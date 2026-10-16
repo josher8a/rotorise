@@ -44,10 +44,27 @@ def μG : Graph S.sig N → Option (Mean.Mem (B := S.sig))
   | .node (.obj _ _ _) _ => (Mean.map (B := S.sig)).map (·.μ)
   | .node (.union _) a => unanimous (List.ofFn fun p => μG (a p))
 
+/-- **The term at a child of a container**: the body of the entry, where the child is an entry. -/
+def bodyAt (sys : Fin N → Graph S.sig N) : Graph S.sig N → Graph S.sig N
+  | .leaf j => sys j
+  | t => t
+
+/-- **The member that a node of a scope stores**: `μG`, where a set reads the member of the body of
+    the entry that its element names. Each child of a container of a scope is an entry, and the
+    body of the entry holds the member that the element stores. -/
+def μAt (sys : Fin N → Graph S.sig N) : Graph S.sig N → Option (Mean.Mem (B := S.sig))
+  | .node .set a =>
+      match Mean.set (B := S.sig) with
+      | some L => (μG (bodyAt sys (a ()))).bind L.member
+      | none => none
+  | .node (.refine _ _) a => μAt sys (a ())
+  | .node (.union _) a => unanimous (List.ofFn fun p => μAt sys (a p))
+  | t => μG t
+
 /-- **The store refuses the segment at every attribute that the node reads**: the node stores one
     member, and the member is not the member of the container. -/
-def apartG (s : Seg) (t : Graph S.sig N) : Bool :=
-  match μG t with
+def apartG (sys : Fin N → Graph S.sig N) (s : Seg) (t : Graph S.sig N) : Bool :=
+  match μAt sys t with
   | some m => !(decide (s.member S = some m))
   | none => false
 
@@ -70,27 +87,27 @@ def joinAll {X : Type} : List (Option (List X)) → Option (List X)
       | _, _ => none
 
 /-- **One segment, by structural recursion on the graph term.** `k` answers an entry. -/
-def childG (k : Fin N → Option (List (Graph S.sig N))) (s : Seg) :
+def childG (sys : Fin N → Graph S.sig N) (k : Fin N → Option (List (Graph S.sig N))) (s : Seg) :
     Graph S.sig N → Option (List (Graph S.sig N))
   | .leaf j => k j
   | .node .never _ => some []
   | .node .opaq a => some [.node .opaq a]
-  | .node (.union _) a => joinAll (List.ofFn fun p => childG k s (a p))
+  | .node (.union _) a => joinAll (List.ofFn fun p => childG sys k s (a p))
   | .node (.obj fs md w) a =>
       match s with
       | .name n => some [(slotAtG (md := md) a n).2]
-      | .pos _ => if apartG s (.node (.obj fs md w) a) then some [] else none
+      | .pos _ => if apartG sys s (.node (.obj fs md w) a) then some [] else none
   | .node (.list n sp m) a =>
       match s with
       | .pos i => (listChildG Graph.never (listParts a).1 (listParts a).2.1 (listParts a).2.2 i).map
           fun t => [t]
-      | .name _ => if apartG s (.node (.list n sp m) a) then some [] else none
-  | t => if apartG s t then some [] else none
+      | .name _ => if apartG sys s (.node (.list n sp m) a) then some [] else none
+  | t => if apartG sys s t then some [] else none
 
 /-- One segment, with a bound on the unfoldings of an entry. -/
 def childN (sys : Fin N → Graph S.sig N) : Nat → Seg → Graph S.sig N → Option (List (Graph S.sig N))
   | 0, _, _ => none
-  | n + 1, s, t => childG (fun j => childN sys n s (sys j)) s t
+  | n + 1, s, t => childG sys (fun j => childN sys n s (sys j)) s t
 
 end Frontier
 
@@ -234,6 +251,18 @@ theorem HL.bind {n m : Nat} (π : Fin n → Fin m) (e : Fin m → Mean.C S.sig) 
       exact (congrArg (Lawful Mean.mem)
         (Flat.interp_bind (R := TStep τ) e (fun j => .leaf (π j)) (.node o a))).mpr h.1
 
+/-- **Each node of a lifted closed term is lawful.** The term is typed and meets its obligations,
+    which read no entry. -/
+theorem HL.lift {N : Nat} {e : Fin N → Mean.C S.sig} {t : Graph S.sig 0} {T μ}
+    (h : Scoped.TypedC τ t T μ) :
+    Scoped.ObligationsC τ t → HL τ e t.lift ∧ Lawful Mean.mem (t.interp (TStep τ) Fin.elim0) := by
+  induction h with
+  | node _ hr ih =>
+    intro hob
+    have hL := TOp.lawful τ hr (fun p => (ih p (hob.1 p)).2) hob.2
+    exact ⟨⟨(congrArg (Lawful Mean.mem) (Flat.interp_lift (R := TStep τ) e (.node _ _))).mpr hL,
+      fun p => (ih p (hob.1 p)).1⟩, hL⟩
+
 /-- **Each node of an inlined scope term is lawful.** The term is typed, its obligations hold at
     each stage of lawful approximants, and the approximants agree with the solution below their
     index. The node reads the laws of its operation (`TOp.lawful`), and
@@ -252,47 +281,43 @@ theorem HL.inl {N : Nat} {e : Fin N → Mean.C S.sig} {w k : Nat}
       HL τ e (u.inl σw σk) ∧ Lawful Mean.mem (SFlat.interp (TStep τ) u ρw ρk) := by
   induction h with
   | ref i => exact fun _ _ _ _ _ _ _ _ _ hσkL _ hρk _ _ _ => ⟨hσkL i, hρk i⟩
-  | @node w k ρw' ρk' o args T μ r hargs hr ih =>
+  | @node o hk args T μ r hargs hr ih =>
     intro σw σk ρw ρk stw stk hσw hσk hσwL hσkL hρw hρk hagW hagK hob
     have hS := TStep_lawful τ
-    have ihp := fun p => ih p ((TOp.kind o).envW σw) ((TOp.kind o).envK σw σk)
-      ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk) (fun n => (TOp.kind o).envW (stw n))
-      (fun n => (TOp.kind o).envK (stw n) (stk n))
-      (fun j => by
-        have e1 := congrFun (Kind.envW_comp (fun t => t.interp (TStep τ) e) (TOp.kind o) σw) j
-        rw [e1, funext hσw])
-      (fun j => by
-        have e1 := congrFun (Kind.envK_comp (fun t => t.interp (TStep τ) e) (TOp.kind o) σw σk) j
-        rw [e1, funext hσw, funext hσk])
-      (Kind.envW_all hσwL _) (Kind.envK_all hσwL hσkL _) (Kind.envW_all hρw _)
-      (Kind.envK_all hρw hρk _) (fun n => Kind.envW_all2 (hagW n) _)
-      (fun n => Kind.envK_all2 (hagW n) (hagK n) _) (fun n => (hob n).1 p)
-    have hobl : TOp.obl τ o (fun p => SFlat.interp (TStep τ) (args p)
-        ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)) := by
+    have ihp := fun p => ih p σw σk ρw ρk stw stk hσw hσk hσwL hσkL hρw hρk hagW hagK
+      (fun n => (hob n).1 p)
+    have hobl : TOp.obl τ o (fun p => SFlat.interp (TStep τ) (args p) ρw ρk) := by
       cases o with
-      | held s k₀ ks => exact (hob 0).2
+      | held _ _ _ => exact nomatch hk
       | union m =>
         intro p q
         exact compat_of_approx (depth := Mean.d) fun n =>
           ⟨_, _, SFlat.agree hS (args p) _ _ _ _ (hagW n) (hagK n),
             SFlat.agree hS (args q) _ _ _ _ (hagW n) (hagK n), (hob n).2 p q⟩
       | _ => trivial
-    have hL : Lawful Mean.mem (TOp.run τ o fun p => SFlat.interp (TStep τ) (args p)
-        ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)) :=
+    have hL : Lawful Mean.mem (TOp.run τ o fun p => SFlat.interp (TStep τ) (args p) ρw ρk) :=
       TOp.lawful τ hr (fun p => (ihp p).2) hobl
     refine ⟨⟨?_, fun p => (ihp p).1⟩, hL⟩
-    have e2 : ∀ p, ((args p).inl ((TOp.kind o).envW σw) ((TOp.kind o).envK σw σk)).interp
-        (TStep τ) e = SFlat.interp (TStep τ) (args p) ((TOp.kind o).envW ρw)
-          ((TOp.kind o).envK ρw ρk) := fun p => by
-      refine (SFlat.interp_inl (R := TStep τ) e (args p) _ _).trans ?_
-      congr 1
-      · funext j
-        have e1 := congrFun (Kind.envW_comp (fun t => t.interp (TStep τ) e) (TOp.kind o) σw) j
-        rw [e1, funext hσw]
-      · funext j
-        have e1 := congrFun (Kind.envK_comp (fun t => t.interp (TStep τ) e) (TOp.kind o) σw σk) j
-        rw [e1, funext hσw, funext hσk]
+    have e2 : ∀ p, ((args p).inl σw σk).interp (TStep τ) e = SFlat.interp (TStep τ) (args p) ρw ρk :=
+      fun p => (SFlat.interp_inl (R := TStep τ) e (args p) _ _).trans (by rw [funext hσw, funext hσk])
     exact (congrArg (fun a => Lawful Mean.mem (TOp.run τ o a)) (funext e2)).mpr hL
+  | @down o hk args r hr =>
+    intro σw _ ρw _ _ _ hσw _ hσwL _ hρw _ _ _ _
+    have hobl : TOp.obl τ o (fun p => ρw (args p)) := by
+      cases o <;> trivial
+    have hL : Lawful Mean.mem (TOp.run τ o fun p => ρw (args p)) :=
+      TOp.lawful τ hr (fun p => hρw _) hobl
+    refine ⟨⟨?_, fun p => hσwL _⟩, hL⟩
+    exact (congrArg (fun a => Lawful Mean.mem (TOp.run τ o a))
+      (funext fun p => hσw (args p))).mpr hL
+  | @wall o _ args T μ r hc hr =>
+    intro _ _ _ _ _ _ _ _ _ _ _ _ _ _ hob
+    have hcl := fun p => HL.lift (e := e) (hc p) ((hob 0).1 p)
+    have hL : Lawful Mean.mem (TOp.run τ o fun p => (args p).interp (TStep τ) Fin.elim0) :=
+      TOp.lawful τ hr (fun p => (hcl p).2) (hob 0).2
+    refine ⟨⟨?_, fun p => (hcl p).1⟩, hL⟩
+    exact (congrArg (fun a => Lawful Mean.mem (TOp.run τ o a))
+      (funext fun p => Flat.interp_lift (R := TStep τ) e (args p))).mpr hL
 
 /-- **Each node of a typed closed codec that meets its obligations is lawful**, at the solution. -/
 theorem Closed.lawfulNodes {N : Nat} (d : Closed S.sig N) (hty : Closed.Typed τ d)
@@ -369,21 +394,96 @@ theorem μG_sound (e : Fin N → Mean.C S.sig) :
       rw [e1]; exact h
   | .node .opaq _, _, h | .node .never _, _, h => nomatch h
 
-/-- **The store refuses a segment apart from the node.** Where a lawful node reads an attribute,
-    the attribute carries the member of the node, and no container of the segment carries it. -/
-theorem apart_refusesG (e : Fin N → Mean.C S.sig) {t : Graph S.sig N} {s : Seg}
-    (hl : Lawful Mean.mem (t.interp (TStep τ) e)) (hap : apartG s t = true) {A : S.V}
-    (hA : ((t.interp (TStep τ) e).p A).isSome = true) :
+/-- The term at a child of a container has the map of the child. -/
+theorem mng_bodyAt (d : GSys τ N) : ∀ t, (mng τ d (bodyAt d.sys t)).f = (mng τ d t).f
+  | .leaf j => (mng_leaf d j).symm
+  | .node _ _ => rfl
+
+/-- **The codec of the element of a set**: a lawful codec of the member that `μG` names at the
+    body of the entry, with the map of the element. -/
+theorem elem_codec (d : GSys τ N) (hsys : ∀ j, HL τ d.e (d.sys j)) :
+    ∀ {u : Graph S.sig N}, HL τ d.e u → ∀ {m : Mean.Mem (B := S.sig)},
+      μG (bodyAt d.sys u) = some m →
+      ∃ c : Mean.C S.sig, c.f = (mng τ d u).f ∧ Lawful Mean.mem c ∧ c.μ = some m
+  | .leaf j, _, m, h => by
+    have h' : μG (d.sys j) = some m := h
+    have hf := mng_leaf d j
+    have hb := hsys j
+    revert hf hb h'
+    generalize d.sys j = b
+    cases b with
+    | leaf _ => intro h' _ _; exact nomatch h'
+    | node o a => exact fun h' hf hb => ⟨_, hf.symm, hb.1, μG_sound d.e _ h'⟩
+  | .node o a, hu, m, h => ⟨_, rfl, hu.1, μG_sound d.e _ h⟩
+
+/-- A node whose member `μG` names reads only attributes of that member, where the node is lawful. -/
+theorem reads_μG (e : Fin N → Mean.C S.sig) {o : TOp S.sig} {a : o.Pos → Graph S.sig N}
+    (hl : Lawful Mean.mem ((Flat.node o a).interp (TStep τ) e)) {m : Mean.Mem (B := S.sig)}
+    (h : μG (.node o a) = some m) {A : S.V}
+    (hA : (((Flat.node o a).interp (TStep τ) e).p A).isSome = true) : Mean.mem A = m := by
+  obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hA
+  exact hl.reads (μG_sound e _ h) hv
+
+/-- **A node reads only attributes of the member that `μAt` names**, where its nodes and the nodes
+    of each entry are lawful. A set reads the member through the body of its element. -/
+theorem reads_μAt (d : GSys τ N) (hsys : ∀ j, HL τ d.e (d.sys j)) :
+    ∀ (t : Graph S.sig N) {m : Mean.Mem (B := S.sig)}, HL τ d.e t → μAt d.sys t = some m →
+      ∀ {A : S.V}, ((mng τ d t).p A).isSome = true → Mean.mem A = m
+  | .leaf _, _, _, h, _, _ => nomatch h
+  | .node .set a, m, ht, h, A, hA => by
+      simp only [μAt] at h
+      replace hA : ((TOp.run τ .set fun p => mng τ d (a p)).p A).isSome = true := hA
+      simp only [TOp.run] at hA
+      revert h hA
+      cases Mean.set (B := S.sig) with
+      | none => intro h; exact nomatch h
+      | some L =>
+        intro h hA
+        obtain ⟨m', hm', hmm⟩ := Option.bind_eq_some_iff.mp h
+        obtain ⟨c, hcf, hcl, hcμ⟩ := elem_codec d hsys (ht.2 ()) hm'
+        have hf : (L.lift c).f = (L.lift (mng τ d (a ()))).f :=
+          AgreeLe.eq_of_forall (depth := Mean.d) fun k =>
+            (L.agree (AgreeLe.of_eq (d := k) hcf)).mono (Nat.le_succ k)
+        obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hA
+        have hv' : (L.lift c).p A = some v := by
+          show (L.lift c).f .dual A = some v
+          rw [hf]; exact hv
+        exact (L.lawful hcl).reads (by rw [L.lift_μ, hcμ]; exact hmm) hv'
+  | .node (.refine q qA) a, m, ht, h, A, hA => by
+      obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hA
+      have hv' : (refine2 (mng τ d (a ())) (Mean.eval false q) (Mean.eval true qA)).f .dual A =
+          some v := hv
+      exact reads_μAt d hsys (a ()) (ht.2 ()) h
+        (Option.isSome_iff_exists.mpr ⟨v, (refine2_f.mp hv').2.1⟩)
+  | .node (.union k) a, m, ht, h, A, hA => by
+      have hall := unanimous_spec (l := List.ofFn fun p => μAt d.sys (a p)) h
+      replace hA : (select (List.ofFn fun p => mng τ d (a p)) (·.f .dual) A).isSome = true := hA
+      obtain ⟨c, hc, hcA⟩ := (select_isSome_attempt _ _ _).mp hA
+      obtain ⟨p, rfl⟩ := List.mem_ofFn.mp hc
+      exact reads_μAt d hsys (a p) (ht.2 p) (hall _ (List.mem_ofFn.mpr ⟨p, rfl⟩)) hcA
+  | .node (.prim _) _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+  | .node .opaq _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+  | .node .never _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+  | .node (.list _ _ _) _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+  | .node (.held _ _ _) _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+  | .node (.legacy _) _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+  | .node (.obj _ _ _) _, _, ht, h, _, hA => reads_μG d.e ht.1 h hA
+
+/-- **The store refuses a segment apart from the node.** Where a node with lawful nodes reads an
+    attribute, the attribute carries the member of the node, and no container of the segment
+    carries it. -/
+theorem apart_refusesG (d : GSys τ N) (hsys : ∀ j, HL τ d.e (d.sys j)) {t : Graph S.sig N}
+    {s : Seg} (ht : HL τ d.e t) (hap : apartG d.sys s t = true) {A : S.V}
+    (hA : ((mng τ d t).p A).isSome = true) :
     getSeg s A = none ∧ ∀ B, putSeg s B A = none := by
   unfold apartG at hap
   revert hap
-  match hμ : μG t with
+  match hμ : μAt d.sys t with
   | none => intro hap; exact nomatch hap
   | some m =>
     intro hap
     simp only [Bool.not_eq_true', decide_eq_false_iff_not] at hap
-    obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp hA
-    have hmem : Mean.mem A = m := hl.reads (μG_sound e t hμ) hv
+    have hmem : Mean.mem A = m := reads_μAt d hsys t ht hμ hA
     cases s with
     | name k =>
       simp only [Seg.member] at hap
@@ -491,13 +591,13 @@ theorem StepG.union (d : GSys τ N) (n m : Nat) (a : (TOp.union (B := S.sig) m).
 /-- **The row of a node that the store refuses at the segment.** The child is a refusal, or the
     node is apart from the segment and its lawful codec reads no attribute that the store accepts
     there. -/
-theorem StepG.apart (d : GSys τ N) {n : Nat} {t : Graph S.sig N} {s : Seg}
-    (hc : childN d.sys (n + 1) s t = if apartG s t then some [] else none)
-    (hl : Lawful Mean.mem (mng τ d t)) : StepG τ d (n + 1) t s := by
+theorem StepG.apart (d : GSys τ N) (hsys : ∀ j, HL τ d.e (d.sys j)) {n : Nat} {t : Graph S.sig N}
+    {s : Seg} (hc : childN d.sys (n + 1) s t = if apartG d.sys s t then some [] else none)
+    (ht : HL τ d.e t) : StepG τ d (n + 1) t s := by
   intro gs hgs A hA
   rw [hc] at hgs
   split at hgs
-  · next hap => exact Or.inl (apart_refusesG d.e hl hap hA)
+  · next hap => exact Or.inl (apart_refusesG d hsys ht hap hA)
   · exact nomatch hgs
 
 end Steps
@@ -667,7 +767,6 @@ theorem stepG_of_HL (d : GSys τ N) (hsys : ∀ j, HL τ d.e (d.sys j)) :
     | leaf j => exact fun s _ => StepG.leaf d n j s (ihn _ s (hsys j))
     | node o a ih =>
       intro s h
-      have hl : Lawful Mean.mem (mng τ d (.node o a)) := h.1
       cases o with
       | never => exact StepG.never d n a s
       | opaq => exact StepG.opaq d n a s
@@ -675,16 +774,16 @@ theorem stepG_of_HL (d : GSys τ N) (hsys : ∀ j, HL τ d.e (d.sys j)) :
       | obj fs md w =>
         cases s with
         | name k => exact StepG.obj d n a k
-        | pos _ => exact StepG.apart d rfl hl
+        | pos _ => exact StepG.apart d hsys rfl h
       | list _ _ _ =>
         cases s with
         | pos i => exact StepG.list d n a i
-        | name _ => exact StepG.apart d rfl hl
-      | prim _ => exact StepG.apart d rfl hl
-      | set => exact StepG.apart d rfl hl
-      | held _ _ _ => exact StepG.apart d rfl hl
-      | refine _ _ => exact StepG.apart d rfl hl
-      | legacy _ => exact StepG.apart d rfl hl
+        | name _ => exact StepG.apart d hsys rfl h
+      | prim _ => exact StepG.apart d hsys rfl h
+      | set => exact StepG.apart d hsys rfl h
+      | held _ _ _ => exact StepG.apart d hsys rfl h
+      | refine _ _ => exact StepG.apart d hsys rfl h
+      | legacy _ => exact StepG.apart d hsys rfl h
 
 omit [Sem S] in
 /-- A term of a list shape is a part of the shape, or the bottom. -/

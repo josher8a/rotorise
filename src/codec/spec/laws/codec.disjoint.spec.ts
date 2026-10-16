@@ -13,6 +13,7 @@ import {
     boolean,
     decimal,
     held,
+    list,
     never,
     nullValue,
     number,
@@ -338,6 +339,42 @@ describe('two recursive terms are disjoint where their bodies are', () => {
 
     it('keeps a recursive term apart from a partner that no stage shares', () => {
         expect(apart(json.def as Term, termOf(nullValue))).toBe(true)
+    })
+})
+
+/**
+ * Each child of a container is an entry of the graph, so a walk pairs two entries at each
+ * container and the table of pairs ends every cycle. A nest of lists is apart at any depth, and a
+ * cycle beside a cycle of another phase is apart: the walk no longer spends its fuel on a child in
+ * place.
+ */
+describe('two terms are disjoint where they part at any depth below containers', () => {
+    const nest = (depth: number, inner: AnyCodec): AnyCodec =>
+        depth === 0 ? inner : nest(depth - 1, list(inner))
+
+    it('keeps two nests of lists apart where the innermost literals part, at every depth', () => {
+        for (const depth of [3, 6, 10]) {
+            const a = nest(depth, string('a'))
+            const b = nest(depth, string('b'))
+            expect(apart(termOf(a), termOf(b))).toBe(true)
+            expect(viewsDisjoint(termOf(a), termOf(b))).toBe(true)
+        }
+    })
+
+    it('keeps a cycle apart from a cycle of another phase, and from a deep nest', () => {
+        const twice = (inner: AnyCodec): AnyCodec => list(list(inner))
+        const { evenA } = scope({
+            evenA: union([string('a'), twice(ref('evenA'))]),
+        })
+        const { oddB } = scope({
+            evenB: union([string('b'), twice(ref('evenB'))]),
+            oddB: list(ref('evenB')),
+        })
+        expect(apart(termOf(evenA), termOf(oddB))).toBe(true)
+        const { recA } = scope({
+            recA: union([string('a'), array(ref('recA'))]),
+        })
+        expect(apart(termOf(recA), termOf(nest(10, string('b'))))).toBe(true)
     })
 })
 

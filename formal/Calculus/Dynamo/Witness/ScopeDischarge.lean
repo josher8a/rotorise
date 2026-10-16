@@ -19,7 +19,7 @@ variable {α : Table}
 
 /-- The term of the one entry of the host's schema for JSON: a string, or an array of the entry. -/
 def jsonBody : Scoped.Term 1 0 :=
-  Scoped.Term.union [Scoped.Term.string, Scoped.Term.array (Scoped.Term.ref 0)]
+  Scoped.Term.union [Scoped.Term.string, Scoped.Term.array 0]
 
 /-- The host's schema for JSON, as a closed codec of one entry. -/
 def jsonClosed : Closed := Closed.one jsonBody
@@ -30,12 +30,8 @@ theorem typed_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s)
   obtain ⟨T1, μ1, h1⟩ : ∃ T μ, Alg.Scoped.Typed τ ρw ρk Scoped.Term.string T μ :=
     ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .prim (Ground.base .string)) (T := Empty.elim) (μ := Empty.elim) (fun p => p.elim) rfl⟩
   obtain ⟨T2, μ2, h2⟩ : ∃ T μ,
-      Alg.Scoped.Typed τ ρw ρk (Scoped.Term.array (Scoped.Term.ref 0)) T μ :=
-    ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .list 0 1 0) (T := fun _ => (ρw 0).T) (μ := fun _ => (ρw 0).μ)
-      (fun p => match p with
-        | .inl p => p.elim0
-        | .inr (.inl _) => .ref ⟨0, Nat.one_pos⟩
-        | .inr (.inr p) => p.elim0) rfl⟩
+      Alg.Scoped.Typed τ ρw ρk (Scoped.Term.array 0) T μ :=
+    ⟨_, _, Alg.Scoped.Typed.down (B := dynSig) (o := .list 0 1 0) rfl⟩
   exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .union 2) (T := [T1, T2].get) (μ := [μ1, μ2].get)
     (fun p => match p with
       | ⟨0, _⟩ => h1
@@ -64,12 +60,7 @@ theorem obligations_jsonBody (τ : (s : Bool) → Alg.TableAt dynSig s)
   refine ⟨fun p => ?_, fun p q => ?_⟩
   · match p with
     | ⟨0, _⟩ => exact ⟨fun p => p.elim, trivial⟩
-    | ⟨1, _⟩ =>
-      refine ⟨fun p => ?_, trivial⟩
-      match p with
-      | .inl p => exact p.elim0
-      | .inr (.inl _) => trivial
-      | .inr (.inr p) => exact p.elim0
+    | ⟨1, _⟩ => trivial
   · match p, q with
     | ⟨0, _⟩, ⟨0, _⟩ => exact fun _ _ hp _ => hp
     | ⟨0, _⟩, ⟨1, _⟩ => exact hs
@@ -156,9 +147,9 @@ def nestGraph : Graph := ⟨2, fun i => Scoped.Graph.Term.array (Scoped.Graph.Te
 
 /-- The stratified system of one entry: a string, or an array of the entry. -/
 def jsonStrat : Alg.SSys (Alg.Scoped.TSig dynSig) 1 := fun _ =>
-  .node (Alg.Scoped.TOp.union 2)
-    (Fin.cases (.node (Alg.Scoped.TOp.prim (Ground.base .string)) fun p => nomatch p)
-      fun _ => .node (Alg.Scoped.TOp.list 0 1 0) fun _ => .leaf (0 : Fin 1))
+  .node (Alg.Scoped.TOp.union 2) rfl
+    (Fin.cases (.node (Alg.Scoped.TOp.prim (Ground.base .string)) rfl fun p => nomatch p)
+      fun _ => .down (Alg.Scoped.TOp.list 0 1 0) rfl fun _ => 0)
 
 /-- **An entry under a container has a stratified form**: the graph form of `jsonStrat` is
     `jsonGraph`. -/
@@ -178,7 +169,7 @@ theorem Graph.json_strat : jsonGraph.StratForm := by
 
 /-- The stratified system of two entries, each an array of the other. -/
 def nestStrat : Alg.SSys (Alg.Scoped.TSig dynSig) 2 := fun i =>
-  .node (Alg.Scoped.TOp.list 0 1 0) fun _ => .leaf (i.rev : Fin 2)
+  .down (Alg.Scoped.TOp.list 0 1 0) rfl fun _ => i.rev
 
 /-- **Two entries that name each other under a container have a stratified form**: the graph form
     of `nestStrat` is `nestGraph`. -/

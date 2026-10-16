@@ -11,9 +11,9 @@ older reader give `exists`, a `held` gives the precondition of its stored side, 
 term with an adapter gives the precondition of its inner term, and an open object whose slots are
 each required gives `type M` and the precondition of each name. Every other graph term refuses.
 
-An entry refuses, as an entry pins nothing in `Closed.spec`. The precondition thus reads no
-entry of the graph and recurses on the graph term alone, so its exactness holds at each
-environment of the entries.
+Each child of a container is an entry, so the precondition reads an entry as its body, with a
+bound on the unfoldings. A cycle spends the bound and refuses. The exactness reads an entry
+through the fixed point of the stored view.
 
 `Closed.preconditionOfC_exact` states that the precondition holds on an item exactly where the
 stored view of the clause admits the attribute at the path. `Closed.narrow_law_precondition` is
@@ -52,9 +52,10 @@ def storedOpaqG : Alg.Scoped.Graph dynSig N → Bool
   | .node (.held s _ _) a => bif s then storedOpaqG (a false) else storedOpaqG (a true)
   | _ => false
 
-/-- Whether an open block is present, and its stored view is `opaque`. -/
-def restOpaqG : (s : Fin 2) → (Fin s → Alg.Scoped.Graph dynSig N) → Bool
-  | ⟨1, _⟩, a => storedOpaqG (a ⟨0, Nat.one_pos⟩)
+/-- Whether an open block is present, and the stored view of the body of its entry is `opaque`. -/
+def restOpaqG (sys : Fin N → Alg.Scoped.Graph dynSig N) :
+    (s : Fin 2) → (Fin s → Alg.Scoped.Graph dynSig N) → Bool
+  | ⟨1, _⟩, a => storedOpaqG (Alg.Scoped.bodyAt (S := dynSyn) sys (a ⟨0, Nat.one_pos⟩))
   | _, _ => false
 
 /-- **The preconditions of the names of an open object**, each at the path of its name. The
@@ -72,8 +73,10 @@ def keysPreG {fs : Finset String} (md : {x // x ∈ fs} → SlotMode dynSig) (re
 variable (sys : Fin N → Alg.Scoped.Graph dynSig N)
 
 /-- **The precondition of a graph term at a path**, or a refusal (`none`). The stored view
-    decides the row. An entry refuses. -/
-def termPreG : Alg.Scoped.Graph dynSig N → List Seg → Option (List Cond)
+    decides the row. `k` answers an entry. -/
+def termPreAt (k : Fin N → List Seg → Option (List Cond)) :
+    Alg.Scoped.Graph dynSig N → List Seg → Option (List Cond)
+  | .leaf j, π => k j π
   | .node (.prim (.base k)) _, π => some [⟨π, .type k.member⟩]
   | .node (.prim (.literal k x)) _, π => some [⟨π, .in k x []⟩]
   | .node (.union _) a, π =>
@@ -85,12 +88,17 @@ def termPreG : Alg.Scoped.Graph dynSig N → List Seg → Option (List Cond)
       | [] => none
   | .node .opaq _, π => some [⟨π, .exists⟩]
   | .node (.legacy _) _, π => some [⟨π, .exists⟩]
-  | .node (.held s _ _) a, π => bif s then termPreG (a false) π else termPreG (a true) π
-  | .node (.refine _ _) a, π => if belowTop sys (a ()) then none else termPreG (a ()) π
+  | .node (.held s _ _) a, π => bif s then termPreAt k (a false) π else termPreAt k (a true) π
+  | .node (.refine _ _) a, π => if belowTop sys (a ()) then none else termPreAt k (a ()) π
   | .node (.obj _ md s) a, π =>
-      (keysPreG md (restOpaqG s fun p => a (.inr p)) (fun x => termPreG (a (.inl x))) π).map
+      (keysPreG md (restOpaqG sys s fun p => a (.inr p)) (fun x => termPreAt k (a (.inl x))) π).map
         (⟨π, .type .M⟩ :: ·)
   | _, _ => none
+
+/-- The precondition of a graph term at a path, with a bound on the unfoldings of an entry. -/
+def termPreG : Nat → Alg.Scoped.Graph dynSig N → List Seg → Option (List Cond)
+  | 0, _, _ => none
+  | n + 1, t, π => termPreAt sys (fun j => termPreG n (sys j)) t π
 
 end Pre
 
@@ -103,8 +111,8 @@ def Closed.preconditionOfC (φ : Closed) (π : List Seg) : Option (List Cond) :=
   | .node (.obj fs md s) a =>
       match keyPos fs, π with
       | [], _ :: _ => none
-      | _, _ => keysPreG md (restOpaqG s fun p => a (.inr p))
-          (fun x => termPreG φ.scope.graph (a (.inl x))) π
+      | _, _ => keysPreG md (restOpaqG φ.scope.graph s fun p => a (.inr p))
+          (fun x => termPreG φ.scope.graph (φ.N + 1) (a (.inl x))) π
   | _ => none
 
 /-! ## The exactness law -/
@@ -249,7 +257,9 @@ theorem storedAt_union (m : Nat) (a : Fin m → Alg.Scoped.Graph dynSig N) (A : 
     each present and read by the stored view of the slot. -/
 theorem storedAt_obj {fs : Finset String} {md : {x // x ∈ fs} → SlotMode dynSig} {s : Fin 2}
     {a : (TOp.obj fs md s).Pos → Alg.Scoped.Graph dynSig N} (hmd : ∀ x, md x = .req)
-    (hrest : restOpaqG s (fun p => a (.inr p)) = true) (A : Attr) :
+    (hfix : ∀ j, (e j).f = ((viewG sys .dual (sys j)).interp
+      (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA)) e).f)
+    (hrest : restOpaqG sys s (fun p => a (.inr p)) = true) (A : Attr) :
     ((storedAt α sys e (.node (.obj fs md s) a)).p A).isSome = true ↔
       ∃ keys g, A = .m keys g ∧ ∀ x : {x // x ∈ fs}, ∃ h : x.1 ∈ keys,
         ((storedAt α sys e (a (.inl x))).p (g ⟨x.1, h⟩)).isSome = true := by
@@ -262,7 +272,16 @@ theorem storedAt_obj {fs : Finset String} {md : {x // x ∈ fs} → SlotMode dyn
         (storedAt α sys e (a (.inl x)))⟩ (.codec (storedAt α sys e (a (.inr ⟨0, Nat.one_pos⟩))))).p
         A).isSome = true ↔ _
     rw [hf]
-    exact object_reads _ _ (storedOpaqG_reads α sys e hrest) A
+    refine object_reads _ _ (fun B => ?_) A
+    have hb : ((storedAt α sys e (Alg.Scoped.bodyAt (S := dynSyn) sys
+        (a (.inr ⟨0, Nat.one_pos⟩)))).p B).isSome = true := storedOpaqG_reads α sys e hrest B
+    revert hb
+    cases a (.inr ⟨0, Nat.one_pos⟩) with
+    | leaf j =>
+      intro hb
+      show ((e j).f .dual B).isSome = true
+      rw [hfix j]; exact hb
+    | node _ _ => exact id
 
 /-- The preconditions of the names of an open object hold where the row of each name holds at the
     path of the name, where the precondition of each name is exact for its row. -/
@@ -299,12 +318,18 @@ theorem keysPreG_exact {fs : Finset String} {md : {x // x ∈ fs} → SlotMode d
     exact hall x
 
 /-- **The precondition of a graph term is exact**: on each item, the precondition holds where the
-    stored view of the term admits the attribute at the path. -/
-theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs : List Cond),
-    termPreG sys t π = some gs →
+    stored view of the term admits the attribute at the path, where `k` is exact at each entry. -/
+theorem termPreAt_exact (hfix : ∀ j, (e j).f = ((viewG sys .dual (sys j)).interp
+      (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA)) e).f)
+    {k : Fin N → List Seg → Option (List Cond)}
+    (hk : ∀ j π gs, k j π = some gs →
+      ∀ R, gs.all (·.eval R) = rowAt (fun A => ((storedAt α sys e (.leaf j)).p A).isSome) π R) :
+    ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs : List Cond),
+    termPreAt sys k t π = some gs →
       ∀ R, gs.all (·.eval R) = rowAt (fun A => ((storedAt α sys e t).p A).isSome) π R
+  | .leaf j, π, gs, h, R => hk j π gs h R
   | .node (.prim (.base k)) _, π, gs, h, R => by
-      simp only [termPreG, Option.some.injEq] at h; subst h
+      simp only [termPreAt, Option.some.injEq] at h; subst h
       unfold rowAt Cond.eval
       simp only [List.all_cons, List.all_nil, Bool.and_true]
       cases readPath π R with
@@ -313,7 +338,7 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
           simp only [Test.eval]
           exact (ground_reads (.base k) A).symm
   | .node (.prim (.literal k x)) _, π, gs, h, R => by
-      simp only [termPreG, Option.some.injEq] at h; subst h
+      simp only [termPreAt, Option.some.injEq] at h; subst h
       unfold rowAt Cond.eval
       simp only [List.all_cons, List.all_nil, Bool.and_true]
       cases readPath π R with
@@ -323,7 +348,7 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
           simp only [List.any_cons, List.any_nil, Bool.or_false]
           exact (ground_reads (.literal k x) A).symm
   | .node (.union m) a, π, gs, h, R => by
-      unfold termPreG at h
+      unfold termPreAt at h
       split at h
       · next t ts hts =>
         split at h
@@ -342,23 +367,23 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
         · exact nomatch h
       · exact nomatch h
   | .node .opaq _, π, gs, h, R => by
-      simp only [termPreG, Option.some.injEq] at h; subst h
+      simp only [termPreAt, Option.some.injEq] at h; subst h
       unfold rowAt Cond.eval
       simp only [List.all_cons, List.all_nil, Bool.and_true]
       cases readPath π R <;> rfl
   | .node (.legacy _) _, π, gs, h, R => by
-      simp only [termPreG, Option.some.injEq] at h; subst h
+      simp only [termPreAt, Option.some.injEq] at h; subst h
       unfold rowAt Cond.eval
       simp only [List.all_cons, List.all_nil, Bool.and_true]
       cases readPath π R <;> rfl
-  | .node (.held false _ _) a, π, gs, h, R => termPreG_exact (a true) π gs h R
-  | .node (.held true _ _) a, π, gs, h, R => termPreG_exact (a false) π gs h R
+  | .node (.held false _ _) a, π, gs, h, R => termPreAt_exact hfix hk (a true) π gs h R
+  | .node (.held true _ _) a, π, gs, h, R => termPreAt_exact hfix hk (a false) π gs h R
   | .node (.refine p pA) a, π, gs, h, R => by
-      simp only [termPreG] at h
+      simp only [termPreAt] at h
       split at h
       · exact nomatch h
       · next hb =>
-        rw [termPreG_exact (a ()) π gs h R]
+        rw [termPreAt_exact hfix hk (a ()) π gs h R]
         have hv : viewG sys .dual (.node (.refine p pA) a) =
             .node (.refine (Alg.Mean.truth false) pA) fun _ => viewG sys .dual (a ()) := by
           simp only [viewG, hb]; rfl
@@ -376,18 +401,18 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
               funext fun v => Alg.Mean.eval_truth (B := dynSig) false v, Alg.gate_true]
             rfl
   | .node (.obj fs md s) a, π, gs, h, R => by
-      simp only [termPreG, Option.map_eq_some_iff] at h
+      simp only [termPreAt, Option.map_eq_some_iff] at h
       obtain ⟨gs', hb, rfl⟩ := h
       obtain ⟨hrest, hmd, hall⟩ := keysPreG_exact
         (P := fun x A => ((storedAt α sys e (a (.inl x))).p A).isSome)
-        (fun x π ys hy R => termPreG_exact (a (.inl x)) π ys hy R) hb
+        (fun x π ys hy R => termPreAt_exact hfix hk (a (.inl x)) π ys hy R) hb
       refine Bool.eq_iff_iff.mpr ?_
       rw [List.all_cons, Bool.and_eq_true, hall R]
       unfold rowAt Cond.eval
       cases hR : readPath π R with
       | none => simp
       | some A =>
-          rw [storedAt_obj α sys e hmd hrest]
+          rw [storedAt_obj α sys e hmd hfix hrest]
           simp only [Test.eval, decide_eq_true_eq]
           constructor
           · rintro ⟨hm, hk⟩
@@ -399,8 +424,25 @@ theorem termPreG_exact : ∀ (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs
             | _ => exact nomatch hm
           · rintro ⟨keys, g, rfl, hk⟩
             exact ⟨rfl, fun x => (rowAt_name _ π x.1 R).mpr ⟨keys, g, hR, hk x⟩⟩
-  | .leaf _, _, _, h, _ | .node .never _, _, _, h, _ | .node .set _, _, _, h, _
+  | .node .never _, _, _, h, _ | .node .set _, _, _, h, _
   | .node (.list _ _ _) _, _, _, h, _ => nomatch h
+
+/-- **The precondition of a graph term is exact** at each bound, where the entries are a fixed
+    point of the stored view. -/
+theorem termPreG_exact (hfix : ∀ j, (e j).f = ((viewG sys .dual (sys j)).interp
+      (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA)) e).f) :
+    ∀ (n : Nat) (t : Alg.Scoped.Graph dynSig N) (π : List Seg) (gs : List Cond),
+    termPreG sys n t π = some gs →
+      ∀ R, gs.all (·.eval R) = rowAt (fun A => ((storedAt α sys e t).p A).isSome) π R
+  | 0, _, _, _, h, _ => nomatch h
+  | n + 1, t, π, gs, h, R => termPreAt_exact α sys e hfix (fun j π gs hj R => by
+      rw [termPreG_exact hfix n (sys j) π gs hj R]
+      unfold rowAt
+      cases readPath π R with
+      | none => rfl
+      | some A =>
+        show ((storedAt α sys e (sys j)).p A).isSome = ((e j).f .dual A).isSome
+        rw [hfix j]) t π gs h R
 
 end Exact
 
@@ -436,8 +478,8 @@ theorem Closed.preconditionOfC_exact {φ : Closed} {π : List Seg} {gs : List Co
   unfold Closed.preconditionOfC at h
   split at h
   · next fs md s a hg =>
-    have hroot : (π = [] ∨ ∃ k, k ∈ fs) ∧ keysPreG md (restOpaqG s fun p => a (.inr p))
-        (fun x => termPreG φ.scope.graph (a (.inl x))) π = some gs := by
+    have hroot : (π = [] ∨ ∃ k, k ∈ fs) ∧ keysPreG md (restOpaqG φ.scope.graph s fun p => a (.inr p))
+        (fun x => termPreG φ.scope.graph (φ.N + 1) (a (.inl x))) π = some gs := by
       cases hs : keyPos fs with
       | nil =>
           cases π with
@@ -449,7 +491,9 @@ theorem Closed.preconditionOfC_exact {φ : Closed} {π : List Seg} {gs : List Co
     let e := (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).e
     obtain ⟨hrest, hmd, hall⟩ := keysPreG_exact
       (P := fun x A => ((storedAt α φ.scope.graph e (a (.inl x))).p A).isSome)
-      (fun x π ys hy R => termPreG_exact α φ.scope.graph e (a (.inl x)) π ys hy R) hkg
+      (fun x π ys hy R => termPreG_exact α φ.scope.graph e
+        ((Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).fix)
+        (φ.N + 1) (a (.inl x)) π ys hy R) hkg
     refine Bool.eq_iff_iff.mpr ?_
     rw [hall R]
     unfold Closed.admAt rowAt
@@ -464,7 +508,8 @@ theorem Closed.preconditionOfC_exact {φ : Closed} {π : List Seg} {gs : List Co
     · intro hk
       obtain ⟨keys, g, hR⟩ := hmap hk
       simp only [hR]
-      rw [Closed.view_root α φ hg, storedAt_obj α _ _ hmd hrest]
+      rw [Closed.view_root α φ hg, storedAt_obj α _ _ hmd
+        (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).fix hrest]
       refine ⟨keys, g, rfl, fun x => ?_⟩
       obtain ⟨_, _, he, hn, ha⟩ := (rowAt_name _ π x.1 R).mp (hk x)
       rw [hR] at he; cases he; exact ⟨hn, ha⟩
@@ -473,7 +518,8 @@ theorem Closed.preconditionOfC_exact {φ : Closed} {π : List Seg} {gs : List Co
       | none => rw [hR] at hA; exact nomatch hA
       | some A =>
           simp only [hR] at hA
-          rw [Closed.view_root α φ hg, storedAt_obj α _ _ hmd hrest] at hA
+          rw [Closed.view_root α φ hg, storedAt_obj α _ _ hmd
+        (Alg.Scoped.Closed.viewToG (Alg.tables dynSyn.o α dynTableA) .dual φ.scope).fix hrest] at hA
           obtain ⟨keys, g, rfl, hk⟩ := hA
           exact fun x => (rowAt_name _ π x.1 R).mpr ⟨keys, g, hR, hk x⟩
   · exact nomatch h
@@ -552,23 +598,27 @@ private def shows (r : Option (List Cond)) (cs : List (Cond → Bool)) : Bool :=
 private abbrev one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
 
-/-- A clause: an open object whose names are each required. -/
-private abbrev clauseOf (fs : Finset String) (f : {x // x ∈ fs} → Scoped.Term 1 1) : Closed :=
-  one (Scoped.Term.object (Scoped.Body.mk fs (fun x => Scoped.ObjectSlot.req (f x))
-    (some Scoped.Term.opaq)))
+/-- A clause of one key `k`, an open object: entry `1` is the term of the key, entry `2` is the
+    open block, and entry `3` is a child of the term of the key. -/
+private abbrev cl (t : Scoped.Term 4 1) (u : Scoped.Term 4 3) : Closed := ⟨4, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"k"} (fun _ => .req 1) (some 2)) :
+      Scoped.Term 4 0)
+  | ⟨1, _⟩ => t
+  | ⟨2, _⟩ => (Scoped.Term.opaq : Scoped.Term 4 2)
+  | ⟨3, _⟩ => u, 0⟩
 
-/-- A clause of one key. -/
-private abbrev cl1 (t : Scoped.Term 1 1) : Closed := clauseOf {"k"} fun _ => t
+/-- A clause of one key whose term holds no child. -/
+private abbrev cl1 (t : Scoped.Term 4 1) : Closed := cl t .never
 
-private abbrev litS (s : String) : Scoped.Term 1 1 := Scoped.Term.literal .string s
-private abbrev n1 : Scoped.Term 0 0 := Scoped.Term.literal .number (WFNumeral.of "1")
-private abbrev n2 : Scoped.Term 0 0 := Scoped.Term.literal .number (WFNumeral.of "2")
+private abbrev litS {w k : Nat} (s : String) : Scoped.Term w k := Scoped.Term.literal .string s
+private abbrev n1 : Scoped.Graph.Term 0 := Scoped.Graph.Term.literal .number (WFNumeral.of "1")
+private abbrev n2 : Scoped.Graph.Term 0 := Scoped.Graph.Term.literal .number (WFNumeral.of "2")
 /-- `number(1)`: a caller adapter over the literal `N 1`. -/
-private abbrev num {w k : Nat} (l : Scoped.Term 0 0) : Scoped.Term w k :=
-  Scoped.Term.held false l Scoped.Term.number (.caller 0, false) []
+private abbrev num {w k : Nat} (l : Scoped.Graph.Term 0) : Scoped.Term w k :=
+  Scoped.Term.held false l Scoped.Graph.Term.number (.caller 0, false) []
 /-- `decimal('1')`: the library text adapter over the literal `N 1`. -/
-private abbrev dec {w k : Nat} (l : Scoped.Term 0 0) (s : String) : Scoped.Term w k :=
-  Scoped.Term.held false l (Scoped.Term.literal .string s) (.decimalText, false) []
+private abbrev dec {w k : Nat} (l : Scoped.Graph.Term 0) (s : String) : Scoped.Term w k :=
+  Scoped.Term.held false l (Scoped.Graph.Term.literal .string s) (.decimalText, false) []
 private abbrev m : List Seg := [.name "m"]
 
 -- a string tag
@@ -590,38 +640,51 @@ example : shows ((cl1 Scoped.Term.opaq).preconditionOfC m) [existsAt ["m", "k"]]
 -- a base clause: `number` gives `type N`
 example : shows ((cl1 Scoped.Term.number).preconditionOfC m) [typeAt ["m", "k"] .N] = true := by decide
 -- two keys: a conjunction, in the order of the names
-example : shows ((clauseOf {"t", "k"} fun x => if x.1 = "k" then litS "A" else
-    Scoped.Term.number).preconditionOfC m) [inS ["m", "k"] ["A"], typeAt ["m", "t"] .N] = true := by
+example : shows ((⟨4, fun i => match i with
+    | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"t", "k"} (fun x => if x.1 = "k" then
+        Scoped.ObjectSlot.req 1 else Scoped.ObjectSlot.req 2) (some 3)) : Scoped.Term 4 0)
+    | ⟨1, _⟩ => (litS "A" : Scoped.Term 4 1)
+    | ⟨2, _⟩ => (Scoped.Term.number : Scoped.Term 4 2)
+    | ⟨3, _⟩ => (Scoped.Term.opaq : Scoped.Term 4 3), 0⟩ : Closed).preconditionOfC m)
+    [inS ["m", "k"] ["A"], typeAt ["m", "t"] .N] = true := by
   decide
 -- an open object under a key: `type M` and the precondition of its name
-example : shows ((cl1 (Scoped.Term.object (Scoped.Body.mk {"z"} (fun _ =>
-    Scoped.ObjectSlot.req (litS "Z")) (some Scoped.Term.opaq)))).preconditionOfC [])
-    [typeAt ["k"] .M, inS ["k", "z"] ["Z"]] = true := by decide
+example : shows ((cl (Scoped.Term.object (Scoped.Body.mk {"z"} (fun _ => .req 3) (some 2)))
+    (litS "Z")).preconditionOfC []) [typeAt ["k"] .M, inS ["k", "z"] ["Z"]] = true := by decide
 -- a refinement over an adapter: the stored view keeps the truth, so the inner term decides
 example : shows ((cl1 (Scoped.Term.refine (num n1) (.closure fun _ => true) ())).preconditionOfC m)
     [inN ["m", "k"] [WFNumeral.of "1"]] = true := by decide
+/-- The clause of no key: an open object. -/
+private abbrev emptyCl : Closed := ⟨2, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk ∅ (fun k => nomatch k.2) (some 1)) :
+      Scoped.Term 2 0)
+  | ⟨1, _⟩ => (Scoped.Term.opaq : Scoped.Term 2 1), 0⟩
+
 -- the empty clause: the empty conjunction at the root, and a refusal below the root
-example : shows ((clauseOf ∅ fun k => nomatch k.2).preconditionOfC []) [] = true := by decide
-example : ((clauseOf ∅ fun k => nomatch k.2).preconditionOfC m).isNone = true := by decide
+example : shows (emptyCl.preconditionOfC []) [] = true := by decide
+example : (emptyCl.preconditionOfC m).isNone = true := by decide
 
 -- a closed object refuses
-example : ((cl1 (Scoped.Term.object (Scoped.Body.mk {"z"} (fun _ =>
-    Scoped.ObjectSlot.req Scoped.Term.string) none))).preconditionOfC m).isNone = true := by decide
+example : ((cl (Scoped.Term.object (Scoped.Body.mk {"z"} (fun _ => .req 3) none))
+    Scoped.Term.string).preconditionOfC m).isNone = true := by decide
 -- a list with a spread refuses
-example : ((cl1 (Scoped.Term.list [] (some Scoped.Term.string) [])).preconditionOfC m).isNone =
+example : ((cl (Scoped.Term.list [] (some 3) []) Scoped.Term.string).preconditionOfC m).isNone =
     true := by decide
 -- a refinement that the stored view keeps refuses
 example : ((cl1 (Scoped.Term.refine Scoped.Term.string (.closure fun _ => true) ())).preconditionOfC
     m).isNone = true := by decide
 -- an optional slot under a key refuses
-example : ((cl1 (Scoped.Term.object (Scoped.Body.mk {"z"} (fun _ =>
-    Scoped.ObjectSlot.optional Scoped.Term.string) (some Scoped.Term.opaq)))).preconditionOfC
-    m).isNone = true := by decide
+example : ((cl (Scoped.Term.object (Scoped.Body.mk {"z"} (fun _ => .optional 3) (some 2)))
+    Scoped.Term.string).preconditionOfC m).isNone = true := by decide
 -- a union of two bases refuses
 example : ((cl1 (Scoped.Term.union [litS "A", Scoped.Term.literal .number (WFNumeral.of "1")])).preconditionOfC
     m).isNone = true := by decide
--- an entry refuses: the precondition reads no entry
-example : ((cl1 (Scoped.Term.ref 0)).preconditionOfC m).isNone = true := by decide
+-- an entry on a cycle refuses: the key names the root, and the walk spends the bound
+example : ((⟨2, fun i => match i with
+    | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"k"} (fun _ => .req 0) (some 1)) :
+        Scoped.Term 2 0)
+    | ⟨1, _⟩ => (Scoped.Term.opaq : Scoped.Term 2 1), 0⟩ : Closed).preconditionOfC m).isNone =
+    true := by decide
 -- a clause whose root entry is no object refuses
 example : ((one Scoped.Term.string).preconditionOfC m).isNone = true := by decide
 

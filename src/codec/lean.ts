@@ -64,7 +64,7 @@ import type { AnyCodec, LiteralValue, ObjectSlot, Refinement } from './codec'
 import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed } from './result'
-import { agrees, disjoint, storedApart, viewsDisjoint } from './scoped'
+import { agrees, disjoint, flatOf, storedApart, viewsDisjoint } from './scoped'
 import type {
     Alternatives,
     Body,
@@ -538,31 +538,39 @@ type Entry = {
 
 /**
  * **Where the scoped printer is**: the entries of the closed codec, the entry that it prints,
- * whether it prints the top of the entry, and whether the position is below a guard or below a
- * wall.
+ * whether it prints the top of the entry, and whether the position is a child of a container, below
+ * a guard, or below a wall.
  */
 type Placed = {
     /** A closed codec: one ordered scope. A graph: one flat system, with no order on its entries. */
     readonly form: 'closed' | 'graph'
+    /** The entries that a position above every guard names. */
     readonly entries: ReadonlyMap<Term, Entry>
+    /** The entry of each child of a container, in a closed codec. */
+    readonly children: ReadonlyMap<Term, Entry>
     readonly index: number
     readonly top: boolean
+    /** The position is a child of a container. */
+    readonly down: boolean
     readonly guarded: boolean
     readonly wall: boolean
 }
 
 /**
  * The namespace of the builders: the scoped builders where the printer prints a closed codec, and
- * the flat builders where it prints a graph.
+ * the flat builders where it prints a graph or a closed term below a wall.
  */
 const pre = (scope: At): string =>
-    scope.placed.form === 'graph' ? 'Scoped.Graph.' : 'Scoped.'
+    scope.placed.form === 'graph' || scope.placed.wall
+        ? 'Scoped.Graph.'
+        : 'Scoped.'
 
 /** The position below a container, which is a guard, or below a wall. */
 const below = (scope: At, kind: 'guard' | 'wall'): At => ({
     ...scope,
     placed: {
         ...scope.placed,
+        down: kind === 'guard',
         guarded: scope.placed.guarded || kind === 'guard',
         wall: scope.placed.wall || kind === 'wall',
     },
@@ -609,13 +617,15 @@ const leanBinders = (bound: Bound): string => {
  * **A closed codec** — the codec as one flat scope, for the families whose analysis reads only the
  * meaning.
  *
- * The entries of the scope are the entries of each cycle of the term graph, cycle by cycle in the
- * order of {@link componentsOf}: a cycle comes after each cycle that it reaches. The entries of a
- * cycle are in the order of {@link entryOrder}. The root is an entry: an entry of its own cycle, or
- * the last entry. So an entry reads an entry of an earlier cycle above every guard, and the scope
- * needs no constant. The top of each entry states its indices, because the elaborator needs them
- * before it reads a list of options. A term with no scoped form, an unguarded cycle, a wall that
- * reaches a cycle, or an open fragment, is refused, with the reason.
+ * The entries of the scope are the entries of {@link flatOf}: the entries of each cycle of the term
+ * graph, cycle by cycle in the order of {@link componentsOf}, then the root where no cycle holds it,
+ * then each child of a container. A cycle comes after each cycle that it reaches, and the entries of
+ * a cycle are in the order of {@link entryOrder}. So an entry reads an entry of an earlier cycle
+ * above every guard, and the scope needs no constant. A child of a container prints as the index of
+ * its entry, and a term below a wall prints as a closed graph term. The top of each entry states its
+ * indices, because the elaborator needs them before it reads a list of options. A term with no
+ * scoped form, an unguarded cycle, a wall that reaches a cycle, or an open fragment, is refused,
+ * with the reason.
  */
 export const leanClosedOf = (
     declared: ObjectSlot,
@@ -638,47 +648,51 @@ const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string =>
 
 /**
  * A printed closed codec, with the entry of each term that prints as an entry: an entry is its index
- * in the scope, and the root is the entry of the term.
+ * in the scope, and the root is the entry of the term. `entries` holds the entries that a position
+ * above every guard names, and `children` the entry of each child of a container.
  */
 type ClosedPrint = {
     readonly text: string
     readonly entries: ReadonlyMap<Term, Entry>
+    readonly children: ReadonlyMap<Term, Entry>
     readonly root: number
 }
 
-/** The print of {@link leanClosedOfTerm}, with its entries. */
+/**
+ * The print of {@link leanClosedOfTerm}: the flat scope of the host ({@link flatOf}). The last arm
+ * refutes each index past the entries, because the elaborator does not find the match on `Fin n`
+ * exhaustive from sixteen literal arms up.
+ */
 const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
-    const members: Term[] = []
-    for (const component of componentsOf([def])) {
-        const order = entryOrder(component)
-        if (order.kind === 'refused') return refuse(at, order.reason)
-        members.push(...order.entries)
-    }
-    if (!members.includes(def)) members.push(def)
-    const entries = new Map<Term, Entry>(
-        members.map((t, index) => [t, { index }]),
-    )
-    const arms = members
+    const flat = flatOf(def)
+    if (flat.kind === 'refused') return refuse(at, flat.reason)
+    const entryMap = (m: ReadonlyMap<Term, number>) =>
+        new Map<Term, Entry>([...m].map(([t, index]) => [t, { index }]))
+    const entries = entryMap(flat.cycles)
+    const children = entryMap(flat.index)
+    const arms = flat.bodies
         .map((t, index) => {
             const body = leanTermOfTerm(t, at, {
                 bound,
                 placed: {
                     form: 'closed',
                     entries,
+                    children,
                     index,
                     top: true,
+                    down: false,
                     guarded: false,
                     wall: false,
                 },
             })
-            return `| ⟨${index}, _⟩ => (${body} : Scoped.Term ${members.length} ${index})`
+            return `| ⟨${index}, _⟩ => (${body} : Scoped.Term ${flat.bodies.length} ${index})`
         })
         .join(' ')
-    const root = entries.get(def)?.index ?? 0
     return {
-        text: `(⟨${members.length}, (fun i => match i with ${arms}), ${root}⟩ : Closed)`,
+        text: `(⟨${flat.bodies.length}, (fun i => match i with ${arms} | ⟨_ + ${flat.bodies.length}, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), ${flat.root}⟩ : Closed)`,
         entries,
-        root,
+        children,
+        root: flat.root,
     }
 }
 
@@ -722,8 +736,10 @@ const leanGraphOfTerm = (def: Term, at: string, bound?: Bound): string => {
                 placed: {
                     form: 'graph',
                     entries,
+                    children: entries,
                     index,
                     top: true,
+                    down: false,
                     guarded: false,
                     wall: false,
                 },
@@ -832,10 +848,26 @@ const leanTermOfTerm = (t: Term, at: string, scope: At): string =>
     leanPlaced(t, at, scope, scope.placed)
 
 /**
- * **A term of a closed codec.** An entry prints as `ref`: below a guard any entry, above every guard
- * an earlier entry. Below a wall the term names no entry. Each other term prints in place.
+ * **A term of a closed codec.** A child of a container prints as the index of its entry. Above every
+ * guard an entry of a cycle prints as `ref` of an earlier entry. Below a wall the term names no
+ * entry, and prints as a closed graph term. Each other term prints in place.
  */
 const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
+    if (placed.form === 'closed' && placed.down && !placed.wall) {
+        const child = placed.children.get(t)
+        if (child !== undefined) return `${child.index}`
+        if (t.kind !== 'ref')
+            throw new Error(
+                'the flat scope holds no entry for a child of a container: flatOf missed the child',
+            )
+        const target = targetOf(t)
+        if (target === undefined)
+            return refuse(
+                at,
+                'an open fragment: a thunk names a codec not yet declared, so the term has no scoped form',
+            )
+        return leanPlaced(target, at, scope, placed)
+    }
     const entry = placed.entries.get(t)
     if (entry !== undefined && !placed.top && placed.form === 'graph')
         return `Scoped.Graph.Term.ref ${entry.index}`
@@ -852,7 +884,10 @@ const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
             )
         return `Scoped.Term.ref ${entry.index}`
     }
-    return leanTermCore(t, at, { ...scope, placed: { ...placed, top: false } })
+    return leanTermCore(t, at, {
+        ...scope,
+        placed: { ...placed, top: false, down: false },
+    })
 }
 
 /**
@@ -2559,12 +2594,14 @@ const narrowedBy = (phi: Term, options: readonly Term[]): Term[] =>
 
 /**
  * **A frame of the graph walk of a narrowing row**: the option whose closed codec holds the frame,
- * and the term at the frame. A frame at a position of the print is the body of the entry `j` and
- * the steps `path`, as `Closed.frameAt` reads them. The frame of a root is the root entry.
+ * the term at the frame, and whether the frame is a child of a container. A frame at a position of
+ * the print is the body of the entry `j` and the steps `path`, as `Closed.frameAt` reads them. The
+ * frame of a root is the root entry.
  */
 type GraphWalked = {
     readonly option: number
     readonly t: Term
+    readonly down: boolean
     readonly at:
         | { readonly kind: 'root' }
         | {
@@ -2582,7 +2619,8 @@ const underRefs = (t: Term): Term | undefined =>
 
 /**
  * **The model's frontier at one segment, over the graph of a printed option**: `childG`. A term
- * that prints as an entry is a leaf, and a step past it enters the body of the entry. A union gives
+ * that prints as an entry is a leaf, and a step past it enters the body of the entry. Each child of
+ * a container prints as an entry, and above every guard an entry of a cycle does. A union gives
  * the children of each option. `undefined` is a refusal, and a segment that a term does not read
  * gives no frame. The kernel checks each frame against `Rooted.at`, so a step that reads otherwise
  * fails the row.
@@ -2590,11 +2628,11 @@ const underRefs = (t: Term): Term | undefined =>
 const graphChildOf = (
     w: GraphWalked,
     s: string | number,
-    entries: ReadonlyMap<Term, Entry>,
+    print: Pick<ClosedPrint, 'entries' | 'children'>,
 ): GraphWalked[] | undefined => {
     const u = underRefs(w.t)
     if (u === undefined) return []
-    const entry = entries.get(u)
+    const entry = (w.down ? print.children : print.entries).get(u)
     const top = w.at.kind === 'position' && w.at.path.length === 0
     if (
         entry !== undefined &&
@@ -2604,16 +2642,18 @@ const graphChildOf = (
             {
                 option: w.option,
                 t: u,
+                down: false,
                 at: { kind: 'position', j: entry.index, path: [] },
             },
             s,
-            entries,
+            print,
         )
     if (w.at.kind !== 'position') return []
     const { j, path } = w.at
-    const step = (t: Term, sel: string): GraphWalked => ({
+    const step = (t: Term, sel: string, down: boolean): GraphWalked => ({
         option: w.option,
         t,
+        down,
         at: { kind: 'position', j, path: [...path, sel] },
     })
     switch (u.kind) {
@@ -2624,7 +2664,11 @@ const graphChildOf = (
         case 'union': {
             const all: GraphWalked[] = []
             for (const [p, option] of u.options.entries()) {
-                const some = graphChildOf(step(option, `.opt ${p}`), s, entries)
+                const some = graphChildOf(
+                    step(option, `.opt ${p}`, false),
+                    s,
+                    print,
+                )
                 if (some === undefined) return undefined
                 all.push(...some)
             }
@@ -2637,15 +2681,16 @@ const graphChildOf = (
                 step(
                     field ? field.t : (u.body.rest ?? nothingAt),
                     `.name ${leanString(s)}`,
+                    true,
                 ),
             ]
         }
         case 'list': {
             if (typeof s !== 'number') return []
             const one = u.pre[s]
-            if (one !== undefined) return [step(one, `.pos ${s}`)]
+            if (one !== undefined) return [step(one, `.pos ${s}`, true)]
             if (u.suf.length > 0) return undefined
-            return [step(u.spread ?? nothingAt, `.pos ${s}`)]
+            return [step(u.spread ?? nothingAt, `.pos ${s}`, true)]
         }
         default:
             return []
@@ -2656,13 +2701,22 @@ const graphChildOf = (
 const graphWalkOf = (
     start: readonly GraphWalked[],
     segs: readonly (string | number)[],
-    entriesOf: (option: number) => ReadonlyMap<Term, Entry>,
+    printOf: (
+        option: number,
+    ) => Pick<ClosedPrint, 'entries' | 'children'> | undefined,
 ): GraphWalked[] | undefined => {
     let ws: GraphWalked[] = [...start]
     for (const s of segs) {
         const next: GraphWalked[] = []
         for (const w of ws) {
-            const some = graphChildOf(w, s, entriesOf(w.option))
+            const some = graphChildOf(
+                w,
+                s,
+                printOf(w.option) ?? {
+                    entries: new Map(),
+                    children: new Map(),
+                },
+            )
             if (some === undefined) return undefined
             next.push(...some)
         }
@@ -2770,9 +2824,9 @@ export const leanPath = (
             const segs = [wrapped, ...(steps as readonly (string | number)[])]
             const frontier = () =>
                 graphWalkOf(
-                    [{ option: 0, t: def, at: { kind: 'root' } }],
+                    [{ option: 0, t: def, down: false, at: { kind: 'root' } }],
                     segs,
-                    () => rootPrint.entries,
+                    () => rootPrint,
                 )
             plain.push(
                 `([${segs.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, frameText(root))})`,
@@ -2813,11 +2867,18 @@ export const leanPath = (
             return graphWalkOf(
                 options.options.flatMap((t, option) =>
                     kept.has(t)
-                        ? [{ option, t, at: { kind: 'root' } as const }]
+                        ? [
+                              {
+                                  option,
+                                  t,
+                                  down: false,
+                                  at: { kind: 'root' } as const,
+                              },
+                          ]
                         : [],
                 ),
                 rest,
-                (option) => printed[option]?.entries ?? new Map(),
+                (option) => printed[option],
             )
         }
         const byClause = unions.get(os) ?? new Map<string, string[]>()

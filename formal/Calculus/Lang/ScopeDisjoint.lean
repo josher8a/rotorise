@@ -166,7 +166,9 @@ def famObjG {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B}
 variable {sL sR}
 
 /-- A pair of positions below a guard: a pair of entries already assumed is apart, and a new
-    pair is assumed while the walk compares the two bodies. -/
+    pair is assumed while the walk compares the two bodies. Each child of a container of a scope is
+    an entry, so the last case reads only a closed term from below a wall: a closed term holds no
+    leaf, so no cycle passes through it. -/
 def pairAt (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR) :
     Graph B NL → Graph B NR → Bool
   | .leaf i, .leaf j => A.any (fun p => decide (p.1 = i) && decide (p.2 = j)) ||
@@ -193,7 +195,7 @@ def rowG (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL N
   | .node (.refine _ _) a, y => rowG prev A (a ()) y
   | .node (.union m) a, y => (List.finRange m).all fun p => rowG prev A (a p) y
   | x@(.node (.prim g) _), y => rightC sR (prev A x) (famPrimG g) y
-  | x@(.node .set a), y => rightC sR (prev A x) (famSetG (prev [] (a ()))) y
+  | x@(.node .set a), y => rightC sR (prev A x) (famSetG (pairAt (sL := sL) (sR := sR) prev A (a ()))) y
   | x@(.node (.list _ _ _) a), y =>
       rightC sR (prev A x) (famListG ((listParts a).1.map (pairAt (sL := sL) (sR := sR) prev A))
         ((listParts a).2.1.map (pairAt (sL := sL) (sR := sR) prev A))
@@ -209,18 +211,17 @@ def blockR (R : Graph B NL → Graph B NR → Bool) {fs : Finset String} {md : {
   | ⟨0, _⟩, _ => fun _ => true
   | ⟨1, _⟩, a => R (a (.inr ⟨0, Nat.one_pos⟩))
 
-/-- **The rows with one test per role**: `Rr` at a restart, `Rs` at the element of a set, and
-    `Rc` at a child below a guard. -/
-def rowR3 (Rr Rs Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
+/-- **The rows with one test per role**: `Rr` at a restart, and `Rc` at a child below a guard. -/
+def rowR2 (Rr Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
   | .leaf j, y => Rr (sL j) y
   | .node .never _, _ => true
   | x@(.node (.held _ _ _) _), y => rightC sR (Rr x) (fun _ => false) y
   | x@(.node (.legacy _) _), y => rightC sR (Rr x) (fun _ => false) y
   | x@(.node .opaq _), y => rightC sR (Rr x) (fun _ => false) y
-  | .node (.refine _ _) a, y => rowR3 Rr Rs Rc (a ()) y
-  | .node (.union m) a, y => (List.finRange m).all fun p => rowR3 Rr Rs Rc (a p) y
+  | .node (.refine _ _) a, y => rowR2 Rr Rc (a ()) y
+  | .node (.union m) a, y => (List.finRange m).all fun p => rowR2 Rr Rc (a p) y
   | x@(.node (.prim g) _), y => rightC sR (Rr x) (famPrimG g) y
-  | x@(.node .set a), y => rightC sR (Rr x) (famSetG (Rs (a ()))) y
+  | x@(.node .set a), y => rightC sR (Rr x) (famSetG (Rc (a ()))) y
   | x@(.node (.list _ _ _) a), y =>
       rightC sR (Rr x) (famListG ((listParts a).1.map Rc) ((listParts a).2.1.map Rc)
         ((listParts a).2.2.map Rc)) y
@@ -528,27 +529,27 @@ theorem blockTest_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (
 
 variable [Leaf B]
 
-/-- **The row of the walk is the row with three tests**: the walk at the table, the walk at the
-    empty table, and the pair test. -/
+/-- **The row of the walk is the row with two tests**: the walk at the table, and the pair
+    test. -/
 theorem rowG_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR) :
     ∀ x y, rowG sL sR prev A x y =
-      rowR3 sL sR (prev A) (prev []) (pairAt (sL := sL) (sR := sR) prev A) x y := by
+      rowR2 sL sR (prev A) (pairAt (sL := sL) (sR := sR) prev A) x y := by
   intro x
   induction x with
-  | leaf j => intro y; simp only [rowG, rowR3]
+  | leaf j => intro y; simp only [rowG, rowR2]
   | node op a ih =>
     intro y
     cases op with
-    | refine _ _ => simp only [rowG, rowR3]; exact ih () y
-    | union m => simp only [rowG, rowR3]; exact congrArg _ (funext fun p => ih p y)
-    | obj fs md s => simp only [rowG, rowR3]; rw [blockTest_eq sL sR prev A s a]
-    | _ => simp only [rowG, rowR3]
+    | refine _ _ => simp only [rowG, rowR2]; exact ih () y
+    | union m => simp only [rowG, rowR2]; exact congrArg _ (funext fun p => ih p y)
+    | obj fs md s => simp only [rowG, rowR2]; rw [blockTest_eq sL sR prev A s a]
+    | _ => simp only [rowG, rowR2]
 
-/-- **Post-fixed up to the unfolding of two entries**: each pair passes the rows at three tests
+/-- **Post-fixed up to the unfolding of two entries**: each pair passes the rows at two tests
     that the relation holds, or is two entries whose bodies the relation holds. -/
 def PostP (R : Graph B NL → Graph B NR → Prop) : Prop :=
-  ∀ x y, R x y → (∃ Rr Rs Rc : Graph B NL → Graph B NR → Bool,
-    SubR Rr R ∧ SubR Rs R ∧ SubR Rc R ∧ rowR3 sL sR Rr Rs Rc x y = true) ∨
+  ∀ x y, R x y → (∃ Rr Rc : Graph B NL → Graph B NR → Bool,
+    SubR Rr R ∧ SubR Rc R ∧ rowR2 sL sR Rr Rc x y = true) ∨
     ∃ i j, x = .leaf i ∧ y = .leaf j ∧ R (sL i) (sR j)
 
 /-- **The visited relation of `disjoint` is post-fixed up to unfolding.** -/
@@ -559,9 +560,8 @@ theorem vis_post : PostP sL sR (Vis sL sR (decG sL sR)) := by
     cases m with
     | zero => exact nomatch h
     | succ k =>
-      refine Or.inl ⟨decG sL sR k A, decG sL sR k [], pairAt (sL := sL) (sR := sR) (decG sL sR k) A,
-        fun a b hab => vis_walk sL sR _ hab hA', fun a b hab => vis_root sL sR _ hab,
-        vis_pairAt sL sR (decG sL sR) hA', ?_⟩
+      refine Or.inl ⟨decG sL sR k A, pairAt (sL := sL) (sR := sR) (decG sL sR k) A,
+        fun a b hab => vis_walk sL sR _ hab hA', vis_pairAt sL sR (decG sL sR) hA', ?_⟩
       rw [← rowG_eq]; exact h
   · exact Or.inr ⟨i, j, rfl, rfl, S, hS, hs⟩
 
@@ -1661,13 +1661,13 @@ omit [Shapes S] in
     relation holds, and the meaning reads an entry as its body. -/
 theorem rformP {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostP dL.sys dR.sys R)
     {x : Graph S.sig NL} {v : Mean.V (B := S.sig)}
-    (hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R →
-      ∀ y, rowR3 dL.sys dR.sys Rr Rs Rc x y = true → (mng τ dR y).f o v = none)
+    (hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R →
+      ∀ y, rowR2 dL.sys dR.sys Rr Rc x y = true → (mng τ dR y).f o v = none)
     (hleaf : ∀ i j, x = .leaf i → R (dL.sys i) (dR.sys j) → (mng τ dR (dR.sys j)).f o v = none) :
     ∀ y, R x y → (mng τ dR y).f o v = none := by
   intro y hy
-  rcases hR x y hy with ⟨Rr, Rs, Rc, h1, h2, h3, h4⟩ | ⟨i, j, rfl, rfl, h⟩
-  · exact hrows Rr Rs Rc h1 h2 h3 y h4
+  rcases hR x y hy with ⟨Rr, Rc, h1, h3, h4⟩ | ⟨i, j, rfl, rfl, h⟩
+  · exact hrows Rr Rc h1 h3 y h4
   · rw [congrFun (congrFun (mng_leaf dR j) o) v]; exact hleaf i j rfl h
 
 variable (dL dR) in
@@ -1677,67 +1677,67 @@ variable (dL dR) in
 theorem post_soundP (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Prop}
     (hR : PostP dL.sys dR.sys R) :
     ∀ {x o' v r}, Eval dL x o' v r → o' = o → ∀ w, r = some w →
-      (∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R →
-        ∀ y, rowR3 dL.sys dR.sys Rr Rs Rc x y = true → (mng τ dR y).f o v = none) ∧
+      (∀ Rr Rc, SubR Rr R → SubR Rc R →
+        ∀ y, rowR2 dL.sys dR.sys Rr Rc x y = true → (mng τ dR y).f o v = none) ∧
       ∀ y, R x y → (mng τ dR y).f o v = none := by
   intro x o' v r h
   induction h with
   | @leaf i o' v r _ ih =>
     intro ho w hw
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.leaf i) y = true → (mng τ dR y).f o v = none :=
-      fun Rr Rs Rc hr _ _ y hy => (ih ho w hw).2 y (hr _ _ hy)
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.leaf i) y = true → (mng τ dR y).f o v = none :=
+      fun Rr Rc hr _ y hy => (ih ho w hw).2 y (hr _ _ hy)
     exact ⟨hrows, rformP dL dR hR hrows fun i' j hx h => by cases hx; exact (ih ho w hw).2 _ h⟩
   | @prim g a o' v =>
     intro ho w hw; subst o'
     have hf : ∀ y', famPrimG g y' = true → (mng τ dR y').f o v = none := fun y' h' =>
       none_of_apart (famPrimG_sound laws dR (k := Mean.d (B := S.sig) v + 1)
         (fun p => mng τ dL (a p)) y' h' v (Nat.lt_succ_self _)) hw
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.prim g) a) y = true → (mng τ dR y).f o v = none := by
-      intro Rr Rs Rc hr _ _ y hy
-      simp only [rowR3] at hy
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node (.prim g) a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rc hr _ y hy
+      simp only [rowR2] at hy
       refine rightC_noneP dR (P := R (.node (.prim g) a)) (fun y' h' => ?_) (hr _) hf y hy
-      rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
-      · exact ⟨Rr' _, _, h1 _, hf, by simpa only [rowR3] using h4⟩
+      rcases hR _ _ h' with ⟨Rr', _, h1, _, h4⟩ | ⟨_, _, hx, _⟩
+      · exact ⟨Rr' _, _, h1 _, hf, by simpa only [rowR2] using h4⟩
       · exact nomatch hx
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
   | @opaq a o' v =>
     intro ho w hw; subst o'
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node .opaq a) y = true → (mng τ dR y).f o v = none := by
-      intro Rr Rs Rc hr _ _ y hy
-      simp only [rowR3] at hy
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node .opaq a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rc hr _ y hy
+      simp only [rowR2] at hy
       refine rightC_noneP dR (P := R (.node .opaq a)) (fun y' h' => ?_) (hr _)
         (fun _ h' => absurd h' Bool.false_ne_true) y hy
-      rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
-      · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR3] using h4⟩
+      rcases hR _ _ h' with ⟨Rr', _, h1, _, h4⟩ | ⟨_, _, hx, _⟩
+      · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR2] using h4⟩
       · exact nomatch hx
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
   | never => exact fun _ w hw => nomatch hw
   | @refine p pA a o' v r h0 ih =>
     intro ho w hw; subst o'
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.refine p pA) a) y = true → (mng τ dR y).f o v = none :=
-      fun Rr Rs Rc hr hs hc y hy => (ih rfl w (bind_some_eq hw)).1 Rr Rs Rc hr hs hc y hy
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node (.refine p pA) a) y = true → (mng τ dR y).f o v = none :=
+      fun Rr Rc hr hc y hy => (ih rfl w (bind_some_eq hw)).1 Rr Rc hr hc y hy
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
   | unionNil => exact fun _ w hw => nomatch hw
   | @unionHead m o' v w' a _ ih =>
     intro ho w hw
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.union (m + 1)) a) y = true → (mng τ dR y).f o v = none := by
-      intro Rr Rs Rc hr hs hc y hy
-      simp only [rowR3, List.all_eq_true, List.mem_finRange, true_implies] at hy
-      exact (ih ho w hw).1 Rr Rs Rc hr hs hc y (hy 0)
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node (.union (m + 1)) a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rc hr hc y hy
+      simp only [rowR2, List.all_eq_true, List.mem_finRange, true_implies] at hy
+      exact (ih ho w hw).1 Rr Rc hr hc y (hy 0)
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
   | @unionTail m o' v r a _ _ _ ih =>
     intro ho w hw
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node (.union (m + 1)) a) y = true → (mng τ dR y).f o v = none := by
-      intro Rr Rs Rc hr hs hc y hy
-      simp only [rowR3, List.all_eq_true, List.mem_finRange, true_implies] at hy
-      exact (ih ho w hw).1 Rr Rs Rc hr hs hc y (by
-        simp only [rowR3, List.all_eq_true, List.mem_finRange, true_implies]; exact fun p => hy p.succ)
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node (.union (m + 1)) a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rc hr hc y hy
+      simp only [rowR2, List.all_eq_true, List.mem_finRange, true_implies] at hy
+      exact (ih ho w hw).1 Rr Rc hr hc y (by
+        simp only [rowR2, List.all_eq_true, List.mem_finRange, true_implies]; exact fun p => hy p.succ)
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
   | @down op a o' v hk C hC ih =>
     intro ho w hw; subst o'
@@ -1749,9 +1749,9 @@ theorem post_soundP (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
       cases hcu : (C p).f o u with
       | none => rfl
       | some w' => rw [(ih p o u hu rfl w' hcu).2 y' hy']; simp
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node op a) y = true → (mng τ dR y).f o v = none := by
-      intro Rr Rs Rc hr hs hc y hy
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node op a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rc hr hc y hy
       cases op with
       | list n s m =>
         have hf : ∀ Rc : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rc R → ∀ y',
@@ -1759,10 +1759,10 @@ theorem post_soundP (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
             (mng τ dR y').f o v = none := fun Rc hc y' h' =>
           none_of_apart (listRow_sound a (fun p y'' h'' => hAB p y'' (hc _ _ h'')) y' h' v
             (Nat.lt_succ_self _)) hx
-        simp only [rowR3] at hy
+        simp only [rowR2] at hy
         refine rightC_noneP dR (P := R (.node (.list n s m) a)) (fun y' h' => ?_) (hr _) (hf Rc hc) y hy
-        rcases hR _ _ h' with ⟨Rr', _, Rc', h1, _, h3, h4⟩ | ⟨_, _, hx, _⟩
-        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR3] using h4⟩
+        rcases hR _ _ h' with ⟨Rr', Rc', h1, h3, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR2] using h4⟩
         · exact nomatch hx
       | obj fs md s =>
         have hf : ∀ Rc : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rc R → ∀ y',
@@ -1770,18 +1770,18 @@ theorem post_soundP (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
             (mng τ dR y').f o v = none := fun Rc hc y' h' =>
           none_of_apart (objRow_sound a (fun p y'' h'' => hAB p y'' (hc _ _ h'')) y' h' v
             (Nat.lt_succ_self _)) hx
-        simp only [rowR3] at hy
+        simp only [rowR2] at hy
         refine rightC_noneP dR (P := R (.node (.obj fs md s) a)) (fun y' h' => ?_) (hr _) (hf Rc hc) y hy
-        rcases hR _ _ h' with ⟨Rr', _, Rc', h1, _, h3, h4⟩ | ⟨_, _, hx, _⟩
-        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR3] using h4⟩
+        rcases hR _ _ h' with ⟨Rr', Rc', h1, h3, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR2] using h4⟩
         · exact nomatch hx
       | set =>
-        have hf : ∀ Rs : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rs R → ∀ y',
-            famSetG (Rs (a ())) y' = true → (mng τ dR y').f o v = none := by
-          intro Rs hs' y' h'
+        have hf : ∀ Rc : Graph S.sig NL → Graph S.sig NR → Bool, SubR Rc R → ∀ y',
+            famSetG (Rc (a ())) y' = true → (mng τ dR y').f o v = none := by
+          intro Rc hs' y' h'
           let a' : (TOp.set (B := S.sig)).Pos → Mean.C S.sig :=
             fun _ => trunc (Mean.d (B := S.sig) v - 1) (mng τ dL (a ()))
-          have hmt : ∀ e, Rs (a ()) e = true → ∀ u,
+          have hmt : ∀ e, Rc (a ()) e = true → ∀ u,
               (((a' ()).f o u).isSome && ((mng τ dR e).f o u).isSome) = false := by
             intro e he u
             show ((if Mean.d (B := S.sig) u ≤ Mean.d (B := S.sig) v - 1 then (mng τ dL (a ())).f o u
@@ -1795,32 +1795,32 @@ theorem post_soundP (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
             (hag.f o v (by have := Mean.d_pos (B := S.sig) v; omega)).trans hx
           exact none_of_apart (famSetG_sound laws dR (k := Mean.d (B := S.sig) v + 1) a' hmt y' h' v
             (Nat.lt_succ_self _)) hx'
-        simp only [rowR3] at hy
-        refine rightC_noneP dR (P := R (.node .set a)) (fun y' h' => ?_) (hr _) (hf Rs hs) y hy
-        rcases hR _ _ h' with ⟨Rr', Rs', _, h1, h2, _, h4⟩ | ⟨_, _, hx, _⟩
-        · exact ⟨Rr' _, _, h1 _, hf Rs' h2, by simpa only [rowR3] using h4⟩
+        simp only [rowR2] at hy
+        refine rightC_noneP dR (P := R (.node .set a)) (fun y' h' => ?_) (hr _) (hf Rc hc) y hy
+        rcases hR _ _ h' with ⟨Rr', Rc', h1, h3, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, hf Rc' h3, by simpa only [rowR2] using h4⟩
         · exact nomatch hx
       | _ => exact nomatch hk
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩
   | @wall op a o' v hk _ _ =>
     intro ho w hw; subst o'
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowR3 dL.sys dR.sys Rr Rs Rc (.node op a) y = true → (mng τ dR y).f o v = none := by
-      intro Rr Rs Rc hr _ _ y hy
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowR2 dL.sys dR.sys Rr Rc (.node op a) y = true → (mng τ dR y).f o v = none := by
+      intro Rr Rc hr _ y hy
       cases op with
       | held _ _ _ =>
-        simp only [rowR3] at hy
+        simp only [rowR2] at hy
         refine rightC_noneP dR (P := R (.node _ a)) (fun y' h' => ?_) (hr _)
           (fun _ h' => absurd h' Bool.false_ne_true) y hy
-        rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
-        · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR3] using h4⟩
+        rcases hR _ _ h' with ⟨Rr', _, h1, _, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR2] using h4⟩
         · exact nomatch hx
       | legacy _ =>
-        simp only [rowR3] at hy
+        simp only [rowR2] at hy
         refine rightC_noneP dR (P := R (.node _ a)) (fun y' h' => ?_) (hr _)
           (fun _ h' => absurd h' Bool.false_ne_true) y hy
-        rcases hR _ _ h' with ⟨Rr', _, _, h1, _, _, h4⟩ | ⟨_, _, hx, _⟩
-        · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR3] using h4⟩
+        rcases hR _ _ h' with ⟨Rr', _, h1, _, h4⟩ | ⟨_, _, hx, _⟩
+        · exact ⟨Rr' _, _, h1 _, fun _ h' => absurd h' Bool.false_ne_true, by simpa only [rowR2] using h4⟩
         · exact nomatch hx
       | _ => exact nomatch hk
     exact ⟨hrows, rformP dL dR hR hrows fun _ _ hx => nomatch hx⟩

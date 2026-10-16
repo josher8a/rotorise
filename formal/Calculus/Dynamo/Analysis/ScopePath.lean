@@ -7,7 +7,8 @@ import Calculus.Dynamo.Analysis.ScopeDisjoint
 Each vector reduces in the kernel. A frontier is the operation of each frame at the path, or a
 refusal. The store refuses a name on a list and a position on a map. A position past the prefix of
 a list shape with a suffix is a refusal, because the codec of the position depends on the length.
-An entry that a cycle returns to is one entry, so a path past the cycle lands on the entry again.
+An entry that a cycle returns to is one entry, so a path past the cycle lands on the entry again. Each
+child of a container is an entry, so a vector reads an entry as the operation of its body.
 
 Narrowing keeps each option whose view at the dual meets the view of the clause. The narrowing law
 at DynamoDB (`Closed.narrowC_law`) reads the laws of the decision at the dual (`dynLaws`).
@@ -69,66 +70,79 @@ private def tagOf {N : Nat} : Alg.Scoped.Graph dynSig N → Nat
   | .node (.obj _ _ _) _ => 9
   | .node (.union _) _ => 10
 
-/-- The operations of a frontier. -/
+/-- The operations of a frontier. An entry reads as the operation of its body, because each child
+    of a container is an entry. -/
 private def tags (r : Option (List (GFrame dynSig))) : Option (List Nat) :=
-  r.map (·.map fun f => tagOf f.t)
-
-private abbrev one (t : Scoped.Term 1 0) : Closed :=
-  ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
-
-private abbrev litS (s : String) : Scoped.Term 1 0 := Scoped.Term.literal .string s
+  r.map (·.map fun f => match f.t with
+    | .leaf j => tagOf (f.d.graph j)
+    | t => tagOf t)
 
 /-- A union under `m`, whose option `B` declares no `only`. -/
-private abbrev itemM : Closed := one (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ =>
-  Scoped.ObjectSlot.req (Scoped.Term.union [
-    Scoped.Term.object (Scoped.Body.mk {"tag", "only"} (fun k => if k.1 = "tag" then
-      Scoped.ObjectSlot.req (Scoped.Term.literal .string "A") else Scoped.ObjectSlot.req
-        Scoped.Term.number) none),
-    Scoped.Term.object (Scoped.Body.mk {"tag", "shared"} (fun k => if k.1 = "tag" then
-      Scoped.ObjectSlot.req (Scoped.Term.literal .string "B") else Scoped.ObjectSlot.req
-        Scoped.Term.string) none)])) none))
+private abbrev itemM : Closed := ⟨6, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ => .req 1) none) : Scoped.Term 6 0)
+  | ⟨1, _⟩ => (Scoped.Term.union [
+      Scoped.Term.object (Scoped.Body.mk {"tag", "only"} (fun k => if k.1 = "tag" then
+        Scoped.ObjectSlot.req 2 else Scoped.ObjectSlot.req 3) none),
+      Scoped.Term.object (Scoped.Body.mk {"tag", "shared"} (fun k => if k.1 = "tag" then
+        Scoped.ObjectSlot.req 4 else Scoped.ObjectSlot.req 5) none)] : Scoped.Term 6 1)
+  | ⟨2, _⟩ => (Scoped.Term.literal .string "A" : Scoped.Term 6 2)
+  | ⟨3, _⟩ => (Scoped.Term.number : Scoped.Term 6 3)
+  | ⟨4, _⟩ => (Scoped.Term.literal .string "B" : Scoped.Term 6 4)
+  | ⟨5, _⟩ => (Scoped.Term.string : Scoped.Term 6 5), 0⟩
 
 -- the frontier at `m.only` is a number and the bottom: `B` reads maps and refuses `only`
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemM.rooted [.name "m", .name "only"]) = some [1, 3] := by decide
 
 -- a name on a list: the store refuses the name on every list, so the frontier is empty
-private abbrev itemL : Closed := one (Scoped.Term.object (Scoped.Body.mk {"xs"} (fun _ =>
-  Scoped.ObjectSlot.req (Scoped.Term.list [] (some Scoped.Term.string) [])) none))
+private abbrev itemL : Closed := ⟨3, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"xs"} (fun _ => .req 1) none) : Scoped.Term 3 0)
+  | ⟨1, _⟩ => (Scoped.Term.list [] (some 2) [] : Scoped.Term 3 1)
+  | ⟨2, _⟩ => (Scoped.Term.string : Scoped.Term 3 2), 0⟩
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemL.rooted [.name "xs", .name "foo"]) = some [] := by decide
 -- a position past the prefix with no suffix is the spread
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemL.rooted [.name "xs", .pos 7]) = some [1] := by decide
 -- a position past the prefix with a suffix is a refusal
-private abbrev itemS : Closed := one (Scoped.Term.object (Scoped.Body.mk {"xs"} (fun _ =>
-  Scoped.ObjectSlot.req (Scoped.Term.list [Scoped.Term.number] (some Scoped.Term.string)
-    [Scoped.Term.boolean])) none))
+private abbrev itemS : Closed := ⟨5, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"xs"} (fun _ => .req 1) none) : Scoped.Term 5 0)
+  | ⟨1, _⟩ => (Scoped.Term.list [2] (some 3) [4] : Scoped.Term 5 1)
+  | ⟨2, _⟩ => (Scoped.Term.number : Scoped.Term 5 2)
+  | ⟨3, _⟩ => (Scoped.Term.string : Scoped.Term 5 3)
+  | ⟨4, _⟩ => (Scoped.Term.boolean : Scoped.Term 5 4), 0⟩
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemS.rooted [.name "xs", .pos 1]) = none := by decide
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemS.rooted [.name "xs", .pos 0]) = some [1] := by decide
 
--- the path of no segment is the root entry
-example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemL.rooted []) = some [0] := by decide
+-- the path of no segment is the root entry, an object
+example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemL.rooted []) = some [9] := by decide
 
--- a recursive codec: `kids.0.v` is `string`, and `kids.0.kids.3` lands on the entry again
-private abbrev tree : Closed := one (Scoped.Term.object (Scoped.Body.mk {"v", "kids"} (fun k =>
-  if k.1 = "v" then Scoped.ObjectSlot.req Scoped.Term.string else
-    Scoped.ObjectSlot.req (Scoped.Term.list [] (some (Scoped.Term.ref 0)) [])) none))
+-- a recursive codec: `kids.0.v` is `string`, and `kids.0.kids.3` lands on the root entry again
+private abbrev tree : Closed := ⟨3, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"v", "kids"} (fun k =>
+      if k.1 = "v" then Scoped.ObjectSlot.req 1 else Scoped.ObjectSlot.req 2) none) : Scoped.Term 3 0)
+  | ⟨1, _⟩ => (Scoped.Term.string : Scoped.Term 3 1)
+  | ⟨2, _⟩ => (Scoped.Term.list [] (some 0) [] : Scoped.Term 3 2), 0⟩
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) tree.rooted [.name "kids", .pos 0, .name "v"]) = some [1] := by decide
-example : tags (Alg.Scoped.Rooted.at (S := dynSyn) tree.rooted [.name "kids", .pos 0, .name "kids", .pos 3]) = some [0] := by decide
+example : tags (Alg.Scoped.Rooted.at (S := dynSyn) tree.rooted [.name "kids", .pos 0, .name "kids", .pos 3]) = some [9] := by decide
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) tree.rooted [.name "kids", .pos 0, .name "kids", .pos 3, .name "v"]) =
     some [1] := by decide
 
 -- an opaque attribute: every path is opaque
-private abbrev itemO : Closed := one (Scoped.Term.object (Scoped.Body.mk {"o"} (fun _ =>
-  Scoped.ObjectSlot.req Scoped.Term.opaq) none))
+private abbrev itemO : Closed := ⟨2, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"o"} (fun _ => .req 1) none) : Scoped.Term 2 0)
+  | ⟨1, _⟩ => (Scoped.Term.opaq : Scoped.Term 2 1), 0⟩
 example : tags (Alg.Scoped.Rooted.at (S := dynSyn) itemO.rooted [.name "o", .name "x", .pos 2]) = some [2] := by decide
 
 /-! Narrowing on the graph -/
 
-private abbrev clause (k : String) (t : Scoped.Term 1 1) : Closed :=
-  one (Scoped.Term.object (Scoped.Body.mk {k} (fun _ => Scoped.ObjectSlot.req t)
-    (some Scoped.Term.opaq)))
-private abbrev two (k v : String) (tk tv : Scoped.Term 1 1) : Closed :=
-  one (Scoped.Term.object (Scoped.Body.mk {k, v} (fun x => if x.1 = k then
-    Scoped.ObjectSlot.req tk else Scoped.ObjectSlot.req tv) none))
+private abbrev clause (k : String) (t : Scoped.Term 3 1) : Closed := ⟨3, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {k} (fun _ => .req 1) (some 2)) : Scoped.Term 3 0)
+  | ⟨1, _⟩ => t
+  | ⟨2, _⟩ => (Scoped.Term.opaq : Scoped.Term 3 2), 0⟩
+private abbrev two (k v : String) (tk : Scoped.Term 3 1) (tv : Scoped.Term 3 2) : Closed :=
+  ⟨3, fun i => match i with
+    | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {k, v} (fun x => if x.1 = k then
+        Scoped.ObjectSlot.req 1 else Scoped.ObjectSlot.req 2) none) : Scoped.Term 3 0)
+    | ⟨1, _⟩ => tk
+    | ⟨2, _⟩ => tv, 0⟩
 
 private abbrev φA : Closed := clause "tag" (Scoped.Term.literal .string "A")
 private abbrev φAB : Closed := clause "tag"

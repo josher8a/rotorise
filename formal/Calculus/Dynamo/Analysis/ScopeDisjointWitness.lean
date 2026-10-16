@@ -22,11 +22,11 @@ def Closed.over (base : Scoped.Term 2 0) (top : Scoped.Term 2 1) : Closed :=
 
 /-- A recursive codec: a boolean, or an object whose key `"k"` holds the codec again. -/
 def recBoolBody : Scoped.Term 1 0 :=
-  .union [.boolean, .object (Scoped.Body.mk {"k"} (fun _ => .req (.ref 0)) none)]
+  .union [.boolean, .object (Scoped.Body.mk {"k"} (fun _ => .req 0) none)]
 
 /-- A recursive codec: a string, or an object whose key `"k"` holds the codec again. -/
 def recStrBody {w : Nat} : Scoped.Term (w + 1) 0 :=
-  .union [.string, .object (Scoped.Body.mk {"k"} (fun _ => .req (.ref 0)) none)]
+  .union [.string, .object (Scoped.Body.mk {"k"} (fun _ => .req 0) none)]
 
 /-! ## Refinements and recursion -/
 
@@ -68,8 +68,8 @@ The owner's witness. Each list starts with a literal, and the empty list is an o
 
 /-- The three options: a nonempty list of `"A"`, a nonempty list of `"B"`, and the empty list. -/
 def literalListOptionsC : List Closed :=
-  [Closed.one (.list [.literal .string "A"] (some (.literal .string "A")) []),
-   Closed.one (.list [.literal .string "B"] (some (.literal .string "B")) []),
+  [Closed.two (.list [1] (some 1) []) (.literal .string "A"),
+   Closed.two (.list [1] (some 1) []) (.literal .string "B"),
    Closed.one (.list [] none [])]
 
 /-- **The certificate certifies the union**: each pair of options is disjoint. -/
@@ -78,8 +78,8 @@ theorem Closed.certAllC_literalListOptions : certAllC literalListOptionsC = true
 /-- **The crossing control is not certified.** `array (literal "A")` and `array (literal "B")`
     both hold `[]`. -/
 theorem Closed.not_certAllC_literalArrays :
-    certAllC [Closed.one (.array (.literal .string "A")),
-      Closed.one (.array (.literal .string "B"))] = false := by
+    certAllC [Closed.two (.array 1) (.literal .string "A"),
+      Closed.two (.array 1) (.literal .string "B")] = false := by
   decide
 
 /-! ## Two restricted sets, apart at their elements -/
@@ -87,14 +87,14 @@ theorem Closed.not_certAllC_literalArrays :
 /-- **Two string sets with disjoint members are disjoint.** No set is empty. Each element is a
     union of literals. -/
 theorem Closed.disjoint_disjointStringSets :
-    (Closed.one (.set (.union [.literal .string "a", .literal .string "b"]))).disjoint
-      (Closed.one (.set (.literal .string "c"))) = true := by
+    (Closed.two (.set 1) (.union [.literal .string "a", .literal .string "b"])).disjoint
+      (Closed.two (.set 1) (.literal .string "c")) = true := by
   decide
 
 /-- **Two string sets that share a member are not disjoint.** -/
 theorem Closed.not_disjoint_stringSets_shared :
-    (Closed.one (.set (.union [.literal .string "a", .literal .string "b"]))).disjoint
-      (Closed.one (.set (.union [.literal .string "b", .literal .string "c"]))) = false := by
+    (Closed.two (.set 1) (.union [.literal .string "a", .literal .string "b"])).disjoint
+      (Closed.two (.set 1) (.union [.literal .string "b", .literal .string "c"])) = false := by
   decide
 
 /-! ## The views certify a `held` whose caller side is precise
@@ -106,20 +106,20 @@ requires one element or more, and the stored-side views differ in kind. -/
 /-- The decision on the two codecs does not certify the pair. -/
 theorem Closed.disjoint_heldNE_base :
     (Closed.one (.held false (.set .string) (.list [.string] (some .string) []) (.caller 0, false) [])).disjoint
-      (Closed.one (.list [] (some .number) [])) = false := by
+      (Closed.two (.list [] (some 1) []) .number) = false := by
   decide
 
 /-- **A caller side that requires one element or more is certified** beside a list of numbers. -/
 theorem Closed.viewsDisjoint_heldNE :
     (Closed.one (.held false (.set .string) (.list [.string] (some .string) []) (.caller 0, false) [])).viewsDisjoint
-      (Closed.one (.list [] (some .number) [])) = true := by
+      (Closed.two (.list [] (some 1) []) .number) = true := by
   decide
 
 /-- **A caller side that admits the empty list is refused**, because the list of numbers admits
     the empty list too. -/
 theorem Closed.viewsDisjoint_heldAny :
     (Closed.one (.held false (.set .string) (.list [] (some .string) []) (.caller 0, false) [])).viewsDisjoint
-      (Closed.one (.list [] (some .number) [])) = false := by
+      (Closed.two (.list [] (some 1) []) .number) = false := by
   decide
 
 /-- **A `held` below a recursion is certified where the views part.** The caller view of the
@@ -128,14 +128,14 @@ theorem Closed.viewsDisjoint_heldAny :
 theorem Closed.viewsDisjoint_heldBelowMu :
     (Closed.one (.union [.literal .string "A", .literal .string "B"])).viewsDisjoint
       (Closed.one (.union [.held false .number (.literal .string "1") (.caller 0, false) [],
-        .list [] (some (.ref 0)) []])) = true := by
+        .list [] (some 0) []])) = true := by
   decide
 
 /-- …and the pair is refused where the caller views share a value: the text `"1"`. -/
 theorem Closed.viewsDisjoint_heldBelowMu_meets :
     (Closed.one (.literal .string "1")).viewsDisjoint
       (Closed.one (.union [.held false .number (.literal .string "1") (.caller 0, false) [],
-        .list [] (some (.ref 0)) []])) = false := by
+        .list [] (some 0) []])) = false := by
   decide
 
 /-! ## A certified union is separated -/

@@ -93,11 +93,11 @@ def rowC (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL N
       (fun y' => cbaseG sL sR o (.node (.held s k₀ ks) a) y' || match y' with
         | .node (.held s' k₀' ks') b =>
             decide ((⟨s, k₀ :: ks⟩ : (s : Bool) × List (B.G s × Bool)) = ⟨s', k₀' :: ks'⟩) &&
-              rowC prev [] (a true) (b true)
+              prev A (a true) (b true)
         | _ => false) y
   | .node .set a, y => rightC sR (prev A (.node .set a))
       (fun y' => cbaseG sL sR o (.node .set a) y' || match y' with
-        | .node .set b => rowC prev [] (a ()) (b ())
+        | .node .set b => pairAt (sL := sL) (sR := sR) prev A (a ()) (b ())
         | _ => false) y
   | .node (.list n s m) a, y => rightC sR (prev A (.node (.list n s m) a))
       (fun y' => cbaseG sL sR o (.node (.list n s m) a) y' || match y' with
@@ -128,26 +128,27 @@ def objC3 (Rc : Graph B NL → Graph B NR → Bool) {fs : Finset String} {md : {
       (s.val == 0 || Rc (blockG (md := md) s a) (blockG (md := md') s' b))
   | _ => false
 
-/-- The family of a guarded left node beside a node of its class: the set element and the inner
-    term of a `held` at the test `Rs`, and each child of a list or an object at the test `Rc`. -/
-def famC (Rs Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
+/-- The family of a guarded left node beside a node of its class: the inner term of a `held` at
+    the test `Rr`, because the inner term is closed, and each child of a set, a list or an object
+    at the test `Rc`. -/
+def famC (Rr Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
   | .node (.held s k₀ ks) a, .node (.held s' k₀' ks') b =>
-      decide ((⟨s, k₀ :: ks⟩ : (s : Bool) × List (B.G s × Bool)) = ⟨s', k₀' :: ks'⟩) && Rs (a true) (b true)
-  | .node .set a, .node .set b => Rs (a ()) (b ())
+      decide ((⟨s, k₀ :: ks⟩ : (s : Bool) × List (B.G s × Bool)) = ⟨s', k₀' :: ks'⟩) && Rr (a true) (b true)
+  | .node .set a, .node .set b => Rc (a ()) (b ())
   | .node (.list n s m) a, .node (.list n' s' m') b => (TOp.pos (B := B) (.list n s m)).all fun p =>
       (TOp.pos (B := B) (.list n' s' m')).all fun q => Rc (a p) (b q)
   | .node (.obj _ md _) a, y => objC3 o Rc (md := md) a y
   | _, _ => false
 
-/-- **The rows of `compat` with one test per role**: `Rr` at a restart, `Rs` at the set element and
-    the inner term of a `held`, and `Rc` at a child below a guard. -/
-def rowC3 (Rr Rs Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
+/-- **The rows of `compat` with one test per role**: `Rr` at a restart and at the inner term of a
+    `held`, and `Rc` at a child below a guard. -/
+def rowC2 (Rr Rc : Graph B NL → Graph B NR → Bool) : Graph B NL → Graph B NR → Bool
   | .leaf j, y => cbaseG sL sR o (.leaf j) y || Rr (sL j) y
   | .node .never _, _ => true
-  | .node (.refine q qA) a, y => cbaseG sL sR o (.node (.refine q qA) a) y || rowC3 Rr Rs Rc (a ()) y
+  | .node (.refine q qA) a, y => cbaseG sL sR o (.node (.refine q qA) a) y || rowC2 Rr Rc (a ()) y
   | .node (.union m) a, y => cbaseG sL sR o (.node (.union m) a) y ||
-      (List.finRange m).all fun p => rowC3 Rr Rs Rc (a p) y
-  | x, y => rightC sR (Rr x) (fun y' => cbaseG sL sR o x y' || famC o Rs Rc x y') y
+      (List.finRange m).all fun p => rowC2 Rr Rc (a p) y
+  | x, y => rightC sR (Rr x) (fun y' => cbaseG sL sR o x y' || famC o Rr Rc x y') y
 
 end Rows
 
@@ -168,44 +169,44 @@ section Visited
 variable [Mean B] [Leaf B] {NL NR : Nat} (sL : Fin NL → Graph B NL) (sR : Fin NR → Graph B NR)
   (o : Orient)
 
-/-- **The row of the walk is the row with three tests**: the walk at the table, the row at the
-    empty table, and the pair test. -/
+/-- **The row of the walk is the row with two tests**: the walk at the table, and the pair
+    test. -/
 theorem rowC_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR) :
     ∀ x y, rowC sL sR o prev A x y =
-      rowC3 sL sR o (prev A) (rowC sL sR o prev []) (pairAt (sL := sL) (sR := sR) prev A) x y := by
+      rowC2 sL sR o (prev A) (pairAt (sL := sL) (sR := sR) prev A) x y := by
   intro x
   induction x with
   | leaf j => intro y; rfl
   | node op a ih =>
     intro y
     cases op with
-    | refine _ _ => simp only [rowC, rowC3]; exact congrArg _ (ih () y)
-    | union m => simp only [rowC, rowC3]; exact congrArg _ (congrArg _ (funext fun p => ih p y))
+    | refine _ _ => simp only [rowC, rowC2]; exact congrArg _ (ih () y)
+    | union m => simp only [rowC, rowC2]; exact congrArg _ (congrArg _ (funext fun p => ih p y))
     | never => rfl
     | prim _ => exact congrArg (fun f => rightC sR (prev A _) f y) (funext fun y' => (Bool.or_false _).symm)
     | opaq => exact congrArg (fun f => rightC sR (prev A _) f y) (funext fun y' => (Bool.or_false _).symm)
     | legacy _ => exact congrArg (fun f => rightC sR (prev A _) f y) (funext fun y' => (Bool.or_false _).symm)
     | held _ _ _ =>
-      simp only [rowC, rowC3]; congr 1; funext y'
+      simp only [rowC, rowC2]; congr 1; funext y'
       cases y' with
       | leaf _ => rfl
       | node op' b => cases op' <;> rfl
     | set =>
-      simp only [rowC, rowC3]; congr 1; funext y'
+      simp only [rowC, rowC2]; congr 1; funext y'
       cases y' with
       | leaf _ => rfl
       | node op' b => cases op' <;> rfl
     | list _ _ _ =>
-      simp only [rowC, rowC3]; congr 1; funext y'
+      simp only [rowC, rowC2]; congr 1; funext y'
       cases y' with
       | leaf _ => rfl
       | node op' b => cases op' <;> rfl
-    | obj _ _ _ => simp only [rowC, rowC3]; rfl
+    | obj _ _ _ => simp only [rowC, rowC2]; rfl
 
 /-- **Post-fixed up to the unfolding of two entries**, for the rows of `compat`. -/
 def PostC (R : Graph B NL → Graph B NR → Prop) : Prop :=
-  ∀ x y, R x y → (∃ Rr Rs Rc : Graph B NL → Graph B NR → Bool,
-    SubR Rr R ∧ SubR Rs R ∧ SubR Rc R ∧ rowC3 sL sR o Rr Rs Rc x y = true) ∨
+  ∀ x y, R x y → (∃ Rr Rc : Graph B NL → Graph B NR → Bool,
+    SubR Rr R ∧ SubR Rc R ∧ rowC2 sL sR o Rr Rc x y = true) ∨
     ∃ i j, x = .leaf i ∧ y = .leaf j ∧ R (sL i) (sR j)
 
 /-- **The visited relation of `compat` is post-fixed up to unfolding.** -/
@@ -217,10 +218,8 @@ theorem vis_postC : PostC sL sR o (Vis sL sR (compG sL sR o)) := by
     cases m with
     | zero => exact nomatch h
     | succ k =>
-      refine Or.inl ⟨compG sL sR o k A, rowC sL sR o (compG sL sR o k) [],
-        pairAt (sL := sL) (sR := sR) (compG sL sR o k) A,
-        fun a b hab => vis_walk sL sR _ hab hA', fun a b hab => vis_root sL sR _ (m := k + 1) hab,
-        vis_pairAt sL sR (compG sL sR o) hA', ?_⟩
+      refine Or.inl ⟨compG sL sR o k A, pairAt (sL := sL) (sR := sR) (compG sL sR o k) A,
+        fun a b hab => vis_walk sL sR _ hab hA', vis_pairAt sL sR (compG sL sR o) hA', ?_⟩
       rw [← rowC_eq]; exact h
   · exact Or.inr ⟨i, j, rfl, rfl, S, hS, hs⟩
 
@@ -536,41 +535,41 @@ variable {cL : Closed S.sig NL} {cR : Closed S.sig NR}
 theorem guard_at (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Prop}
     (hR : PostC cL.graph cR.graph o R) {x : Graph S.sig NL} {v w : Mean.V (B := S.sig)}
     (hx : (mng τ (Closed.toG τ cL) x).f o v = some w) (hnl : ∀ i, x ≠ .leaf i)
-    (hfam : ∀ Rs Rc, SubR Rs R → SubR Rc R → ∀ y' b, famC o Rs Rc x y' = true →
+    (hfam : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y' b, famC o Rr Rc x y' = true →
       (mng τ (Closed.toG τ cR) y').f o v = some b → w = b)
-    (heq : ∀ Rr Rs Rc y, rowC3 cL.graph cR.graph o Rr Rs Rc x y =
-      rightC cR.graph (Rr x) (fun y' => cbaseG cL.graph cR.graph o x y' || famC o Rs Rc x y') y) :
-    ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y, rowC3 cL.graph cR.graph o Rr Rs Rc x y = true →
+    (heq : ∀ Rr Rc y, rowC2 cL.graph cR.graph o Rr Rc x y =
+      rightC cR.graph (Rr x) (fun y' => cbaseG cL.graph cR.graph o x y' || famC o Rr Rc x y') y) :
+    ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y, rowC2 cL.graph cR.graph o Rr Rc x y = true →
       ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
-  have fam' : ∀ Rs Rc, SubR Rs R → SubR Rc R → ∀ y' b,
-      (cbaseG cL.graph cR.graph o x y' || famC o Rs Rc x y') = true →
+  have fam' : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y' b,
+      (cbaseG cL.graph cR.graph o x y' || famC o Rr Rc x y') = true →
       (mng τ (Closed.toG τ cR) y').f o v = some b → w = b := by
-    intro Rs Rc hs hc y' b h hb
+    intro Rr Rc hr hc y' b h hb
     simp only [Bool.or_eq_true] at h
     rcases h with h | h
     · exact cbaseG_sound laws cL cR h v w b hx hb
-    · exact hfam Rs Rc hs hc y' b h hb
-  intro Rr Rs Rc hr hs hc y h
+    · exact hfam Rr Rc hr hc y' b h hb
+  intro Rr Rc hr hc y h
   rw [heq] at h
   refine rightC_mng (Closed.toG τ cR) (G := fun b => w = b) (P := R x) (fun y' h' => ?_) (hr _)
-    (fam' Rs Rc hs hc) y h
-  rcases hR _ _ h' with ⟨Rr', Rs', Rc', h1, h2, h3, h4⟩ | ⟨i, _, hxi, _⟩
-  · rw [heq] at h4; exact ⟨_, _, h1 _, fam' Rs' Rc' h2 h3, h4⟩
+    (fam' Rr Rc hr hc) y h
+  rcases hR _ _ h' with ⟨Rr', Rc', h1, h3, h4⟩ | ⟨i, _, hxi, _⟩
+  · rw [heq] at h4; exact ⟨_, _, h1 _, fam' Rr' Rc' h1 h3, h4⟩
   · exact absurd hxi (hnl i)
 
 omit [Shapes S] [TopLaws S] in
 /-- **The relation from the rows**, at one input. -/
 theorem rformC {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostC cL.graph cR.graph o R)
     {x : Graph S.sig NL} {v w : Mean.V (B := S.sig)}
-    (hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-      rowC3 cL.graph cR.graph o Rr Rs Rc x y = true →
+    (hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+      rowC2 cL.graph cR.graph o Rr Rc x y = true →
       ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z)
     (hleaf : ∀ i j, x = .leaf i → R (cL.graph i) (cR.graph j) →
       ∀ z, (mng τ (Closed.toG τ cR) (cR.graph j)).f o v = some z → w = z) :
     ∀ y, R x y → ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
   intro y hy z hz
-  rcases hR x y hy with ⟨Rr, Rs, Rc, h1, h2, h3, h4⟩ | ⟨i, j, rfl, rfl, h⟩
-  · exact hrows Rr Rs Rc h1 h2 h3 _ h4 z hz
+  rcases hR x y hy with ⟨Rr, Rc, h1, h3, h4⟩ | ⟨i, j, rfl, rfl, h⟩
+  · exact hrows Rr Rc h1 h3 _ h4 z hz
   · rw [congrFun (congrFun (mng_leaf (Closed.toG τ cR) j) o) v] at hz
     exact hleaf i j rfl h z hz
 
@@ -582,8 +581,8 @@ theorem rformC {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostC cL.g
 theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Prop}
     (hR : PostC cL.graph cR.graph o R) :
     ∀ {x o' v r}, Eval (Closed.toG τ cL) x o' v r → o' = o → ∀ w, r = some w → Good x →
-      (∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowC3 cL.graph cR.graph o Rr Rs Rc x y = true →
+      (∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowC2 cL.graph cR.graph o Rr Rc x y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z) ∧
       ∀ y, R x y → ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
   intro x o' v r h
@@ -592,11 +591,11 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     intro ho w hw _; subst o'
     have hx := (mng_of_eval _ (Eval.leaf h0)).trans hw
     have IH := ih rfl w hw (fun j => (SSys.order cL).2 i j)
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowC3 cL.graph cR.graph o Rr Rs Rc (.leaf i) y = true →
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowC2 cL.graph cR.graph o Rr Rc (.leaf i) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
-      intro Rr Rs Rc hr _ _ y h z hz
-      simp only [rowC3, Bool.or_eq_true] at h
+      intro Rr Rc hr _ y h z hz
+      simp only [rowC2, Bool.or_eq_true] at h
       rcases h with h | h
       · exact cbaseG_sound laws cL cR h v w z hx hz
       · exact IH.2 y (hr _ _ h) z hz
@@ -605,55 +604,55 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     intro ho w hw _; subst o'
     have hrows := guard_at (τ := τ) (x := .node (.prim g) a) laws hR
       ((mng_of_eval _ Eval.prim).trans hw) (fun _ h => nomatch h)
-      (fun _ _ _ _ _ _ h _ => nomatch h) (fun _ _ _ _ => rfl)
+      (fun _ _ _ _ _ _ h _ => nomatch h) (fun _ _ _ => rfl)
     exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
   | @opaq a o' v =>
     intro ho w hw _; subst o'
     have hrows := guard_at (τ := τ) (x := .node .opaq a) laws hR
       ((mng_of_eval _ Eval.opaq).trans hw) (fun _ h => nomatch h)
-      (fun _ _ _ _ _ _ h _ => nomatch h) (fun _ _ _ _ => rfl)
+      (fun _ _ _ _ _ _ h _ => nomatch h) (fun _ _ _ => rfl)
     exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
   | never => exact fun _ w hw => nomatch hw
   | @refine p pA a o' v r h0 ih =>
     intro ho w hw hg; subst o'
     have hx := (mng_of_eval _ (Eval.refine h0)).trans hw
     have IH := ih rfl w (bind_some_eq hw) (good_child hg (fun h => nomatch h) ())
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowC3 cL.graph cR.graph o Rr Rs Rc (.node (.refine p pA) a) y = true →
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowC2 cL.graph cR.graph o Rr Rc (.node (.refine p pA) a) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
-      intro Rr Rs Rc hr hs hc y h z hz
-      simp only [rowC3, Bool.or_eq_true] at h
+      intro Rr Rc hr hc y h z hz
+      simp only [rowC2, Bool.or_eq_true] at h
       rcases h with h | h
       · exact cbaseG_sound laws cL cR h v w z hx hz
-      · exact IH.1 Rr Rs Rc hr hs hc y h z hz
+      · exact IH.1 Rr Rc hr hc y h z hz
     exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
   | unionNil => exact fun _ w hw => nomatch hw
   | @unionHead m o' v w' a h0 ih =>
     intro ho w hw hg; subst o'
     have hx := (mng_of_eval _ (Eval.unionHead h0)).trans hw
     have IH := ih rfl w hw (good_child hg (fun h => nomatch h) (0 : Fin (m + 1)))
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowC3 cL.graph cR.graph o Rr Rs Rc (.node (.union (m + 1)) a) y = true →
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowC2 cL.graph cR.graph o Rr Rc (.node (.union (m + 1)) a) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
-      intro Rr Rs Rc hr hs hc y h z hz
-      simp only [rowC3, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
+      intro Rr Rc hr hc y h z hz
+      simp only [rowC2, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
       rcases h with h | h
       · exact cbaseG_sound laws cL cR h v w z hx hz
-      · exact IH.1 Rr Rs Rc hr hs hc y (h 0) z hz
+      · exact IH.1 Rr Rc hr hc y (h 0) z hz
     exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
   | @unionTail m o' v r a h0 h1 _ ih =>
     intro ho w hw hg; subst o'
     have hx := (mng_of_eval _ (Eval.unionTail h0 h1)).trans hw
     have IH := ih rfl w hw (good_tail hg)
-    have hrows : ∀ Rr Rs Rc, SubR Rr R → SubR Rs R → SubR Rc R → ∀ y,
-        rowC3 cL.graph cR.graph o Rr Rs Rc (.node (.union (m + 1)) a) y = true →
+    have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
+        rowC2 cL.graph cR.graph o Rr Rc (.node (.union (m + 1)) a) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
-      intro Rr Rs Rc hr hs hc y h z hz
-      simp only [rowC3, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
+      intro Rr Rc hr hc y h z hz
+      simp only [rowC2, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
       rcases h with h | h
       · exact cbaseG_sound laws cL cR h v w z hx hz
-      · exact IH.1 Rr Rs Rc hr hs hc y (by
-          simp only [rowC3, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies]
+      · exact IH.1 Rr Rc hr hc y (by
+          simp only [rowC2, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies]
           exact Or.inr fun p => h p.succ) z hz
     exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
   | @down op a o' v hk C hC ih =>
@@ -671,7 +670,7 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     have hv : Mean.d (B := S.sig) v < j + 2 := by rw [hj]; exact Nat.lt_succ_self _
     cases op with
     | set =>
-      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rs Rc hs hc y' b h hb => by
+      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rr Rc hr hc y' b h hb => by
         cases y' with
         | leaf _ => exact nomatch h
         | node op' b' =>
@@ -679,12 +678,12 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
           | set =>
             simp only [famC] at h
             exact AgB.down (τ := τ) rfl rfl
-              (set_agree (τ := τ) (agree_trunc (hAB _ (Or.inr ⟨(), rfl⟩) _ (hs _ _ h)))) v hv w b hx hb
+              (set_agree (τ := τ) (agree_trunc (hAB _ (Or.inr ⟨(), rfl⟩) _ (hc _ _ h)))) v hv w b hx hb
           | prim _ | opaq | never | held _ _ _ | list _ _ _ | refine _ _ | legacy _ | obj _ _ _
-          | union _ => exact nomatch h) (fun _ _ _ _ => rfl)
+          | union _ => exact nomatch h) (fun _ _ _ => rfl)
       exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
     | list n s m =>
-      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rs Rc hs hc y' b h hb => by
+      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rr Rc hr hc y' b h hb => by
         cases y' with
         | leaf _ => exact nomatch h
         | node op' b' =>
@@ -695,10 +694,10 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
               (hAB _ (Or.inr ⟨p, rfl⟩) _ (hc _ _ (h p (TOp.pos_complete (B := S.sig) (.list n s m) p) q
                 (TOp.pos_complete (B := S.sig) (.list n' s' m') q))))) v hv w b hx hb
           | prim _ | opaq | never | held _ _ _ | set | refine _ _ | legacy _ | obj _ _ _
-          | union _ => exact nomatch h) (fun _ _ _ _ => rfl)
+          | union _ => exact nomatch h) (fun _ _ _ => rfl)
       exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
     | obj fs md s =>
-      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rs Rc hs hc y' b h hb => by
+      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rr Rc hr hc y' b h hb => by
         cases y' with
         | leaf _ => exact nomatch h
         | node op' b' =>
@@ -708,7 +707,7 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
               (fun t => trunc j (mng τ (Closed.toG τ cL) t)) (fun t => trunc j (mng τ (Closed.toG τ cR) t))
               a b' h fun t u htu hm => agree_trunc (hAB t hm u (hc _ _ htu))) v hv w b hx hb
           | prim _ | opaq | never | held _ _ _ | set | refine _ _ | legacy _ | list _ _ _
-          | union _ => exact nomatch h) (fun _ _ _ _ => rfl)
+          | union _ => exact nomatch h) (fun _ _ _ => rfl)
       exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
     | _ => exact nomatch hk
   | @wall op a o' v hk hC ih =>
@@ -720,7 +719,7 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
       have hin : ∀ y', R (a true) y' →
           Agree o (mng τ (Closed.toG τ cL) (a true)) (mng τ (Closed.toG τ cR) y') :=
         fun y' hy' u y₁ z₁ h1 h2 => (ih true hnl o u rfl y₁ h1 (good_of_noLeaf hnl)).2 y' hy' z₁ h2
-      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rs Rc hs hc y' b h hb => by
+      have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h) (fun Rr Rc hr hc y' b h hb => by
         cases y' with
         | leaf _ => exact nomatch h
         | node op' b' =>
@@ -729,14 +728,14 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
             simp only [famC, Bool.and_eq_true, decide_eq_true_eq] at h
             obtain ⟨he, hs'⟩ := h
             cases he
-            exact agree_of_agreeS (fun _ h' => agreeS_held1 h') o (hin (b' true) (hs _ _ hs'))
+            exact agree_of_agreeS (fun _ h' => agreeS_held1 h') o (hin (b' true) (hr _ _ hs'))
               v w b hx hb
           | prim _ | opaq | never | set | list _ _ _ | refine _ _ | legacy _ | obj _ _ _ | union _ =>
-            exact nomatch h) (fun _ _ _ _ => rfl)
+            exact nomatch h) (fun _ _ _ => rfl)
       exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
     | legacy _ =>
       have hrows := guard_at (τ := τ) laws hR hx (fun _ h => nomatch h)
-        (fun _ _ _ _ _ _ h _ => nomatch h) (fun _ _ _ _ => rfl)
+        (fun _ _ _ _ _ _ h _ => nomatch h) (fun _ _ _ => rfl)
       exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩
     | _ => exact nomatch hk
 

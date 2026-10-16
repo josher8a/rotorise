@@ -10,7 +10,8 @@ them. `TSig B` is the term container, and it holds no table. The algebra `TStep 
 operation at the former of the meaning, at the tables `τ`.
 
 A term of a scope is an `SFlat` over the term container, and a closed codec is one scope. Its
-meaning is the solution of that scope at a root entry.
+meaning is the solution of that scope at a root entry. Each child of a container is an entry of the
+scope, and each child of a wall is a closed graph term.
 -/
 
 namespace Calculus.Alg
@@ -324,8 +325,8 @@ end Laws
 section Carrier
 variable {B : Sig}
 
-/-- **A term of a scope**: an `SFlat` over the term container. Below a container the term names
-    any of the `w` entries; above every guard it names the `k` entries before its own. -/
+/-- **A term of a scope**: an `SFlat` over the term container. Each child of a container is one of
+    the `w` entries; above every guard the term names the `k` entries before its own. -/
 abbrev Term (B : Sig) (w k : Nat) : Type := SFlat (TSig B).Op (TSig B).Pos (TSig B).kind w k
 
 /-- **A flat term over the term container**, with a leaf for each of `N` entries: the graph form of
@@ -343,59 +344,58 @@ def Closed.meaning [Mean B] (τ : (s : Bool) → TableAt B s) {N : Nat} (d : Clo
 
 variable {w k : Nat}
 
-@[match_pattern] abbrev Term.prim (g : B.Ground) : Term B w k := .node (.prim g) Empty.elim
-@[match_pattern] abbrev Term.opaq : Term B w k := .node .opaq Empty.elim
-@[match_pattern] abbrev Term.never : Term B w k := .node .never Empty.elim
-@[match_pattern] abbrev Term.set (e : Term B w w) : Term B w k := .node .set fun _ => e
+@[match_pattern] abbrev Term.prim (g : B.Ground) : Term B w k := .node (.prim g) rfl Empty.elim
+@[match_pattern] abbrev Term.opaq : Term B w k := .node .opaq rfl Empty.elim
+@[match_pattern] abbrev Term.never : Term B w k := .node .never rfl Empty.elim
+@[match_pattern] abbrev Term.set (e : Fin w) : Term B w k := .down .set rfl fun _ => e
 @[match_pattern] abbrev Term.refine (t : Term B w k) (p : B.P false) (pA : B.P true) :
-    Term B w k := .node (.refine p pA) fun _ => t
-@[match_pattern] abbrev Term.legacy (t : Term B 0 0) (r : B.R) : Term B w k :=
-  .node (.legacy r) fun _ => t
+    Term B w k := .node (.refine p pA) rfl fun _ => t
+@[match_pattern] abbrev Term.legacy (t : Graph B 0) (r : B.R) : Term B w k :=
+  .wall (.legacy r) rfl fun _ => t
 @[match_pattern] abbrev Term.ref (i : Fin k) : Term B w k := .leaf i
 
-/-- The rule `(held)`: the inner term and the outer term, below the wall. -/
-def Term.held (s : Bool) (inner outer : Term B 0 0) (k₀ : B.G s × Bool)
+/-- The rule `(held)`: the inner term and the outer term, closed below the wall. -/
+def Term.held (s : Bool) (inner outer : Graph B 0) (k₀ : B.G s × Bool)
     (ks : List (B.G s × Bool)) : Term B w k :=
-  .node (.held s k₀ ks) fun
+  .wall (.held s k₀ ks) rfl fun
     | true => inner
     | false => outer
 
 /-- The rule `(union)`, from a list of options. -/
-def Term.union (os : List (Term B w k)) : Term B w k := .node (.union os.length) os.get
+def Term.union (os : List (Term B w k)) : Term B w k := .node (.union os.length) rfl os.get
 
-/-- The rule `(list)`, from a prefix, at most one spread, and a suffix. -/
-def Term.list (pre : List (Term B w w)) (sp : Option (Term B w w)) (suf : List (Term B w w)) :
-    Term B w k :=
+/-- The rule `(list)`, from a prefix, at most one spread, and a suffix, each an entry. -/
+def Term.list (pre : List (Fin w)) (sp : Option (Fin w)) (suf : List (Fin w)) : Term B w k :=
   match sp with
-  | none => .node (.list pre.length 0 suf.length) fun
+  | none => .down (.list pre.length 0 suf.length) rfl fun
     | .inl p => pre.get p
     | .inr (.inl p) => p.elim0
     | .inr (.inr p) => suf.get p
-  | some t => .node (.list pre.length 1 suf.length) fun
+  | some t => .down (.list pre.length 1 suf.length) rfl fun
     | .inl p => pre.get p
     | .inr (.inl _) => t
     | .inr (.inr p) => suf.get p
 
 /-- The rule `(array)`. -/
-def Term.array (e : Term B w w) : Term B w k := Term.list [] (some e) []
+def Term.array (e : Fin w) : Term B w k := Term.list [] (some e) []
 
 /-- The rules `(tuple)` and `(tuple-tail)`. -/
-def Term.tuple (es : List (Term B w w)) (tail : Option (Term B w w)) : Term B w k :=
+def Term.tuple (es : List (Fin w)) (tail : Option (Fin w)) : Term B w k :=
   Term.list es tail []
 
-/-- A slot: its presence and its term. -/
-abbrev ObjectSlot (B : Sig) (w : Nat) := SlotMode B × Term B w w
+/-- A slot: its presence and its entry. -/
+abbrev ObjectSlot (B : Sig) (w : Nat) := SlotMode B × Fin w
 
-@[match_pattern] abbrev ObjectSlot.req (t : Term B w w) : ObjectSlot B w := (.req, t)
-@[match_pattern] abbrev ObjectSlot.optional (t : Term B w w) : ObjectSlot B w := (.opt, t)
+@[match_pattern] abbrev ObjectSlot.req (t : Fin w) : ObjectSlot B w := (.req, t)
+@[match_pattern] abbrev ObjectSlot.optional (t : Fin w) : ObjectSlot B w := (.opt, t)
 
 /-- The rule `(object)`: the declared names, the slot of each, and the open block. -/
 def Term.object (fs : Finset String) (f : {x // x ∈ fs} → ObjectSlot B w) :
-    Option (Term B w w) → Term B w k
-  | none => .node (.obj fs (fun x => (f x).1) 0) fun
+    Option (Fin w) → Term B w k
+  | none => .down (.obj fs (fun x => (f x).1) 0) rfl fun
     | .inl x => (f x).2
     | .inr p => p.elim0
-  | some t => .node (.obj fs (fun x => (f x).1) 1) fun
+  | some t => .down (.obj fs (fun x => (f x).1) 1) rfl fun
     | .inl x => (f x).2
     | .inr _ => t
 
@@ -430,7 +430,7 @@ variable [Mean B] (τ : (s : Bool) → TableAt B s)
 /-- The field table of a slot table, at the environment `ρ` of the width. -/
 def slotSems (ρ : Fin w → Mean.C B) (m : MapOf (ObjectSlot B w)) :
     MapOf (FieldSem (Mean.V (B := B)) (Mean.Mem (B := B))) :=
-  m.map fun s => mkField s.1 (s.2.interp (TStep τ) ρ ρ)
+  m.map fun s => mkField s.1 (ρ s.2)
 
 /-- **The meaning of a merge of two closed objects with disjoint names** reads the payload map of
     the first object at its names and the payload map of the second at the other names. -/
@@ -438,10 +438,10 @@ theorem Term.closed_union_f {F : MapA (Mean.V (B := B)) (Mean.Mem (B := B)) Mean
     (hF : Mean.map (B := B) = some F) {m m' : MapOf (ObjectSlot B w)} (h : Disjoint m.keys m'.keys)
     (ρw : Fin w → Mean.C B) (ρk : Fin k → Mean.C B) (o : Orient) (x : Mean.V (B := B)) :
     ((Term.closed (m.union m') : Term B w k).interp (TStep τ) ρw ρk).f o x =
-      ((F.toSummand.p.out x).bind (objPair (objAt (slotSems τ ρw m) none o)
-        (objAt (slotSems τ ρw m') none o) m.keys)).map F.toSummand.p.into := by
-  have e : objAt (slotSems τ ρw (m.union m')) none o =
-      objPair (objAt (slotSems τ ρw m) none o) (objAt (slotSems τ ρw m') none o) m.keys :=
+      ((F.toSummand.p.out x).bind (objPair (objAt (slotSems ρw m) none o)
+        (objAt (slotSems ρw m') none o) m.keys)).map F.toSummand.p.into := by
+  have e : objAt (slotSems ρw (m.union m')) none o =
+      objPair (objAt (slotSems ρw m) none o) (objAt (slotSems ρw m') none o) m.keys :=
     (congrArg (objAt · none o) (MapOf.map_union _ m m')).trans (objAt_union h o)
   simp only [Term.closed, Term.object, SFlat.interp, TStep_run, TOp.run, hF]
   exact congrArg (fun g => ((F.toSummand.p.out x).bind g).map F.toSummand.p.into) e
