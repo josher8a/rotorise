@@ -349,27 +349,33 @@ theorem pathKindC_reads_no_closure (α : Table) :
 
 /-! ## Vectors -/
 
-private abbrev one (t : Scoped.Term 1 0) : Closed :=
-  ⟨1, (fun i => match i with | ⟨0, _⟩ => t), 0⟩
-
-private abbrev itemM : Closed := one (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ =>
-  Scoped.ObjectSlot.req (Scoped.Term.union [
-    Scoped.Term.object (Scoped.Body.mk {"tag", "only"} (fun k => if k.1 = "tag" then
-      Scoped.ObjectSlot.req (Scoped.Term.literal .string "A") else Scoped.ObjectSlot.req
-        Scoped.Term.number) none),
-    Scoped.Term.object (Scoped.Body.mk {"tag", "shared"} (fun k => if k.1 = "tag" then
-      Scoped.ObjectSlot.req (Scoped.Term.literal .string "B") else Scoped.ObjectSlot.req
-        Scoped.Term.string) none)])) none))
+private abbrev itemM : Closed := ⟨6, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"m"} (fun _ => .req 1) none) : Scoped.Term 6 0)
+  | ⟨1, _⟩ => (Scoped.Term.union [
+      Scoped.Term.object (Scoped.Body.mk {"tag", "only"} (fun k => if k.1 = "tag" then
+        Scoped.ObjectSlot.req 2 else Scoped.ObjectSlot.req 3) none),
+      Scoped.Term.object (Scoped.Body.mk {"tag", "shared"} (fun k => if k.1 = "tag" then
+        Scoped.ObjectSlot.req 4 else Scoped.ObjectSlot.req 5) none)] : Scoped.Term 6 1)
+  | ⟨2, _⟩ => (Scoped.Term.literal .string "A" : Scoped.Term 6 2)
+  | ⟨3, _⟩ => (Scoped.Term.number : Scoped.Term 6 3)
+  | ⟨4, _⟩ => (Scoped.Term.literal .string "B" : Scoped.Term 6 4)
+  | ⟨5, _⟩ => (Scoped.Term.string : Scoped.Term 6 5), 0⟩
 
 -- `m.only` is declared by one option, `m.zz` by none, and the store refuses a name on a literal
 example : PathRowsC itemM [([.name "m", .name "only"], .someVariants),
     ([.name "m", .name "zz"], .vacant), ([.name "m", .name "tag", .name "x"], .vacant)] := kernel_rfl%
 
-private abbrev two (k v : String) (tk tv : Scoped.Term 1 1) : Closed :=
-  one (Scoped.Term.object (Scoped.Body.mk {k, v} (fun x => if x.1 = k then
-    Scoped.ObjectSlot.req tk else Scoped.ObjectSlot.req tv) none))
-private abbrev φA : Closed := one (Scoped.Term.object (Scoped.Body.mk {"tag"} (fun _ =>
-  Scoped.ObjectSlot.req (Scoped.Term.literal .string "A")) (some Scoped.Term.opaq)))
+private abbrev two (k v : String) (tk : Scoped.Term 3 1) (tv : Scoped.Term 3 2) : Closed :=
+  ⟨3, fun i => match i with
+    | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {k, v} (fun x => if x.1 = k then
+        Scoped.ObjectSlot.req 1 else Scoped.ObjectSlot.req 2) none) : Scoped.Term 3 0)
+    | ⟨1, _⟩ => tk
+    | ⟨2, _⟩ => tv, 0⟩
+private abbrev φA : Closed := ⟨3, fun i => match i with
+  | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"tag"} (fun _ => .req 1) (some 2)) :
+      Scoped.Term 3 0)
+  | ⟨1, _⟩ => (Scoped.Term.literal .string "A" : Scoped.Term 3 1)
+  | ⟨2, _⟩ => (Scoped.Term.opaq : Scoped.Term 3 2), 0⟩
 
 -- the clause keeps the option of `A`, which declares no `y`
 example : NarrowRowsC [two "tag" "x" (Scoped.Term.literal .string "A") Scoped.Term.number,

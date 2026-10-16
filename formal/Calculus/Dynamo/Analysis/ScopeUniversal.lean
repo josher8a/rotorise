@@ -5,12 +5,12 @@ import Calculus.Dynamo.Analysis.ScopeSlice
 # `opaque` is the universal sum, over closed codecs
 
 `opaque` is the top of the admission lattice. The normal form is one union over each base and
-each container, as a closed codec of one entry:
+each container, as a closed codec of two entries:
 
     opaque = union [string, boolean, binary, null, number,
                     array opaque, record opaque, set opaque]
 
-The union holds `opaque` under a container, so the scope term is finite and names no entry.
+Each container of the union holds the second entry, `opaque`, so the scope is finite.
 
 `set opaque` does not meet the DynamoDB set obligation (`SetElem`), because `opaque` names no
 member. The unfolding is a statement of the algebra, and the obligation is the store's.
@@ -52,16 +52,17 @@ theorem objectCodec_empty (F : {k // k ∈ (∅ : Finset Name)} → FieldSem) (c
   subst hF
   rfl
 
-/-- The options of `opaque` unfolded one time: each base, and each container over `opaque`. -/
-def opaqOptions : List (Scoped.Term 1 0) :=
-  [.string, .boolean, .binary, .null, .number, Scoped.Term.array .opaq,
-    Scoped.Term.object ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1), some .opaq⟩, .set .opaq]
+/-- The options of `opaque` unfolded one time: each base, and each container over the entry
+    `1`, which is `opaque`. -/
+def opaqOptions : List (Scoped.Term 2 0) :=
+  [.string, .boolean, .binary, .null, .number, Scoped.Term.array 1,
+    Scoped.Term.object ⟨∅, fun k => absurd k.2 (Finset.notMem_empty k.1), some 1⟩, .set 1]
 
-/-- `opaque` unfolded one time, as a closed codec of one entry. -/
-def opaqUnfoldClosed : Closed := Closed.one (.union opaqOptions)
+/-- `opaque` unfolded one time, as a closed codec of two entries. -/
+def opaqUnfoldClosed : Closed := Closed.two (.union opaqOptions) .opaq
 
 /-- **The options of the unfolding are pairwise orthogonal**, as closed codecs. -/
-theorem Closed.opaqUnfold_ok : certAllC (opaqOptions.map Closed.one) = true := by
+theorem Closed.opaqUnfold_ok : certAllC (opaqOptions.map (Closed.two · .opaq)) = true := by
   decide
 
 /-- **The unfolding is held-free.** -/
@@ -79,7 +80,10 @@ theorem Closed.opaqA_total (α : Table) (a : Attr) : (Closed.one .opaq).AdmA α 
 /-- **The unfolding acts at every datum**, at each orientation. -/
 theorem Closed.opaqUnfold_isSome (α : Table) (o : Alg.Orient) (v : Value) :
     ((opaqUnfoldClosed.meaning α).f o v).isSome = true := by
-  rw [opaqUnfoldClosed, Closed.one_fix]
+  have hid : (opaqUnfoldClosed.entry α ⟨1, Nat.one_lt_two⟩).f o = Alg.idCodec.f o :=
+    funext fun x => Closed.entry_fix α opaqUnfoldClosed ⟨1, Nat.one_lt_two⟩ o x
+  show ((opaqUnfoldClosed.entry α ⟨0, Nat.zero_lt_two⟩).f o v).isSome = true
+  rw [Closed.entry_fix]
   cases v with
   | s _ =>
     refine Scoped.interp_union_isSome _ _ _ _ _ ⟨0, by decide⟩ ?_
@@ -98,24 +102,28 @@ theorem Closed.opaqUnfold_isSome (α : Table) (o : Alg.Orient) (v : Value) :
     rcases o with ⟨⟨_ | _, _ | _⟩, ho⟩ <;> rfl
   | ss S =>
     refine Scoped.interp_union_isSome _ _ _ _ _ ⟨7, by decide⟩ ?_
-    exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω o .string S⟩
+    exact Option.isSome_iff_exists.mpr ⟨_, (setAt_congr fun x _ => congrFun hid _).trans
+      (setAt_Ω o .string S)⟩
   | ns S =>
     refine Scoped.interp_union_isSome _ _ _ _ _ ⟨7, by decide⟩ ?_
-    exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω o .number S⟩
+    exact Option.isSome_iff_exists.mpr ⟨_, (setAt_congr fun x _ => congrFun hid _).trans
+      (setAt_Ω o .number S)⟩
   | bs S =>
     refine Scoped.interp_union_isSome _ _ _ _ _ ⟨7, by decide⟩ ?_
-    exact Option.isSome_iff_exists.mpr ⟨_, setAt_Ω o .binary S⟩
+    exact Option.isSome_iff_exists.mpr ⟨_, (setAt_congr fun x _ => congrFun hid _).trans
+      (setAt_Ω o .binary S)⟩
   | l xs =>
     refine Scoped.interp_union_isSome _ _ _ _ _ ⟨5, by decide⟩ ?_
-    show ((arrayCodec Alg.idCodec).f o (.l xs)).isSome = true
-    rw [arrayCodec_f]
+    show ((arrayCodec (opaqUnfoldClosed.entry α ⟨1, Nat.one_lt_two⟩)).f o (.l xs)).isSome = true
+    rw [arrayCodec_f, hid]
     show (Option.map Attr.l (traverse some xs)).isSome = true
     rw [Alg.traverse_some]
     rfl
   | m keys g =>
     refine Scoped.interp_union_isSome _ _ _ _ _ ⟨6, by decide⟩ ?_
-    show ((objectCodec ⟨∅, _⟩ (.codec Alg.idCodec)).f o (Attr.m keys g)).isSome = true
-    rw [objectCodec_empty, recordCodec_f]
+    show ((objectCodec ⟨∅, _⟩ (.codec (opaqUnfoldClosed.entry α ⟨1, Nat.one_lt_two⟩))).f o
+      (Attr.m keys g)).isSome = true
+    rw [objectCodec_empty, recordCodec_f, hid]
     exact congrArg Option.isSome
       (congrArg (Option.map (Attr.m keys)) (Alg.funImage_eq (f := g) fun _ => rfl))
 

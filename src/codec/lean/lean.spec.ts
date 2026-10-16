@@ -132,13 +132,24 @@ const statesTerm = (codec: AnyCodec, name: string): boolean => {
 const rootOf = (codec: AnyCodec): string => {
     const printed = leanClosedOf(codec)
     const entry =
-        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 1 0\)\), 0⟩ : Closed\)$/.exec(
+        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 1 0\) \| ⟨_ \+ 1, h⟩ => absurd h \(Nat\.not_lt_of_le \(Nat\.le_add_left _ _\)\)\), 0⟩ : Closed\)$/.exec(
             printed,
         )
     if (entry?.[1] === undefined)
         throw new Error(`not a closed codec of one entry: ${printed}`)
     return entry[1]
 }
+
+/**
+ * **The entries of a closed codec**, as the scoped printer prints each entry, in the order of the
+ * scope. Each child of a container is an entry, so a container prints the index of each child.
+ */
+const entriesOf = (codec: AnyCodec): readonly string[] =>
+    [
+        ...leanClosedOf(codec).matchAll(
+            /⟨(\d+), _⟩ => \((.*?) : Scoped\.Term \d+ \1\)(?= \| ⟨)/g,
+        ),
+    ].map((arm) => arm[2] as string)
 
 /** What the emitter refused, and why — the part of a failure worth asserting on. */
 const refusal = (emit: () => unknown): { at: string; reason: string } => {
@@ -159,7 +170,7 @@ describe('terms', () => {
         expect(rootOf(erase(dynamoNumber))).toBe('Scoped.Term.number')
         // `decimal` is an adapter over that native, and the model names its pair
         expect(rootOf(erase(decimal))).toBe(
-            '(Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) [])',
+            '(Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])',
         )
         expect(rootOf(erase(boolean))).toBe('Scoped.Term.boolean')
         expect(rootOf(erase(binary))).toBe('Scoped.Term.binary')
@@ -204,7 +215,7 @@ describe('terms', () => {
             'Scoped.Term.literal GroundKind.string "𝔸"',
         )
         // an object's names and a tag go through the same writer
-        expect(rootOf(erase(object({ π: string }).item))).toContain('"π"')
+        expect(entriesOf(erase(object({ π: string }).item))[0]).toContain('"π"')
         // and the control range keeps an escape, zero-padded to the four digits Lean wants
         expect(rootOf(erase(string('\u0001')))).toBe(
             'Scoped.Term.literal GroundKind.string "\\u0001"',
@@ -223,10 +234,10 @@ describe('terms', () => {
      */
     it('emits a decimal literal at the native base, under the named pair', () => {
         expect(rootOf(erase(decimal('-1.5')))).toBe(
-            '(Scoped.Term.held false (Scoped.Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Scoped.Term.literal GroundKind.string "-1.5") (.decimalText, false) [])',
+            '(Scoped.Term.held false (Scoped.Graph.Term.literal GroundKind.number (WFNumeral.of "-1.5")) (Scoped.Graph.Term.literal GroundKind.string "-1.5") (.decimalText, false) [])',
         )
         expect(rootOf(erase(decimal('1', '2.5')))).toBe(
-            '(Scoped.Term.held false (Scoped.Term.union [Scoped.Term.literal GroundKind.number (WFNumeral.of "1"), Scoped.Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Scoped.Term.union [Scoped.Term.literal GroundKind.string "1", Scoped.Term.literal GroundKind.string "2.5"]) (.decimalText, false) [])',
+            '(Scoped.Term.held false (Scoped.Graph.Term.union [Scoped.Graph.Term.literal GroundKind.number (WFNumeral.of "1"), Scoped.Graph.Term.literal GroundKind.number (WFNumeral.of "2.5")]) (Scoped.Graph.Term.union [Scoped.Graph.Term.literal GroundKind.string "1", Scoped.Graph.Term.literal GroundKind.string "2.5"]) (.decimalText, false) [])',
         )
     })
 
@@ -255,16 +266,21 @@ describe('terms', () => {
         expect(why).toContain('binary64 rounding')
     })
 
+    /** Each child of a container is an entry, so a container prints the index of each child. */
     it('emits the containers structurally', () => {
-        expect(rootOf(erase(array(string)))).toBe(
-            'Scoped.Term.array (Scoped.Term.string)',
-        )
-        expect(rootOf(erase(object([string, optional(boolean)])))).toBe(
-            'Scoped.Term.object (Scoped.Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (Scoped.Term.boolean)))',
-        )
-        expect(rootOf(erase(list(string, boolean)))).toBe(
-            'Scoped.Term.tuple [Scoped.Term.string, Scoped.Term.boolean] none',
-        )
+        expect(entriesOf(erase(array(string)))).toEqual([
+            'Scoped.Term.array (1)',
+            'Scoped.Term.string',
+        ])
+        expect(entriesOf(erase(object([string, optional(boolean)])))).toEqual([
+            'Scoped.Term.object (Scoped.Body.mk ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)) (some (1)))',
+            'Scoped.Term.boolean',
+        ])
+        expect(entriesOf(erase(list(string, boolean)))).toEqual([
+            'Scoped.Term.tuple [1, 2] none',
+            'Scoped.Term.string',
+            'Scoped.Term.boolean',
+        ])
     })
 
     /**
@@ -272,15 +288,18 @@ describe('terms', () => {
      * the set is the finite-powerset lift of its element.
      */
     it('emits a set as the set of its element term', () => {
-        expect(rootOf(erase(string.set()))).toBe(
-            'Scoped.Term.set (Scoped.Term.string)',
-        )
-        expect(rootOf(erase(dynamoNumber.set()))).toBe(
-            'Scoped.Term.set (Scoped.Term.number)',
-        )
-        expect(rootOf(erase(binary.set()))).toBe(
-            'Scoped.Term.set (Scoped.Term.binary)',
-        )
+        expect(entriesOf(erase(string.set()))).toEqual([
+            'Scoped.Term.set (1)',
+            'Scoped.Term.string',
+        ])
+        expect(entriesOf(erase(dynamoNumber.set()))).toEqual([
+            'Scoped.Term.set (1)',
+            'Scoped.Term.number',
+        ])
+        expect(entriesOf(erase(binary.set()))).toEqual([
+            'Scoped.Term.set (1)',
+            'Scoped.Term.binary',
+        ])
     })
 
     /**
@@ -289,9 +308,10 @@ describe('terms', () => {
      * name in the model, so its set is refused for the reason its scalar is.
      */
     it('emits the set of a named adapter, and refuses the set of an unnamed one', () => {
-        expect(rootOf(erase(decimal.set()))).toBe(
-            'Scoped.Term.set ((Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) []))',
-        )
+        expect(entriesOf(erase(decimal.set()))).toEqual([
+            'Scoped.Term.set (1)',
+            '(Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])',
+        ])
         const why = refusal(() => leanClosedOf(erase(number.set()))).reason
         expect(why).toContain('numeralOfStoredText')
     })
@@ -305,9 +325,10 @@ describe('terms', () => {
      * any other. That refusal is not waiting on a pass.
      */
     it('prints a set of a literal element, and refuses one over a closure', () => {
-        expect(rootOf(erase(string.set('a', 'b')))).toBe(
-            'Scoped.Term.set (Scoped.Term.union [Scoped.Term.literal GroundKind.string "a", Scoped.Term.literal GroundKind.string "b"])',
-        )
+        expect(entriesOf(erase(string.set('a', 'b')))).toEqual([
+            'Scoped.Term.set (1)',
+            'Scoped.Term.union [Scoped.Term.literal GroundKind.string "a", Scoped.Term.literal GroundKind.string "b"]',
+        ])
         const positive = refine(
             decimal,
             (value: string): value is string => !value.startsWith('-'),
@@ -336,7 +357,7 @@ describe('terms', () => {
                 erase(withLegacyRead({ current: string, whenMissing: 'x' })),
             ),
         ).toThrow(/`optional`\/`fallback` denote `Field`/)
-        expect(rootOf(erase(object({ a: optional(string) })))).toContain(
+        expect(entriesOf(erase(object({ a: optional(string) })))[0]).toContain(
             'Scoped.ObjectSlot.optional',
         )
     })
@@ -347,9 +368,13 @@ describe('terms', () => {
      * because the subtype's inhabitants are exactly the declared keys.
      */
     it('emits an object as a key set and a function on it', () => {
-        expect(rootOf(erase(object({ a: string, b: optional(boolean) })))).toBe(
-            'Scoped.Term.object (Scoped.Body.mk {"a", "b"} (fun k => if k.1 = "a" then Scoped.ObjectSlot.req (Scoped.Term.string) else Scoped.ObjectSlot.optional (Scoped.Term.boolean)) none)',
-        )
+        expect(
+            entriesOf(erase(object({ a: string, b: optional(boolean) }))),
+        ).toEqual([
+            'Scoped.Term.object (Scoped.Body.mk {"a", "b"} (fun k => if k.1 = "a" then Scoped.ObjectSlot.req (1) else Scoped.ObjectSlot.optional (2)) none)',
+            'Scoped.Term.string',
+            'Scoped.Term.boolean',
+        ])
     })
 
     /** The empty key set has no `else` to fall through to, so the function is the absurd one. */
@@ -365,7 +390,7 @@ describe('terms', () => {
      */
     it('emits a missing-value field as a fill slot that carries its stand-in', () => {
         expect(
-            rootOf(
+            entriesOf(
                 erase(
                     object({
                         a: withLegacyRead({
@@ -375,17 +400,22 @@ describe('terms', () => {
                     }),
                 ),
             ),
-        ).toContain(
-            'Scoped.ObjectSlot.fill (Scoped.Term.string) (Value.str "d")',
-        )
+        ).toEqual([
+            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.fill (1) (Value.str "d")) none)',
+            'Scoped.Term.string',
+        ])
     })
 
     it('emits an open object as the one open block', () => {
         expect(
-            rootOf(erase(object({ a: string }, [string, optional(boolean)]))),
-        ).toBe(
-            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.req (Scoped.Term.string)) (some (Scoped.Term.boolean)))',
-        )
+            entriesOf(
+                erase(object({ a: string }, [string, optional(boolean)])),
+            ),
+        ).toEqual([
+            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.req (1)) (some (2)))',
+            'Scoped.Term.string',
+            'Scoped.Term.boolean',
+        ])
     })
 
     /**
@@ -400,9 +430,10 @@ describe('terms', () => {
      * the policy, and the emitter reads it rather than guessing.
      */
     it('emits the strict object policy', () => {
-        expect(rootOf(erase(object({ a: string })))).toBe(
-            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.req (Scoped.Term.string)) none)',
-        )
+        expect(entriesOf(erase(object({ a: string })))).toEqual([
+            'Scoped.Term.object (Scoped.Body.mk {"a"} (fun k => Scoped.ObjectSlot.req (1)) none)',
+            'Scoped.Term.string',
+        ])
     })
 
     it('emits a union as its option list', () => {
@@ -423,7 +454,7 @@ describe('terms', () => {
      * own index that no term carries.
      */
     it('emits a discriminated union as the union of objects it is', () => {
-        const emitted = rootOf(
+        const entries = entriesOf(
             erase(
                 discriminatedUnion('kind', [
                     object({ kind: string('a'), x: string }),
@@ -431,17 +462,14 @@ describe('terms', () => {
                 ]),
             ),
         )
+        const emitted = entries[0] ?? ''
         // **there is one sum, so there is one row.** The members are `object` terms and the tag
         // table is the builder's own index, carried by no term — so what reaches the model is the
         // union the declaration always was, and the discriminators are the required literals in
-        // each member's body
+        // each member's body, each an entry of its own
         expect(emitted).toContain('Scoped.Term.union [Scoped.Term.object')
-        expect(emitted).toContain(
-            'Scoped.ObjectSlot.req (Scoped.Term.literal GroundKind.string "a")',
-        )
-        expect(emitted).toContain(
-            'Scoped.ObjectSlot.req (Scoped.Term.literal GroundKind.string "b")',
-        )
+        expect(entries).toContain('Scoped.Term.literal GroundKind.string "a"')
+        expect(entries).toContain('Scoped.Term.literal GroundKind.string "b"')
         expect(emitted).not.toContain('Scoped.Term.dunion')
         expect(emitted.split('Scoped.Body.mk')).toHaveLength(3)
     })
@@ -500,7 +528,7 @@ describe('terms', () => {
         })
         expect(verdict).toContain('(r0 : Attr → Option Value)')
         expect(verdict).toContain(
-            '(Scoped.Term.legacy (Scoped.Term.string) r0)',
+            '(Scoped.Term.legacy (Scoped.Graph.Term.string) r0)',
         )
         expect(refusal(() => leanClosedOf(migrated)).reason).toContain(
             'no evaluation vector',
@@ -649,12 +677,10 @@ describe('what cannot be emitted', () => {
      */
     it('prints a schema that recurses below a list as an entry whose reference sits in the list', () => {
         expect(rootOf(json)).toBe(
-            'Scoped.Term.union [Scoped.Term.string, Scoped.Term.array (Scoped.Term.ref 0)]',
+            'Scoped.Term.union [Scoped.Term.string, Scoped.Term.array (0)]',
         )
         // the top thunk of `Category` returns the object, and the object holds the same thunk
-        expect(rootOf(erase(Category))).toMatch(
-            /^Scoped\.Term\.object .*Scoped\.Term\.array \(Scoped\.Term\.ref 0\).*$/,
-        )
+        expect(entriesOf(erase(Category))).toContain('Scoped.Term.array (0)')
     })
 
     /**
@@ -704,19 +730,19 @@ describe('what cannot be emitted', () => {
                 object({ v: decimal('2'), b: string }),
             ]),
         )
-        expect(rootOf(decimals)).toContain('Scoped.Term.union')
-        expect(rootOf(decimals)).toContain('.decimalText')
+        expect(entriesOf(decimals)[0]).toContain('Scoped.Term.union')
+        expect(entriesOf(decimals).join(' ')).toContain('.decimalText')
 
         // and a string tag emits, which it always did
         expect(
-            rootOf(
+            entriesOf(
                 erase(
                     discriminatedUnion('kind', [
                         object({ kind: string('A'), a: string }),
                         object({ kind: string('B'), b: string }),
                     ]),
                 ),
-            ),
+            )[0],
         ).toContain('Scoped.Term.union')
     })
 
@@ -801,7 +827,7 @@ describe('a whole vector', () => {
         })
         expect(emitted).toContain('theorem scalar_string :')
         expect(emitted).toContain(
-            '(Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.string : Scoped.Term 1 0)), 0⟩ : Closed)).e',
+            '(Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.string : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e',
         )
         expect(emitted).toContain('(Value.str "hello")')
         expect(emitted).toContain('(some (Attr.s "hello")) = .same')
@@ -2223,7 +2249,7 @@ describe('the legacy read gate, against the model', () => {
         )
         // the current read answers first, and the host asks the older reader nothing
         expect(stated('lr_literal_A__raw_S_A')).toContain(
-            '(Scoped.Term.legacy (Scoped.Term.literal GroundKind.string "A") r0)',
+            '(Scoped.Term.legacy (Scoped.Graph.Term.literal GroundKind.string "A") r0)',
         )
     })
 
@@ -2926,7 +2952,7 @@ describe('a closed codec', () => {
             Y: array(ref('X')),
         })
         expect(leanClosedOf(erase(pair.X))).toBe(
-            '(⟨2, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.array (Scoped.Term.ref 1) : Scoped.Term 2 0) | ⟨1, _⟩ => (Scoped.Term.union [Scoped.Term.string, Scoped.Term.ref 0] : Scoped.Term 2 1)), 1⟩ : Closed)',
+            '(⟨2, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.array (1) : Scoped.Term 2 0) | ⟨1, _⟩ => (Scoped.Term.union [Scoped.Term.string, Scoped.Term.ref 0] : Scoped.Term 2 1) | ⟨_ + 2, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 1⟩ : Closed)',
         )
     })
 })

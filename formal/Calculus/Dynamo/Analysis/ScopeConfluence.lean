@@ -39,7 +39,7 @@ def oneTable : Table := fun _ => (fun _ => Value.num (WFNumeral.of "1"), fun _ =
     closed codec of one entry. The adapter writes each text as the number `1`, and reads each
     number as the text `"1"`. -/
 def oneHeldClosed : Closed :=
-  Closed.one (Scoped.Term.held false Scoped.Term.number Scoped.Term.string (.caller 0, false) [])
+  Closed.one (Scoped.Term.held false Scoped.Graph.Term.number Scoped.Graph.Term.string (.caller 0, false) [])
 
 /-- `oneHeldClosed` writes the string `"1"` as the number `1`. -/
 theorem Closed.oneHeld_writes :

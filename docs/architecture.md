@@ -146,9 +146,11 @@ pair of entries while it compares the two bodies, and a pair already assumed is 
 At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel
 answers `false`. The row of a left refinement reads its inner term. On the right, a union reads its
 options and a refinement reads its inner term (`rightC`). So a right refinement hides no option
-from the left row. The set row compares the two elements with
-no assumed pair. A `held`, a `legacy` and the top are disjoint only from the bottom, because their
-admission is a function that the decision does not read.
+from the left row. The set row compares the two elements as any other pair below a guard, with
+the assumed pairs. Each child of a container is an entry, so each cycle passes a pair of entries,
+and the decision meets each cycle at a pair that it can assume. A `held`, a `legacy` and the top
+are disjoint only from the bottom, because their admission is a function that the decision does
+not read.
 
 **The soundness of the decision holds at every signature, from the laws of the universe.**
 `Scoped.disjoint_sound` says that where the decision answers `true`, no datum of any depth is
@@ -263,7 +265,9 @@ about the graph is enforced.
 
 ## The term family, and what a stratum owes
 
-A term of a scope is an `SFlat` over the term container `TSig B`, in `Lang/Scope.lean`. `TOp B`
+A term of a scope is an `SFlat` over the term container `TSig B`, in `Lang/Scope.lean`. An
+`SFlat` is a leaf, a node that keeps the names, a container whose children are entries (`down`), or
+a wall whose children are closed terms (`wall`, over `Flat … 0`). `TOp B`
 holds one operation per constructor, with the data of the constructor, and `TOp.Pos` types the
 children of each operation. At DynamoDB, `Term`, `Body` and `ObjectSlot` in the namespace
 `Scoped` are their abbreviations at `dynSig`. **The point of the typed positions is negative: no
@@ -351,7 +355,8 @@ undecidable; a syntactic premise in `Scoped.Obligations` becomes a burden every 
 ## Termination
 
 A proof by recursion on a term of a scope is a structural recursion on `SFlat`: each child of a
-node is a value of the argument function of the node. So no measure appears in a statement, in
+node is a value of the argument function of the node, a child of a container is an entry, and a
+child of a wall is a closed `Flat` term. So no measure appears in a statement, in
 `Obligations` or in a rule. That is the whole difference between it and a fuel parameter.
 
 A recursive codec recurses on its input, not on the term. The solution of a closed codec reads each
@@ -428,7 +433,8 @@ meaning of the closed codec. An entry reads the codec that its scope solves, as 
 **The host spells recursion as a `ref` node, and the bridge prints a closed codec.** A `ref` node
 names an entry of the scope that binds it, and an unbound name is a node with no target. The
 emitter prints one flat scope: the entries of each cycle of the term graph, cycle by cycle, and a
-cycle comes after each cycle that it reaches. The root is an entry of its cycle, or the last entry.
+cycle comes after each cycle that it reaches. Then come the root, where no cycle holds it, and each
+child of a container that is not yet an entry. A child below a wall prints in place.
 Each term of a cycle is an entry, and a `ref` node whose target is an entry prints as the reference
 to that entry. Any other `ref` node prints the term it names. The emitter refuses a term with no
 scoped form: an unguarded cycle, a wall that reaches a cycle, or an open fragment. The host refuses a wall whose argument reaches an entry on a
@@ -454,7 +460,8 @@ segment reads the slot of a name, the term of a position (`listChildG`), the opt
 and the body of an entry. An entry unfolds through the graph of its scope. The unfoldings have a
 bound, the count of the entries plus the first step, so the walk ends.
 
-**The store refuses a segment apart from the term.** A term that stores one member (`μG`) apart
+**The store refuses a segment apart from the term.** A term that stores one member (`μAt`, which
+reads the element of a set through the body of its entry) apart
 from the member of the container of the segment gives no frame (`apartG`). So a name on a list,
 a position on a map, and a primitive of another member give no frame. A closed object at a name
 that the object does not declare gives `never`, and so does a list shape with no spread at a

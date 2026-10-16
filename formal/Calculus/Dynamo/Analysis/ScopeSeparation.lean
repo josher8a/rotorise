@@ -22,12 +22,12 @@ variable {α : Table}
 
 /-- `array` **is** the degenerate `tuple`: both builders write the same `list`, so the two closed
     codecs have one meaning. -/
-theorem Closed.arrayRow (e : Scoped.Term 1 1) :
-    (Closed.one (.array e)).meaning α = (Closed.one (.tuple [] (some e))).meaning α := rfl
+theorem Closed.arrayRow (e : Scoped.Term 2 1) :
+    (Closed.two (.array 1) e).meaning α = (Closed.two (.tuple [] (some 1)) e).meaning α := rfl
 
 /-- The same on the read row, and for the same reason. -/
-theorem Closed.arrayRowA (e : Scoped.Term 1 1) (a : Attr) :
-    (Closed.one (.array e)).AdmA α a = (Closed.one (.tuple [] (some e))).AdmA α a := rfl
+theorem Closed.arrayRowA (e : Scoped.Term 2 1) (a : Attr) :
+    (Closed.two (.array 1) e).AdmA α a = (Closed.two (.tuple [] (some 1)) e).AdmA α a := rfl
 
 /-! ## `refine t ⊤` and `t` move the same data -/
 
@@ -110,7 +110,7 @@ theorem Closed.not_decides_refine_top :
 /-- **A row that answers `false` at every `object` is too stingy**: an object with a required field
     refuses the empty map and writes a populated one. -/
 theorem Closed.decides_object :
-    (Closed.one (.object (Scoped.Body.mk {"k"} (fun _ => .req .string) none))).Decides α :=
+    (Closed.two (.object (Scoped.Body.mk {"k"} (fun _ => .req 1) none)) .string).Decides α :=
   ⟨.map {"k"} (fun _ => .str "a"), .map ∅ (fun k => absurd k.2 (Finset.notMem_empty k.1)),
     rfl, rfl, rfl⟩
 
@@ -137,22 +137,31 @@ theorem literal_e_isSome {c : String} {w : Value}
   rw [Alg.restrict_e_isSome, Bool.and_eq_true] at h
   exact inL_iff.mp h.1
 
+/-- A set over a string literal, as a closed codec of two entries. -/
+def setLitClosed (c : String) : Closed := Closed.two (.set 1) (.literal .string c)
+
+/-- The set over a literal moves what the set codec of the literal moves. -/
+theorem setLit_f (c : String) (o : Alg.Orient) (v : Value) :
+    ((setLitClosed c).meaning α).f o v = (setCodec (groundCodec (.literal .string c))).f o v := by
+  refine (Closed.entry_fix α _ ⟨0, Nat.zero_lt_two⟩ o v).trans ?_
+  show (setCodec ((setLitClosed c).entry α ⟨1, Nat.one_lt_two⟩)).f o v = _
+  cases v <;> rfl
+
 /-- **Two sets over disjoint literals separate**: `℘⁺fin` has no empty inhabitant, so the two
     options share none. -/
 theorem Closed.sepJV_set_literals :
-    Closed.SepJV α (Closed.one (.set (.literal .string "A")))
-      (Closed.one (.set (.literal .string "B"))) := by
+    Closed.SepJV α (setLitClosed "A") (setLitClosed "B") := by
   intro v hv
   simp only [Alg.Codec.e] at hv ⊢
-  rw [Closed.one_fix] at hv
-  rw [Closed.one_fix]
+  rw [setLit_f] at hv
+  rw [setLit_f]
   cases v
   case ss S =>
     obtain ⟨x, hx⟩ := S.2
     obtain ⟨a, ha⟩ := Option.isSome_iff_exists.mp hv
     have hA := literal_e_isSome (setAt_elem ha x hx)
-    cases hb : ((setCodec (groundCodec (.literal .string "B"))).e (.ss S)).isSome with
-    | false => exact hb
+    cases hb : ((setCodec (groundCodec (.literal .string "B"))).f .host (.ss S)).isSome with
+    | false => rfl
     | true =>
       obtain ⟨b, hb'⟩ := Option.isSome_iff_exists.mp hb
       exact absurd (hA.symm.trans (literal_e_isSome (setAt_elem hb' x hx))) (by simp)
@@ -168,14 +177,14 @@ theorem Closed.sepJV_set_literals :
 
 /-- **The array pair does not separate**: both options write `[]`. -/
 theorem Closed.not_sepJV_array_literals :
-    ¬ Closed.SepJV α (Closed.one (.array (.literal .string "A")))
-      (Closed.one (.array (.literal .string "B"))) :=
+    ¬ Closed.SepJV α (Closed.two (.array 1) (.literal .string "A"))
+      (Closed.two (.array 1) (.literal .string "B")) :=
   fun h => Bool.false_ne_true ((h (.arr []) rfl).symm.trans rfl)
 
 /-! ## Admission reads the meaning, not the structure -/
 
 /-- One name, declared `req string` and pinned to no literal, as a closed codec. -/
-def tReqStrClosed : Closed := Closed.one (.object (Scoped.Body.mk {"A"} (fun _ => .req .string) none))
+def tReqStrClosed : Closed := Closed.two (.object (Scoped.Body.mk {"A"} (fun _ => .req 1) none)) .string
 
 /-- …and a map carrying that name at a boolean, which the structure admits and the meaning
     refuses. -/

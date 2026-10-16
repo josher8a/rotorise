@@ -48,7 +48,7 @@ const narrowing = <T>(is: (value: string) => boolean) =>
 const rootOf = (codec: AnyCodec): string => {
     const printed = leanClosedOf(codec)
     const entry =
-        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 1 0\)\), 0⟩ : Closed\)$/.exec(
+        /^\(⟨1, \(fun i => match i with \| ⟨0, _⟩ => \((.*) : Scoped\.Term 1 0\) \| ⟨_ \+ 1, h⟩ => absurd h \(Nat\.not_lt_of_le \(Nat\.le_add_left _ _\)\)\), 0⟩ : Closed\)$/.exec(
             printed,
         )
     if (entry?.[1] === undefined)
@@ -77,7 +77,7 @@ describe('the predicates this library ships', () => {
     it('emits `Numeral.Stored` at the text carrier for `isStoredNumeral`', () => {
         const stored = refine(decimal, narrowing(isStoredNumeral))
         expect(rootOf(erase(stored))).toBe(
-            'Scoped.Term.refine ((Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
+            'Scoped.Term.refine ((Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
         )
     })
 
@@ -122,7 +122,7 @@ describe('the predicates this library ships', () => {
             value: '1.5',
         })
         expect(emitted).toContain(
-            'Scoped.Term.refine ((Scoped.Term.held false (Scoped.Term.number) (Scoped.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
+            'Scoped.Term.refine ((Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) ()',
         )
         expect(emitted).toContain('Attr.n (WFNumeral.of "1.5")')
     })

@@ -232,6 +232,18 @@ theorem TOp.rule_T : ∀ (o : Alg.Scoped.TOp dynSig) (a : o.Pos → Codec)
 
 /-! ## A term, and a closed codec -/
 
+/-- **The index of a closed graph term is the held set of the term.** -/
+theorem Scoped.typedC_T_eq {t : Alg.Scoped.Graph dynSig 0}
+    {T : Alg.Mean.V dynSig → Prop} {μ : Option (Alg.Mean.Mem dynSig)}
+    (h : Alg.Scoped.TypedC τ t T μ) :
+    ∀ v, T v ↔ (Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 t).T v := by
+  induction h with
+  | @node o args T μ r _ hr ih =>
+    have hT : T = fun p => (Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 (args p)).T :=
+      funext fun p => funext fun v => propext (ih p v)
+    subst hT
+    exact TOp.rule_T τ o _ μ r hr
+
 /-- **The index of a scope term is the held set of the term**, at the environments it is typed at. -/
 theorem Scoped.typed_T_eq {w k : Nat}
     {ρw : Fin w → Alg.Mean.C dynSig} {ρk : Fin k → Alg.Mean.C dynSig} {t : Alg.Scoped.Term dynSig w k}
@@ -240,10 +252,15 @@ theorem Scoped.typed_T_eq {w k : Nat}
     ∀ v, T v ↔ (Alg.SFlat.interp (Alg.Scoped.TStep τ) t ρw ρk).T v := by
   induction h with
   | ref i => exact fun _ => Iff.rfl
-  | @node w k ρw ρk o args T μ r _ hr ih =>
-    have hT : T = fun p => (Alg.SFlat.interp (Alg.Scoped.TStep τ) (args p)
-        ((Alg.Scoped.TOp.kind o).envW ρw) ((Alg.Scoped.TOp.kind o).envK ρw ρk)).T :=
+  | @node o _ args T μ r _ hr ih =>
+    have hT : T = fun p => (Alg.SFlat.interp (Alg.Scoped.TStep τ) (args p) ρw ρk).T :=
       funext fun p => funext fun v => propext (ih p v)
+    subst hT
+    exact TOp.rule_T τ o _ μ r hr
+  | @down o _ args r hr => exact TOp.rule_T τ o _ _ r hr
+  | @wall o _ args T μ r hc hr =>
+    have hT : T = fun p => (Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 (args p)).T :=
+      funext fun p => funext fun v => propext (Scoped.typedC_T_eq τ (hc p) v)
     subst hT
     exact TOp.rule_T τ o _ μ r hr
 

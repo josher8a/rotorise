@@ -2,10 +2,11 @@
  * **The decisions over the graph of a closed codec**: disjointness and compatibility, the model's
  * `Scoped.disjoint` and `Scoped.compat`.
  *
- * Each decision reads the graph that the emitter prints for a closed codec ({@link graphOf}): an
- * entry for each entry of each cycle, and the root. Below a guard a walk assumes a pair of entries
- * while it compares the two bodies. At an unguarded position a walk unfolds an entry. A fuel bounds
- * each walk as the model's fuel does, so the host and the model compute one function.
+ * Each decision reads the flat scope that the emitter prints for a closed codec ({@link flatOf}): an
+ * entry for each entry of each cycle, the root, and each child of a container. Below a guard a walk
+ * assumes a pair of entries while it compares the two bodies. At an unguarded position a walk
+ * unfolds an entry. A fuel bounds each walk as the model's fuel does, so the host and the model
+ * compute one function.
  *
  * **The host has one disjointness decision**, the walk of this file. {@link agrees}, path narrowing
  * and the disjointness rows each read the walk, and each Lean twin reads `Scoped.disjoint`.
@@ -27,37 +28,101 @@ import {
 type Mode = 'raw' | 'caller' | 'stored'
 
 /**
- * **The graph of a term, as the emitter prints the closed codec**: the entries of each cycle in the
- * order of {@link entryOrder}, scope by scope in the order of {@link componentsOf}, then the root
- * where no cycle holds it. `undefined` is a term with no scoped form.
+ * **The flat scope of a term, as the emitter prints the closed codec**: the entries of each cycle in
+ * the order of {@link entryOrder}, scope by scope in the order of {@link componentsOf}, then the root
+ * where no cycle holds it, then each child of a container as an entry of its own.
+ *
+ * A position above every guard names an entry of a cycle only, so `cycles` holds the entries that
+ * such a position names. **Each child of a container is an entry**, so `index` holds an entry for
+ * each term at such a child. A child that a cycle holds is the entry of the cycle, and every other
+ * child is an entry after the root, in the order that the walk of the bodies meets it. A wall closes
+ * the names below it, so the children below a wall stay in place. A cycle passes no wall, so no
+ * cycle passes a term in place, and the walk below a wall needs no table.
  */
-const graphOf = (
+export type FlatScope = {
+    readonly bodies: readonly Term[]
+    readonly cycles: ReadonlyMap<Term, number>
+    readonly index: ReadonlyMap<Term, number>
+    readonly root: number
+}
+
+/** **The flat scope of a term**, or the reason that the term has no scoped form. */
+export const flatOf = (
     root: Term,
-): { readonly bodies: readonly Term[]; readonly root: number } | undefined => {
-    const scopes: Term[][] = []
+):
+    | ({ readonly kind: 'flat' } & FlatScope)
+    | { readonly kind: 'refused'; readonly reason: string } => {
+    const bodies: Term[] = []
     for (const component of componentsOf([root])) {
         const order = entryOrder(component)
-        if (order.kind === 'refused') return undefined
-        scopes.push([...order.entries])
+        if (order.kind === 'refused')
+            return { kind: 'refused', reason: order.reason }
+        bodies.push(...order.entries)
     }
-    if (!scopes.some((entries) => entries.includes(root))) scopes.push([root])
-    const bodies = scopes.flat()
-    return { bodies, root: bodies.indexOf(root) }
+    if (!bodies.includes(root)) bodies.push(root)
+    const cycles = new Map(bodies.map((one, j) => [one, j]))
+    const index = new Map(cycles)
+    // a child of a container is an entry: an entry of a cycle, or a new entry after the others
+    const hoist = (t: Term): void => {
+        if (index.has(t)) return
+        if (t.kind === 'ref') {
+            const target = targetOf(t)
+            if (target !== undefined) hoist(target)
+            return
+        }
+        index.set(t, bodies.length)
+        bodies.push(t)
+    }
+    // the children of a term in place: a container hoists each child, and a wall keeps them
+    const visit = (t: Term): void => {
+        switch (t.kind) {
+            case 'list':
+            case 'set':
+            case 'object':
+                for (const one of childrenOf(t)) hoist(one)
+                return
+            case 'held':
+            case 'legacy':
+                return
+        }
+        for (const one of childrenOf(t)) keep(one)
+    }
+    // a term in place above every guard: an entry of a cycle is visited as an entry
+    const keep = (t: Term): void => {
+        if (cycles.has(t)) return
+        if (t.kind !== 'ref') return visit(t)
+        const target = targetOf(t)
+        if (target !== undefined) keep(target)
+    }
+    for (let j = 0; j < bodies.length; j++) visit(bodies[j] as Term)
+    return { kind: 'flat', bodies, cycles, index, root: bodies.indexOf(root) }
 }
 
 /**
  * **A position of the graph**: an entry, a term in place, a refinement over a position, or a `ref`
- * with no target.
+ * with no target. A term below a wall is `closed`: its children stay in place.
  */
 type At =
-    | { readonly kind: 'entry'; readonly j: number }
-    | { readonly kind: 'term'; readonly t: Term; readonly side: Side }
+    | Entry
+    | {
+          readonly kind: 'term'
+          readonly t: Term
+          readonly side: Side
+          readonly closed: boolean
+      }
     | { readonly kind: 'refine'; readonly inner: At }
-    | { readonly kind: 'free' }
+    | Free
+
+/** An entry of the flat scope. */
+type Entry = { readonly kind: 'entry'; readonly j: number }
+
+/** A `ref` with no target. */
+type Free = { readonly kind: 'free' }
 
 /** One operand: its entries, its view, and the entries that reach an adapter. */
 type Side = {
     readonly bodies: readonly Term[]
+    readonly cycles: ReadonlyMap<Term, number>
     readonly index: ReadonlyMap<Term, number>
     readonly root: number
     readonly mode: Mode
@@ -76,13 +141,13 @@ type Ctx = {
 }
 
 const sideOf = (t: Term, mode: Mode): Side | undefined => {
-    const graph = graphOf(t)
-    if (graph === undefined) return undefined
-    const index = new Map(graph.bodies.map((one, j) => [one, j]))
+    const flat = flatOf(t)
+    if (flat.kind === 'refused') return undefined
     const base = {
-        bodies: graph.bodies,
-        index,
-        root: graph.root,
+        bodies: flat.bodies,
+        cycles: flat.cycles,
+        index: flat.index,
+        root: flat.root,
         mode: 'raw' as Mode,
         adapts: [],
         stable: true,
@@ -131,7 +196,7 @@ const reachesAdapter = (table: readonly boolean[], at: At): boolean => {
                 )
             )
                 return true
-            return childrenAt(at.side, t).some((one) =>
+            return childrenAt(at.side, t, at.closed).some((one) =>
                 reachesAdapter(table, one),
             )
         }
@@ -145,42 +210,72 @@ const belowTopAt = (side: Side, at: At): boolean =>
 /** The body of an entry, in the operand that the test reads. */
 const body = (side: Side, j: number): At => {
     const t = side.bodies[j] as Term
-    if (t.kind !== 'ref') return viewAt(side, t)
+    if (t.kind !== 'ref') return viewAt(side, t, false)
     const target = targetOf(t)
     return target === undefined ? { kind: 'free' } : place(side, target)
 }
 
 /**
- * **A term in place**: a `ref` reads its target, an entry prints as its entry, and
- * any other term prints in place.
+ * **A term in place above every guard**: a `ref` reads its target, an entry of a cycle prints as its
+ * entry, and any other term prints in place.
  */
 const place = (side: Side, t: Term): At => {
-    const j = side.index.get(t)
+    const j = side.cycles.get(t)
     if (j !== undefined) return { kind: 'entry', j }
-    if (t.kind !== 'ref') return viewAt(side, t)
+    if (t.kind !== 'ref') return viewAt(side, t, false)
     const target = targetOf(t)
     return target === undefined ? { kind: 'free' } : place(side, target)
 }
+
+/** **A term in place below a wall**: a `ref` reads its target, and the term names no entry. */
+const closedAt = (side: Side, t: Term): At => {
+    if (t.kind !== 'ref') return viewAt(side, t, true)
+    const target = targetOf(t)
+    return target === undefined ? { kind: 'free' } : closedAt(side, target)
+}
+
+/** A term in place, below a wall or above every guard. */
+const inPlace = (side: Side, t: Term, closed: boolean): At =>
+    closed ? closedAt(side, t) : place(side, t)
+
+/**
+ * **A child of a container above every wall is an entry.** {@link flatOf} holds an entry for each
+ * such child, so a child with no entry is a broken invariant of the flat scope, and throws.
+ */
+const entryAt = (side: Side, t: Term): Entry | Free => {
+    const j = side.index.get(t)
+    if (j !== undefined) return { kind: 'entry', j }
+    if (t.kind !== 'ref')
+        throw new Error(
+            'the flat scope holds no entry for a child of a container: flatOf missed the child',
+        )
+    const target = targetOf(t)
+    return target === undefined ? { kind: 'free' } : entryAt(side, target)
+}
+
+/** **A child of a container**: an entry, or a term in place below a wall. */
+const childAt = (side: Side, t: Term, closed: boolean): At =>
+    closed ? closedAt(side, t) : entryAt(side, t)
 
 /**
  * **The view of a term in place**, the model's `viewG`. A `held` reads its caller side, and a
  * `withLegacyRead` reads its inner term where it writes and `opaque` where it reads. A refinement
  * is a position over its inner term.
  */
-const viewAt = (side: Side, t: Term): At => {
+const viewAt = (side: Side, t: Term, closed: boolean): At => {
     switch (t.kind) {
         case 'refine':
-            return { kind: 'refine', inner: place(side, t.inner) }
+            return { kind: 'refine', inner: inPlace(side, t.inner, closed) }
         case 'held':
             if (side.mode === 'raw') break
-            return place(side, side.mode === 'caller' ? t.outer : t.inner)
+            return closedAt(side, side.mode === 'caller' ? t.outer : t.inner)
         case 'legacy':
             if (side.mode === 'raw') break
             return side.mode === 'caller'
-                ? place(side, t.inner)
-                : { kind: 'term', t: opaque, side }
+                ? closedAt(side, t.inner)
+                : { kind: 'term', t: opaque, side, closed: true }
     }
-    return { kind: 'term', t, side }
+    return { kind: 'term', t, side, closed }
 }
 
 /** **The presence of a field in the view**: a `fallback` holds the name where it writes. */
@@ -195,9 +290,14 @@ const markOf = (field: Field, mode: Mode): 'req' | 'opt' | 'fill' => {
     }
 }
 
-/** The positions of a term in place. */
-const childrenAt = (side: Side, t: Term): readonly At[] =>
-    childrenOf(t).map((one) => place(side, one))
+/** The positions of a term in place: a container names an entry at each child, and a wall closes. */
+const childrenAt = (side: Side, t: Term, closed: boolean): readonly At[] => {
+    const down = t.kind === 'list' || t.kind === 'set' || t.kind === 'object'
+    const walled = closed || t.kind === 'held' || t.kind === 'legacy'
+    return childrenOf(t).map((one) =>
+        down ? childAt(side, one, closed) : inPlace(side, one, walled),
+    )
+}
 
 /**
  * **One row per operation of the left operand**, the model's `rowG`, with `prev` as the walk at
@@ -226,41 +326,47 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
         case 'ref':
             return rightRows(c, restart, () => false, r)
         case 'refine':
-            return row(c, table, viewAt(c.left, t), r)
+            return row(c, table, viewAt(c.left, t, l.closed), r)
         case 'union':
             return t.options.every((option) =>
-                row(c, table, place(c.left, option), r),
+                row(c, table, inPlace(c.left, option, l.closed), r),
             )
         case 'set': {
-            const elem = place(c.left, t.elem)
+            const elem = childAt(c.left, t.elem, l.closed)
             return rightRows(
                 c,
                 restart,
                 (r1) =>
-                    termOf(r1, (u) =>
+                    termOf(r1, (u, closed) =>
                         u.kind === 'set'
-                            ? c.prev([], elem, place(c.right, u.elem))
+                            ? pair(elem)(childAt(c.right, u.elem, closed))
                             : otherShape(u, ['prim', 'list', 'object']),
                     ),
                 r,
             )
         }
         case 'list': {
-            const parts = (u: Extract<Term, { kind: 'list' }>, side: Side) => ({
-                pre: u.pre.map((one) => place(side, one)),
+            const parts = (
+                u: Extract<Term, { kind: 'list' }>,
+                side: Side,
+                closed: boolean,
+            ) => ({
+                pre: u.pre.map((one) => childAt(side, one, closed)),
                 spread:
-                    u.spread === undefined ? undefined : place(side, u.spread),
-                suf: u.suf.map((one) => place(side, one)),
+                    u.spread === undefined
+                        ? undefined
+                        : childAt(side, u.spread, closed),
+                suf: u.suf.map((one) => childAt(side, one, closed)),
             })
-            const mine = parts(t, c.left)
+            const mine = parts(t, c.left, l.closed)
             return rightRows(
                 c,
                 restart,
                 (r1) =>
-                    termOf(r1, (u) => {
+                    termOf(r1, (u, closed) => {
                         if (u.kind !== 'list')
                             return otherShape(u, ['prim', 'set', 'object'])
-                        const theirs = parts(u, c.right)
+                        const theirs = parts(u, c.right, closed)
                         return listRows(
                             mine.pre.map(pair),
                             mine.spread === undefined
@@ -280,21 +386,32 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
             const block =
                 body.rest === undefined
                     ? () => true
-                    : pair(place(c.left, body.rest))
+                    : pair(childAt(c.left, body.rest, l.closed))
             return rightRows(
                 c,
                 restart,
                 (r1) =>
-                    termOf(r1, (u) =>
+                    termOf(r1, (u, closed) =>
                         u.kind === 'object'
                             ? Object.entries(body.fields).some(
                                   ([name, field]) => {
-                                      const slot = slotAt(c.right, u.body, name)
+                                      const slot = slotAt(
+                                          c.right,
+                                          u.body,
+                                          name,
+                                          closed,
+                                      )
                                       return (
                                           (markOf(field, c.left.mode) ===
                                               'req' ||
                                               slot.mark === 'req') &&
-                                          pair(place(c.left, field.t))(slot.at)
+                                          pair(
+                                              childAt(
+                                                  c.left,
+                                                  field.t,
+                                                  l.closed,
+                                              ),
+                                          )(slot.at)
                                       )
                                   },
                               ) ||
@@ -302,7 +419,7 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
                                   ([name, field]) =>
                                       !(name in body.fields) &&
                                       markOf(field, c.right.mode) === 'req' &&
-                                      block(place(c.right, field.t)),
+                                      block(childAt(c.right, field.t, closed)),
                               )
                             : otherShape(u, ['prim', 'set', 'list']),
                     ),
@@ -325,12 +442,14 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
 }
 
 /** A family over a term in place; every other position answers `false`. */
-const termOf = (at: At, fam: (t: Term) => boolean): boolean =>
-    at.kind === 'term' && fam(at.t)
+const termOf = (at: At, fam: (t: Term, closed: boolean) => boolean): boolean =>
+    at.kind === 'term' && fam(at.t, at.closed)
 
 /**
  * **A pair of positions below a guard**, the model's `pairAt`: a pair of entries already assumed
- * is apart, and a new pair is assumed while the walk compares the two bodies.
+ * is apart, and a new pair is assumed while the walk compares the two bodies. Each child of a
+ * container is an entry, so the last case reads only a term in place below a wall: a closed term
+ * names no entry, so no cycle passes through it.
  */
 const pairAt = (c: Ctx, table: Table, a: At, b: At): boolean => {
     if (a.kind === 'entry' && b.kind === 'entry')
@@ -353,16 +472,20 @@ const slotAt = (
     side: Side,
     b: Body,
     name: string,
+    closed: boolean,
 ): { readonly mark: 'req' | 'opt' | 'fill'; readonly at: At } => {
     const field = b.fields[name]
     if (field !== undefined)
-        return { mark: markOf(field, side.mode), at: place(side, field.t) }
+        return {
+            mark: markOf(field, side.mode),
+            at: childAt(side, field.t, closed),
+        }
     return {
         mark: 'opt',
         at:
             b.rest === undefined
-                ? { kind: 'term', t: never, side }
-                : place(side, b.rest),
+                ? { kind: 'term', t: never, side, closed: true }
+                : childAt(side, b.rest, closed),
     }
 }
 
@@ -390,10 +513,20 @@ const rightRows = (
                 case 'never':
                     return true
                 case 'refine':
-                    return rightRows(c, restart, fam, viewAt(c.right, r.t))
+                    return rightRows(
+                        c,
+                        restart,
+                        fam,
+                        viewAt(c.right, r.t, r.closed),
+                    )
                 case 'union':
                     return r.t.options.every((option) =>
-                        rightRows(c, restart, fam, place(c.right, option)),
+                        rightRows(
+                            c,
+                            restart,
+                            fam,
+                            inPlace(c.right, option, r.closed),
+                        ),
                     )
             }
             return fam(r)
@@ -505,7 +638,7 @@ const viewOf = (side: Side, at: At): At => {
         case 'refine':
             return { kind: 'refine', inner: viewOf(side, at.inner) }
         case 'term':
-            return viewAt(side, at.t)
+            return viewAt(side, at.t, at.closed)
     }
 }
 
@@ -628,7 +761,7 @@ const heldIn = (half: Half, side: Side, at: At): At =>
         ? heldIn(
               half,
               side,
-              place(side, half === 'write' ? at.t.outer : at.t.inner),
+              closedAt(side, half === 'write' ? at.t.outer : at.t.inner),
           )
         : at
 
@@ -673,12 +806,22 @@ const agreeRight = (
                 case 'never':
                     return true
                 case 'refine':
-                    return agreeRight(k, restart, fam, viewAt(k.right, r.t))
+                    return agreeRight(
+                        k,
+                        restart,
+                        fam,
+                        viewAt(k.right, r.t, r.closed),
+                    )
                 case 'union':
                     return (
                         fam(r) ||
                         r.t.options.every((option) =>
-                            agreeRight(k, restart, fam, place(k.right, option)),
+                            agreeRight(
+                                k,
+                                restart,
+                                fam,
+                                inPlace(k.right, option, r.closed),
+                            ),
                         )
                     )
             }
@@ -688,8 +831,8 @@ const agreeRight = (
 
 /**
  * **One row per operation of the left operand**, the model's `rowC`, with `prev` as the walk at
- * the next fuel. A set and a `held` compare their positions with no assumed pair. A list and an
- * object compare their positions below the guard ({@link pairAt}).
+ * the next fuel. A set, a list and an object compare their positions below the guard
+ * ({@link pairAt}). A `held` compares its inner terms, which are closed, at the walk.
  */
 const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
     const restart = (r1: At) => k.prev(table, l, r1)
@@ -709,12 +852,12 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
         case 'never':
             return true
         case 'refine':
-            return agreeRow(k, table, viewAt(k.left, t), r)
+            return agreeRow(k, table, viewAt(k.left, t, l.closed), r)
         case 'union':
             return (
                 base(r) ||
                 t.options.every((option) =>
-                    agreeRow(k, table, place(k.left, option), r),
+                    agreeRow(k, table, inPlace(k.left, option, l.closed), r),
                 )
             )
         // two `held`s of one adapter agree where their inner terms agree
@@ -729,11 +872,10 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                         (u) =>
                             u.kind === 'held' &&
                             sameAdapter(t, u) &&
-                            agreeRow(
-                                k,
-                                [],
-                                place(k.left, t.inner),
-                                place(k.right, u.inner),
+                            k.prev(
+                                table,
+                                closedAt(k.left, t.inner),
+                                closedAt(k.right, u.inner),
                             ),
                     ),
                 r,
@@ -746,13 +888,13 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                     base(r1) ||
                     termOf(
                         r1,
-                        (u) =>
+                        (u, closed) =>
                             u.kind === 'set' &&
-                            agreeRow(
+                            pairAt(
                                 k,
-                                [],
-                                place(k.left, t.elem),
-                                place(k.right, u.elem),
+                                table,
+                                childAt(k.left, t.elem, l.closed),
+                                childAt(k.right, u.elem, closed),
                             ),
                     ),
                 r,
@@ -765,15 +907,15 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                     base(r1) ||
                     termOf(
                         r1,
-                        (u) =>
+                        (u, closed) =>
                             u.kind === 'list' &&
                             positionsOf(t).every((one) =>
                                 positionsOf(u).every((other) =>
                                     pairAt(
                                         k,
                                         table,
-                                        place(k.left, one),
-                                        place(k.right, other),
+                                        childAt(k.left, one, l.closed),
+                                        childAt(k.right, other, closed),
                                     ),
                                 ),
                             ),
@@ -788,9 +930,12 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                     base(r1) ||
                     termOf(
                         r1,
-                        (u) =>
+                        (u, closed) =>
                             u.kind === 'object' &&
-                            bodiesAgree(k, table, t.body, u.body),
+                            bodiesAgree(k, table, t.body, u.body, {
+                                left: l.closed,
+                                right: closed,
+                            }),
                     ),
                 r,
             )
@@ -811,7 +956,13 @@ const positionsOf = (t: Extract<Term, { kind: 'list' }>): readonly Term[] => [
  * and answer alike at absence, and the two open blocks agree. An undeclared name holds `optional`
  * of the open block, which is the bottom where the body has no block.
  */
-const bodiesAgree = (k: Agreement, table: Table, a: Body, b: Body): boolean => {
+const bodiesAgree = (
+    k: Agreement,
+    table: Table,
+    a: Body,
+    b: Body,
+    closed: { readonly left: boolean; readonly right: boolean },
+): boolean => {
     const fieldOf = (body: Body, name: string): Field =>
         body.fields[name] ?? { mark: 'optional', t: body.rest ?? never }
     const absent = (name: string) =>
@@ -823,8 +974,8 @@ const bodiesAgree = (k: Agreement, table: Table, a: Body, b: Body): boolean => {
                 pairAt(
                     k,
                     table,
-                    place(k.left, field.t),
-                    slotAt(k.right, b, name).at,
+                    childAt(k.left, field.t, closed.left),
+                    slotAt(k.right, b, name, closed.right).at,
                 ),
         ) &&
         Object.entries(b.fields).every(
@@ -833,18 +984,18 @@ const bodiesAgree = (k: Agreement, table: Table, a: Body, b: Body): boolean => {
                 pairAt(
                     k,
                     table,
-                    slotAt(k.left, a, name).at,
-                    place(k.right, field.t),
+                    slotAt(k.left, a, name, closed.left).at,
+                    childAt(k.right, field.t, closed.right),
                 ),
         ) &&
         (a.rest === undefined ||
             pairAt(
                 k,
                 table,
-                place(k.left, a.rest),
+                childAt(k.left, a.rest, closed.left),
                 b.rest === undefined
-                    ? { kind: 'term', t: never, side: k.right }
-                    : place(k.right, b.rest),
+                    ? { kind: 'term', t: never, side: k.right, closed: true }
+                    : childAt(k.right, b.rest, closed.right),
             ))
     )
 }

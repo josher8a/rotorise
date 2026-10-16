@@ -18,14 +18,21 @@ namespace Scoped
 variable {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
 
 /-- A `held` at the side `false` is `through`, restricted by the write domain of the outer. -/
-theorem interp_held (inner outer : Term 0 0) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool))
+theorem interp_held (inner outer : Graph.Term 0) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool))
     (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
     Alg.SFlat.interp (Alg.Scoped.TStep τ)
         (Term.held false inner outer k₀ ks : Term w k) ρw ρk =
-      ((Alg.SFlat.interp (Alg.Scoped.TStep τ) inner Fin.elim0 Fin.elim0).through
+      ((Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 inner).through
           ((τ false).word (k₀ :: ks)).1 ((τ false).word (k₀ :: ks)).2).restrict
-        fun v => ((Alg.SFlat.interp (Alg.Scoped.TStep τ) outer Fin.elim0
-          Fin.elim0).e v).isSome :=
+        fun v => ((Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 outer).e v).isSome :=
+  Alg.held1_host _ _ _
+
+/-- A closed `held` at the side `false` is `through`, restricted by the write domain of the outer. -/
+theorem interp_heldC (inner outer : Graph.Term 0) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) :
+    Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 (Graph.Term.held false inner outer k₀ ks) =
+      ((Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 inner).through
+          ((τ false).word (k₀ :: ks)).1 ((τ false).word (k₀ :: ks)).2).restrict
+        fun v => ((Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 outer).e v).isSome :=
   Alg.held1_host _ _ _
 
 /-- A `refine` is `restrict` of the meaning of its data predicate. -/
@@ -42,16 +49,15 @@ theorem optional_μ (t : Term w k) (ρw : Fin w → Codec) (ρk : Fin k → Code
   rfl
 
 /-- `held(held(c, P, k), P′, k′) ≡ refine(held(c, P′, k ++ k′), P ∘ f′)`, over a scope term. -/
-theorem equiv_held_comp (t P P' : Term 0 0) (k₀ k₀' : DynGen × Bool)
+theorem equiv_held_comp (t P P' : Graph.Term 0) (k₀ k₀' : DynGen × Bool)
     (ks ks' : List (DynGen × Bool)) (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
     Codec.Equiv
       (Alg.SFlat.interp (Alg.Scoped.TStep τ)
-        (Term.held false (Term.held false t P k₀ ks) P' k₀' ks' : Term w k) ρw ρk)
+        (Term.held false (Graph.Term.held false t P k₀ ks) P' k₀' ks' : Term w k) ρw ρk)
       (Alg.SFlat.interp (Alg.Scoped.TStep τ)
         (Term.refine (Term.held false t P' k₀ (ks ++ k₀' :: ks'))
-          (.closure fun v => ((Alg.SFlat.interp (Alg.Scoped.TStep τ) P Fin.elim0
-            Fin.elim0).e (((τ false).word (k₀' :: ks')).1 v)).isSome) () : Term w k) ρw ρk) := by
-  rw [interp_refine, interp_held, interp_held, interp_held]
+          (.closure fun v => ((Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 P).e (((τ false).word (k₀' :: ks')).1 v)).isSome) () : Term w k) ρw ρk) := by
+  rw [interp_refine, interp_held, interp_heldC, interp_held]
   rw [← List.cons_append, Alg.TableAt.word_append]
   refine ⟨fun _ => ⟨fun ⟨⟨h1, h2⟩, h3⟩ => ⟨⟨h1, h3⟩, h2⟩, fun ⟨⟨h1, h3⟩, h2⟩ => ⟨⟨h1, h2⟩, h3⟩⟩,
     rfl, ?_, ?_⟩
@@ -87,11 +93,11 @@ theorem equiv_refine_full (t : Term w k) (p : Pred) (ρw : Fin w → Codec) (ρk
   Alg.equiv_restrict_full _ _ hq
 
 /-- `μ(held(c)) = μ(c)` over a scope term: the inner term names the member. -/
-theorem held_μ (t P : Term 0 0) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool))
+theorem held_μ (t P : Graph.Term 0) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool))
     (ρw : Fin w → Codec) (ρk : Fin k → Codec) :
     (Alg.SFlat.interp (Alg.Scoped.TStep τ)
         (Term.held false t P k₀ ks : Term w k) ρw ρk).μ =
-      (Alg.SFlat.interp (Alg.Scoped.TStep τ) t Fin.elim0 Fin.elim0).μ :=
+      (Alg.Flat.interp (Alg.Scoped.TStep τ) Fin.elim0 t).μ :=
   rfl
 
 /-- `μ(refine(c)) = μ(c)` over a scope term. -/

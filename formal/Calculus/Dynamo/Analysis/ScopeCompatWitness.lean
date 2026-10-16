@@ -40,32 +40,32 @@ theorem Scoped.typed_prim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
   ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .prim g) (T := Empty.elim) (μ := Empty.elim)
     (fun p => p.elim) rfl⟩
 
+/-- **A closed primitive is typed.** -/
+theorem Scoped.typedC_prim (τ : (s : Bool) → Alg.TableAt dynSig s) (g : Ground) :
+    ∃ T μ, Alg.Scoped.TypedC τ (Scoped.Graph.Term.prim g : Scoped.Graph.Term 0) T μ :=
+  ⟨_, _, Alg.Scoped.TypedC.node (B := dynSig) (o := .prim g) (T := Empty.elim) (μ := Empty.elim)
+    (fun p => p.elim) rfl⟩
+
 /-- **A `held` of two primitives is typed** at every environment. -/
 theorem Scoped.typed_heldPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
     (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g g' : Ground)
     (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) :
     ∃ T μ, Alg.Scoped.Typed τ ρw ρk
       (Scoped.Term.held false (.prim g) (.prim g') k₀ ks : Scoped.Term w k) T μ := by
-  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_prim τ Fin.elim0 Fin.elim0 g
-  obtain ⟨T2, μ2, h2⟩ := Scoped.typed_prim τ Fin.elim0 Fin.elim0 g'
-  exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .held false k₀ ks)
+  obtain ⟨T1, μ1, h1⟩ := Scoped.typedC_prim τ g
+  obtain ⟨T2, μ2, h2⟩ := Scoped.typedC_prim τ g'
+  exact ⟨_, _, Alg.Scoped.Typed.wall (B := dynSig) (o := .held false k₀ ks)
     (T := fun p => match p with | true => T1 | false => T2)
     (μ := fun p => match p with | true => μ1 | false => μ2)
     (fun p => match p with
       | true => h1
       | false => h2) rfl⟩
 
-/-- **An array of a primitive is typed** at every environment. -/
-theorem Scoped.typed_arrayPrim {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
-    (ρw : Fin w → Codec) (ρk : Fin k → Codec) (g : Ground) :
-    ∃ T μ, Alg.Scoped.Typed τ ρw ρk (Scoped.Term.array (.prim g) : Scoped.Term w k) T μ := by
-  obtain ⟨T1, μ1, h1⟩ := Scoped.typed_prim τ ρw ρw g
-  exact ⟨_, _, Alg.Scoped.Typed.node (B := dynSig) (o := .list 0 1 0) (T := fun _ => T1)
-    (μ := fun _ => μ1)
-    (fun p => match p with
-      | .inl p => p.elim0
-      | .inr (.inl _) => h1
-      | .inr (.inr p) => p.elim0) rfl⟩
+/-- **An array of an entry is typed** at every environment. -/
+theorem Scoped.typed_array {w k : Nat} (τ : (s : Bool) → Alg.TableAt dynSig s)
+    (ρw : Fin w → Codec) (ρk : Fin k → Codec) (j : Fin w) :
+    ∃ T μ, Alg.Scoped.Typed τ ρw ρk (Scoped.Term.array j : Scoped.Term w k) T μ :=
+  ⟨_, _, Alg.Scoped.Typed.down (B := dynSig) (o := .list 0 1 0) rfl⟩
 
 /-- **A closed `held` of two primitives is typed.** -/
 theorem Closed.typed_heldPrim (g g' : Ground) (k₀ : DynGen × Bool) (ks : List (DynGen × Bool)) :
@@ -82,20 +82,23 @@ theorem Closed.obligations_heldPrim (g g' : Ground) (k₀ : DynGen × Bool) (ks 
         | true => ⟨fun p => p.elim, trivial⟩
         | false => ⟨fun p => p.elim, trivial⟩, h, trivial⟩
 
+/-- An array of a primitive, as a closed codec of two entries. -/
+def arrayPrimClosed (g : Ground) : Closed := Closed.two (.array 1) (Alg.Scoped.Term.prim g)
+
 /-- **A closed array of a primitive is lawful.** -/
-theorem Closed.lawful_arrayPrim (g : Ground) : Lawful ((Closed.one (.array (.prim g))).meaning α) :=
-  Closed.sound (fun i => match i with | ⟨0, _⟩ => Scoped.typed_arrayPrim _ _ _ g)
+theorem Closed.lawful_arrayPrim (g : Ground) : Lawful ((arrayPrimClosed g).meaning α) :=
+  Closed.sound (fun i => match i with
+      | ⟨0, _⟩ => Scoped.typed_array _ _ _ ⟨1, Nat.one_lt_two⟩
+      | ⟨1, _⟩ => Scoped.typed_prim _ _ _ g)
     fun _ _ i => match i with
-      | ⟨0, _⟩ => ⟨fun p => match p with
-          | .inl p => p.elim0
-          | .inr (.inl _) => ⟨fun p => p.elim, trivial⟩
-          | .inr (.inr p) => p.elim0, trivial⟩
+      | ⟨0, _⟩ => trivial
+      | ⟨1, _⟩ => ⟨fun p => p.elim, trivial⟩
 
 /-- **A schema people write, discharged with no certificate**: both options write `[]` as one
     attribute, so the decision accepts the pair. -/
 theorem Closed.pairwiseCompat_array_literals :
-    Closed.PairwiseCompat α [Closed.one (.array (.literal .string "A")),
-      Closed.one (.array (.literal .string "B"))] := by
+    Closed.PairwiseCompat α [arrayPrimClosed (.literal .string "A"),
+      arrayPrimClosed (.literal .string "B")] := by
   refine Closed.pairwiseCompat_of_compatPair (by decide) fun t ht => ?_
   simp only [List.mem_cons, List.not_mem_nil, or_false] at ht
   rcases ht with rfl | rfl <;> exact Closed.lawful_arrayPrim _
@@ -287,22 +290,24 @@ Each pair holds a `held`, so no held-free bound covers it: the decision agrees p
 component. -/
 
 /-- `{a?: swap}` and `{a?: binary}`: the two slots agree, because the two terms are disjoint. -/
-example : (Closed.one (.object (Scoped.Body.mk {"a"} (fun _ => .optional swapBody) none))).compatPair
-    (Closed.one (.object (Scoped.Body.mk {"a"} (fun _ => .optional .binary) none))) = true := by decide
+example : (Closed.two (.object (Scoped.Body.mk {"a"} (fun _ => .optional 1) none)) swapBody).compatPair
+    (Closed.two (.object (Scoped.Body.mk {"a"} (fun _ => .optional 1) none)) .binary) = true := by
+  decide
 /-- `binary` and `swap | binary`: the partner is an option of the union. -/
 example : (Closed.one .binary).compatPair (Closed.one (.union [swapBody, .binary])) = true := by decide
 /-- `array(swap)` and `array(boolean)`: the elements are disjoint, and the empty list is one
     attribute. -/
-example : (Closed.one (.array swapBody)).compatPair (Closed.one (.array .boolean)) = true := by decide
+example : (Closed.two (.array 1) swapBody).compatPair (Closed.two (.array 1) .boolean) = true := by
+  decide
 /-- A recursive closed codec and `array(never)`. -/
-example : (Closed.one (.union [swapBody, .array (.ref 0)])).compatPair
-    (Closed.one (.array .never)) = true := by decide
+example : (Closed.one (.union [swapBody, .array 0])).compatPair
+    (Closed.two (.array 1) .never) = true := by decide
 /-- …and the certificate certifies none of the four. -/
-example : (Closed.one (.object (Scoped.Body.mk {"a"} (fun _ => .optional swapBody) none))).viewsDisjoint
-      (Closed.one (.object (Scoped.Body.mk {"a"} (fun _ => .optional .binary) none))) = false ∧
+example : (Closed.two (.object (Scoped.Body.mk {"a"} (fun _ => .optional 1) none)) swapBody).viewsDisjoint
+      (Closed.two (.object (Scoped.Body.mk {"a"} (fun _ => .optional 1) none)) .binary) = false ∧
     (Closed.one .binary).viewsDisjoint (Closed.one (.union [swapBody, .binary])) = false ∧
-    (Closed.one (.array swapBody)).viewsDisjoint (Closed.one (.array .boolean)) = false ∧
-    (Closed.one (.union [swapBody, .array (.ref 0)])).viewsDisjoint (Closed.one (.array .never)) = false := by
+    (Closed.two (.array 1) swapBody).viewsDisjoint (Closed.two (.array 1) .boolean) = false ∧
+    (Closed.one (.union [swapBody, .array 0])).viewsDisjoint (Closed.two (.array 1) .never) = false := by
   decide
 
 /-- **The decision refuses the two incompatible witnesses.** -/

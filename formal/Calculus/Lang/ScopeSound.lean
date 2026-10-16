@@ -49,18 +49,32 @@ def TOp.rule : (o : TOp B) → (o.Pos → Mean.C B) → (o.Pos → Mean.V (B := 
 
 section Term
 
-/-- **The judgement** over a term of a scope: an entry reads its held set from its codec. -/
-inductive Typed : {w k : Nat} → (Fin w → Mean.C B) → (Fin k → Mean.C B) → Term B w k →
-    (Mean.V (B := B) → Prop) → Option (Mean.Mem (B := B)) → Prop where
-  | ref {w k : Nat} {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B} (i : Fin k) :
-      Typed ρw ρk (.leaf i) (ρk i).T (ρk i).μ
-  | node {w k : Nat} {ρw : Fin w → Mean.C B} {ρk : Fin k → Mean.C B} {o : TOp B}
-      {args : (p : o.Pos) → Term B ((TOp.kind o).w w) ((TOp.kind o).k w k)}
+/-- **The judgement** over a closed graph term, the child of a wall. -/
+inductive TypedC : Graph B 0 → (Mean.V (B := B) → Prop) → Option (Mean.Mem (B := B)) → Prop where
+  | node {o : TOp B} {args : o.Pos → Graph B 0}
       {T : o.Pos → Mean.V (B := B) → Prop} {μ : o.Pos → Option (Mean.Mem (B := B))} {r}
-      (h : ∀ p, Typed ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk) (args p) (T p) (μ p))
-      (hr : TOp.rule τ o (fun p => SFlat.interp (TStep τ) (args p)
-        ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)) T μ = some r) :
-      Typed ρw ρk (.node o args) r.1 r.2
+      (h : ∀ p, TypedC (args p) (T p) (μ p))
+      (hr : TOp.rule τ o (fun p => (args p).interp (TStep τ) Fin.elim0) T μ = some r) :
+      TypedC (.node o args) r.1 r.2
+
+/-- **The judgement** over a term of a scope: an entry reads its held set from its codec. -/
+inductive Typed {w k : Nat} (ρw : Fin w → Mean.C B) (ρk : Fin k → Mean.C B) : Term B w k →
+    (Mean.V (B := B) → Prop) → Option (Mean.Mem (B := B)) → Prop where
+  | ref (i : Fin k) : Typed ρw ρk (.leaf i) (ρk i).T (ρk i).μ
+  | node {o : TOp B} {h} {args : o.Pos → Term B w k}
+      {T : o.Pos → Mean.V (B := B) → Prop} {μ : o.Pos → Option (Mean.Mem (B := B))} {r}
+      (hc : ∀ p, Typed ρw ρk (args p) (T p) (μ p))
+      (hr : TOp.rule τ o (fun p => SFlat.interp (TStep τ) (args p) ρw ρk) T μ = some r) :
+      Typed ρw ρk (.node o h args) r.1 r.2
+  | down {o : TOp B} {h} {args : o.Pos → Fin w} {r}
+      (hr : TOp.rule τ o (fun p => ρw (args p)) (fun p => (ρw (args p)).T)
+        (fun p => (ρw (args p)).μ) = some r) :
+      Typed ρw ρk (.down o h args) r.1 r.2
+  | wall {o : TOp B} {h} {args : o.Pos → Graph B 0}
+      {T : o.Pos → Mean.V (B := B) → Prop} {μ : o.Pos → Option (Mean.Mem (B := B))} {r}
+      (hc : ∀ p, TypedC τ (args p) (T p) (μ p))
+      (hr : TOp.rule τ o (fun p => (args p).interp (TStep τ) Fin.elim0) T μ = some r) :
+      Typed ρw ρk (.wall o h args) r.1 r.2
 
 /-! ## Obligations -/
 
@@ -70,13 +84,20 @@ def TOp.obl : (o : TOp B) → (o.Pos → Mean.C B) → Prop
   | .union _, a => ∀ p q, Compat (a p) (a q)
   | _, _ => True
 
+/-- **The obligations of a closed graph term**: the obligation of each operation. -/
+def ObligationsC : Graph B 0 → Prop
+  | .leaf _ => True
+  | .node o args => (∀ p, ObligationsC (args p)) ∧
+      TOp.obl τ o fun p => (args p).interp (TStep τ) Fin.elim0
+
 /-- **The obligations of a scope term**: the obligation of each operation, at its positions. -/
-def Obligations : {w k : Nat} → (Fin w → Mean.C B) → (Fin k → Mean.C B) → Term B w k → Prop
-  | _, _, _, _, .leaf _ => True
-  | _, _, ρw, ρk, .node o args =>
-      (∀ p, Obligations ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk) (args p)) ∧
-        TOp.obl τ o fun p => SFlat.interp (TStep τ) (args p)
-          ((TOp.kind o).envW ρw) ((TOp.kind o).envK ρw ρk)
+def Obligations {w k : Nat} (ρw : Fin w → Mean.C B) (ρk : Fin k → Mean.C B) : Term B w k → Prop
+  | .leaf _ => True
+  | .node o _ args => (∀ p, Obligations ρw ρk (args p)) ∧
+      TOp.obl τ o fun p => SFlat.interp (TStep τ) (args p) ρw ρk
+  | .down o _ args => TOp.obl τ o fun p => ρw (args p)
+  | .wall o _ args => (∀ p, ObligationsC τ (args p)) ∧
+      TOp.obl τ o fun p => (args p).interp (TStep τ) Fin.elim0
 
 /-! ## The law of each operation -/
 
@@ -139,6 +160,13 @@ theorem TOp.lawful {o : TOp B} {a : o.Pos → Mean.C B} {a' : o.Pos → Mean.C B
 
 /-! ## Soundness -/
 
+/-- **Soundness of a closed graph term**: a typed closed term that meets its obligations is
+    lawful. -/
+theorem sound_termC {t : Graph B 0} {T μ} (h : TypedC τ t T μ) :
+    ObligationsC τ t → Lawful Mean.mem (t.interp (TStep τ) Fin.elim0) := by
+  induction h with
+  | node _ hr ih => exact fun hob => TOp.lawful τ hr (fun p => ih p (hob.1 p)) hob.2
+
 /-- **Soundness of a scope term**: a typed term that meets its obligations at lawful codecs is lawful. -/
 theorem sound_term {w k : Nat} {ρw' : Fin w → Mean.C B}
     {ρk' : Fin k → Mean.C B} {t : Term B w k} {T μ} (h : Typed τ ρw' ρk' t T μ) :
@@ -149,8 +177,9 @@ theorem sound_term {w k : Nat} {ρw' : Fin w → Mean.C B}
   | ref i => exact fun _ hk _ => hk i
   | node _ hr ih =>
     intro ρw ρk hw hk hob
-    exact TOp.lawful τ hr (fun p => ih p (Kind.envW_all hw _) (Kind.envK_all hw hk _) (hob.1 p))
-      hob.2
+    exact TOp.lawful τ hr (fun p => ih p hw hk (hob.1 p)) hob.2
+  | down hr => exact fun hw _ hob => TOp.lawful τ hr (fun p => hw _) hob
+  | wall hc hr => exact fun _ _ hob => TOp.lawful τ hr (fun p => sound_termC τ (hc p) (hob.1 p)) hob.2
 
 end Term
 
@@ -206,26 +235,26 @@ theorem Closed.meaning_lawful {N : Nat} (d : Closed B N) (hty : Closed.Typed τ 
 
 /-- A closed codec of one entry: a `legacy` reader over the identity. -/
 def legacyClosed (r : B.R) : Closed B 1 :=
-  fun i => Term.legacy (w := 1) (k := i) .opaq r
+  fun i => Term.legacy (w := 1) (k := i) (.node .opaq Empty.elim) r
 
 /-- **A closed codec with a `legacy` is not typed**: the rule of `legacy` answers `none`. -/
 theorem legacyClosed_untyped (r : B.R) : ¬ Closed.Typed τ (legacyClosed r) := fun h => by
   unfold legacyClosed Closed.Typed at h
   obtain ⟨T, μ, ht⟩ := h 0
   cases ht with
-  | node _ hr => exact nomatch hr
+  | wall _ hr => exact nomatch hr
 
 /-- A closed codec of one entry: an object with one `fill` slot. -/
 def fillClosed (v : B.K) : Closed B 1 :=
   fun i =>
-    Term.object (w := 1) (k := i) {"a"} (fun _ => (.fill v, .opaq)) none
+    Term.object (w := 1) (k := i) {"a"} (fun _ => (.fill v, 0)) none
 
 /-- **A closed codec with a `fill` is not typed**: the rule of the object answers `none`. -/
 theorem fillClosed_untyped (v : B.K) : ¬ Closed.Typed τ (fillClosed v) := fun h => by
   unfold fillClosed Closed.Typed at h
   obtain ⟨T, μ, ht⟩ := h 0
   cases ht with
-  | node _ hr =>
+  | down hr =>
     simp only [TOp.rule] at hr
     split at hr
     · next hall =>

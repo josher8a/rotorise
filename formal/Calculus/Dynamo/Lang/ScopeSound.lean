@@ -47,6 +47,11 @@ theorem Closed.extendRead_lawfulCore {α : Table} {t : Closed} (hty : t.Typed α
 def Closed.one (t : Scoped.Term 1 0) : Closed :=
   ⟨1, fun i => match i with | ⟨0, _⟩ => t, 0⟩
 
+/-- **A closed codec of two entries**, rooted at the first. The first entry names the second at
+    the child of a container. -/
+def Closed.two (t₀ : Scoped.Term 2 0) (t₁ : Scoped.Term 2 1) : Closed :=
+  ⟨2, fun i => match i with | ⟨0, _⟩ => t₀ | ⟨1, _⟩ => t₁, 0⟩
+
 /-- **The fixpoint law of a closed codec of one entry**: the meaning moves what its term moves over
     the meaning. -/
 theorem Closed.one_fix (α : Table) (t : Scoped.Term 1 0) (o : Alg.Orient) (v : Value) :
@@ -64,5 +69,24 @@ theorem Closed.one_fix (α : Table) (t : Scoped.Term 1 0) (o : Alg.Orient) (v : 
     rfl
   · funext j
     exact j.elim0
+
+/-- **The codec of an entry of a closed codec** at the caller table `α`: the solution of its scope
+    at the entry. The meaning is the codec of the root. -/
+def Closed.entry (α : Table) (t : Closed) (i : Fin t.N) : Codec :=
+  Alg.Scoped.Closed.meaning (Alg.tables dynSyn.o α dynTableA) t.scope i
+
+/-- **The fixpoint law of an entry of a closed codec**: the entry moves what its term moves over
+    the entries. -/
+theorem Closed.entry_fix (α : Table) (t : Closed) (i : Fin t.N) (o : Alg.Orient) (v : Value) :
+    (t.entry α i).f o v =
+      (Alg.SFlat.interp (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA))
+        (t.scope i) (t.entry α) fun j => t.entry α (Fin.castLE (Nat.le_of_lt i.isLt) j)).f o v := by
+  have hS := Alg.Scoped.TStep_lawful (Alg.tables dynSyn.o α dynTableA)
+  have hfix : ∀ j, (t.entry α j).f = ((Alg.nf (Alg.Scoped.TSig dynSig) t.scope j).interp
+      (Alg.Scoped.TStep (Alg.tables dynSyn.o α dynTableA)) (t.entry α)).f := fun j =>
+    funext fun o => funext fun v => Alg.solve_fix Alg.Mean.d_pos (Alg.nf_contractive hS t.scope) j o v
+  rw [hfix i, Alg.interp_nf]
+  exact congrFun (congrFun (Alg.SFlat.interp_f_congr hS (t.scope i) (fun _ => rfl)
+    fun _ => (hfix _).symm) o) v
 
 end Calculus

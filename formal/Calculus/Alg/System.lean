@@ -1060,124 +1060,63 @@ end Shapes
 
 /-! ## The stratified system
 
-`SFlat w k` is a flat term whose leaves above every guard name an entry below `k`. A `down` step
-widens the nameable entries to the width `w`. A `wall` step closes both indices, so no leaf sits
-below a wall, also not below a `down` under a wall. -/
+`SFlat w k` is a flat term in which each child of a `down` node names one of the `w` entries, and
+each leaf above every guard names one of the `k` entries. A `wall` closes the names: its children
+are flat terms with no leaf. So the terms of a system are flat: every child of a `down` node is an
+entry, and the only inline subterms below a guard are closed. -/
 
 section Strat
 
-/-- The width below a node: a `wall` closes it. -/
-def Kind.w : Kind → Nat → Nat
-  | .wall, _ => 0
-  | .keep, w => w
-  | .down, w => w
-
-/-- The nameable entries below a node: `keep` keeps them, `down` widens them to the width, and
-    `wall` closes them. -/
-def Kind.k : Kind → Nat → Nat → Nat
-  | .keep, _, k => k
-  | .down, w, _ => w
-  | .wall, _, _ => 0
-
-/-- The stratified flat term. -/
-inductive SFlat (Op : Type) (ar : Op → Type) (kd : Op → Kind) : Nat → Nat → Type where
-  | leaf {w k : Nat} (j : Fin k) : SFlat Op ar kd w k
-  | node {w k : Nat} (o : Op)
-      (args : ar o → SFlat Op ar kd ((kd o).w w) ((kd o).k w k)) : SFlat Op ar kd w k
+/-- **The stratified flat term.** A `keep` node holds terms, a `down` node holds entries of the
+    width, and a `wall` node holds closed flat terms. -/
+inductive SFlat (Op : Type) (ar : Op → Type) (kd : Op → Kind) (w k : Nat) : Type where
+  | leaf (j : Fin k) : SFlat Op ar kd w k
+  | node (o : Op) (h : kd o = .keep) (args : ar o → SFlat Op ar kd w k) : SFlat Op ar kd w k
+  | down (o : Op) (h : kd o = .down) (args : ar o → Fin w) : SFlat Op ar kd w k
+  | wall (o : Op) (h : kd o = .wall) (args : ar o → Flat Op ar 0) : SFlat Op ar kd w k
 
 /-- **A stratified system**: entry `i` names an entry below `i` above every guard, and any entry
-    below a guard. -/
+    at a child of a `down` node. -/
 abbrev SSys (S : Container) (n : Nat) : Type := (i : Fin n) → SFlat S.Op S.Pos S.kind n i
 
-/-- The environment of the width below a node. -/
-def Kind.envW {X : Type} {w : Nat} : (κ : Kind) → (Fin w → X) → Fin (κ.w w) → X
-  | .keep, ρ => ρ
-  | .down, ρ => ρ
-  | .wall, _ => Fin.elim0
-
-/-- The environment of the nameable entries below a node. -/
-def Kind.envK {X : Type} {w k : Nat} : (κ : Kind) → (Fin w → X) → (Fin k → X) → Fin (κ.k w k) → X
-  | .keep, _, ρ => ρ
-  | .down, ρ, _ => ρ
-  | .wall, _, _ => Fin.elim0
-
-/-- A map commutes with the environment of the width below a node. -/
-theorem Kind.envW_comp {X Y : Type} {w : Nat} (g : X → Y) :
-    ∀ (κ : Kind) (ρ : Fin w → X), (fun j => g (κ.envW ρ j)) = κ.envW (fun j => g (ρ j))
-  | .keep, _ => rfl
-  | .down, _ => rfl
-  | .wall, _ => funext fun j => j.elim0
-
-/-- A map commutes with the environment of the nameable entries below a node. -/
-theorem Kind.envK_comp {X Y : Type} {w k : Nat} (g : X → Y) :
-    ∀ (κ : Kind) (ρw : Fin w → X) (ρk : Fin k → X),
-      (fun j => g (κ.envK ρw ρk j)) = κ.envK (fun j => g (ρw j)) (fun j => g (ρk j))
-  | .keep, _, _ => rfl
-  | .down, _, _ => rfl
-  | .wall, _, _ => funext fun j => j.elim0
-
-/-- A property of each value of an environment holds at each value of the width below a node. -/
-theorem Kind.envW_all {X : Type} {w : Nat} {P : X → Prop} {ρ : Fin w → X} (h : ∀ j, P (ρ j)) :
-    ∀ (κ : Kind) j, P (κ.envW ρ j)
-  | .keep, j => h j
-  | .down, j => h j
-  | .wall, j => j.elim0
-
-/-- A property of each value of both environments holds at each nameable entry below a node. -/
-theorem Kind.envK_all {X : Type} {w k : Nat} {P : X → Prop} {ρw : Fin w → X} {ρk : Fin k → X}
-    (hw : ∀ j, P (ρw j)) (hk : ∀ j, P (ρk j)) : ∀ (κ : Kind) j, P (κ.envK ρw ρk j)
-  | .keep, j => hk j
-  | .down, j => hw j
-  | .wall, j => j.elim0
-
-/-- Below a `down`, the nameable entries are the width. -/
-theorem Kind.envK_down {X : Type} {w k : Nat} {P : X → Prop} {ρw : Fin w → X} {ρk : Fin k → X}
-    (hw : ∀ j, P (ρw j)) : ∀ (κ : Kind), κ = .down → ∀ j, P (κ.envK ρw ρk j)
-  | .down, _, j => hw j
-
-/-- A wall closes the width. -/
-theorem Kind.w_wall {w : Nat} : ∀ κ : Kind, κ = .wall → κ.w w = 0
-  | .wall, _ => rfl
-
-/-- A wall closes the nameable entries. -/
-theorem Kind.k_wall {w k : Nat} : ∀ κ : Kind, κ = .wall → κ.k w k = 0
-  | .wall, _ => rfl
-
-/-- Below a wall, the environment of the width is empty. -/
-theorem Kind.envW_wall {X : Type} {w : Nat} (ρ ρ' : Fin w → X) :
-    ∀ κ : Kind, κ = .wall → κ.envW ρ = κ.envW ρ'
-  | .wall, _ => funext fun j => j.elim0
-
-/-- Below a wall, the environment of the nameable entries is empty. -/
-theorem Kind.envK_wall {X : Type} {w k : Nat} (ρw ρw' : Fin w → X) (ρk ρk' : Fin k → X) :
-    ∀ κ : Kind, κ = .wall → κ.envK ρw ρk = κ.envK ρw' ρk'
-  | .wall, _ => funext fun j => j.elim0
+/-- A closed flat term as a flat term over any entries. -/
+abbrev Flat.lift {Op : Type} {ar : Op → Type} {n : Nat} (t : Flat Op ar 0) : Flat Op ar n :=
+  t.bind Fin.elim0
 
 /-- The codec of a stratified term, over the environment of each index. -/
-def SFlat.interp (R : Step S V M) : {w k : Nat} → SFlat S.Op S.Pos S.kind w k →
+def SFlat.interp (R : Step S V M) {w k : Nat} : SFlat S.Op S.Pos S.kind w k →
     (Fin w → Codec V M) → (Fin k → Codec V M) → Codec V M
-  | _, _, .leaf j, _, ρk => ρk j
-  | _, _, .node o args, ρw, ρk =>
-      R.run o fun p => SFlat.interp R (args p) ((S.kind o).envW ρw) ((S.kind o).envK ρw ρk)
+  | .leaf j, _, ρk => ρk j
+  | .node o _ args, ρw, ρk => R.run o fun p => SFlat.interp R (args p) ρw ρk
+  | .down o _ args, ρw, _ => R.run o fun p => ρw (args p)
+  | .wall o _ args, _, _ => R.run o fun p => (args p).interp R Fin.elim0
 
 /-- Inlining: each leaf becomes a flat term. -/
-def SFlat.inl {S : Container} {n : Nat} : {w k : Nat} → SFlat S.Op S.Pos S.kind w k →
+def SFlat.inl {S : Container} {n w k : Nat} : SFlat S.Op S.Pos S.kind w k →
     (Fin w → Flat S.Op S.Pos n) → (Fin k → Flat S.Op S.Pos n) → Flat S.Op S.Pos n
-  | _, _, .leaf j, _, σk => σk j
-  | _, _, .node o args, σw, σk =>
-      .node o fun p => SFlat.inl (args p) ((S.kind o).envW σw) ((S.kind o).envK σw σk)
+  | .leaf j, _, σk => σk j
+  | .node o _ args, σw, σk => .node o fun p => SFlat.inl (args p) σw σk
+  | .down o _ args, σw, _ => .node o fun p => σw (args p)
+  | .wall o _ args, _, _ => .node o fun p => (args p).lift
+
+/-- A closed flat term reads no environment. -/
+theorem Flat.interp_lift {n : Nat} (e : Fin n → Codec V M) (t : Flat S.Op S.Pos 0) :
+    t.lift.interp R e = t.interp R Fin.elim0 :=
+  (Flat.interp_bind e Fin.elim0 t).trans (congrArg (Flat.interp R · t) (funext fun j => j.elim0))
 
 /-- **The substitution lemma** of the inlining. -/
-theorem SFlat.interp_inl {n : Nat} (e : Fin n → Codec V M) : ∀ {w k : Nat}
-    (t : SFlat S.Op S.Pos S.kind w k) (σw : Fin w → Flat S.Op S.Pos n)
+theorem SFlat.interp_inl {n w k : Nat} (e : Fin n → Codec V M) :
+    ∀ (t : SFlat S.Op S.Pos S.kind w k) (σw : Fin w → Flat S.Op S.Pos n)
     (σk : Fin k → Flat S.Op S.Pos n),
     (t.inl σw σk).interp R e = t.interp R (fun j => (σw j).interp R e) (fun j => (σk j).interp R e)
-  | _, _, .leaf _, _, _ => rfl
-  | _, _, .node o args, σw, σk => by
+  | .leaf _, _, _ => rfl
+  | .node o _ args, σw, σk => by
       simp only [SFlat.inl, SFlat.interp, Flat.interp]
-      congr 1
-      funext p
-      rw [SFlat.interp_inl e (args p), Kind.envW_comp, Kind.envK_comp]
+      exact congrArg (R.run o) (funext fun p => SFlat.interp_inl e (args p) σw σk)
+  | .down _ _ _, _, _ => rfl
+  | .wall o _ args, _, _ => by
+      simp only [SFlat.inl, SFlat.interp, Flat.interp]
+      exact congrArg (R.run o) (funext fun p => Flat.interp_lift e (args p))
 
 /-- The graph form: the stratified system as a flat system. -/
 def SSys.graph (sys : SSys S n) : Fin n → Flat S.Op S.Pos n := fun i =>
@@ -1223,17 +1162,10 @@ theorem nf_eq (sys : SSys S n) (i : Fin n) :
   show (nfVec S sys i (by omega))[l.val] = (nfVec S sys n le_rfl)[l.val]
   rw [nfVec_get sys i _ l l.isLt, nfVec_get sys n le_rfl l (by have := l.isLt; omega)]
 
-/-- A stratified term with both indices zero has no leaf. -/
-theorem SFlat.inl_closed {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k),
-    w = 0 → k = 0 → ∀ (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
-    (t.inl σw σk).Closed S
-  | _, _, .leaf j, _, hk, _, _ => by subst hk; exact j.elim0
-  | _, _, .node o args, hw, hk, σw, σk => by
-      simp only [SFlat.inl, Flat.Closed]
-      intro p
-      refine SFlat.inl_closed (args p) ?_ ?_ _ _
-      · cases S.kind o <;> simp [Kind.w, hw]
-      · cases S.kind o <;> simp [Kind.k, hw, hk]
+/-- A closed flat term, lifted, has no leaf. -/
+theorem Flat.closed_lift {n : Nat} : ∀ t : Flat S.Op S.Pos 0, (t.lift (n := n)).Closed S
+  | .leaf j => j.elim0
+  | .node _ args => fun p => Flat.closed_lift (args p)
 
 /-- A node is guarded where each argument meets the guard of the kind of the node. -/
 theorem Flat.guarded_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n}
@@ -1256,34 +1188,32 @@ theorem Flat.ok_node {o : S.Op} {g : S.Pos o → Flat S.Op S.Pos n}
   | wall => exact hw h
 
 /-- Inlining terms with no leaf under a wall keeps no leaf under a wall. -/
-theorem SFlat.inl_ok {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k)
+theorem SFlat.inl_ok {n w k : Nat} : ∀ (t : SFlat S.Op S.Pos S.kind w k)
     (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (∀ j, (σw j).Ok S) → (∀ j, (σk j).Ok S) → (t.inl σw σk).Ok S
-  | _, _, .leaf j, _, _, _, hk => hk j
-  | _, _, .node o args, σw, σk, hw, hk => by
-      simp only [SFlat.inl]
-      refine Flat.ok_node (fun _ p => SFlat.inl_ok (args p) _ _ (Kind.envW_all hw _)
-        (Kind.envK_all hw hk _)) (fun h p => SFlat.inl_closed (args p) (Kind.w_wall _ h)
-        (Kind.k_wall _ h) _ _)
+  | .leaf j, _, _, _, hk => hk j
+  | .node _ h args, σw, σk, hw, hk =>
+      Flat.ok_node (fun _ p => SFlat.inl_ok (args p) σw σk hw hk)
+        (fun h' => nomatch h.symm.trans h')
+  | .down _ h args, _, _, hw, _ =>
+      Flat.ok_node (fun _ p => hw (args p)) (fun h' => nomatch h.symm.trans h')
+  | .wall _ h args, _, _, _, _ =>
+      Flat.ok_node (fun h' => absurd h h') (fun _ p => Flat.closed_lift (args p))
 
 /-- **Inlining guarded terms at the unguarded leaves gives a guarded term.** -/
-theorem SFlat.inl_guarded {n : Nat} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k)
+theorem SFlat.inl_guarded {n w k : Nat} : ∀ (t : SFlat S.Op S.Pos S.kind w k)
     (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (∀ j, (σw j).Ok S) → (∀ j, (σk j).Guarded S) → (t.inl σw σk).Guarded S
-  | _, _, .leaf j, _, _, _, hk => hk j
-  | _, _, .node o args, σw, σk, hw, hk => by
-      simp only [SFlat.inl]
-      refine Flat.guarded_node ?_ ?_ ?_
-      · intro h p
-        refine SFlat.inl_guarded (args p) _ _ (Kind.envW_all hw _) ?_
-        cases hκ : S.kind o with
-        | keep => exact hk
-        | down => exact absurd (hκ.symm.trans h) (by simp)
-        | wall => exact absurd (hκ.symm.trans h) (by simp)
-      · intro h p
-        exact SFlat.inl_ok (args p) _ _ (Kind.envW_all hw _) (Kind.envK_down hw _ h)
-      · intro h p
-        exact SFlat.inl_closed (args p) (Kind.w_wall _ h) (Kind.k_wall _ h) _ _
+  | .leaf j, _, _, _, hk => hk j
+  | .node _ h args, σw, σk, hw, hk =>
+      Flat.guarded_node (fun _ p => SFlat.inl_guarded (args p) σw σk hw hk)
+        (fun h' => nomatch h.symm.trans h') (fun h' => nomatch h.symm.trans h')
+  | .down _ h args, _, _, hw, _ =>
+      Flat.guarded_node (fun h' => nomatch h.symm.trans h') (fun _ p => hw (args p))
+        (fun h' => nomatch h.symm.trans h')
+  | .wall _ h args, _, _, _, _ =>
+      Flat.guarded_node (fun h' => nomatch h.symm.trans h') (fun h' => nomatch h.symm.trans h')
+        (fun _ p => Flat.closed_lift (args p))
 
 /-- **Each entry of the normal form is guarded.** -/
 theorem nf_guarded (sys : SSys S n) : ∀ i, (nf S sys i).Guarded S := by
@@ -1305,43 +1235,17 @@ end Strat
 
 section StratFix
 
-/-- A kind is `keep`, `down` or `wall`. -/
-theorem Kind.cases3 : ∀ κ : Kind, κ = .keep ∨ κ = .down ∨ κ = .wall
-  | .keep => .inl rfl
-  | .down => .inr (.inl rfl)
-  | .wall => .inr (.inr rfl)
-
-/-- A relation at each pair of values of two environments holds below a node, at the width. -/
-theorem Kind.envW_all2 {X : Type} {w : Nat} {R : X → X → Prop} {ρ ρ' : Fin w → X}
-    (h : ∀ j, R (ρ j) (ρ' j)) : ∀ (κ : Kind) j, R (κ.envW ρ j) (κ.envW ρ' j)
-  | .keep, j => h j
-  | .down, j => h j
-  | .wall, j => j.elim0
-
-/-- A relation at each pair of values of two environments holds below a node, at the nameable
-    entries. -/
-theorem Kind.envK_all2 {X : Type} {w k : Nat} {R : X → X → Prop} {ρw ρw' : Fin w → X}
-    {ρk ρk' : Fin k → X} (hw : ∀ j, R (ρw j) (ρw' j)) (hk : ∀ j, R (ρk j) (ρk' j)) :
-    ∀ (κ : Kind) j, R (κ.envK ρw ρk j) (κ.envK ρw' ρk' j)
-  | .keep, j => hk j
-  | .down, j => hw j
-  | .wall, j => j.elim0
-
 /-- The interpretation keeps agreement below `d`. -/
-theorem SFlat.agree (hS : R.Lawful depth) {d : Nat} : ∀ {w k : Nat}
-    (t : SFlat S.Op S.Pos S.kind w k) (ρw ρw' : Fin w → Codec V M) (ρk ρk' : Fin k → Codec V M),
+theorem SFlat.agree (hS : R.Lawful depth) {d w k : Nat} :
+    ∀ (t : SFlat S.Op S.Pos S.kind w k) (ρw ρw' : Fin w → Codec V M) (ρk ρk' : Fin k → Codec V M),
     (∀ j, AgreeLe depth d (ρw j) (ρw' j)) → (∀ j, AgreeLe depth d (ρk j) (ρk' j)) →
     AgreeLe depth d (t.interp R ρw ρk) (t.interp R ρw' ρk')
-  | _, _, .leaf j, _, _, _, _, _, hk => hk j
-  | _, _, .node o args, ρw, ρw', ρk, ρk', hw, hk => by
-      simp only [SFlat.interp]
-      rcases Kind.cases3 (S.kind o) with hκ | hκ | hκ
-      · exact hS.keep o hκ d _ _ fun p => SFlat.agree hS (args p) _ _ _ _
-          (Kind.envW_all2 hw _) (Kind.envK_all2 hw hk _)
-      · exact (hS.down o hκ d _ _ fun p => SFlat.agree hS (args p) _ _ _ _
-          (Kind.envW_all2 hw _) (Kind.envK_all2 hw hk _)).mono (by omega)
-      · rw [Kind.envW_wall ρw ρw' _ hκ, Kind.envK_wall ρw ρw' ρk ρk' _ hκ]
-        exact AgreeLe.refl _ _
+  | .leaf j, _, _, _, _, _, hk => hk j
+  | .node o h args, ρw, ρw', ρk, ρk', hw, hk =>
+      hS.keep o h d _ _ fun p => SFlat.agree hS (args p) ρw ρw' ρk ρk' hw hk
+  | .down o h args, _, _, _, _, hw, _ =>
+      (hS.down o h d _ _ fun p => hw (args p)).mono (by omega)
+  | .wall _ _ _, _, _, _, _, _, _ => AgreeLe.refl _ _
 
 /-- Environments with the same maps give one map. -/
 theorem SFlat.interp_f_congr (hS : R.Lawful depth) {w k : Nat}
@@ -1405,10 +1309,10 @@ section StratShapes
 /-- The shape of `triJ` as a stratified system, X before Y: `X = shift Y` names `Y` below the guard,
     and `Y = join [X, shift Y]` names `X` above it. -/
 def triS : SSys (triSig.withJoin Nat Unit) 2 := fun i => match i with
-  | ⟨0, _⟩ => .node (.inl ()) fun _ => .leaf (1 : Fin 2)
-  | ⟨1, _⟩ => .node (.inr (.inl (2, none))) fun p => match p with
-    | ⟨0, _⟩ => .leaf (0 : Fin 1)
-    | ⟨_ + 1, _⟩ => .node (.inl ()) fun _ => .leaf (1 : Fin 2)
+  | ⟨0, _⟩ => .down (.inl ()) rfl fun _ => 1
+  | ⟨1, _⟩ => .node (.inr (.inl (2, none))) rfl fun p => match p with
+    | ⟨0, _⟩ => .leaf 0
+    | ⟨_ + 1, _⟩ => .down (.inl ()) rfl fun _ => 1
 
 /-- `triS` has one solution, at the maps. -/
 theorem triS_solution :
@@ -1480,21 +1384,16 @@ theorem Flat.okB_of_ok : ∀ t : Flat S.Op S.Pos n, t.Ok S → t.okB S = true
         | down => rw [hk] at h; exact Flat.okB_of_ok _ (h p)
         | wall => exact absurd hk hκ
 
-/-- Below a `keep`, each nameable entry is a nameable entry above the node. -/
-theorem Kind.envK_keep_pt {X : Type} {w k : Nat} {ρw : Fin w → X} {ρk : Fin k → X} :
-    ∀ κ : Kind, κ = .keep → ∀ l, ∃ l', κ.envK ρw ρk l = ρk l'
-  | .keep, _, l => ⟨l, rfl⟩
-
 /-- An unguarded leaf of an inlined term is an unguarded leaf of a nameable entry's term. -/
-theorem SFlat.ulv_inl {n : Nat} {j : Fin n} : ∀ {w k : Nat} (t : SFlat S.Op S.Pos S.kind w k)
+theorem SFlat.ulv_inl {n w k : Nat} {j : Fin n} : ∀ (t : SFlat S.Op S.Pos S.kind w k)
     (σw : Fin w → Flat S.Op S.Pos n) (σk : Fin k → Flat S.Op S.Pos n),
     (t.inl σw σk).ulv S j = true → ∃ l, (σk l).ulv S j = true
-  | _, _, .leaf l, _, _, h => ⟨l, h⟩
-  | _, _, .node o args, σw, σk, h => by
-      obtain ⟨hκ, p, hp⟩ := Flat.ulv_node_iff.mp h
-      obtain ⟨l, hl⟩ := SFlat.ulv_inl (args p) _ _ hp
-      obtain ⟨l', hl'⟩ := Kind.envK_keep_pt (ρw := σw) (ρk := σk) _ hκ l
-      exact ⟨l', hl' ▸ hl⟩
+  | .leaf l, _, _, h => ⟨l, h⟩
+  | .node _ _ args, σw, σk, h => by
+      obtain ⟨_, p, hp⟩ := Flat.ulv_node_iff.mp h
+      exact SFlat.ulv_inl (args p) σw σk hp
+  | .down _ hκ _, _, _, h => nomatch hκ.symm.trans (Flat.ulv_node_iff.mp h).1
+  | .wall _ hκ _, _, _, h => nomatch hκ.symm.trans (Flat.ulv_node_iff.mp h).1
 
 /-- An unguarded edge of a stratified system goes to a lower entry. -/
 theorem SSys.ulv_graph (sys : SSys S n) {i j : Fin n} (h : (sys.graph i).ulv S j = true) :
@@ -1588,62 +1487,52 @@ theorem noCycle_of_rank {n : Nat} {S : Container} {sys : Fin n → Flat S.Op S.P
   omega
 
 
-/-! ## The entries below a node -/
-
-/-- A wall closes the width: below a wall, no entry of the width remains. -/
-theorem Kind.w_empty {w : Nat} : ∀ κ : Kind, κ = .wall → Fin (κ.w w) → False
-  | .wall, _, l => l.elim0
-
-/-- A wall closes the nameable entries. -/
-theorem Kind.k_empty {w k : Nat} : ∀ κ : Kind, κ = .wall → Fin (κ.k w k) → False
-  | .wall, _, l => l.elim0
-
-/-- Each entry of the width below a node is an entry of the width above it. -/
-theorem Kind.envW_some {X : Type} {w : Nat} (ρ : Fin w → X) :
-    ∀ (κ : Kind) (l : Fin (κ.w w)), ∃ l', κ.envW ρ l = ρ l'
-  | .keep, l => ⟨l, rfl⟩
-  | .down, l => ⟨l, rfl⟩
-  | .wall, l => l.elim0
-
-/-- Each nameable entry below a node is an entry of the width or a nameable entry above it. -/
-theorem Kind.envK_some {X : Type} {w k : Nat} (ρw : Fin w → X) (ρk : Fin k → X) :
-    ∀ (κ : Kind) (l : Fin (κ.k w k)), (∃ l', κ.envK ρw ρk l = ρw l') ∨ ∃ l', κ.envK ρw ρk l = ρk l'
-  | .keep, l => .inr ⟨l, rfl⟩
-  | .down, l => .inl ⟨l, rfl⟩
-  | .wall, l => l.elim0
-
 section Leaves
 variable {N : Nat}
 
+/-- A lifted closed term has no leaf. -/
+theorem Flat.lv_lift {j : Fin N} : ∀ t : Flat S.Op S.Pos 0, (t.lift (n := N)).lv S j = false
+  | .leaf l => l.elim0
+  | .node _ args => Bool.eq_false_iff.mpr fun h => by
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      rw [Flat.lv_lift (args p)] at hp
+      exact nomatch hp
+
 /-- A leaf of an inlined scope term is an entry of the width or a nameable entry. -/
-theorem SFlat.lv_inl {j : Fin N} : ∀ {w k : Nat}
+theorem SFlat.lv_inl {j : Fin N} {w k : Nat} : ∀
     (t : SFlat S.Op S.Pos S.kind w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N),
     (t.inl (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l))).lv S j = true →
       (∃ l, ρw l = j) ∨ ∃ l, ρk l = j
-  | _, _, .leaf l, _, _, h => .inr ⟨l, by simpa [SFlat.inl, Flat.lv] using h⟩
-  | _, _, .node o args, ρw, ρk, h => by
+  | .leaf l, _, _, h => .inr ⟨l, by simpa [SFlat.inl, Flat.lv] using h⟩
+  | .node _ _ args, ρw, ρk, h => by
       obtain ⟨p, hp⟩ := Flat.lv_node.mp h
-      rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-      rcases SFlat.lv_inl (args p) _ _ hp with ⟨l, hl⟩ | ⟨l, hl⟩
-      · obtain ⟨l', hl'⟩ := Kind.envW_some ρw (S.kind o) l
-        exact .inl ⟨l', hl' ▸ hl⟩
-      · rcases Kind.envK_some ρw ρk (S.kind o) l with ⟨l', hl'⟩ | ⟨l', hl'⟩
-        · exact .inl ⟨l', hl' ▸ hl⟩
-        · exact .inr ⟨l', hl' ▸ hl⟩
+      exact SFlat.lv_inl (args p) ρw ρk hp
+  | .down _ _ args, _, _, h => by
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      exact .inl ⟨args p, by simpa [Flat.lv] using hp⟩
+  | .wall _ _ args, _, _, h => by
+      obtain ⟨p, hp⟩ := Flat.lv_node.mp h
+      rw [Flat.lv_lift (args p)] at hp
+      exact nomatch hp
 
 /-- An inlined scope term has no leaf below a wall. -/
-theorem SFlat.wlv_inl {j : Fin N} : ∀ {w k : Nat}
+theorem SFlat.wlv_inl {j : Fin N} {w k : Nat} : ∀
     (t : SFlat S.Op S.Pos S.kind w k) (ρw : Fin w → Fin N) (ρk : Fin k → Fin N),
     (t.inl (fun l => .leaf (ρw l)) (fun l => .leaf (ρk l))).wlv S j = true → False
-  | _, _, .leaf _, _, _, h => by simp [SFlat.inl, Flat.wlv] at h
-  | _, _, .node o args, ρw, ρk, h => by
-      rcases Flat.wlv_node.mp h with ⟨hκ, p, hp⟩ | ⟨_, p, hp⟩
-      · rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-        rcases SFlat.lv_inl (args p) _ _ hp with ⟨l, _⟩ | ⟨l, _⟩
-        · exact Kind.w_empty (S.kind o) hκ l
-        · exact Kind.k_empty (S.kind o) hκ l
-      · rw [← Kind.envW_comp, ← Kind.envK_comp] at hp
-        exact SFlat.wlv_inl (args p) _ _ hp
+  | .leaf _, _, _, h => by simp [SFlat.inl, Flat.wlv] at h
+  | .node _ hκ args, ρw, ρk, h => by
+      rcases Flat.wlv_node.mp h with ⟨hw, _⟩ | ⟨_, p, hp⟩
+      · exact nomatch hκ.symm.trans hw
+      · exact SFlat.wlv_inl (args p) ρw ρk hp
+  | .down _ hκ _, _, _, h => by
+      rcases Flat.wlv_node.mp h with ⟨hw, _⟩ | ⟨_, p, hp⟩
+      · exact nomatch hκ.symm.trans hw
+      · simp [Flat.wlv] at hp
+  | .wall _ hκ args, _, _, h => by
+      rcases Flat.wlv_node.mp h with ⟨_, p, hp⟩ | ⟨hw, _⟩
+      · rw [Flat.lv_lift (args p)] at hp
+        exact nomatch hp
+      · exact hw hκ
 
 end Leaves
 

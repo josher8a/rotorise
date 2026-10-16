@@ -5,86 +5,14 @@ import Calculus.Lang.Scope
 # The scoped term at DynamoDB
 
 A closed codec of DynamoDB is one scope over the term container at the DynamoDB signature, and a
-root entry. Each builder keeps the spelling of the constructor of today's term:
-an entry names an entry of the scope by `ref`. The meaning of a closed codec is the solution of
+root entry. Each builder keeps the spelling of the constructor of today's term. Above every guard
+a term names an entry of the scope by `ref`. Each child of a container is an entry of the scope,
+and each child of a wall is a closed graph term. The meaning of a closed codec is the solution of
 the scope. The meaning reads the caller table at the side `false` and the store table at the side
 `true`.
 -/
 
 namespace Calculus
-
-namespace Scoped
-
-/-- A term of an entry of a scope at DynamoDB: `w` entries below a guard, and `k` entries above
-    every guard. -/
-abbrev Term (w k : Nat) := Alg.Scoped.Term dynSig w k
-
-/-- A slot at DynamoDB: its presence and its term. -/
-abbrev ObjectSlot (w : Nat) := Alg.Scoped.ObjectSlot dynSig w
-
-section Builders
-variable {w k : Nat}
-
-@[match_pattern] abbrev Term.base (kd : GroundKind) : Term w k := Alg.Scoped.Term.prim (.base kd)
-@[match_pattern] abbrev Term.literal (kd : GroundKind) (v : kd.Carrier) : Term w k :=
-  Alg.Scoped.Term.prim (.literal kd v)
-@[match_pattern] abbrev Term.set (e : Term w w) : Term w k := Alg.Scoped.Term.set e
-@[match_pattern] abbrev Term.refine (t : Term w k) (p : Pred) (pA : dynSyn.PredA) : Term w k :=
-  Alg.Scoped.Term.refine t p pA
-@[match_pattern] abbrev Term.legacy (t : Term 0 0) (r : Attr → Option Value) : Term w k :=
-  Alg.Scoped.Term.legacy t r
-@[match_pattern] abbrev Term.opaq : Term w k := Alg.Scoped.Term.opaq
-@[match_pattern] abbrev Term.never : Term w k := Alg.Scoped.Term.never
-@[match_pattern] abbrev Term.ref (i : Fin k) : Term w k := Alg.Scoped.Term.ref i
-@[match_pattern] abbrev Term.string : Term w k := .base .string
-@[match_pattern] abbrev Term.number : Term w k := .base .number
-@[match_pattern] abbrev Term.boolean : Term w k := .base .boolean
-@[match_pattern] abbrev Term.binary : Term w k := .base .binary
-@[match_pattern] abbrev Term.null : Term w k := .base .null
-
-/-- The rule `(held)`: the inner term and the outer term, below the wall. -/
-abbrev Term.held (s : Bool) (inner outer : Term 0 0) (k₀ : dynSig.G s × Bool)
-    (ks : List (dynSig.G s × Bool)) : Term w k :=
-  Alg.Scoped.Term.held s inner outer k₀ ks
-
-/-- The rule `(union)`, from a list of options. -/
-abbrev Term.union (os : List (Term w k)) : Term w k := Alg.Scoped.Term.union os
-
-/-- The rule `(list)`, from a prefix, at most one spread, and a suffix. -/
-abbrev Term.list (pre : List (Term w w)) (sp : Option (Term w w)) (suf : List (Term w w)) :
-    Term w k :=
-  Alg.Scoped.Term.list pre sp suf
-
-/-- The rule `(array)`. -/
-abbrev Term.array (e : Term w w) : Term w k := Alg.Scoped.Term.array e
-
-/-- The rules `(tuple)` and `(tuple-tail)`. -/
-abbrev Term.tuple (es : List (Term w w)) (tail : Option (Term w w)) : Term w k :=
-  Alg.Scoped.Term.tuple es tail
-
-@[match_pattern] abbrev ObjectSlot.req (t : Term w w) : ObjectSlot w := (.req, t)
-@[match_pattern] abbrev ObjectSlot.optional (t : Term w w) : ObjectSlot w := (.opt, t)
-@[match_pattern] abbrev ObjectSlot.fill (t : Term w w) (v : Value) : ObjectSlot w :=
-  (.fill v, t)
-
-/-- **An object payload**: the declared names, the slot of each, and the open block. -/
-structure Body (w : Nat) where
-  mk ::
-  fields : Finset Name
-  slot : {x // x ∈ fields} → ObjectSlot w
-  wild : Option (Term w w)
-
-/-- The rule `(object)`. -/
-abbrev Term.object (b : Body w) : Term w k := Alg.Scoped.Term.object b.fields b.slot b.wild
-
-/-- The rule `(record)`: the object that declares no name and takes every key at one codec. It is
-    not a constructor, because the open block is a block like any other. -/
-abbrev Term.record (val : Term w w) : Term w k :=
-  Term.object (.mk ∅ (fun x => absurd x.2 (Finset.notMem_empty x.1)) (some val))
-
-end Builders
-
-end Scoped
 
 namespace Scoped.Graph
 
@@ -97,6 +25,7 @@ abbrev ObjectSlot (N : Nat) := Alg.Scoped.SlotMode dynSig × Term N
 section Builders
 variable {N : Nat}
 
+@[match_pattern] abbrev Term.prim (g : Ground) : Term N := .node (.prim g) Empty.elim
 @[match_pattern] abbrev Term.base (kd : GroundKind) : Term N := .node (.prim (.base kd)) Empty.elim
 @[match_pattern] abbrev Term.literal (kd : GroundKind) (v : kd.Carrier) : Term N :=
   .node (.prim (.literal kd v)) Empty.elim
@@ -166,6 +95,78 @@ def Term.object (b : Body N) : Term N :=
 end Builders
 
 end Scoped.Graph
+
+namespace Scoped
+
+/-- A term of an entry of a scope at DynamoDB: each child of a container is one of the `w`
+    entries, and above every guard the term names one of the `k` entries. -/
+abbrev Term (w k : Nat) := Alg.Scoped.Term dynSig w k
+
+/-- A slot at DynamoDB: its presence and its entry. -/
+abbrev ObjectSlot (w : Nat) := Alg.Scoped.ObjectSlot dynSig w
+
+section Builders
+variable {w k : Nat}
+
+@[match_pattern] abbrev Term.base (kd : GroundKind) : Term w k := Alg.Scoped.Term.prim (.base kd)
+@[match_pattern] abbrev Term.literal (kd : GroundKind) (v : kd.Carrier) : Term w k :=
+  Alg.Scoped.Term.prim (.literal kd v)
+@[match_pattern] abbrev Term.set (e : Fin w) : Term w k := Alg.Scoped.Term.set e
+@[match_pattern] abbrev Term.refine (t : Term w k) (p : Pred) (pA : dynSyn.PredA) : Term w k :=
+  Alg.Scoped.Term.refine t p pA
+@[match_pattern] abbrev Term.legacy (t : Graph.Term 0) (r : Attr → Option Value) : Term w k :=
+  Alg.Scoped.Term.legacy t r
+@[match_pattern] abbrev Term.opaq : Term w k := Alg.Scoped.Term.opaq
+@[match_pattern] abbrev Term.never : Term w k := Alg.Scoped.Term.never
+@[match_pattern] abbrev Term.ref (i : Fin k) : Term w k := Alg.Scoped.Term.ref i
+@[match_pattern] abbrev Term.string : Term w k := .base .string
+@[match_pattern] abbrev Term.number : Term w k := .base .number
+@[match_pattern] abbrev Term.boolean : Term w k := .base .boolean
+@[match_pattern] abbrev Term.binary : Term w k := .base .binary
+@[match_pattern] abbrev Term.null : Term w k := .base .null
+
+/-- The rule `(held)`: the inner term and the outer term, closed below the wall. -/
+abbrev Term.held (s : Bool) (inner outer : Graph.Term 0) (k₀ : dynSig.G s × Bool)
+    (ks : List (dynSig.G s × Bool)) : Term w k :=
+  Alg.Scoped.Term.held s inner outer k₀ ks
+
+/-- The rule `(union)`, from a list of options. -/
+abbrev Term.union (os : List (Term w k)) : Term w k := Alg.Scoped.Term.union os
+
+/-- The rule `(list)`, from a prefix, at most one spread, and a suffix, each an entry. -/
+abbrev Term.list (pre : List (Fin w)) (sp : Option (Fin w)) (suf : List (Fin w)) : Term w k :=
+  Alg.Scoped.Term.list pre sp suf
+
+/-- The rule `(array)`. -/
+abbrev Term.array (e : Fin w) : Term w k := Alg.Scoped.Term.array e
+
+/-- The rules `(tuple)` and `(tuple-tail)`. -/
+abbrev Term.tuple (es : List (Fin w)) (tail : Option (Fin w)) : Term w k :=
+  Alg.Scoped.Term.tuple es tail
+
+@[match_pattern] abbrev ObjectSlot.req (t : Fin w) : ObjectSlot w := (.req, t)
+@[match_pattern] abbrev ObjectSlot.optional (t : Fin w) : ObjectSlot w := (.opt, t)
+@[match_pattern] abbrev ObjectSlot.fill (t : Fin w) (v : Value) : ObjectSlot w :=
+  (.fill v, t)
+
+/-- **An object payload**: the declared names, the slot of each, and the open block. -/
+structure Body (w : Nat) where
+  mk ::
+  fields : Finset Name
+  slot : {x // x ∈ fields} → ObjectSlot w
+  wild : Option (Fin w)
+
+/-- The rule `(object)`. -/
+abbrev Term.object (b : Body w) : Term w k := Alg.Scoped.Term.object b.fields b.slot b.wild
+
+/-- The rule `(record)`: the object that declares no name and takes every key at one codec. It is
+    not a constructor, because the open block is a block like any other. -/
+abbrev Term.record (val : Fin w) : Term w k :=
+  Term.object (.mk ∅ (fun x => absurd x.2 (Finset.notMem_empty x.1)) (some val))
+
+end Builders
+
+end Scoped
 
 /-- **The flat graph of a codec**: one entry for each cycle point of the codec, in any order. -/
 structure Graph where

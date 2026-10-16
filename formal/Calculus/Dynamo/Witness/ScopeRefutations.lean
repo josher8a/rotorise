@@ -3,7 +3,7 @@ import Calculus.Dynamo.Lang.ScopeSound
 /-!
 # The "Do not hold" table of `≡`, over closed codecs
 
-The rows of `≡` that fail, refuted at closed codecs of one entry. The meaning of a closed codec
+The rows of `≡` that fail, refuted at small closed codecs. The meaning of a closed codec
 holds exactly its write domain, so each refutation is a held-set separation: one side writes a
 value that the other side does not write.
 
@@ -29,24 +29,25 @@ theorem Closed.not_equiv_union_extend :
 /-- `["A", "B"]` is an array of either literal, but homogeneous in neither. -/
 theorem Closed.not_equiv_union_array :
     ¬ Codec.Equiv
-        ((Closed.one (Scoped.Term.union [Scoped.Term.array (.literal .string "A"),
-          Scoped.Term.array (.literal .string "B")])).meaning α)
-        ((Closed.one (Scoped.Term.array
-          (Scoped.Term.union [.literal .string "A", .literal .string "B"]))).meaning α) :=
+        ((⟨3, fun i => match i with
+          | ⟨0, _⟩ => (Scoped.Term.union [Scoped.Term.array 1, Scoped.Term.array 2] : Scoped.Term 3 0)
+          | ⟨1, _⟩ => (Scoped.Term.literal .string "A" : Scoped.Term 3 1)
+          | ⟨2, _⟩ => (Scoped.Term.literal .string "B" : Scoped.Term 3 2), 0⟩ : Closed).meaning α)
+        ((Closed.two (.array 1) (.union [.literal .string "A", .literal .string "B"])).meaning α) :=
   fun h => Bool.false_ne_true ((h.heldSet (.arr [.str "A", .str "B"])).mpr rfl)
 
 /-! ## `tuple(c₁ … cₙ, rest(c))` is neither a tuple nor an array of unions -/
 
 /-- Against the plain tuple: a second element the tail accepts and the tuple has no position for. -/
 theorem Closed.not_equiv_tupleTail_tuple :
-    ¬ Codec.Equiv ((Closed.one (Scoped.Term.tuple [.string] (some .string))).meaning α)
-      ((Closed.one (Scoped.Term.tuple [.string] none)).meaning α) :=
+    ¬ Codec.Equiv ((Closed.two (.tuple [1] (some 1)) .string).meaning α)
+      ((Closed.two (.tuple [1] none) .string).meaning α) :=
   fun h => Bool.false_ne_true ((h.heldSet (.arr [.str "a", .str "b"])).mp rfl)
 
 /-- Against the array: the empty sequence, which an array holds and a fixed head cannot. -/
 theorem Closed.not_equiv_tupleTail_array :
-    ¬ Codec.Equiv ((Closed.one (Scoped.Term.tuple [.string] (some .string))).meaning α)
-      ((Closed.one (Scoped.Term.array (Scoped.Term.union [.string]))).meaning α) :=
+    ¬ Codec.Equiv ((Closed.two (.tuple [1] (some 1)) .string).meaning α)
+      ((Closed.two (.array 1) (.union [.string])).meaning α) :=
   fun h => Bool.false_ne_true ((h.heldSet (.arr [])).mpr rfl)
 
 /-! ## `refine(held(c, P, k), q) ≢ held(refine(c, q), P, k)` -/
@@ -69,7 +70,7 @@ theorem Closed.not_equiv_refine_held :
         ((Closed.one (Scoped.Term.refine
           (Scoped.Term.held false .string .string (.caller 0, false) [])
             (.closure predA) ())).meaning isoTable)
-        ((Closed.one (Scoped.Term.held false (Scoped.Term.refine .string (.closure predA) ())
+        ((Closed.one (Scoped.Term.held false (Scoped.Graph.Term.refine .string (.closure predA) ())
           .string (.caller 0, false) [])).meaning isoTable) :=
   fun h => Bool.false_ne_true ((h.heldSet (.str "B")).mpr rfl)
 
