@@ -106,17 +106,19 @@ def anyZipG {X : Type} : List (X → Bool) → List X → Bool
   | f :: fs, u :: us => f u || anyZipG fs us
   | _, _ => false
 
-/-- **Two list shapes**: one disjoint position at each common length. -/
+/-- **Two list shapes**: one disjoint position at each common length. Two spreading shapes both
+    admit a length from `lo` up, and from `hi` up each row re-spreads the row at `hi`, so the
+    lengths `lo` to `hi` decide. -/
 def listRowG {X : Type} (fpre : List (X → Bool)) (fsp : Option (X → Bool))
     (fsuf : List (X → Bool)) (pre₂ : List X) (sp₂ : Option X) (suf₂ : List X) : Bool :=
   match fsp, sp₂ with
   | some f, some c =>
-      if dominates fpre.length fsuf.length pre₂.length suf₂.length then
-        match rowOfG fpre (some f) fsuf (max fpre.length pre₂.length + max fsuf.length suf₂.length),
-            rowOfG pre₂ (some c) suf₂ (max fpre.length pre₂.length + max fsuf.length suf₂.length) with
+      (List.range' (max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))
+          (max fpre.length pre₂.length + max fsuf.length suf₂.length + 1
+            - max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))).all fun n =>
+        match rowOfG fpre (some f) fsuf n, rowOfG pre₂ (some c) suf₂ n with
         | some fs, some us => anyZipG fs us
         | _, _ => false
-      else false
   | none, _ =>
       match rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
       | some us => anyZipG (fpre ++ fsuf) us
@@ -175,12 +177,27 @@ def pairAt (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL
       prev ((i, j) :: A) (sL i) (sR j)
   | a, b => prev A a b
 
+/-- The positions of a list node, at any codomain. -/
+def listPartsX {X : Type} {a : Nat} {s : Fin 2} {b : Nat}
+    (g : TOp.Pos (B := B) (.list a s b) → X) : List X × Option X × List X :=
+  (List.ofFn fun p => g (.inl p), optOf s (fun p => g (.inr (.inl p))),
+    List.ofFn fun p => g (.inr (.inr p)))
+
 /-- The test of the open block of a left object: `true` where the object has no block. -/
-def blockTest (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR)
-    {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} :
-    (w : Fin 2) → ((TOp.obj fs md w).Pos → Graph B NL) → Graph B NR → Bool
+def blockX {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} :
+    (w : Fin 2) → ((TOp.obj fs md w).Pos → Graph B NR → Bool) → Graph B NR → Bool
   | ⟨0, _⟩, _ => fun _ => true
-  | ⟨1, _⟩, a => pairAt (sL := sL) (sR := sR) prev A (a (.inr ⟨0, Nat.one_pos⟩))
+  | ⟨1, _⟩, g => g (.inr ⟨0, Nat.one_pos⟩)
+
+/-- A pair of positions below a guard, in the walk for disjointness. A pair of entries is looked up
+    or assumed, and spends one fuel. Any other pair has a closed side, which holds no leaf, so no
+    cycle passes through the pair. The pair runs `self`, the row at the same fuel. -/
+def pairX (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR)
+    (t : Graph B NL) (self : Graph B NR → Bool) : Graph B NR → Bool := fun y =>
+  match t, y with
+  | .leaf i, .leaf j => A.any (fun p => decide (p.1 = i) && decide (p.2 = j)) ||
+      prev ((i, j) :: A) (sL i) (sR j)
+  | _, _ => self y
 
 variable (sL sR)
 
@@ -195,15 +212,17 @@ def rowG (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL N
   | .node (.refine _ _) a, y => rowG prev A (a ()) y
   | .node (.union m) a, y => (List.finRange m).all fun p => rowG prev A (a p) y
   | x@(.node (.prim g) _), y => rightC sR (prev A x) (famPrimG g) y
-  | x@(.node .set a), y => rightC sR (prev A x) (famSetG (pairAt (sL := sL) (sR := sR) prev A (a ()))) y
+  | x@(.node .set a), y => rightC sR (prev A x) (famSetG
+      (pairX (sL := sL) (sR := sR) prev A (a ()) (rowG prev A (a ())))) y
   | x@(.node (.list _ _ _) a), y =>
-      rightC sR (prev A x) (famListG ((listParts a).1.map (pairAt (sL := sL) (sR := sR) prev A))
-        ((listParts a).2.1.map (pairAt (sL := sL) (sR := sR) prev A))
-        ((listParts a).2.2.map (pairAt (sL := sL) (sR := sR) prev A))) y
+      rightC sR (prev A x) (famListG
+        (listPartsX (B := B) (fun p => pairX (sL := sL) (sR := sR) prev A (a p) (rowG prev A (a p)))).1
+        (listPartsX (B := B) (fun p => pairX (sL := sL) (sR := sR) prev A (a p) (rowG prev A (a p)))).2.1
+        (listPartsX (B := B) (fun p => pairX (sL := sL) (sR := sR) prev A (a p) (rowG prev A (a p)))).2.2) y
   | x@(.node (.obj _ md s) a), y =>
       rightC sR (prev A x) (famObjG (md := md)
-        (fun k => pairAt (sL := sL) (sR := sR) prev A (a (.inl k)))
-        (blockTest (sL := sL) (sR := sR) (md := md) prev A s a)) y
+        (fun k => pairX (sL := sL) (sR := sR) prev A (a (.inl k)) (rowG prev A (a (.inl k))))
+        (blockX (md := md) s fun p => pairX (sL := sL) (sR := sR) prev A (a p) (rowG prev A (a p)))) y
 
 /-- The test of the open block of a left object: `true` where the object has no block. -/
 def blockR (R : Graph B NL → Graph B NR → Bool) {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} :
@@ -409,34 +428,40 @@ theorem listRowG_sound {pre suf : List X} {sp : Option X} {fpre fsuf : List (Y �
       · exact nomatch h₂
     | some c =>
       simp only [listRowG] at h
-      split at h
-      · next hdom =>
-        have hdm := dominates_max hdom
-        have hn₁ := rowOfG_isSome_len' h₁
-        have hn₂ := rowOfG_isSome_len' h₂
-        generalize hP : max fpre.length pre₂.length = P' at h hdm
-        generalize hS : max fsuf.length suf₂.length = S' at h hdm
-        split at h
-        · next fs us hfs hus =>
-          obtain ⟨rN, hrN⟩ := rowOfG_total (pre := pre) (suf := suf) (c := t) (n := P' + S')
-            (by omega)
-          have hF := rowOfG_forall₂ (R := SoundG P Q) hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf hrN hfs
-          have hr₁ := rowOfG_respread (P := P') (S := S') (n := n) (by omega) (by omega)
-            (by omega) hrN h₁
-          have hr₂ := rowOfG_respread (P := P') (S := S') (n := n) (by omega) (by omega)
-            (by omega) hus h₂
-          have hlN := rowOfG_length hrN
-          have hlu := rowOfG_length hus
-          have hlf' := hF.length_eq
-          subst hr₁ hr₂
-          rcases anyZipG_take_drop P' h with ha | ha
-          · rw [List.append_assoc, List.append_assoc]
-            exact RowsAp.append_left (by simp; omega)
-              (rowsAp_of_anyZip (List.forall₂_take P' hF) ha)
-          · exact RowsAp.append_right (by simp; omega)
-              (rowsAp_of_anyZip (List.forall₂_drop P' hF) ha)
-        · exact nomatch h
-      · exact nomatch h
+      have hn₁ := rowOfG_isSome_len' h₁
+      have hn₂ := rowOfG_isSome_len' h₂
+      generalize hP : max fpre.length pre₂.length = P' at h
+      generalize hS : max fsuf.length suf₂.length = S' at h
+      have hall := List.all_eq_true.mp h
+      rcases Nat.lt_or_ge (P' + S') n with hlt | hle
+      · have hm := hall (P' + S') (List.mem_range'_1.mpr ⟨by omega, by omega⟩)
+        obtain ⟨fs, hfs⟩ := rowOfG_total (pre := fpre) (suf := fsuf) (c := f) (n := P' + S')
+          (by omega)
+        obtain ⟨us, hus⟩ := rowOfG_total (pre := pre₂) (suf := suf₂) (c := c) (n := P' + S')
+          (by omega)
+        rw [hfs, hus] at hm
+        obtain ⟨rN, hrN⟩ := rowOfG_total (pre := pre) (suf := suf) (c := t) (n := P' + S')
+          (by omega)
+        have hF := rowOfG_forall₂ (R := SoundG P Q) hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf hrN hfs
+        have hr₁ := rowOfG_respread (P := P') (S := S') (n := n) (by omega) (by omega)
+          (by omega) hrN h₁
+        have hr₂ := rowOfG_respread (P := P') (S := S') (n := n) (by omega) (by omega)
+          (by omega) hus h₂
+        have hlN := rowOfG_length hrN
+        have hlu := rowOfG_length hus
+        have hlf' := hF.length_eq
+        subst hr₁ hr₂
+        rcases anyZipG_take_drop P' hm with ha | ha
+        · rw [List.append_assoc, List.append_assoc]
+          exact RowsAp.append_left (by simp; omega)
+            (rowsAp_of_anyZip (List.forall₂_take P' hF) ha)
+        · exact RowsAp.append_right (by simp; omega)
+            (rowsAp_of_anyZip (List.forall₂_drop P' hF) ha)
+      · have hm := hall n (List.mem_range'_1.mpr ⟨by omega, by omega⟩)
+        obtain ⟨fs, hfs⟩ := rowOfG_total (pre := fpre) (suf := fsuf) (c := f) (n := n) (by omega)
+        rw [hfs, h₂] at hm
+        exact rowsAp_of_anyZip
+          (rowOfG_forall₂ (R := SoundG P Q) hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf h₁ hfs) hm
 
 end RowsGen
 
@@ -518,22 +543,28 @@ theorem vis_pairAt {k : Nat} {A : Tbl NL NR} (hA : ∀ p ∈ A, Vis sL sR W (.le
 
 end Walk
 
+/-- The optional spread of a list, mapped at the positions, is the mapped optional spread. -/
+theorem optOf_mapX {X Y : Type} (g : X → Y) : ∀ (s : Fin 2) (f : Fin s → X),
+    optOf s (fun p => g (f p)) = (optOf s f).map g
+  | ⟨0, _⟩, _ => rfl
+  | ⟨1, _⟩, _ => rfl
+
 /-- The block test of the walk is the block test at the pair test. -/
-theorem blockTest_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR)
-    {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} :
+theorem blockX_eq (F : Graph B NL → Graph B NR → Bool) {fs : Finset String}
+    {md : {x // x ∈ fs} → SlotMode B} :
     ∀ (s : Fin 2) (a : (TOp.obj fs md s).Pos → Graph B NL),
-      blockTest (sL := sL) (sR := sR) (md := md) prev A s a =
-        blockR (md := md) (pairAt (sL := sL) (sR := sR) prev A) s a
+      blockX (md := md) s (fun p => F (a p)) = blockR (md := md) F s a
   | ⟨0, _⟩, _ => rfl
   | ⟨1, _⟩, _ => rfl
 
 variable [Leaf B]
 
-/-- **The row of the walk is the row with two tests**: the walk at the table, and the pair
-    test. -/
+/-- **The row of the walk is the row with two tests**: the walk at the table, and the pair test
+    at the row of the same fuel. -/
 theorem rowG_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR) :
     ∀ x y, rowG sL sR prev A x y =
-      rowR2 sL sR (prev A) (pairAt (sL := sL) (sR := sR) prev A) x y := by
+      rowR2 sL sR (prev A)
+        (fun a => pairX (sL := sL) (sR := sR) prev A a (rowG sL sR prev A a)) x y := by
   intro x
   induction x with
   | leaf j => intro y; simp only [rowG, rowR2]
@@ -542,8 +573,30 @@ theorem rowG_eq (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : T
     cases op with
     | refine _ _ => simp only [rowG, rowR2]; exact ih () y
     | union m => simp only [rowG, rowR2]; exact congrArg _ (funext fun p => ih p y)
-    | obj fs md s => simp only [rowG, rowR2]; rw [blockTest_eq sL sR prev A s a]
+    | list n s m =>
+      simp only [rowG, rowR2, listParts, listPartsX, List.map_ofFn, Function.comp_def]
+      exact congrArg (fun o => rightC sR _ (famListG _ o _) y)
+        (optOf_mapX (fun a => pairX (sL := sL) (sR := sR) prev A a (rowG sL sR prev A a)) s
+          (fun p => a (.inr (.inl p))))
+    | obj fs md s =>
+      simp only [rowG, rowR2]
+      rw [blockX_eq (fun a => pairX (sL := sL) (sR := sR) prev A a (rowG sL sR prev A a)) s a]
     | _ => simp only [rowG, rowR2]
+
+/-- **A pair below a guard that the walk answers is visited**: a pair of entries through the
+    table, and any other pair through the walk at one more fuel. -/
+theorem vis_pairX {k : Nat} {A : Tbl NL NR}
+    (hA : ∀ p ∈ A, Vis sL sR (decG sL sR) (.leaf p.1) (.leaf p.2)) :
+    ∀ a b, pairX (sL := sL) (sR := sR) (decG sL sR k) A a (rowG sL sR (decG sL sR k) A a) b = true →
+      Vis sL sR (decG sL sR) a b
+  | .leaf i, .leaf j, hab => by
+    simp only [pairX, Bool.or_eq_true, List.any_eq_true, Bool.and_eq_true,
+      decide_eq_true_eq] at hab
+    rcases hab with ⟨p, hp, h1, h2⟩ | hab
+    · subst h1 h2; exact hA p hp
+    · exact vis_pair sL sR _ hab hA
+  | .leaf _, .node _ _, hab => vis_walk sL sR _ (m := k + 1) hab hA
+  | .node _ _, _, hab => vis_walk sL sR _ (m := k + 1) hab hA
 
 /-- **Post-fixed up to the unfolding of two entries**: each pair passes the rows at two tests
     that the relation holds, or is two entries whose bodies the relation holds. -/
@@ -560,8 +613,9 @@ theorem vis_post : PostP sL sR (Vis sL sR (decG sL sR)) := by
     cases m with
     | zero => exact nomatch h
     | succ k =>
-      refine Or.inl ⟨decG sL sR k A, pairAt (sL := sL) (sR := sR) (decG sL sR k) A,
-        fun a b hab => vis_walk sL sR _ hab hA', vis_pairAt sL sR (decG sL sR) hA', ?_⟩
+      refine Or.inl ⟨decG sL sR k A,
+        fun a => pairX (sL := sL) (sR := sR) (decG sL sR k) A a (rowG sL sR (decG sL sR k) A a),
+        fun a b hab => vis_walk sL sR _ hab hA', vis_pairX sL sR hA', ?_⟩
       rw [← rowG_eq]; exact h
   · exact Or.inr ⟨i, j, rfl, rfl, S, hS, hs⟩
 

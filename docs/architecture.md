@@ -67,6 +67,7 @@ instance, and JSON is a second instance.
 | `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the flat scope with `scope_solution` |
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, `Scoped.Closed.meaning_sub`, and the product of closed objects `Scoped.Term.product` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
+| `Lang/ScopeFuel.lean`, `Lang/ScopeExact.lean` | the adequacy of the fuel of the decision on a flat system, the witness laws `Scoped.WLaws`, the fragment `Scoped.Frag`, and the exactness `Scoped.disjoint_exact`; `Dynamo/Analysis/ScopeExact.lean` and `JSON/ScopeExact.lean` give the two universes |
 | `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
 | `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
 
@@ -146,8 +147,10 @@ pair of entries while it compares the two bodies, and a pair already assumed is 
 At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel
 answers `false`. The row of a left refinement reads its inner term. On the right, a union reads its
 options and a refinement reads its inner term (`rightC`). So a right refinement hides no option
-from the left row. The set row compares the two elements as any other pair below a guard, with
-the assumed pairs. Each child of a container is an entry, so each cycle passes a pair of entries,
+from the left row. A pair with a closed side runs the row at the same fuel (`pairX`), because a
+closed term is a finite tree. The list row of two spreading shapes reads each common length, from
+the lowest length that both admit to the length where both re-spread. The set row compares the
+two elements as any other pair below a guard, with the assumed pairs. Each child of a container is an entry, so each cycle passes a pair of entries,
 and the decision meets each cycle at a pair that it can assume. A `held`, a `legacy` and the top
 are disjoint only from the bottom, because their admission is a function that the decision does
 not read.
@@ -166,6 +169,18 @@ and the attribute side at the dual. The `refine` row needs no law: a refinement 
 what its inner term accepts (`refine2_acc`). At DynamoDB, a leaf law is a fact about `inBase` and
 `inL`, and a set law is a fact about `setCodec`. At JSON, two kinds meet where they are one kind,
 and the set law holds because the signature has no set former.
+
+**The decision is exact over the fragment.** `Scoped.disjoint_exact` says that the decision answers
+`true` exactly where the two meanings share no datum, for two closed codecs whose entries are in the
+fragment `Scoped.Frag`. The fragment is the free constructors that the universe has: a primitive,
+a union, the bottom, a list, an object with no fill, and a set over the primitives that the
+universe holds in a set. `Scoped.WLaws` holds the dual laws: two primitives that the leaf does not
+keep apart share a datum, and two sets over elements that share a datum share a set. A common
+datum comes from a path of the walk, by induction. The fuel of `disjoint` suffices, because on a
+flat system each step of the walk lowers a measure of the table and the unguarded height.
+Outside the fragment the converse fails: the decision does not read the admission of a
+refinement, a fill, a `held`, a `legacy` or the top, a set of booleans at DynamoDB accepts nothing,
+and JSON has no list former.
 
 **A universe is a container, and the disjointness of two formers is a theorem.** The carrier of a
 universe is the W-type of a container, and the member of a value is its root shape. Each former

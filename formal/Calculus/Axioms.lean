@@ -1,4 +1,8 @@
 import Calculus.Dynamo.Lang.ScopeSound
+import Calculus.Lang.ScopeFuel
+import Calculus.Lang.ScopeExact
+import Calculus.JSON.ScopeExact
+import Calculus.Dynamo.Analysis.ScopeExact
 import Calculus.Dynamo.Lang.ScopeHeldSet
 import Calculus.Dynamo.Lang.ScopeHeldFree
 import Calculus.Dynamo.Lang.ScopeEquations

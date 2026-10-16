@@ -303,16 +303,19 @@ describe('two list shapes are disjoint where one position of each common length 
     })
 
     /**
-     * **Where one spreading side dominates, the row at `max p1 p2 + max s1 s2` decides.** Where
-     * neither side dominates, the test declines.
+     * **Two spreading shapes share a datum exactly when one common length has no disjoint
+     * position.** The common lengths run from `max (p1 + s1) (p2 + s2)` to
+     * `max p1 p2 + max s1 s2`, and each length above the last re-spreads the row at the last.
      */
-    it('reads the common row where one spreading side dominates, and declines elsewhere', () => {
+    it('reads each common length of two spreading shapes, from the lowest to the length where both re-spread', () => {
+        // One side dominates: the row at length two decides.
         expect(
             apart(
                 listOf([termOf(string)], termOf(string), []),
                 listOf([termOf(boolean), termOf(string)], termOf(string), []),
             ),
         ).toBe(true)
+        // Neither side dominates: lengths three and four each part at the first position.
         expect(
             apart(
                 listOf([termOf(boolean), termOf(string)], termOf(string), [
@@ -322,6 +325,20 @@ describe('two list shapes are disjoint where one position of each common length 
                     termOf(string),
                     termOf(boolean),
                 ]),
+            ),
+        ).toBe(true)
+        // The lowest common length holds `[true]` in both shapes.
+        expect(
+            apart(
+                listOf([termOf(boolean)], termOf(string), []),
+                listOf([], termOf(string), [termOf(boolean)]),
+            ),
+        ).toBe(false)
+        // The lowest length parts, and the highest holds `['a', true]` in both shapes.
+        expect(
+            apart(
+                listOf([], termOf(string), [termOf(boolean)]),
+                listOf([termOf(string)], termOf(boolean), []),
             ),
         ).toBe(false)
     })

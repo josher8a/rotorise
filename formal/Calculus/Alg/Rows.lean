@@ -66,16 +66,6 @@ def rowOfG {α : Type} (pre : List α) (sp : Option α) (suf : List α) (n : Nat
       else some (pre ++ List.replicate (n - pre.length - suf.length) c ++ suf)
   | none => if n = pre.length + suf.length then some (pre ++ suf) else none
 
-/-- **One side dominates the other**, in the prefix and in the suffix at once.
-
-    A fact about lengths alone. With both shapes spreading, two shapes both admit a value of
-    length `n` only when `n ≥ max (p₁+s₁) (p₂+s₂)`, and the row that places every declared
-    position of both shapes has `max p₁ p₂ + max s₁ s₂` positions. The second is never
-    smaller, and the two are EQUAL exactly when one side's prefix and suffix are both at least
-    the other's (`dominates_max`). There every common length re-spreads that one row. -/
-def dominates (p₁ s₁ p₂ s₂ : Nat) : Bool :=
-  (decide (p₂ ≤ p₁) && decide (s₂ ≤ s₁)) || (decide (p₁ ≤ p₂) && decide (s₁ ≤ s₂))
-
 /-- A row the shape accepts has exactly the length asked of it. -/
 theorem rowOfG_length {α : Type} {pre : List α} {sp : Option α} {suf : List α} {n row}
     (h : rowOfG pre sp suf n = some row) : row.length = n := by
@@ -221,15 +211,6 @@ theorem rowOfG_respread {α : Type} {pre suf : List α} {c : α} {P S n : Nat}
       = (P - pre.length) + ((n - P - S) + (S - suf.length)) by omega,
     List.replicate_add, List.replicate_add]
   simp only [List.append_assoc]
-
-/-- **Dominance is exactly the equation the common row needs.** The row that places every
-    declared position of both shapes has `max p₁ p₂ + max s₁ s₂` positions, and a value both
-    shapes admit has at least `max (p₁+s₁) (p₂+s₂)` elements. Where one side dominates, the two
-    agree, so each common length re-spreads the one row. -/
-theorem dominates_max {p₁ s₁ p₂ s₂ : Nat} (h : dominates p₁ s₁ p₂ s₂ = true) :
-    max p₁ p₂ + max s₁ s₂ = max (p₁ + s₁) (p₂ + s₂) := by
-  simp only [dominates, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq] at h
-  omega
 
 end Alg
 
