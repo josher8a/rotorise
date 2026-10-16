@@ -241,7 +241,7 @@ theorem listRowG_mono {U : X → Prop} {fpre fpre' fsuf fsuf' : List (X → Bool
     · exact hU' _ h
     · exact hU'' _ h
   rcases hs with ⟨rfl, rfl⟩ | ⟨f, f', rfl, rfl, hff⟩
-  · simp only [listRowG] at h ⊢
+  · simp only [listRowG, alignedAll_none] at h ⊢
     rw [e1, e2]
     cases hu : rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
     | none => rfl
@@ -251,7 +251,7 @@ theorem listRowG_mono {U : X → Prop} {fpre fpre' fsuf fsuf' : List (X → Bool
       exact anyZipG_mono (forall₂_append hp hf) (hrowU hu) h
   · cases sp₂ with
     | none =>
-      simp only [listRowG] at h ⊢
+      simp only [listRowG, alignedAll_some_none] at h ⊢
       cases hf' : rowOfG fpre' (some f') fsuf' (pre₂.length + suf₂.length) with
       | none => rfl
       | some fs' =>
@@ -269,7 +269,7 @@ theorem listRowG_mono {U : X → Prop} {fpre fpre' fsuf fsuf' : List (X → Bool
         · exact hU u hu
         · exact hU'' u hu
     | some c =>
-      simp only [listRowG] at h ⊢
+      simp only [listRowG, alignedAll_some_some] at h ⊢
       rw [e1, e2]
       refine List.all_eq_true.mpr fun n hn => ?_
       have hn' := List.all_eq_true.mp h n hn

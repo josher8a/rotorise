@@ -95,15 +95,19 @@ def objK {fs : Finset String} {md : {x // x ∈ fs} → SlotMode B} {s : Fin 2}
   | _ => false
 
 /-- **The family of a guarded left node beside a node of its class**: the inner terms of two
-    `held`s, the element of two sets, the positions of two lists, and two objects. Each position
-    is read at the test `kid` below a guard. Any other pair has no family. -/
+    `held`s, the element of two sets, two lists, and two objects. Two lists read the aligned rows
+    at each common length (`alignedRows`), and each position is read at the test `kid` below a
+    guard. Any other pair has no family. -/
 def famN : (op : TOp B) → (op.Pos → Graph B NL) → (op.Pos → Graph B NR → Bool) →
     Graph B NR → Bool
   | .held s k₀ ks, _, kid, .node (.held s' k₀' ks') b =>
       decide ((⟨s, k₀ :: ks⟩ : (s : Bool) × List (B.G s × Bool)) = ⟨s', k₀' :: ks'⟩) && kid true (b true)
   | .set, _, kid, .node .set b => kid () (b ())
-  | .list n s m, _, kid, .node (.list n' s' m') b => (TOp.pos (B := B) (.list n s m)).all fun p =>
-      (TOp.pos (B := B) (.list n' s' m')).all fun q => kid p (b q)
+  | .list n s m, _, kid, .node (.list n' s' m') b =>
+      alignedAll (allZipT kid) (listPartsX (B := B) (a := n) (s := s) (b := m) fun p => p).1
+        (listPartsX (B := B) (a := n) (s := s) (b := m) fun p => p).2.1
+        (listPartsX (B := B) (a := n) (s := s) (b := m) fun p => p).2.2
+        (listParts b).1 (listParts b).2.1 (listParts b).2.2
   | .obj _ md _, a, kid, y => objK (md := md) o a kid y
   | _, _, _, _ => false
 
@@ -212,19 +216,40 @@ theorem mem_listSlots {X : Type} {n m : Nat} {s : Fin 2} (a : (TOp.list n s m (B
   · obtain ⟨p, hp⟩ := optOf_mem s _ c h; exact ⟨_, hp⟩
   · obtain ⟨p, rfl⟩ := List.mem_ofFn.mp h; exact ⟨_, rfl⟩
 
-/-- **Two lists agree** where each position of one agrees with each position of the other. -/
+omit [Sem S] in
+/-- The codec row of a list node is the map of the position row through the codecs of the
+    positions. -/
+theorem rowOfG_listPartsX {X : Type} {n m : Nat} {s : Fin 2}
+    (g : (TOp.list n s m (B := S.sig)).Pos → X) (k : Nat) :
+    rowOfG (listPartsX g).1 (listPartsX g).2.1 (listPartsX g).2.2 k =
+      (rowOfG (listPartsX (B := S.sig) (a := n) (s := s) (b := m) fun p => p).1
+        (listPartsX (B := S.sig) (a := n) (s := s) (b := m) fun p => p).2.1
+        (listPartsX (B := S.sig) (a := n) (s := s) (b := m) fun p => p).2.2 k).map (List.map g) := by
+  rw [← rowOfG_map]
+  have e1 : (List.ofFn fun p : Fin n => g (Sum.inl p)) =
+      List.map g (List.ofFn fun p : Fin n => (Sum.inl p : (TOp.list n s m (B := S.sig)).Pos)) :=
+    List.map_ofFn.symm
+  have e2 : (List.ofFn fun p : Fin m => g (Sum.inr (Sum.inr p))) =
+      List.map g (List.ofFn fun p : Fin m =>
+        (Sum.inr (Sum.inr p) : (TOp.list n s m (B := S.sig)).Pos)) :=
+    List.map_ofFn.symm
+  simp only [listPartsX, e1, e2]
+  rw [optOf_mapX g s (fun p => Sum.inr (Sum.inl p))]
+
+/-- **Two lists agree** where the positions of the two shapes agree at each common length. -/
 theorem agree_runList {n m n' m' : Nat} {s s' : Fin 2}
     {a : (TOp.list n s m (B := S.sig)).Pos → Mean.C S.sig}
     {b : (TOp.list n' s' m' (B := S.sig)).Pos → Mean.C S.sig}
-    (h : ∀ p q, Agree o (a p) (b q)) :
+    (h : ∀ k r₁ r₂, rowOfG (listPartsX a).1 (listPartsX a).2.1 (listPartsX a).2.2 k = some r₁ →
+      rowOfG (listPartsX b).1 (listPartsX b).2.1 (listPartsX b).2.2 k = some r₂ →
+      List.Forall₂ (Agree o) r₁ r₂) :
     Agree o (TOp.run τ (.list n s m) a) (TOp.run τ (.list n' s' m') b) := by
   simp only [TOp.run]
   split
   · next L _ =>
-    refine agree_list fun c hc d hd => ?_
-    obtain ⟨p, rfl⟩ := mem_listSlots a hc
-    obtain ⟨q, rfl⟩ := mem_listSlots b hd
-    exact h p q
+    refine agree_list fun k ds ds' hd hd' => h k ds ds' ?_ ?_
+    · rw [slotsL_eq_rowOfG] at hd; exact hd
+    · rw [slotsL_eq_rowOfG] at hd'; exact hd'
   · exact agree_empty_left _ _
 
 /-! ### The rows that read no structure -/
@@ -634,10 +659,29 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
         | node op' b' =>
           cases op' with
           | list n' s' m' =>
-            simp only [famN, List.all_eq_true] at h
-            exact AgB.down (τ := τ) rfl rfl (agree_runList (τ := τ) fun p q => agree_trunc
-              (hAB _ (Or.inr ⟨p, rfl⟩) _ (hc _ _ (h p (TOp.pos_complete (B := S.sig) (.list n s m) p) q
-                (TOp.pos_complete (B := S.sig) (.list n' s' m') q))))) v hv w b hx hb
+            simp only [famN] at h
+            refine AgB.down (τ := τ) (op := .list n s m) (op' := .list n' s' m')
+              (a := fun p => mng τ (Closed.toG τ cL) (a p)) (b := fun q => mng τ (Closed.toG τ cR) (b' q))
+              (j := j) rfl rfl ?_ v hv w b hx hb
+            refine agree_runList (τ := τ) fun k r₁ r₂ h₁ h₂ => ?_
+            rw [rowOfG_listPartsX] at h₁
+            have h₂' : (rowOfG (listParts b').1 (listParts b').2.1 (listParts b').2.2 k).map
+                (List.map fun t => trunc j (mng τ (Closed.toG τ cR) t)) = some r₂ := by
+              rw [← rowOfG_listParts (fun t => trunc j (mng τ (Closed.toG τ cR) t)) b' k]; exact h₂
+            cases hT₁ : rowOfG (listPartsX (B := S.sig) (a := n) (s := s) (b := m) fun p => p).1
+                (listPartsX (B := S.sig) (a := n) (s := s) (b := m) fun p => p).2.1
+                (listPartsX (B := S.sig) (a := n) (s := s) (b := m) fun p => p).2.2 k with
+            | none => rw [hT₁] at h₁; exact nomatch h₁
+            | some t₁ =>
+              cases hT₂ : rowOfG (listParts b').1 (listParts b').2.1 (listParts b').2.2 k with
+              | none => rw [hT₂] at h₂'; exact nomatch h₂'
+              | some t₂ =>
+                rw [hT₁] at h₁; rw [hT₂] at h₂'
+                obtain rfl := (Option.some.inj h₁).symm
+                obtain rfl := (Option.some.inj h₂').symm
+                exact List.forall₂_map_left_iff.mpr (List.forall₂_map_right_iff.mpr
+                  (alignedAll_forall₂ (fun p y hy => agree_trunc
+                    (hAB _ (Or.inr ⟨p, rfl⟩) _ (hc _ _ hy))) h k _ _ hT₁ hT₂))
           | prim _ | opaq | never | held _ _ _ | set | refine _ _ | legacy _ | obj _ _ _
           | union _ => exact nomatch h) (fun _ _ _ => rfl)
       exact ⟨hrows, rformC hR hrows fun _ _ h => nomatch h⟩

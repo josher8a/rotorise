@@ -556,12 +556,50 @@ const rightRows = (
 }
 
 /**
+ * **The aligned rows of two list shapes**, the model's `alignedRows`: one pair of rows at each
+ * common length. **Either side without a spread** fixes the one length, and the pair is absent
+ * where the other side refuses that length. **Both spreading**: the shapes share the lengths from
+ * `max (p1 + s1) (p2 + s2)` up. The middle positions pair the two spreads from `hi + 1` up, where
+ * `hi` is `max p1 p2 + max s1 s2`, and each longer row re-spreads the row at `hi + 1`. So the
+ * lengths from the first bound to `hi + 1` reach every pair of positions.
+ */
+const alignedRows = <L, R>(
+    lpre: readonly L[],
+    lsp: L | undefined,
+    lsuf: readonly L[],
+    rpre: readonly R[],
+    rsp: R | undefined,
+    rsuf: readonly R[],
+): readonly (readonly [readonly L[], readonly R[]])[] => {
+    if (lsp !== undefined && rsp !== undefined) {
+        const lo = Math.max(
+            lpre.length + lsuf.length,
+            rpre.length + rsuf.length,
+        )
+        const hi =
+            Math.max(lpre.length, rpre.length) +
+            Math.max(lsuf.length, rsuf.length)
+        return Array.from({ length: hi + 2 - lo }, (_, k) => lo + k).flatMap(
+            (n) => {
+                const ls = rowAt(lpre, lsp, lsuf, n)
+                const rs = rowAt(rpre, rsp, rsuf, n)
+                return ls === undefined || rs === undefined
+                    ? []
+                    : [[ls, rs] as const]
+            },
+        )
+    }
+    if (lsp === undefined) {
+        const rs = rowAt(rpre, rsp, rsuf, lpre.length + lsuf.length)
+        return rs === undefined ? [] : [[[...lpre, ...lsuf], rs] as const]
+    }
+    const ls = rowAt(lpre, lsp, lsuf, rpre.length + rsuf.length)
+    return ls === undefined ? [] : [[ls, [...rpre, ...rsuf]] as const]
+}
+
+/**
  * **Two list shapes apart**, the model's `listRowG`. Two values of different lengths differ, so
- * the shapes are disjoint where one position of each common length is. **Either side without a
- * spread** fixes the one length, and a length the other side refuses is disjoint outright. **Both
- * spreading**: the shapes share the lengths from `max (p1 + s1) (p2 + s2)` up. From
- * `max p1 p2 + max s1 s2` up, each row re-spreads the row at that length. So the lengths from the
- * first bound to the second decide, and each needs one disjoint position.
+ * the shapes are disjoint where the aligned rows at each common length hold one disjoint position.
  */
 const listRows = (
     fpre: readonly ((r: At) => boolean)[],
@@ -570,29 +608,10 @@ const listRows = (
     pre: readonly At[],
     sp: At | undefined,
     suf: readonly At[],
-): boolean => {
-    const anyZip = (fs: readonly ((r: At) => boolean)[], us: readonly At[]) =>
-        fs.some((f, at) => at < us.length && f(us[at] as At))
-    if (fsp !== undefined && sp !== undefined) {
-        const lo = Math.max(fpre.length + fsuf.length, pre.length + suf.length)
-        const hi =
-            Math.max(fpre.length, pre.length) +
-            Math.max(fsuf.length, suf.length)
-        return Array.from({ length: hi + 1 - lo }, (_, k) => lo + k).every(
-            (n) => {
-                const fs = rowAt(fpre, fsp, fsuf, n)
-                const us = rowAt(pre, sp, suf, n)
-                return fs !== undefined && us !== undefined && anyZip(fs, us)
-            },
-        )
-    }
-    if (fsp === undefined) {
-        const us = rowAt(pre, sp, suf, fpre.length + fsuf.length)
-        return us === undefined || anyZip([...fpre, ...fsuf], us)
-    }
-    const fs = rowAt(fpre, fsp, fsuf, pre.length + suf.length)
-    return fs === undefined || anyZip(fs, [...pre, ...suf])
-}
+): boolean =>
+    alignedRows(fpre, fsp, fsuf, pre, sp, suf).every(([fs, us]) =>
+        fs.some((f, at) => at < us.length && f(us[at] as At)),
+    )
 
 /**
  * **The row a list shape assigns to `n` positions**, the model's `rowOfG`: the prefix, the spread
@@ -832,8 +851,8 @@ const agreeRight = (
 
 /**
  * **One row per operation of the left operand**, the model's `rowSpecC`, with `prev` as the walk at
- * the next fuel. A set, a list and an object compare their positions below the guard
- * ({@link pairX}). A `held` compares its inner terms, which are closed, through the same test.
+ * the next fuel. A set and an object compare their positions below the guard ({@link pairX}). A
+ * list compares the aligned rows at each common length ({@link alignedRows}). A `held` compares its inner terms, which are closed, through the same test.
  */
 const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
     const restart = (r1: At) => k.prev(table, l, r1)
@@ -911,15 +930,26 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                         r1,
                         (u, closed) =>
                             u.kind === 'list' &&
-                            positionsOf(t).every((one) =>
-                                positionsOf(u).every((other) =>
-                                    pairX(
-                                        k,
-                                        table,
-                                        childAt(k.left, one, l.closed),
-                                        childAt(k.right, other, closed),
-                                    ),
-                                ),
+                            alignedRows(
+                                t.pre,
+                                t.spread,
+                                t.suf,
+                                u.pre,
+                                u.spread,
+                                u.suf,
+                            ).every(([ones, others]) =>
+                                ones.every((one, at) => {
+                                    const other = others[at]
+                                    return (
+                                        other === undefined ||
+                                        pairX(
+                                            k,
+                                            table,
+                                            childAt(k.left, one, l.closed),
+                                            childAt(k.right, other, closed),
+                                        )
+                                    )
+                                }),
                             ),
                     ),
                 r,
@@ -945,13 +975,6 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
             return agreeRight(k, restart, base, r)
     }
 }
-
-/** Every position of a list shape: the prefix, the spread, and the suffix. */
-const positionsOf = (t: Extract<Term, { kind: 'list' }>): readonly Term[] => [
-    ...t.pre,
-    ...(t.spread === undefined ? [] : [t.spread]),
-    ...t.suf,
-]
 
 /**
  * **Two bodies agree**, the model's `objK`: at each name that a body declares, the two slots agree

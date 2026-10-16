@@ -96,34 +96,39 @@ theorem agree_carried {o : Orient} {γ : Type} {member : V → M} {s : Summand �
   rw [hx] at hx'; cases hx'
   rw [h x d₁ d₂ h1 h2]
 
-/-- Two rows over one list, every codec of one agreeing with every codec of the other, traverse
-    to one list. -/
+/-- Two rows over one list, codec by codec agreeing at each aligned position, traverse to one
+    list. -/
 theorem zip_agree {X Y : Type} (run : Codec V M → X → Option Y) (R : Codec V M → Codec V M → Prop)
-    (hR : ∀ c d, R c d → ∀ x y y', run c x = some y → run d x = some y' → y = y') :
-    ∀ (xs : List X) (ds₁ ds₂ : List (Codec V M)) (ys₁ ys₂ : List Y),
-      ds₁.length = xs.length → ds₂.length = xs.length → (∀ c ∈ ds₁, ∀ d ∈ ds₂, R c d) →
+    (hR : ∀ c d, R c d → ∀ x y y', run c x = some y → run d x = some y' → y = y')
+    {ds₁ ds₂ : List (Codec V M)} (hF : List.Forall₂ R ds₁ ds₂) :
+    ∀ (xs : List X) (ys₁ ys₂ : List Y), ds₁.length = xs.length →
       traverse (fun cx : Codec V M × X => run cx.1 cx.2) (ds₁.zip xs) = some ys₁ →
-      traverse (fun cx : Codec V M × X => run cx.1 cx.2) (ds₂.zip xs) = some ys₂ → ys₁ = ys₂
-  | [], [], [], ys₁, ys₂, _, _, _, h1, h2 => by
-      simp only [List.zip_nil_right, traverse_nil, Option.some.injEq] at h1 h2; rw [← h1, ← h2]
-  | x :: xs, c :: cs, d :: ds, ys₁, ys₂, hl1, hl2, hall, h1, h2 => by
-      simp only [List.zip_cons_cons, traverse_cons, Option.bind_eq_some_iff, Option.map_eq_some_iff] at h1 h2
+      traverse (fun cx : Codec V M × X => run cx.1 cx.2) (ds₂.zip xs) = some ys₂ → ys₁ = ys₂ := by
+  induction hF with
+  | nil =>
+    intro xs ys₁ ys₂ hl h1 h2
+    cases xs with
+    | nil =>
+      simp only [List.zip_nil_right, traverse_nil, Option.some.injEq] at h1 h2
+      rw [← h1, ← h2]
+    | cons _ _ => exact (Nat.succ_ne_zero _ hl.symm).elim
+  | cons hcd _ ih =>
+    intro xs ys₁ ys₂ hl h1 h2
+    cases xs with
+    | nil => exact (Nat.succ_ne_zero _ hl).elim
+    | cons x xs =>
+      simp only [List.zip_cons_cons, traverse_cons, Option.bind_eq_some_iff,
+        Option.map_eq_some_iff] at h1 h2
       obtain ⟨y1, hy1, t1, ht1, rfl⟩ := h1
       obtain ⟨y2, hy2, t2, ht2, rfl⟩ := h2
-      rw [hR c d (hall c (by simp) d (by simp)) x y1 y2 hy1 hy2,
-        zip_agree run R hR xs cs ds t1 t2 (Nat.succ.inj hl1) (Nat.succ.inj hl2)
-          (fun c' hc' d' hd' => hall c' (by simp [hc']) d' (by simp [hd'])) ht1 ht2]
-  | [], _ :: _, _, _, _, hl1, _, _, _, _ => absurd hl1 (Nat.succ_ne_zero _)
-  | [], [], _ :: _, _, _, _, hl2, _, _, _ => absurd hl2 (Nat.succ_ne_zero _)
-  | _ :: _, [], _, _, _, hl1, _, _, _, _ => absurd hl1 (Nat.succ_ne_zero _).symm
-  | _ :: _, _ :: _, [], _, _, _, hl2, _, _, _ => absurd hl2 (Nat.succ_ne_zero _).symm
+      rw [hR _ _ hcd x y1 y2 hy1 hy2, ih xs t1 t2 (Nat.succ.inj hl) ht1 ht2]
 
-/-- **Two lists agree where every codec of one row agrees with every codec of the other**, at
+/-- **Two lists agree where the two rows agree at each common length**, position by position, at
     each orientation. -/
 theorem agree_list {o : Orient} {member : V → M} {sL : Summand (List V) V M member}
     {pre suf pre' suf' : List (Codec V M)} {sp sp' : Option (Codec V M)}
-    (h : ∀ c, (c ∈ pre ∨ sp = some c ∨ c ∈ suf) → ∀ d, (d ∈ pre' ∨ sp' = some d ∨ d ∈ suf') →
-      Agree o c d) :
+    (h : ∀ n ds ds', slotsL pre sp suf n = some ds → slotsL pre' sp' suf' n = some ds' →
+      List.Forall₂ (Agree o) ds ds') :
     Agree o (listCodec sL pre sp suf) (listCodec sL pre' sp' suf') := by
   refine agree_carried fun vs d₁ d₂ h1 h2 => ?_
   obtain ⟨ps, hal, htr⟩ := Option.bind_eq_some_iff.mp h1
@@ -131,9 +136,7 @@ theorem agree_list {o : Orient} {member : V → M} {sL : Summand (List V) V M me
   obtain ⟨ps', hal', htr'⟩ := Option.bind_eq_some_iff.mp h2
   obtain ⟨ds', hs', hlen', rfl⟩ := alignL_eq_some.mp hal'
   exact zip_agree (fun c v => c.f o v) (Agree o) (fun c d hcd v y y' hy hy' => hcd v y y' hy hy')
-    vs ds ds' d₁ d₂ hlen hlen'
-    (fun c hc d hd => h c (slotsL_mem _ _ _ _ _ hs c hc) d (slotsL_mem _ _ _ _ _ hs' d hd))
-    htr htr'
+    (h vs.length ds ds' hs hs') vs d₁ d₂ hlen htr htr'
 
 /-- **Two objects agree where the two codecs of each name agree**, and where the two slots of each
     name answer alike at absence, at each orientation. -/

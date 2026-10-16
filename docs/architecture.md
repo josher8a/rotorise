@@ -149,13 +149,14 @@ unguarded position, the decision unfolds an entry. A fuel bounds the walk, and a
 and a refinement reads its inner term (`rightC`). So a right refinement hides no option from the
 left row. A pair with a closed side runs the row at the same fuel (`pairX`), because a closed term
 is a finite tree. The compatibility decision runs on the same walk (`Scoped.walk`) with its own row,
-so the table, the fuel and `pairX` are one definition for both decisions. The list row of two
-spreading shapes reads each common length, from the lowest length that both admit to the length
-where both re-spread. The set row compares the two elements as any other pair below a guard, with
-the assumed pairs. Each child of a container is an entry, so each cycle passes a pair of entries,
-and the decision meets each cycle at a pair that it can assume. A `held`, a `legacy` and the top are
-disjoint only from the bottom, because their admission is a function that the decision does not
-read.
+so the table, the fuel and `pairX` are one definition for both decisions. Both rows read two
+spreading lists through one function (`alignedRows`): the aligned rows at each common length, from
+the lowest length that both admit to one past the length where both re-spread. The disjoint row asks
+for one apart pair at each length, and the compatibility row asks that every aligned pair agree. The
+set row compares the two elements as any other pair below a guard, with the assumed pairs. Each
+child of a container is an entry, so each cycle passes a pair of entries, and the decision meets
+each cycle at a pair that it can assume. A `held`, a `legacy` and the top are disjoint only from the
+bottom, because their admission is a function that the decision does not read.
 
 **The soundness of the decision holds at every signature, from the laws of the universe.**
 `Scoped.disjoint_sound` says that where the decision answers `true`, no datum of any depth is

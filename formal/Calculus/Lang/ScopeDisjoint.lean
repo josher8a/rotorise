@@ -112,27 +112,94 @@ def anyZipG {X : Type} : List (X → Bool) → List X → Bool
   | f :: fs, u :: us => f u || anyZipG fs us
   | _, _ => false
 
-/-- **Two list shapes**: one disjoint position at each common length. Two spreading shapes both
-    admit a length from `lo` up, and from `hi` up each row re-spreads the row at `hi`, so the
-    lengths `lo` to `hi` decide. -/
-def listRowG {X : Type} (fpre : List (X → Bool)) (fsp : Option (X → Bool))
-    (fsuf : List (X → Bool)) (pre₂ : List X) (sp₂ : Option X) (suf₂ : List X) : Bool :=
+/-- Every pair of two aligned rows passes the test. -/
+def allZipT {X Y : Type} (T : X → Y → Bool) : List X → List Y → Bool
+  | x :: xs, y :: ys => T x y && allZipT T xs ys
+  | _, _ => true
+
+/-- **The aligned rows of two list shapes**, one pair of rows at each common length. A shape with
+    no spread has one length, and the pair is absent where the other shape refuses that length.
+    Two spreading shapes both admit a length from `lo` up. The middle positions pair the two
+    spreads from the length `hi + 1` up, and each longer row re-spreads the row at `hi + 1`, so the
+    lengths `lo` to `hi + 1` reach every pair of positions. -/
+def alignedRows {X Y : Type} (fpre : List X) (fsp : Option X) (fsuf : List X)
+    (pre₂ : List Y) (sp₂ : Option Y) (suf₂ : List Y) : List (List X × List Y) :=
   match fsp, sp₂ with
   | some f, some c =>
       (List.range' (max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))
-          (max fpre.length pre₂.length + max fsuf.length suf₂.length + 1
-            - max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))).all fun n =>
+          (max fpre.length pre₂.length + max fsuf.length suf₂.length + 2
+            - max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))).filterMap fun n =>
         match rowOfG fpre (some f) fsuf n, rowOfG pre₂ (some c) suf₂ n with
-        | some fs, some us => anyZipG fs us
-        | _, _ => false
+        | some fs, some us => some (fs, us)
+        | _, _ => none
   | none, _ =>
       match rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
-      | some us => anyZipG (fpre ++ fsuf) us
-      | none => true
+      | some us => [(fpre ++ fsuf, us)]
+      | none => []
   | some f, none =>
       match rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
-      | some fs => anyZipG fs (pre₂ ++ suf₂)
-      | none => true
+      | some fs => [(fs, pre₂ ++ suf₂)]
+      | none => []
+
+/-- **A property of the aligned rows**: the test `p` holds for the two rows at each common length.
+    A shape with no spread has one length, and a length that the other shape refuses has no test. -/
+def alignedAll {X Y : Type} (p : List X → List Y → Bool) (fpre : List X) (fsp : Option X)
+    (fsuf : List X) (pre₂ : List Y) (sp₂ : Option Y) (suf₂ : List Y) : Bool :=
+  (alignedRows fpre fsp fsuf pre₂ sp₂ suf₂).all fun r => p r.1 r.2
+
+/-- The aligned rows of a shape with no spread on the left: one length. -/
+theorem alignedAll_none {X Y : Type} (p : List X → List Y → Bool) (fpre fsuf : List X)
+    (pre₂ : List Y) (sp₂ : Option Y) (suf₂ : List Y) :
+    alignedAll p fpre none fsuf pre₂ sp₂ suf₂ =
+      match rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
+      | some us => p (fpre ++ fsuf) us
+      | none => true := by
+  unfold alignedAll alignedRows
+  rcases h : rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with _ | us <;> simp [h]
+
+/-- The aligned rows of a spreading shape beside a shape with no spread: one length. -/
+theorem alignedAll_some_none {X Y : Type} (p : List X → List Y → Bool) (fpre : List X) (f : X)
+    (fsuf : List X) (pre₂ suf₂ : List Y) :
+    alignedAll p fpre (some f) fsuf pre₂ none suf₂ =
+      match rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
+      | some fs => p fs (pre₂ ++ suf₂)
+      | none => true := by
+  unfold alignedAll alignedRows
+  rcases h : rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with _ | fs <;> simp [h]
+
+/-- The aligned rows of two spreading shapes: every length from `lo` to `hi + 1`. -/
+theorem alignedAll_some_some {X Y : Type} (p : List X → List Y → Bool) (fpre : List X) (f : X)
+    (fsuf : List X) (pre₂ : List Y) (c : Y) (suf₂ : List Y) :
+    alignedAll p fpre (some f) fsuf pre₂ (some c) suf₂ =
+      (List.range' (max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))
+          (max fpre.length pre₂.length + max fsuf.length suf₂.length + 2
+            - max (fpre.length + fsuf.length) (pre₂.length + suf₂.length))).all fun n =>
+        match rowOfG fpre (some f) fsuf n, rowOfG pre₂ (some c) suf₂ n with
+        | some fs, some us => p fs us
+        | _, _ => true := by
+  unfold alignedAll alignedRows
+  rw [Bool.eq_iff_iff]
+  simp only [List.all_eq_true, List.mem_filterMap]
+  constructor
+  · intro h n hn
+    rcases h1 : rowOfG fpre (some f) fsuf n with _ | fs
+    · rfl
+    rcases h2 : rowOfG pre₂ (some c) suf₂ n with _ | us
+    · rfl
+    · exact h (fs, us) ⟨n, hn, by simp [h1, h2]⟩
+  · rintro h r ⟨n, hn, hr⟩
+    have hn' := h n hn
+    rcases h1 : rowOfG fpre (some f) fsuf n with _ | fs
+    · simp [h1] at hr
+    rcases h2 : rowOfG pre₂ (some c) suf₂ n with _ | us
+    · simp [h1, h2] at hr
+    · simp only [h1, h2, Option.some.injEq] at hr hn'
+      subst hr; exact hn'
+
+/-- **Two list shapes**: one disjoint position in the aligned rows at each common length. -/
+def listRowG {X : Type} (fpre : List (X → Bool)) (fsp : Option (X → Bool))
+    (fsuf : List (X → Bool)) (pre₂ : List X) (sp₂ : Option X) (suf₂ : List X) : Bool :=
+  alignedAll anyZipG fpre fsp fsuf pre₂ sp₂ suf₂
 
 /-- The positions of a list node, as a prefix, a spread and a suffix. -/
 def listParts {N : Nat} {a : Nat} {s : Fin 2} {b : Nat}
@@ -468,7 +535,7 @@ theorem listRowG_sound {pre suf : List X} {sp : Option X} {fpre fsuf : List (Y �
   have hlf := hf.length_eq
   intro n r₁ r₂ h₁ h₂
   rcases hs with ⟨rfl, rfl⟩ | ⟨t, f, rfl, rfl, htf⟩
-  · simp only [listRowG] at h
+  · rw [listRowG, alignedAll_none] at h
     rw [rowOfG_none_eq] at h₁
     split at h₁
     · next hn =>
@@ -478,7 +545,7 @@ theorem listRowG_sound {pre suf : List X} {sp : Option X} {fpre fsuf : List (Y �
     · exact nomatch h₁
   · cases sp₂ with
     | none =>
-      simp only [listRowG] at h
+      rw [listRowG, alignedAll_some_none] at h
       rw [rowOfG_none_eq] at h₂
       split at h₂
       · next hn =>
@@ -495,7 +562,7 @@ theorem listRowG_sound {pre suf : List X} {sp : Option X} {fpre fsuf : List (Y �
           exact rowsAp_of_anyZip hF h
       · exact nomatch h₂
     | some c =>
-      simp only [listRowG] at h
+      rw [listRowG, alignedAll_some_some] at h
       have hn₁ := rowOfG_isSome_len' h₁
       have hn₂ := rowOfG_isSome_len' h₂
       generalize hP : max fpre.length pre₂.length = P' at h
@@ -530,6 +597,101 @@ theorem listRowG_sound {pre suf : List X} {sp : Option X} {fpre fsuf : List (Y �
         rw [hfs, h₂] at hm
         exact rowsAp_of_anyZip
           (rowOfG_forall₂ (R := SoundG P Q) hp (Or.inr ⟨t, f, rfl, rfl, htf⟩) hf h₁ hfs) hm
+
+/-- Two aligned rows stand in the relation where the test accepts each aligned pair. -/
+theorem forall₂_of_allZipT {X Y : Type} {Ag : X → Y → Prop} {T : X → Y → Bool}
+    (hT : ∀ x y, T x y = true → Ag x y) :
+    ∀ {r₁ : List X} {r₂ : List Y}, r₁.length = r₂.length → allZipT T r₁ r₂ = true →
+      List.Forall₂ Ag r₁ r₂
+  | [], [], _, _ => .nil
+  | [], _ :: _, hl, _ => (Nat.succ_ne_zero _ hl.symm).elim
+  | _ :: _, [], hl, _ => (Nat.succ_ne_zero _ hl).elim
+  | x :: r₁, y :: r₂, hl, h => by
+      simp only [allZipT, Bool.and_eq_true] at h
+      exact .cons (hT x y h.1) (forall₂_of_allZipT hT (Nat.succ.inj hl) h.2)
+
+/-- One related pair of two rows cut at the same index. -/
+theorem forall₂_cut {X Y : Type} {R : X → Y → Prop} {x : X} {y : Y} {B : List X} {D : List Y} :
+    ∀ {A : List X} {C : List Y}, A.length = C.length →
+      List.Forall₂ R (A ++ x :: B) (C ++ y :: D) → R x y
+  | [], [], _, h => (List.forall₂_cons.mp h).1
+  | _ :: _, _ :: _, hl, h =>
+      forall₂_cut (Nat.succ.inj hl) (List.forall₂_cons.mp h).2
+  | [], _ :: _, hl, _ => (Nat.succ_ne_zero _ hl.symm).elim
+  | _ :: _, [], hl, _ => (Nat.succ_ne_zero _ hl).elim
+
+/-- **Two list shapes agree at each common length**, where the test accepts each aligned pair of
+    the rows. Two spreading shapes read the rows from `lo` to `hi + 1`. The row at a longer length
+    re-spreads the row at `hi`, and the row at `hi + 1` pairs the two spreads. -/
+theorem alignedAll_forall₂ {X Y : Type} {Ag : X → Y → Prop} {T : X → Y → Bool}
+    (hT : ∀ x y, T x y = true → Ag x y) {pre suf : List X} {sp : Option X}
+    {pre₂ suf₂ : List Y} {sp₂ : Option Y}
+    (h : alignedAll (allZipT T) pre sp suf pre₂ sp₂ suf₂ = true) :
+    ∀ n r₁ r₂, rowOfG pre sp suf n = some r₁ → rowOfG pre₂ sp₂ suf₂ n = some r₂ →
+      List.Forall₂ Ag r₁ r₂ := by
+  intro n r₁ r₂ h₁ h₂
+  cases sp with
+  | none =>
+    rw [alignedAll_none] at h
+    rw [rowOfG_none_eq] at h₁
+    split at h₁
+    · next hn =>
+      simp only [Option.some.injEq] at h₁; subst h₁
+      rw [← hn, h₂] at h
+      exact forall₂_of_allZipT hT (by rw [rowOfG_length h₂, List.length_append]; omega) h
+    · exact nomatch h₁
+  | some t =>
+    cases sp₂ with
+    | none =>
+      rw [alignedAll_some_none] at h
+      rw [rowOfG_none_eq] at h₂
+      split at h₂
+      · next hn =>
+        simp only [Option.some.injEq] at h₂; subst h₂
+        rw [← hn, h₁] at h
+        exact forall₂_of_allZipT hT (by rw [rowOfG_length h₁, List.length_append]; omega) h
+      · exact nomatch h₂
+    | some c =>
+      rw [alignedAll_some_some] at h
+      have hn₁ := rowOfG_isSome_len' h₁
+      have hn₂ := rowOfG_isSome_len' h₂
+      generalize hP : max pre.length pre₂.length = P' at h
+      generalize hS : max suf.length suf₂.length = S' at h
+      have hall := List.all_eq_true.mp h
+      have key : ∀ m, m < P' + S' + 2 → pre.length + suf.length ≤ m →
+          pre₂.length + suf₂.length ≤ m →
+          ∃ a₁ a₂, rowOfG pre (some t) suf m = some a₁ ∧ rowOfG pre₂ (some c) suf₂ m = some a₂ ∧
+            List.Forall₂ Ag a₁ a₂ := by
+        intro m hm1 hm2 hm3
+        have hmem := hall m (List.mem_range'_1.mpr ⟨by omega, by omega⟩)
+        obtain ⟨a₁, ha₁⟩ := rowOfG_total (pre := pre) (suf := suf) (c := t) (n := m) (by omega)
+        obtain ⟨a₂, ha₂⟩ := rowOfG_total (pre := pre₂) (suf := suf₂) (c := c) (n := m) (by omega)
+        rw [ha₁, ha₂] at hmem
+        exact ⟨a₁, a₂, ha₁, ha₂, forall₂_of_allZipT hT
+          (by rw [rowOfG_length ha₁, rowOfG_length ha₂]) hmem⟩
+      rcases Nat.lt_or_ge n (P' + S') with hlt | hge
+      · obtain ⟨a₁, a₂, e₁, e₂, hF⟩ := key n (by omega) (by omega) (by omega)
+        rw [h₁] at e₁; rw [h₂] at e₂
+        cases e₁; cases e₂
+        exact hF
+      · obtain ⟨b₁, b₂, eb₁, eb₂, hB⟩ := key (P' + S') (by omega) (by omega) (by omega)
+        obtain ⟨c₁, c₂, ec₁, ec₂, hC⟩ := key (P' + S' + 1) (by omega) (by omega) (by omega)
+        have rc₁ := rowOfG_respread (P := P') (S := S') (n := P' + S' + 1) (by omega) (by omega)
+          (by omega) eb₁ ec₁
+        have rc₂ := rowOfG_respread (P := P') (S := S') (n := P' + S' + 1) (by omega) (by omega)
+          (by omega) eb₂ ec₂
+        have hl₁ := rowOfG_length eb₁
+        have hl₂ := rowOfG_length eb₂
+        have htc : Ag t c := by
+          rw [rc₁, rc₂, show P' + S' + 1 - P' - S' = 1 by omega] at hC
+          simp only [List.replicate_succ, List.replicate_zero, List.append_assoc,
+            List.singleton_append, List.nil_append] at hC
+          exact forall₂_cut (by simp only [List.length_take]; omega) hC
+        have r₁' := rowOfG_respread (P := P') (S := S') (n := n) (by omega) (by omega) hge eb₁ h₁
+        have r₂' := rowOfG_respread (P := P') (S := S') (n := n) (by omega) (by omega) hge eb₂ h₂
+        rw [r₁', r₂']
+        exact forall₂_append (forall₂_append (List.forall₂_take P' hB)
+          (forall₂_replicate htc _)) (List.forall₂_drop P' hB)
 
 end RowsGen
 

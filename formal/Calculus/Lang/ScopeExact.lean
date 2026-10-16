@@ -49,7 +49,7 @@ theorem listRowG_false {X : Type} {fpre fsuf : List (X → Bool)} {fsp : Option 
       anyZipG fs us = false := by
   cases fsp with
   | none =>
-    simp only [listRowG] at h
+    simp only [listRowG, alignedAll_none] at h
     cases hu : rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
     | none => rw [hu] at h; exact nomatch h
     | some us =>
@@ -58,14 +58,14 @@ theorem listRowG_false {X : Type} {fpre fsuf : List (X → Bool)} {fsp : Option 
   | some f =>
     cases sp₂ with
     | none =>
-      simp only [listRowG] at h
+      simp only [listRowG, alignedAll_some_none] at h
       cases hf : rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
       | none => rw [hf] at h; exact nomatch h
       | some fs =>
         rw [hf] at h
         exact ⟨_, fs, pre₂ ++ suf₂, hf, by rw [rowOfG_none_eq, if_pos rfl], h⟩
     | some c =>
-      simp only [listRowG] at h
+      simp only [listRowG, alignedAll_some_some] at h
       obtain ⟨n, hn, hm⟩ := all_false' h
       have hn' := List.mem_range'_1.mp hn
       obtain ⟨fs, hfs⟩ := rowOfG_total (pre := fpre) (suf := fsuf) (c := f) (n := n) (by omega)
