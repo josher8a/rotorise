@@ -19,6 +19,85 @@ namespace Calculus.Alg.Scoped
 
 variable {B : Sig}
 
+/-! ## The rows of two list shapes -/
+
+/-- A position of a list node is a position of the node. -/
+theorem mem_listParts {N n m : Nat} {s : Fin 2} (a : (TOp.list n s m (B := B)).Pos → Graph B N)
+    {y : Graph B N}
+    (h : y ∈ (listParts a).1 ∨ (listParts a).2.1 = some y ∨ y ∈ (listParts a).2.2) :
+    ∃ p, a p = y := by
+  rcases h with h | h | h
+  · obtain ⟨p, rfl⟩ := List.mem_ofFn.mp h; exact ⟨_, rfl⟩
+  · obtain ⟨p, hp⟩ := optOf_mem s _ y h; exact ⟨_, hp⟩
+  · obtain ⟨p, rfl⟩ := List.mem_ofFn.mp h; exact ⟨_, rfl⟩
+
+/-- Each right position of an aligned row is a right position of the shape. -/
+theorem alignedRows_snd_mem {X Y : Type} {fpre fsuf : List X} {fsp : Option X}
+    {pre₂ suf₂ : List Y} {sp₂ : Option Y} {r : List X × List Y}
+    (hr : r ∈ alignedRows fpre fsp fsuf pre₂ sp₂ suf₂) :
+    ∀ y ∈ r.2, y ∈ pre₂ ∨ sp₂ = some y ∨ y ∈ suf₂ := by
+  intro y hy
+  unfold alignedRows at hr
+  cases fsp with
+  | none =>
+    cases h : rowOfG pre₂ sp₂ suf₂ (fpre.length + fsuf.length) with
+    | none => simp [h] at hr
+    | some us =>
+      simp only [h, List.mem_singleton] at hr
+      subst hr
+      exact rowOfG_mem h y hy
+  | some f =>
+    cases sp₂ with
+    | none =>
+      cases h : rowOfG fpre (some f) fsuf (pre₂.length + suf₂.length) with
+      | none => simp [h] at hr
+      | some fs =>
+        simp only [h, List.mem_singleton] at hr
+        subst hr
+        rcases List.mem_append.mp hy with h' | h'
+        · exact Or.inl h'
+        · exact Or.inr (Or.inr h')
+    | some c =>
+      simp only [List.mem_filterMap] at hr
+      obtain ⟨n, _, hn⟩ := hr
+      cases h1 : rowOfG fpre (some f) fsuf n with
+      | none => simp [h1] at hn
+      | some fs =>
+        cases h2 : rowOfG pre₂ (some c) suf₂ n with
+        | none => simp [h1, h2] at hn
+        | some us =>
+          simp only [h1, h2, Option.some.injEq] at hn
+          subst hn
+          exact rowOfG_mem h2 y hy
+
+/-- A test that implies a test, at the right positions that satisfy `U`, keeps `allZipT`. -/
+theorem allZipT_imp {X Y : Type} {T T' : X → Y → Bool} {U : Y → Prop}
+    (hT : ∀ x y, U y → T x y = true → T' x y = true) :
+    ∀ {r₁ : List X} {r₂ : List Y}, (∀ y ∈ r₂, U y) → allZipT T r₁ r₂ = true →
+      allZipT T' r₁ r₂ = true
+  | x :: r₁, y :: r₂, hU, h => by
+      simp only [allZipT, Bool.and_eq_true] at h ⊢
+      exact ⟨hT x y (hU y List.mem_cons_self) h.1,
+        allZipT_imp hT (fun y' hy' => hU y' (List.mem_cons_of_mem _ hy')) h.2⟩
+  | [], _, _, _ => rfl
+  | _ :: _, [], _, _ => rfl
+
+/-- **Aligned rows keep their answer `true`** under a test that implies a test, at the right
+    positions that satisfy `U`. -/
+theorem alignedAll_imp {X Y : Type} {T T' : X → Y → Bool} {U : Y → Prop}
+    (hT : ∀ x y, U y → T x y = true → T' x y = true) {fpre fsuf : List X} {fsp : Option X}
+    {pre₂ suf₂ : List Y} {sp₂ : Option Y} (hU : ∀ y ∈ pre₂, U y) (hU' : ∀ y, sp₂ = some y → U y)
+    (hU'' : ∀ y ∈ suf₂, U y)
+    (h : alignedAll (allZipT T) fpre fsp fsuf pre₂ sp₂ suf₂ = true) :
+    alignedAll (allZipT T') fpre fsp fsuf pre₂ sp₂ suf₂ = true := by
+  unfold alignedAll at h ⊢
+  refine List.all_eq_true.mpr fun r hr => allZipT_imp hT (fun y hy => ?_)
+    (List.all_eq_true.mp h r hr)
+  rcases alignedRows_snd_mem hr y hy with h' | h' | h'
+  · exact hU _ h'
+  · exact hU' _ h'
+  · exact hU'' _ h'
+
 /-! ## The fuel of agreement is adequate -/
 
 section Adequacy
@@ -149,8 +228,16 @@ theorem famN_congr (op : TOp B) (a : op.Pos → Graph B NL)
     | list n s m =>
       cases op' with
       | list n' s' m' =>
-        exact congrArg (List.all _) (funext fun p =>
-          congrArg (List.all _) (funext fun q => hk p _ (noLeaf_child hy q)))
+        have hU : ∀ u, (u ∈ (listParts b).1 ∨ (listParts b).2.1 = some u ∨
+            u ∈ (listParts b).2.2) → NoLeaf u :=
+          fun u h => by obtain ⟨q, rfl⟩ := mem_listParts b h; exact noLeaf_child hy q
+        exact Bool.eq_iff_iff.mpr
+          ⟨alignedAll_imp (U := NoLeaf) (fun p u hu h0 => (hk p u hu) ▸ h0)
+            (fun u h => hU u (Or.inl h)) (fun u h => hU u (Or.inr (Or.inl h)))
+            (fun u h => hU u (Or.inr (Or.inr h))),
+          alignedAll_imp (U := NoLeaf) (fun p u hu h0 => (hk p u hu).symm ▸ h0)
+            (fun u h => hU u (Or.inl h)) (fun u h => hU u (Or.inr (Or.inl h)))
+            (fun u h => hU u (Or.inr (Or.inr h)))⟩
       | _ => rfl
     | obj fs md s => exact objK_congr o a hk _ hy
     | _ => rfl
@@ -427,18 +514,22 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
             cases op' with
             | list n' s' k' =>
               have hbd := fun q => flat1_down (o := TOp.list n' s' k') rfl hy'1 q
-              refine List.all_eq_true.mpr fun p hp => List.all_eq_true.mpr fun q hq => ?_
-              have h0 : pairX (sL := sL) (sR := sR) prev A (a p)
-                  (goW (rowSpecC sL sR o) prev A (a p)) (b q) = true :=
-                List.all_eq_true.mp (List.all_eq_true.mp hm p hp) q hq
+              have hU : ∀ u, (u ∈ (listParts b).1 ∨ (listParts b).2.1 = some u ∨
+                  u ∈ (listParts b).2.2) → LeafOrNever u := fun u h => by
+                obtain ⟨q, rfl⟩ := mem_listParts b h
+                obtain ⟨j, hj⟩ := hbd q
+                exact Or.inl ⟨j, hj⟩
+              refine alignedAll_imp (U := LeafOrNever) (fun p u hu h0 => ?_)
+                (fun u h => hU u (Or.inl h)) (fun u h => hU u (Or.inr (Or.inl h)))
+                (fun u h => hU u (Or.inr (Or.inr h))) hm
               obtain ⟨i, hi⟩ := hdown p
-              obtain ⟨j, hj⟩ := hbd q
+              have h0' : pairX (sL := sL) (sR := sR) prev A (a p)
+                  (goW (rowSpecC sL sR o) prev A (a p)) u = true := h0
               show pairX (sL := sL) (sR := sR) prev' A (a p)
-                (goW (rowSpecC sL sR o) prev' A (a p)) (b q) = true
-              rw [hi] at h0 ⊢
+                (goW (rowSpecC sL sR o) prev' A (a p)) u = true
+              rw [hi] at h0' ⊢
               exact pairX_mono_gen sL sR ρL ρR F (fun i => ⟨F.flatL i, hgL i⟩)
-                (fun j => ⟨F.flatR j, hgR j⟩) hM hbud i (b q) (Or.inl ⟨j, hj⟩) _ _
-                (fun a' => hleaf i a') h0
+                (fun j => ⟨F.flatR j, hgR j⟩) hM hbud i u hu _ _ (fun a' => hleaf i a') h0'
             | _ => exact nomatch hm
       | obj fs md w =>
         have hdown := fun q => flat1_down (o := TOp.obj fs md w) rfl hx q

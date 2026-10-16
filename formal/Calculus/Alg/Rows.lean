@@ -180,10 +180,10 @@ theorem rowOfG_total {α : Type} {pre suf : List α} {c : α} {n : Nat}
 
 /-- **A spreading shape's row at any length is its row at one length, re-spread.** Cut the
     shorter row at `P`, insert the spread as often as the longer length needs, and the
-    longer row comes back. This is what the row relations alone cannot give: the `list` row of
-    `Scoped.disjoint` compares the two rows at ONE length, and the disjointness obligation is at
-    EVERY length. `P` and `S` are the common prefix and suffix lengths, which each operand's own
-    prefix and suffix fit inside. -/
+    longer row comes back. So the aligned rows up to one past the length where both shapes
+    re-spread stand for the rows at EVERY common length: the `list` rows of `Scoped.disjoint` and
+    of `Scoped.compat` read only those lengths. `P` and `S` are the common prefix and suffix
+    lengths, which each operand's own prefix and suffix fit inside. -/
 theorem rowOfG_respread {α : Type} {pre suf : List α} {c : α} {P S n : Nat}
     (hP : pre.length ≤ P) (hS : suf.length ≤ S) (hn : P + S ≤ n)
     {rN rn : List α}
