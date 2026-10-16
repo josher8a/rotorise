@@ -1020,13 +1020,14 @@ export const sampleVectors: readonly Vector[] = [
     },
     { name: 'array_of_string', codec: erase(array(string)), value: ['a', 'b'] },
     /**
-     * **The two shapes that put `meetLists` and `dominates` to the model.**
+     * **The two shapes that put `meetLists` and the common lengths of two spreading shapes to the
+     * model.**
      *
      * Before these, every list in the corpus was `array` or `tuple`: three shapes with a spread
-     * and an empty prefix and suffix, and one with a prefix of two and no spread. So `dominates`
-     * was only ever asked about a shape against itself, where it answers true for both reasons,
-     * and the fixed-arity branch only ever answered `never`. The bridge never asked the model
-     * about a suffix, about a flattening that survives, or about the refusal at all.
+     * and an empty prefix and suffix, and one with a prefix of two and no spread. So the rows of
+     * two spreading shapes were only ever asked about a shape against itself, and the
+     * fixed-arity branch only ever answered `never`. The bridge never asked the model about a
+     * suffix, about a flattening that survives, or about the refusal at all.
      *
      * These two are the smallest pair that asks all four, and it takes two because the refusal
      * needs *two* shapes neither of which dominates. Against the corpus they state:
@@ -1034,6 +1035,7 @@ export const sampleVectors: readonly Vector[] = [
      * (`array_of_string`); the meet against a fixed arity that **flattens and survives**
      * (`list_spread_suffix` against `tuple_pair`, which answers the tuple itself); and the
      * window where neither dominates, `p1 s0` against `p0 s1`, which answers `none`.
+     * The disjointness row of that window reads the lengths one and two.
      */
     {
         name: 'list_prefix_spread',

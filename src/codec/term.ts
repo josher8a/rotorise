@@ -1713,15 +1713,3 @@ export const primsApart = (x: Term, y: Term): boolean => {
         x.kind === 'literal' && y.kind === 'literal' && !sameLiteral(x.v, y.v)
     )
 }
-
-/**
- * **One side dominates the other**, in the prefix and in the suffix at once: the model's
- * `dominates`. Where both shapes spread and one dominates, every common length re-spreads the row
- * at `max p1 p2 + max s1 s2` (`dominates_max`).
- */
-export const dominates = (
-    p1: number,
-    s1: number,
-    p2: number,
-    s2: number,
-): boolean => (p2 <= p1 && s2 <= s1) || (p1 <= p2 && s1 <= s2)

@@ -15,7 +15,6 @@ import type { Body, Field, Term } from './term'
 import {
     childrenOf,
     componentsOf,
-    dominates,
     entryOrder,
     isPrim,
     otherShape,
@@ -316,7 +315,7 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
             break
     }
     const t = l.t
-    const pair = (a: At) => (b: At) => pairAt(c, table, a, b)
+    const pair = (a: At) => (b: At) => pairX(c, table, a, b)
     switch (t.kind) {
         case 'never':
             return true
@@ -465,6 +464,16 @@ const pairAt = (c: Ctx, table: Table, a: At, b: At): boolean => {
 }
 
 /**
+ * **A pair of positions below a guard in the disjointness row**, the model's `pairX`: a pair of
+ * entries is {@link pairAt}, and any other pair has a term in place below a wall, which names no
+ * entry, so no cycle passes through it. That pair runs the row at the same fuel.
+ */
+const pairX = (c: Ctx, table: Table, a: At, b: At): boolean =>
+    a.kind === 'entry' && b.kind === 'entry'
+        ? pairAt(c, table, a, b)
+        : row(c, table, a, b)
+
+/**
  * **The slot that an object gives one name**: the declared field, or `optional` of the open block,
  * which is the bottom where the object has no block.
  */
@@ -537,8 +546,9 @@ const rightRows = (
  * **Two list shapes apart**, the model's `listRowG`. Two values of different lengths differ, so
  * the shapes are disjoint where one position of each common length is. **Either side without a
  * spread** fixes the one length, and a length the other side refuses is disjoint outright. **Both
- * spreading**: where one side dominates, one disjoint position of the row at
- * `max p1 p2 + max s1 s2` decides. Where no side dominates, the test answers `false`.
+ * spreading**: the shapes share the lengths from `max (p1 + s1) (p2 + s2)` up. From
+ * `max p1 p2 + max s1 s2` up, each row re-spreads the row at that length. So the lengths from the
+ * first bound to the second decide, and each needs one disjoint position.
  */
 const listRows = (
     fpre: readonly ((r: At) => boolean)[],
@@ -551,14 +561,17 @@ const listRows = (
     const anyZip = (fs: readonly ((r: At) => boolean)[], us: readonly At[]) =>
         fs.some((f, at) => at < us.length && f(us[at] as At))
     if (fsp !== undefined && sp !== undefined) {
-        if (!dominates(fpre.length, fsuf.length, pre.length, suf.length))
-            return false
-        const n =
+        const lo = Math.max(fpre.length + fsuf.length, pre.length + suf.length)
+        const hi =
             Math.max(fpre.length, pre.length) +
             Math.max(fsuf.length, suf.length)
-        const fs = rowAt(fpre, fsp, fsuf, n)
-        const us = rowAt(pre, sp, suf, n)
-        return fs !== undefined && us !== undefined && anyZip(fs, us)
+        return Array.from({ length: hi + 1 - lo }, (_, k) => lo + k).every(
+            (n) => {
+                const fs = rowAt(fpre, fsp, fsuf, n)
+                const us = rowAt(pre, sp, suf, n)
+                return fs !== undefined && us !== undefined && anyZip(fs, us)
+            },
+        )
     }
     if (fsp === undefined) {
         const us = rowAt(pre, sp, suf, fpre.length + fsuf.length)

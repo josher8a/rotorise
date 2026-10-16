@@ -14,6 +14,8 @@ import Calculus.Alg.System
 import Calculus.Lang.Term
 import Calculus.Lang.Scope
 import Calculus.Lang.ScopeDisjoint
+import Calculus.Lang.ScopeFuel
+import Calculus.Lang.ScopeExact
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound
 import Calculus.Lang.ScopePath
@@ -23,6 +25,7 @@ import Calculus.JSON.Disjoint
 import Calculus.JSON.Compat
 import Calculus.JSON.ScopeBasic
 import Calculus.JSON.ScopeDisjoint
+import Calculus.JSON.ScopeExact
 import Calculus.JSON.ScopeCompat
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.Prisms
@@ -51,6 +54,7 @@ import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Witness.ScopeRefutations
 import Calculus.Dynamo.Analysis.Separation
 import Calculus.Dynamo.Analysis.ScopeDisjoint
+import Calculus.Dynamo.Analysis.ScopeExact
 import Calculus.Dynamo.Analysis.ScopeCompat
 import Calculus.Dynamo.Analysis.ScopeCompatWitness
 import Calculus.Dynamo.Analysis.ScopeOrthogonality
