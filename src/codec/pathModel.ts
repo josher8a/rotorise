@@ -787,7 +787,7 @@ type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
           : false
 /** Whether a slot holds its name in the stored view: `req` only, as a `fallback` may lack it. */
 type IsReqT<S> = S extends ['req', unknown] ? true : false
-/** `pairAt`: a pair of entries already assumed is apart, and a new pair is assumed. */
+/** `pairX`: a pair of entries already assumed is apart, a new pair is assumed, and any other pair runs the row at the same fuel. */
 type PairG<X, XE, Y, YE, A extends unknown[], F> = EntryOf<X, XE> extends [
     'some',
     infer I,

@@ -66,9 +66,9 @@ instance, and JSON is a second instance.
 | `Lang/Term.lean` | the signature `Sig`, the syntax `Syn`, the meaning `Mean`, and the tables of adapters |
 | `Alg/System.lean` | the solution of a system of codecs, `contractive_of_guarded`, and the flat scope with `scope_solution` |
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, `Scoped.Closed.meaning_sub`, and the product of closed objects `Scoped.Term.product` |
-| `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
-| `Lang/ScopeFuel.lean`, `Lang/ScopeExact.lean` | the adequacy of the fuel of the decision on a flat system, the witness laws `Scoped.WLaws`, the fragment `Scoped.Frag`, and the exactness `Scoped.disjoint_exact`; `Dynamo/Analysis/ScopeExact.lean` and `JSON/ScopeExact.lean` give the two universes |
-| `Lang/ScopeCompat.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, and `Scoped.compatPair_sound` |
+| `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the one walk of the decisions (`Scoped.Row`, `Scoped.walk`) over pairs of terms, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
+| `Lang/ScopeFuel.lean`, `Lang/ScopeExact.lean` | the adequacy of the fuel of the walk on a flat system, for each row that meets `Scoped.RowMono` and `Scoped.RowNever`, the witness laws `Scoped.WLaws`, the fragment `Scoped.Frag`, and the exactness `Scoped.disjoint_exact`; `Dynamo/Analysis/ScopeExact.lean` and `JSON/ScopeExact.lean` give the two universes |
+| `Lang/ScopeCompat.lean`, `Lang/ScopeCompatFuel.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, the row of agreement on the one walk, `Scoped.compatPair_sound`, and the adequacy of its fuel |
 | `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
@@ -142,25 +142,28 @@ a part of what its inner term accepts.
 `Leaf` is a fact of the signature, so the dual universe has the leaf of the universe. `Leaf` is outside `Sem` and holds computable fields only, so the test stays computable,
 and the kernel evaluates a closed pair.
 
-**The decision assumes a pair of entries below a guard.** Below a guard, the decision assumes a
-pair of entries while it compares the two bodies, and a pair already assumed is apart (`pairAt`).
-At an unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel
-answers `false`. The row of a left refinement reads its inner term. On the right, a union reads its
-options and a refinement reads its inner term (`rightC`). So a right refinement hides no option
-from the left row. A pair with a closed side runs the row at the same fuel (`pairX`), because a
-closed term is a finite tree. The list row of two spreading shapes reads each common length, from
-the lowest length that both admit to the length where both re-spread. The set row compares the
-two elements as any other pair below a guard, with the assumed pairs. Each child of a container is an entry, so each cycle passes a pair of entries,
-and the decision meets each cycle at a pair that it can assume. A `held`, a `legacy` and the top
-are disjoint only from the bottom, because their admission is a function that the decision does
-not read.
+**The decision assumes a pair of entries below a guard.** Below a guard, the decision assumes a pair
+of entries while it compares the two bodies, and a pair already assumed is apart (`pairX`). At an
+unguarded position, the decision unfolds an entry. A fuel bounds the walk, and an empty fuel answers
+`false`. The row of a left refinement reads its inner term. On the right, a union reads its options
+and a refinement reads its inner term (`rightC`). So a right refinement hides no option from the
+left row. A pair with a closed side runs the row at the same fuel (`pairX`), because a closed term
+is a finite tree. The compatibility decision runs on the same walk (`Scoped.walk`) with its own row,
+so the table, the fuel and `pairX` are one definition for both decisions. The list row of two
+spreading shapes reads each common length, from the lowest length that both admit to the length
+where both re-spread. The set row compares the two elements as any other pair below a guard, with
+the assumed pairs. Each child of a container is an entry, so each cycle passes a pair of entries,
+and the decision meets each cycle at a pair that it can assume. A `held`, a `legacy` and the top are
+disjoint only from the bottom, because their admission is a function that the decision does not
+read.
 
 **The soundness of the decision holds at every signature, from the laws of the universe.**
 `Scoped.disjoint_sound` says that where the decision answers `true`, no datum of any depth is
 accepted by both meanings at the orientation. Where the decision answers `true`, the pairs that the
 walk covers form a post-fixed point of the rows, up to the unfolding of two entries. The proof is
 one rule induction on the evaluation of the left meaning, and it reads the rows at each pair. The
-proof holds at every fuel, and `Scoped.compat_sound` has the same proof. The laws are outside
+proof holds at every fuel. The closure of the walk is one lemma (`Scoped.vis_postW`), and
+`Scoped.compat_sound` reads it with the rows of agreement. The laws are outside
 `Sem`, because only the soundness theorems read them.
 `Scoped.Laws` holds two laws at one orientation: two primitives that the leaf keeps apart share no
 datum, and two sets whose elements share no datum share no set. The decision reads no
@@ -177,7 +180,8 @@ a union, the bottom, a list, an object with no fill, and a set over the primitiv
 universe holds in a set. `Scoped.WLaws` holds the dual laws: two primitives that the leaf does not
 keep apart share a datum, and two sets over elements that share a datum share a set. A common
 datum comes from a path of the walk, by induction. The fuel of `disjoint` suffices, because on a
-flat system each step of the walk lowers a measure of the table and the unguarded height.
+flat system each step of the walk lowers a measure of the table and the unguarded height. The
+measure reads the walk and not the row, so the fuel of `compat` suffices by the same theorem.
 Outside the fragment the converse fails: the decision does not read the admission of a
 refinement, a fill, a `held`, a `legacy` or the top, a set of booleans at DynamoDB accepts nothing,
 and JSON has no list former.

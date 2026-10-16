@@ -15,6 +15,7 @@ import Calculus.Lang.Term
 import Calculus.Lang.Scope
 import Calculus.Lang.ScopeDisjoint
 import Calculus.Lang.ScopeFuel
+import Calculus.Lang.ScopeCompatFuel
 import Calculus.Lang.ScopeExact
 import Calculus.Lang.ScopeCompat
 import Calculus.Lang.ScopeSound

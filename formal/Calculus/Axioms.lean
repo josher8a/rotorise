@@ -1,5 +1,6 @@
 import Calculus.Dynamo.Lang.ScopeSound
 import Calculus.Lang.ScopeFuel
+import Calculus.Lang.ScopeCompatFuel
 import Calculus.Lang.ScopeExact
 import Calculus.JSON.ScopeExact
 import Calculus.Dynamo.Analysis.ScopeExact

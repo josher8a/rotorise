@@ -554,13 +554,13 @@ theorem row_wit {NL NR : Nat} (dL : GSys τ NL) (dR : GSys τ NR) (wl : WLaws S 
     | held _ _ _ => exact nomatch hx
     | legacy _ => exact nomatch hx
     | union m =>
-      simp only [rowG] at h
+      simp_rowG at h
       simp only [Frag] at hx
       obtain ⟨p, -, hp'⟩ := all_false h
       obtain ⟨v, h1, h2⟩ := ih p (List.all_eq_true.mp hx p (List.mem_finRange p)) y hy hp'
       exact ⟨v, union_of dL p h1, h2⟩
     | prim g =>
-      simp only [rowG] at h
+      simp_rowG at h
       refine rightC_wit dR _ _ _ hrestart ?_ y hy h
       intro y' _ hf hfam
       cases y' with
@@ -575,7 +575,7 @@ theorem row_wit {NL NR : Nat} (dL : GSys τ NL) (dR : GSys τ NR) (wl : WLaws S 
         | obj _ _ _ => exact nomatch hfam
         | _ => exact nomatch hf
     | set =>
-      simp only [rowG] at h
+      simp_rowG at h
       refine rightC_wit dR _ _ _ hrestart ?_ y hy h
       intro y' hy' hf hfam
       cases y' with
@@ -604,7 +604,7 @@ theorem row_wit {NL NR : Nat} (dL : GSys τ NL) (dR : GSys τ NR) (wl : WLaws S 
         | obj _ _ _ => exact nomatch hfam
         | _ => exact nomatch hf
     | list n s m =>
-      simp only [rowG] at h
+      simp_rowG at h
       obtain ⟨hLsome, hfq⟩ := frag_list hx
       refine rightC_wit dR _ _ _ hrestart ?_ y hy h
       intro y' hy' hf hfam
@@ -639,7 +639,7 @@ theorem row_wit {NL NR : Nat} (dL : GSys τ NL) (dR : GSys τ NR) (wl : WLaws S 
         | obj _ _ _ => exact nomatch hfam
         | _ => exact nomatch hf
     | obj fs md w =>
-      simp only [rowG] at h
+      simp_rowG at h
       obtain ⟨hMsome, hmd, hfq⟩ := frag_obj hx
       refine rightC_wit dR _ _ _ hrestart ?_ y hy h
       intro y' hy' hf hfam

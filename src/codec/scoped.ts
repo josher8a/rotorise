@@ -133,10 +133,15 @@ type Side = {
 /** The pairs of entries assumed apart, or assumed to agree. */
 type Table = readonly (readonly [number, number])[]
 
+/**
+ * **The context of a walk**: the two operands, the walk at the next fuel (`prev`), and the row at
+ * the same fuel (`same`). One walk serves each relation, and only the row differs.
+ */
 type Ctx = {
     readonly left: Side
     readonly right: Side
     readonly prev: (table: Table, l: At, r: At) => boolean
+    readonly same: (table: Table, l: At, r: At) => boolean
 }
 
 const sideOf = (t: Term, mode: Mode): Side | undefined => {
@@ -445,33 +450,41 @@ const termOf = (at: At, fam: (t: Term, closed: boolean) => boolean): boolean =>
     at.kind === 'term' && fam(at.t, at.closed)
 
 /**
- * **A pair of positions below a guard**, the model's `pairAt`: a pair of entries already assumed
- * is apart, and a new pair is assumed while the walk compares the two bodies. Each child of a
- * container is an entry, so the last case reads only a term in place below a wall: a closed term
- * names no entry, so no cycle passes through it.
- */
-const pairAt = (c: Ctx, table: Table, a: At, b: At): boolean => {
-    if (a.kind === 'entry' && b.kind === 'entry')
-        return (
-            table.some(([i, j]) => i === a.j && j === b.j) ||
-            c.prev(
-                [[a.j, b.j], ...table],
-                body(c.left, a.j),
-                body(c.right, b.j),
-            )
-        )
-    return c.prev(table, a, b)
-}
-
-/**
- * **A pair of positions below a guard in the disjointness row**, the model's `pairX`: a pair of
- * entries is {@link pairAt}, and any other pair has a term in place below a wall, which names no
- * entry, so no cycle passes through it. That pair runs the row at the same fuel.
+ * **A pair of positions below a guard**, the model's `pairX`, for both relations. A pair of entries
+ * already assumed holds, and a new pair is assumed while the walk compares the two bodies. Each
+ * child of a container is an entry, so any other pair has a term in place below a wall: a closed
+ * term names no entry, so no cycle passes through the pair. That pair runs the row at the same
+ * fuel.
  */
 const pairX = (c: Ctx, table: Table, a: At, b: At): boolean =>
     a.kind === 'entry' && b.kind === 'entry'
-        ? pairAt(c, table, a, b)
-        : row(c, table, a, b)
+        ? table.some(([i, j]) => i === a.j && j === b.j) ||
+          c.prev([[a.j, b.j], ...table], body(c.left, a.j), body(c.right, b.j))
+        : c.same(table, a, b)
+
+/**
+ * **The walk of one relation**, the model's `walk`: the fuel and the table live here, and the row
+ * of the relation is the argument. `make` gives the context of the relation from the context of
+ * the walk. An empty fuel answers `false`.
+ */
+const walkOf = <K extends Ctx>(
+    row: (k: K, table: Table, l: At, r: At) => boolean,
+    make: (c: Ctx) => K,
+    left: Side,
+    right: Side,
+): ((n: number, table: Table, l: At, r: At) => boolean) => {
+    const walk = (n: number, table: Table, l: At, r: At): boolean => {
+        if (n === 0) return false
+        const k: K = make({
+            left,
+            right,
+            prev: (t, l1, r1) => walk(n - 1, t, l1, r1),
+            same: (t, l1, r1) => row(k, t, l1, r1),
+        })
+        return row(k, table, l, r)
+    }
+    return walk
+}
 
 /**
  * **The slot that an object gives one name**: the declared field, or `optional` of the open block,
@@ -622,22 +635,8 @@ const fuelOf = (left: Side, right: Side): number =>
  * **A `ref` with no target is a free variable.** The model has none, because the emitter prints no
  * codec that holds one. A free variable is disjoint from the bottom alone.
  */
-const apartAt = (left: Side, right: Side, l: At, r: At): boolean => {
-    const walk = (n: number, table: Table, l1: At, r1: At): boolean =>
-        n === 0
-            ? false
-            : row(
-                  {
-                      left,
-                      right,
-                      prev: (t, l2, r2) => walk(n - 1, t, l2, r2),
-                  },
-                  table,
-                  l1,
-                  r1,
-              )
-    return walk(fuelOf(left, right), [], l, r)
-}
+const apartAt = (left: Side, right: Side, l: At, r: At): boolean =>
+    walkOf(row, (c) => c, left, right)(fuelOf(left, right), [], l, r)
 
 /**
  * **The view of a position**, the model's `viewG` on a graph term: an entry stays an entry, and a
@@ -736,23 +735,12 @@ const agreesAt = (half: Half, x: Term, y: Term): boolean => {
         viewR === undefined
     )
         return false
-    const walk = (n: number, table: Table, l: At, r: At): boolean =>
-        n === 0
-            ? false
-            : agreeRow(
-                  {
-                      half,
-                      left,
-                      right,
-                      viewL,
-                      viewR,
-                      prev: (t, l1, r1) => walk(n - 1, t, l1, r1),
-                  },
-                  table,
-                  l,
-                  r,
-              )
-    return walk(
+    return walkOf(
+        agreeRow,
+        (c): Agreement => ({ ...c, half, viewL, viewR }),
+        left,
+        right,
+    )(
         fuelOf(left, right),
         [],
         { kind: 'entry', j: left.root },
@@ -843,9 +831,9 @@ const agreeRight = (
 }
 
 /**
- * **One row per operation of the left operand**, the model's `rowC`, with `prev` as the walk at
+ * **One row per operation of the left operand**, the model's `rowSpecC`, with `prev` as the walk at
  * the next fuel. A set, a list and an object compare their positions below the guard
- * ({@link pairAt}). A `held` compares its inner terms, which are closed, at the walk.
+ * ({@link pairX}). A `held` compares its inner terms, which are closed, through the same test.
  */
 const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
     const restart = (r1: At) => k.prev(table, l, r1)
@@ -885,7 +873,8 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                         (u) =>
                             u.kind === 'held' &&
                             sameAdapter(t, u) &&
-                            k.prev(
+                            pairX(
+                                k,
                                 table,
                                 closedAt(k.left, t.inner),
                                 closedAt(k.right, u.inner),
@@ -903,7 +892,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                         r1,
                         (u, closed) =>
                             u.kind === 'set' &&
-                            pairAt(
+                            pairX(
                                 k,
                                 table,
                                 childAt(k.left, t.elem, l.closed),
@@ -924,7 +913,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                             u.kind === 'list' &&
                             positionsOf(t).every((one) =>
                                 positionsOf(u).every((other) =>
-                                    pairAt(
+                                    pairX(
                                         k,
                                         table,
                                         childAt(k.left, one, l.closed),
@@ -965,7 +954,7 @@ const positionsOf = (t: Extract<Term, { kind: 'list' }>): readonly Term[] => [
 ]
 
 /**
- * **Two bodies agree**, the model's `objC`: at each name that a body declares, the two slots agree
+ * **Two bodies agree**, the model's `objK`: at each name that a body declares, the two slots agree
  * and answer alike at absence, and the two open blocks agree. An undeclared name holds `optional`
  * of the open block, which is the bottom where the body has no block.
  */
@@ -984,7 +973,7 @@ const bodiesAgree = (
         Object.entries(a.fields).every(
             ([name, field]) =>
                 absent(name) &&
-                pairAt(
+                pairX(
                     k,
                     table,
                     childAt(k.left, field.t, closed.left),
@@ -994,7 +983,7 @@ const bodiesAgree = (
         Object.entries(b.fields).every(
             ([name, field]) =>
                 absent(name) &&
-                pairAt(
+                pairX(
                     k,
                     table,
                     slotAt(k.left, a, name, closed.left).at,
@@ -1002,7 +991,7 @@ const bodiesAgree = (
                 ),
         ) &&
         (a.rest === undefined ||
-            pairAt(
+            pairX(
                 k,
                 table,
                 childAt(k.left, a.rest, closed.left),
