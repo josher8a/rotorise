@@ -95,10 +95,10 @@ def termPreAt (k : Fin N → List Seg → Option (List Cond)) :
         (⟨π, .type .M⟩ :: ·)
   | _, _ => none
 
-/-- The precondition of a graph term at a path, with a bound on the unfoldings of an entry. -/
-def termPreG : Nat → Alg.Scoped.Graph dynSig N → List Seg → Option (List Cond)
-  | 0, _, _ => none
-  | n + 1, t, π => termPreAt sys (fun j => termPreG n (sys j)) t π
+/-- The precondition of a graph term at a path, with a bound on the unfoldings of an entry. The step
+    reads an entry below a container, so `unfolding_stable` does not state the bound. -/
+def termPreG (n : Nat) (t : Alg.Scoped.Graph dynSig N) : List Seg → Option (List Cond) :=
+  Alg.Scoped.unfolding sys (fun _ _ => none) (termPreAt sys) n t
 
 end Pre
 

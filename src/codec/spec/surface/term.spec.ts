@@ -12,8 +12,19 @@ import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
 import { decimal, opaque, refine, string } from '../../codec'
 import { orThrow } from '../../result'
-import type { Term } from '../../term'
-import { member, occA, occV, specOf, tagsOf } from '../../term'
+import { flatOf } from '../../scoped'
+import type { RefSlot, Term } from '../../term'
+import {
+    componentsOf,
+    holdsNoValue,
+    member,
+    occA,
+    occV,
+    ownsNullOf,
+    specOf,
+    tagsOf,
+    unboundRefs,
+} from '../../term'
 
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
 
@@ -454,5 +465,96 @@ describe('the term `.set()` writes', () => {
                 },
             ],
         })
+    })
+})
+
+/**
+ * **A reader that runs before its scope closes reads the slot of each `ref` at the call.** A scope
+ * binds a name after the fragments that name it are built, so a flat scope of the root cannot
+ * stand in for the term: the root has no closed scope yet, and the answer of a later call differs.
+ * Each test binds the slot after a first call, and the second call answers from the bound term.
+ */
+describe('a reader during construction reads the term, where a scope binds a name late', () => {
+    const open = (): { readonly t: Term; readonly slot: RefSlot } => {
+        const slot: RefSlot = { name: 'T', waiting: [] }
+        return { t: { kind: 'ref', slot }, slot }
+    }
+
+    it('holdsNoValue waits on a ref that no scope binds, and holds no value once the name is never', () => {
+        const { t, slot } = open()
+        const waited: Term[] = []
+        expect(holdsNoValue(t, (at) => waited.push(at))).toBe(false)
+        expect(waited).toEqual([t])
+        slot.bound = { T: { kind: 'never' } }
+        expect(holdsNoValue(t)).toBe(true)
+    })
+
+    it('ownsNullOf leaves undetermined a free variable, and reads the point once the name is bound', () => {
+        const { t, slot } = open()
+        expect(ownsNullOf(t)).toBe(undefined)
+        slot.bound = { T: { kind: 'null' } }
+        expect(ownsNullOf(t)).toBe(true)
+    })
+
+    it('occV lets a free variable write every slot, and reads the slot once the name is bound', () => {
+        const { t, slot } = open()
+        expect(occV(t).length).toBeGreaterThan(1)
+        slot.bound = { T: str }
+        expect(occV(t)).toEqual(['string'])
+    })
+
+    it('member reads no ref, so a free variable and a bound name both answer nothing', () => {
+        const { t, slot } = open()
+        expect(member(t)).toBe(undefined)
+        slot.bound = { T: str }
+        expect(member(t)).toBe(undefined)
+    })
+
+    it('unboundRefs finds the slot of a free name, and none once a scope binds it', () => {
+        const { t, slot } = open()
+        expect([...unboundRefs([t])]).toEqual([slot])
+        slot.bound = { T: str }
+        expect([...unboundRefs([t])]).toEqual([])
+    })
+
+    it('componentsOf finds a cycle only once the name is bound, which is how the scope orders its entries', () => {
+        const { t, slot } = open()
+        const root: Term = {
+            kind: 'object',
+            body: { fields: { next: { mark: 'req', t } }, rest: undefined },
+        }
+        expect(componentsOf([root])).toEqual([])
+        slot.bound = { T: root }
+        expect(componentsOf([root]).length).toBe(1)
+    })
+})
+
+describe('the flat scope of a root', () => {
+    const rootOver = (t: Term): Term => ({
+        kind: 'object',
+        body: { fields: { x: { mark: 'req', t } }, rest: undefined },
+    })
+
+    /** The readers that run after a scope closes each read one flat scope of the root. */
+    it('is built one time for a closed root, so each reader after the scope closes reads one scope', () => {
+        const root = rootOver(str)
+        expect(flatOf(root)).toBe(flatOf(root))
+    })
+
+    /**
+     * An open root holds a `ref` that a scope binds later, and the child that the name reaches is
+     * an entry once the name is bound. A scope read kept for the open root gives the root no entry
+     * for that child.
+     */
+    it('is read again for an open root, because a scope that binds a name adds the entries of the name', () => {
+        const slot: RefSlot = { name: 'T', waiting: [] }
+        const root = rootOver({ kind: 'ref', slot })
+        const entries = (t: Term): number => {
+            const flat = flatOf(t)
+            return flat.kind === 'flat' ? flat.bodies.length : -1
+        }
+        const before = entries(root)
+        slot.bound = { T: str }
+        expect(entries(root)).toBeGreaterThan(before)
     })
 })

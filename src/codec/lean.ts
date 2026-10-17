@@ -60,10 +60,16 @@ import {
     isStoredNumeral,
     memberOf,
 } from './attribute'
-import type { AnyCodec, LiteralValue, ObjectSlot, Refinement } from './codec'
+import type {
+    AnyCodec,
+    LiteralValue,
+    ObjectSlot,
+    Precondition,
+    Refinement,
+} from './codec'
 import { object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
-import { CodecError, failed } from './result'
+import { CodecError, failed, type Result } from './result'
 import { agrees, disjoint, flatOf, storedApart, viewsDisjoint } from './scoped'
 import type {
     Alternatives,
@@ -2441,9 +2447,13 @@ export type PathStep =
  * happen at the call or on use. The model's frontier carries no such moment, so the vector reads
  * neither moment.
  */
-export type HostAt =
+export type HostAt = {
+    /** The preconditions of the call, where the call of `at` returned a codec. */
+    readonly preconditions?: Result<readonly Precondition[]>
+} & (
     | { readonly kind: 'refused' | 'vacant' | 'someVariants' | 'ambiguous' }
     | { readonly kind: 'resolved'; readonly codec: AnyCodec }
+)
 
 /**
  * The recorder that `at` hands its selector, as a loop drives it. The path type names the steps
@@ -2457,7 +2467,9 @@ type Recorder = { readonly [name: string]: Recorder } & {
 
 /** The item codec that holds a codec at {@link wrapped}, with `at` over a loop's steps. */
 type Wrapper = AnyCodec & {
-    readonly at: (select: (path: Recorder) => Recorder) => AnyCodec
+    readonly at: (
+        select: (path: Recorder) => Recorder,
+    ) => AnyCodec & { readonly preconditions: Result<readonly Precondition[]> }
 }
 
 /** The name at which the wrapper holds the codec under test. */
@@ -2524,7 +2536,7 @@ const stepOf = (path: Recorder, step: PathStep): Recorder =>
  */
 export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
     const item = wrapperOf(codec)
-    let reached: AnyCodec
+    let reached: ReturnType<Wrapper['at']>
     try {
         reached = item.at((path) =>
             steps.reduce(stepOf, path[wrapped] as Recorder),
@@ -2538,16 +2550,73 @@ export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
         }
     }
     if (reachable(item.def as Term).has(reached.def as Term))
-        return { kind: 'resolved', codec: reached }
+        return {
+            kind: 'resolved',
+            codec: reached,
+            preconditions: reached.preconditions,
+        }
     const refusal = reached.decode({ NULL: true })
     const message = refusal instanceof CodecError ? refusal.message : ''
+    const { preconditions } = reached
     if (message.includes('is declared by some variants only'))
-        return { kind: 'someVariants' }
+        return { kind: 'someVariants', preconditions }
     if (message.includes('is declared differently in different variants'))
-        return { kind: 'ambiguous' }
+        return { kind: 'ambiguous', preconditions }
     // a clause that separates every option leaves no codec at the path
-    if (message.startsWith('the clause on')) return { kind: 'vacant' }
-    return { kind: 'refused' }
+    if (message.startsWith('the clause on'))
+        return { kind: 'vacant', preconditions }
+    return { kind: 'refused', preconditions }
+}
+
+/** The order of `compare` on `String` in the model: by code point. */
+const nameOrder = (a: string, b: string): number => {
+    const points = (name: string) =>
+        Array.from(name, (one) => one.codePointAt(0) ?? 0)
+    const [x, y] = [points(a), points(b)]
+    for (let i = 0; i < Math.min(x.length, y.length); i++) {
+        const d = (x[i] ?? 0) - (y[i] ?? 0)
+        if (d !== 0) return d
+    }
+    return x.length - y.length
+}
+
+/** One stored literal, as the base and the inhabitant of the carrier that `Test.in` takes. */
+const leanStoredLiteral = (
+    stored: Extract<Precondition, { readonly in: unknown }>['in'][number],
+): readonly [string, string] => {
+    if (stored.S !== undefined) return ['string', leanString(stored.S)]
+    if (stored.N !== undefined)
+        return ['number', `(WFNumeral.of ${leanString(stored.N)})`]
+    if (stored.BOOL !== undefined) return ['boolean', String(stored.BOOL)]
+    if (stored.B !== undefined) return ['binary', leanBytes(stored.B)]
+    throw new Error('a stored literal holds no member')
+}
+
+/** One precondition of the host, as the model's `Cond`. */
+const leanCond = (p: Precondition): string => {
+    const path = `[${p.segments.map(leanSeg).join(', ')}]`
+    if ('exists' in p) return `⟨${path}, .exists⟩`
+    if ('type' in p) return `⟨${path}, .type .${p.type}⟩`
+    const [first, ...rest] = p.in.map(leanStoredLiteral)
+    const [base, x] = first as readonly [string, string]
+    return `⟨${path}, .in GroundKind.${base} ${x} [${rest.map(([, y]) => y).join(', ')}]⟩`
+}
+
+/**
+ * **The claim of the host about the precondition of a clause**, as the model's
+ * `Option (List Cond)`: a refusal is `none`. The model lists the keys of an object in the order of
+ * `compare`, and a clause lists them as declared, so the claim sorts the conditions by the key.
+ * A claim that holds a `type M` has a nested object, whose keys the sort does not reach, so the
+ * row is not stated.
+ */
+const leanPreconditionClaim = (
+    claim: Result<readonly Precondition[]>,
+): string | undefined => {
+    if (failed(claim)) return 'none'
+    if (claim.some((p) => 'type' in p && p.type === 'M')) return undefined
+    const key = (p: Precondition) => String(p.segments.at(-1))
+    const sorted = [...claim].sort((a, b) => nameOrder(key(a), key(b)))
+    return `(some [${sorted.map(leanCond).join(', ')}])`
 }
 
 /** The paths of one codec, each as its steps under {@link wrapped}. */
@@ -2786,12 +2855,11 @@ export const leanPath = (
      * each frame at a position that holds the resolved node.
      */
     const hostC = (
-        steps: readonly PathStep[],
+        decided: HostAt,
         at: string,
         frontier: () => GraphWalked[] | undefined,
         frameText: (w: GraphWalked) => string,
     ): string => {
-        const decided = decide(codec, steps)
         if (decided.kind !== 'resolved') return `.${decided.kind}`
         const node = underRefs(decided.codec.def as Term)
         const walked = frontier() ?? []
@@ -2815,6 +2883,7 @@ export const leanPath = (
     }
     const plain: string[] = []
     const unions = new Map<string, Map<string, string[]>>()
+    const preconditions = new Map<string, Set<string>>()
     paths.forEach((steps, i) => {
         const at = `${name}.path${i}`
         const clauses = steps.flatMap((step, k) =>
@@ -2829,7 +2898,7 @@ export const leanPath = (
                     () => rootPrint,
                 )
             plain.push(
-                `([${segs.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, frameText(root))})`,
+                `([${segs.map(leanSeg).join(', ')}], ${hostC(decide(codec, steps), at, frontier, frameText(root))})`,
             )
             return
         }
@@ -2881,10 +2950,22 @@ export const leanPath = (
                 (option) => printed[option],
             )
         }
+        const decidedAll = decide(codec, steps)
+        const claim = decidedAll.preconditions
+        const prefix = [
+            wrapped,
+            ...(steps.slice(0, k) as readonly (string | number)[]),
+        ]
+        const stated = claim && leanPreconditionClaim(claim)
+        if (stated !== undefined) {
+            const row = `([${prefix.map(leanSeg).join(', ')}], ${stated})`
+            const known = preconditions.get(phi) ?? new Set<string>()
+            preconditions.set(phi, known.add(row))
+        }
         const byClause = unions.get(os) ?? new Map<string, string[]>()
         const rows = byClause.get(phi) ?? []
         rows.push(
-            `([${rest.map(leanSeg).join(', ')}], ${hostC(steps, at, frontier, (w) => frameText(names[w.option])(w))})`,
+            `([${rest.map(leanSeg).join(', ')}], ${hostC(decidedAll, at, frontier, (w) => frameText(names[w.option])(w))})`,
         )
         byClause.set(phi, rows)
         unions.set(os, byClause)
@@ -2899,6 +2980,10 @@ export const leanPath = (
                             `(${phi},\n        [${rows.join(',\n         ')}])`,
                     )
                     .join(',\n       ')}]`,
+        ),
+        ...[...preconditions].map(
+            ([phi, rows]) =>
+                `PreRowsC ${phi}\n      [${[...rows].join(',\n       ')}]`,
         ),
     ]
     const proof =

@@ -56,7 +56,18 @@ import {
     orThrow,
     type Result,
 } from './result'
-import { storedApart } from './scoped'
+import {
+    type At,
+    belowTopAt,
+    childAt,
+    closedAt,
+    body as entryBody,
+    flatOf,
+    inPlace,
+    type Side,
+    sideOf,
+    storedApart,
+} from './scoped'
 import type {
     Alternatives,
     Body,
@@ -73,15 +84,14 @@ import {
     member as memberOf,
     openRefusal,
     ownsNullOf,
-    reenteredOf,
     refuseSlots,
     resolvedTerm,
     sameAdapter,
     sameTerm,
-    storedView,
     targetOf,
     unanimous,
     unboundRefs,
+    unionAlternatives,
     usedTargetOf,
     whenBound,
 } from './term'
@@ -541,19 +551,20 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * the name, or a list with no spread past its prefix. A write there leaves an item that the codec
  * does not read, so `absent` stays on the frontier and the frontier refuses on use.
  *
- * `reentered` gives the re-entered terms of the root of the walk, which {@link printedMember} reads.
+ * `cycles` holds the entries of the flat scope of the root of the walk, which {@link printedMember}
+ * reads.
  */
 const childrenOf = (
     codec: AnyCodec,
     segment: string | number,
-    reentered: Reentered,
+    cycles: Cycles,
 ): readonly AnyCodec[] | CodecError => {
     const def = codec.def
     // a position enters a list, and a name enters a map
     const container = typeof segment === 'number' ? 'L' : 'M'
     let stored = memberOf(def)
     if (def.kind === 'held' || def.kind === 'refine' || def.kind === 'legacy')
-        stored = printedMember(def.inner, reentered())
+        stored = printedMember(def.inner, cycles)
     const apart = stored !== undefined && stored !== container
     switch (def.kind) {
         // a name the body does not declare falls in the open block, where there is one
@@ -590,7 +601,7 @@ const childrenOf = (
             return acrossVariants(
                 def.options.map((option) => codecOfTerm(option)),
                 segment,
-                reentered,
+                cycles,
             )
         // **A path stops at an adapter that reads the whole value.** A write at a path writes one
         // part of the attribute, and the attribute is checked as a whole nowhere on that write
@@ -610,11 +621,7 @@ const childrenOf = (
                 `a path cannot go into an adapter at '${segment}': the adapter converts the whole value, and a write at the path writes one part of the stored value without the conversion. Address the attribute itself`,
             )
         case 'ref':
-            return childrenOf(
-                codecOfTerm(usedTargetOf(def)),
-                segment,
-                reentered,
-            )
+            return childrenOf(codecOfTerm(usedTargetOf(def)), segment, cycles)
         // `opaque` admits every value, so the codec at each segment is `opaque` again
         case 'opaq':
             return [codec]
@@ -625,51 +632,39 @@ const childrenOf = (
 }
 
 /**
- * **The re-entered terms of the root of a walk**, read at the first wrapper that the walk meets. A
- * walk that meets no wrapper reads the cycles of the root at no step.
+ * The entries of the flat scope of the root of a walk, as {@link flatOf} numbers them. **The map
+ * holds every entry, not only the entry on the stack of the walk.** An entry that the walk reads
+ * before its cycle closes is a reference in the print as well, and a read of the stack alone gave
+ * a member there, which the type and the model refuse.
  */
-type Reentered = () => ReadonlySet<Term>
-
-/** The {@link Reentered} of a root, which reads the cycles of the root once. */
-const reenteredAt = (root: Term): Reentered => {
-    let known: ReadonlySet<Term> | undefined
-    return () => {
-        known ??= reenteredOf(root)
-        return known
-    }
-}
+type Cycles = ReadonlyMap<Term, number>
 
 /**
  * **The member that a wrapper's inner term stores, as the model reads the printed term.** The
  * emitter prints a `ref` that closes no cycle as its target, so the walk reads the target. The
  * emitter prints an entry of a cycle as a reference, `Scoped.Term.ref`, inside a closed codec. The
- * model's `μG` answers no member at a reference, so this answers `undefined` at a re-entered term.
+ * model's `μG` answers no member at a reference, so this answers `undefined` at an entry.
  * The emitter refuses a `ref` with no target, and this answers `undefined` there too.
  *
  * {@link memberOf} answers `undefined` at every `ref`, and the set constructor relies on that
  * answer. A set holds no `ref` on the path that `member` reads, so the last row reads a set
  * exactly.
  */
-const printedMember = (
-    t: Term,
-    reentered: ReadonlySet<Term>,
-): AttributeName | undefined => {
-    if (reentered.has(t)) return undefined
+const printedMember = (t: Term, cycles: Cycles): AttributeName | undefined => {
+    if (cycles.has(t)) return undefined
     switch (t.kind) {
         case 'ref': {
             const target = targetOf(t)
             return target === undefined
                 ? undefined
-                : printedMember(target, reentered)
+                : printedMember(target, cycles)
         }
         case 'held':
         case 'refine':
         case 'legacy':
-            return printedMember(t.inner, reentered)
+            return printedMember(t.inner, cycles)
         case 'union':
-            return unanimous(
-                t.options.map((one) => printedMember(one, reentered)),
-            )
+            return unanimous(t.options.map((one) => printedMember(one, cycles)))
         default:
             return memberOf(t)
     }
@@ -712,11 +707,11 @@ const admitsNothing = (codec: AnyCodec): boolean => codec.def.kind === 'never'
 const acrossVariants = (
     variants: readonly AnyCodec[],
     segment: string | number,
-    reentered: Reentered,
+    cycles: Cycles,
 ): readonly AnyCodec[] | CodecError => {
     let reached: readonly AnyCodec[] = []
     for (const variant of variants) {
-        const children = childrenOf(variant, segment, reentered)
+        const children = childrenOf(variant, segment, cycles)
         if (children instanceof CodecError) return children
         for (const child of children) reached = including(reached, child)
     }
@@ -813,11 +808,19 @@ const preconditionsOf = (
                 `the clause at '${asPath(prefix)}' names no key, so no precondition states that the attribute is a map`,
             )
         }
+        const side = sideOf(step, 'raw')
+        if (side === undefined && fields.length > 0) {
+            return new CodecError(
+                `the clause at '${asPath(prefix)}' has no scoped form, so no precondition reads it`,
+            )
+        }
         for (const [key, field] of fields) {
+            if (side === undefined) break
             const at = preconditionsAt(
-                storedView(field.t),
+                side,
+                childAt(side, field.t, false),
                 [...prefix, key],
-                [],
+                side.bodies.length + 1,
             )
             if (failed(at)) return at
             preconditions.push(...at)
@@ -836,30 +839,64 @@ const groundMember = {
 } as const satisfies Readonly<Record<string, AttributeName>>
 
 /**
- * **The preconditions of a stored view at a path**: `in` for a literal or a union of literals at
- * one base, `type` for a ground base, `exists` for `opaque`, and `type M` with the preconditions
- * of each key for an object whose keys are each required and whose open block is `opaque`. Any
- * other term admits less than any conjunction of these forms states, so the term is a refusal.
+ * **The preconditions of a position of the clause at a path**, the model's `termPreAt`: `in` for a
+ * literal or a union of literals at one base, `type` for a ground base, `exists` for `opaque` and
+ * for `withLegacyRead`, and `type M` with the preconditions of each key for an object whose keys
+ * are each required and whose open block stores `opaque`. A `held` reads its stored side. A
+ * refinement over a term with an adapter reads its inner term. Any other term admits less than any
+ * conjunction of these forms states, so the term is a refusal.
  *
- * `inside` holds the `ref`s that the walk passed on the way down. A `ref` met again is a
- * recursion, which no finite conjunction states.
+ * `fuel` is the model's bound on the unfoldings of an entry: the count of the entries plus one. An
+ * entry met again is a recursion, which no finite conjunction states, and the walk spends the bound
+ * on it.
  */
 const preconditionsAt = (
-    t: Term,
+    side: Side,
+    at: At,
     segments: readonly (string | number)[],
-    inside: readonly Term[],
+    fuel: number,
 ): Result<readonly Precondition[]> => {
     const refuse = (what: string) =>
         new CodecError(
             `'${asPath(segments)}' gives no exact precondition: the clause stores ${what} there, and a condition on the path would admit more than the clause`,
         )
+    if (fuel === 0) return refuse('a recursion')
+    switch (at.kind) {
+        case 'entry':
+            return preconditionsAt(
+                side,
+                entryBody(side, at.j),
+                segments,
+                fuel - 1,
+            )
+        case 'free':
+            return refuse('a name that no scope binds')
+        case 'refine':
+            return belowTopAt(side, at.inner)
+                ? refuse('a refinement')
+                : preconditionsAt(side, at.inner, segments, fuel)
+    }
+    const t = at.t
     switch (t.kind) {
-        case 'ref':
-            if (inside.includes(t)) return refuse('a recursion')
-            return preconditionsAt(usedTargetOf(t), segments, [...inside, t])
-        case 'literal':
-        case 'union': {
+        case 'literal': {
             const alts = literalAlternatives(t)
+            return alts
+                ? [{ segments, in: storedLiterals(alts) }]
+                : refuse('a union of terms that are not literals at one base')
+        }
+        case 'union': {
+            const options: Term[] = []
+            for (const option of t.options) {
+                const one = storedLiteralAt(
+                    side,
+                    inPlace(side, option, at.closed),
+                )
+                if (one !== undefined) options.push(one)
+            }
+            const alts =
+                options.length === t.options.length
+                    ? unionAlternatives(options)
+                    : undefined
             return alts
                 ? [{ segments, in: storedLiterals(alts) }]
                 : refuse('a union of terms that are not literals at one base')
@@ -871,9 +908,22 @@ const preconditionsAt = (
         case 'null':
             return [{ segments, type: groundMember[t.kind] }]
         case 'opaq':
+        case 'legacy':
             return [{ segments, exists: true }]
+        case 'held':
+            return preconditionsAt(
+                side,
+                closedAt(side, t.inner),
+                segments,
+                fuel,
+            )
         case 'object': {
-            if (t.body.rest?.kind !== 'opaq') return refuse('a closed object')
+            const { rest } = t.body
+            if (
+                rest === undefined ||
+                !storedOpaqueAt(side, childAt(side, rest, at.closed))
+            )
+                return refuse('a closed object')
             const preconditions: Precondition[] = [{ segments, type: 'M' }]
             for (const [key, field] of Object.entries(t.body.fields)) {
                 if (field.mark !== 'req') {
@@ -881,9 +931,14 @@ const preconditionsAt = (
                         `an object whose key '${key}' is not required`,
                     )
                 }
-                const at = preconditionsAt(field.t, [...segments, key], inside)
-                if (failed(at)) return at
-                preconditions.push(...at)
+                const here = preconditionsAt(
+                    side,
+                    childAt(side, field.t, at.closed),
+                    [...segments, key],
+                    fuel,
+                )
+                if (failed(here)) return here
+                preconditions.push(...here)
             }
             return preconditions
         }
@@ -891,14 +946,49 @@ const preconditionsAt = (
             return refuse('a list')
         case 'set':
             return refuse('a set')
-        case 'refine':
-            return refuse('a refinement')
-        case 'legacy':
-            return refuse('a `withLegacyRead`')
-        case 'held':
-            return refuse('an adapter')
         case 'never':
             return refuse('`never`')
+        // the flat scope reads a `ref` as its target or as an entry, and a `refine` as a position
+        case 'ref':
+        case 'refine':
+            throw new Error(
+                `a position of the flat scope holds a \`${t.kind}\``,
+            )
+    }
+}
+
+/**
+ * **The literal that the stored view of a position is**, the model's `storedLitG`: a literal, or
+ * the stored side of a `held` over one. An entry is no literal.
+ */
+const storedLiteralAt = (side: Side, at: At): Term | undefined => {
+    if (at.kind !== 'term') return undefined
+    switch (at.t.kind) {
+        case 'literal':
+            return at.t
+        case 'held':
+            return storedLiteralAt(side, closedAt(side, at.t.inner))
+        default:
+            return undefined
+    }
+}
+
+/**
+ * **Whether the stored view of a position is `opaque`**, the model's `storedOpaqG` at the body of
+ * the entry that the position names. A `withLegacyRead` reads every attribute, so the stored view
+ * of the older reader is `opaque`.
+ */
+const storedOpaqueAt = (side: Side, at: At): boolean => {
+    const here = at.kind === 'entry' ? entryBody(side, at.j) : at
+    if (here.kind !== 'term') return false
+    switch (here.t.kind) {
+        case 'opaq':
+        case 'legacy':
+            return true
+        case 'held':
+            return storedOpaqueAt(side, closedAt(side, here.t.inner))
+        default:
+            return false
     }
 }
 
@@ -4097,12 +4187,14 @@ const objectFromMap = <
                 let frontier: readonly AnyCodec[] = [
                     self as unknown as AnyCodec,
                 ]
-                const reentered = reenteredAt(itemDef)
+                const flat = flatOf(itemDef)
+                if (flat.kind === 'refused')
+                    return refusedAt(new CodecError(flat.reason))
                 for (const step of steps) {
                     const next =
                         typeof step === 'object'
                             ? narrowAcross(frontier, step)
-                            : acrossVariants(frontier, step, reentered)
+                            : acrossVariants(frontier, step, flat.cycles)
                     if (next instanceof CodecError) return refusedAt(next)
                     // a frontier where no codec admits a value is a name that no codec declares
                     if (next.every(admitsNothing)) {

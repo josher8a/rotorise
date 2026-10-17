@@ -17,6 +17,7 @@ import {
     componentsOf,
     entryOrder,
     isPrim,
+    memoClosed,
     otherShape,
     primsApart,
     sameAdapter,
@@ -45,12 +46,12 @@ export type FlatScope = {
     readonly root: number
 }
 
-/** **The flat scope of a term**, or the reason that the term has no scoped form. */
-export const flatOf = (
-    root: Term,
-):
+/** The flat scope of a term, or the reason that the term has no scoped form. */
+type FlatResult =
     | ({ readonly kind: 'flat' } & FlatScope)
-    | { readonly kind: 'refused'; readonly reason: string } => {
+    | { readonly kind: 'refused'; readonly reason: string }
+
+const buildFlat = (root: Term): FlatResult => {
     const bodies: Term[] = []
     for (const component of componentsOf([root])) {
         const order = entryOrder(component)
@@ -98,10 +99,16 @@ export const flatOf = (
 }
 
 /**
+ * **The flat scope of a term**, or the reason that the term has no scoped form. The flat scope of a
+ * closed root is built one time, so each reader that runs after the scope closes reads one scope.
+ */
+export const flatOf: (root: Term) => FlatResult = memoClosed(buildFlat)
+
+/**
  * **A position of the graph**: an entry, a term in place, a refinement over a position, or a `ref`
  * with no target. A term below a wall is `closed`: its children stay in place.
  */
-type At =
+export type At =
     | Entry
     | {
           readonly kind: 'term'
@@ -113,13 +120,13 @@ type At =
     | Free
 
 /** An entry of the flat scope. */
-type Entry = { readonly kind: 'entry'; readonly j: number }
+export type Entry = { readonly kind: 'entry'; readonly j: number }
 
 /** A `ref` with no target. */
 type Free = { readonly kind: 'free' }
 
 /** One operand: its entries, its view, and the entries that reach an adapter. */
-type Side = {
+export type Side = {
     readonly bodies: readonly Term[]
     readonly cycles: ReadonlyMap<Term, number>
     readonly index: ReadonlyMap<Term, number>
@@ -144,7 +151,7 @@ type Ctx = {
     readonly same: (table: Table, l: At, r: At) => boolean
 }
 
-const sideOf = (t: Term, mode: Mode): Side | undefined => {
+export const sideOf = (t: Term, mode: Mode): Side | undefined => {
     const flat = flatOf(t)
     if (flat.kind === 'refused') return undefined
     const base = {
@@ -208,11 +215,11 @@ const reachesAdapter = (table: readonly boolean[], at: At): boolean => {
 }
 
 /** **A position below the top**, the model's `belowTop`: the position reaches no adapter. */
-const belowTopAt = (side: Side, at: At): boolean =>
+export const belowTopAt = (side: Side, at: At): boolean =>
     side.stable && !reachesAdapter(side.adapts, at)
 
 /** The body of an entry, in the operand that the test reads. */
-const body = (side: Side, j: number): At => {
+export const body = (side: Side, j: number): At => {
     const t = side.bodies[j] as Term
     if (t.kind !== 'ref') return viewAt(side, t, false)
     const target = targetOf(t)
@@ -232,14 +239,14 @@ const place = (side: Side, t: Term): At => {
 }
 
 /** **A term in place below a wall**: a `ref` reads its target, and the term names no entry. */
-const closedAt = (side: Side, t: Term): At => {
+export const closedAt = (side: Side, t: Term): At => {
     if (t.kind !== 'ref') return viewAt(side, t, true)
     const target = targetOf(t)
     return target === undefined ? { kind: 'free' } : closedAt(side, target)
 }
 
 /** A term in place, below a wall or above every guard. */
-const inPlace = (side: Side, t: Term, closed: boolean): At =>
+export const inPlace = (side: Side, t: Term, closed: boolean): At =>
     closed ? closedAt(side, t) : place(side, t)
 
 /**
@@ -258,7 +265,7 @@ const entryAt = (side: Side, t: Term): Entry | Free => {
 }
 
 /** **A child of a container**: an entry, or a term in place below a wall. */
-const childAt = (side: Side, t: Term, closed: boolean): At =>
+export const childAt = (side: Side, t: Term, closed: boolean): At =>
     closed ? closedAt(side, t) : entryAt(side, t)
 
 /**

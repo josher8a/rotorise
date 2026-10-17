@@ -339,6 +339,8 @@ export const unanimous = (
  * DynamoDB set does, refuses the `ref`: a set holding one element member is a fact of the store
  * universe. `opaque` writes whatever the value turns out to be, `never` writes nothing, and a
  * `union` answers it where its options do not agree on one member. `nullable` is such a union.
+ *
+ * **This reader runs at construction.** A scope binds its names after the fragments that name them are built, so this reader runs while a `ref` has no target. The reader reads the term, because the flat scope of the root does not exist yet.
  */
 export const member = (t: Term): AttributeName | undefined => {
     switch (t.kind) {
@@ -477,6 +479,8 @@ const joined = <A>(
  * slot. `opaque` accepts every kind by design, and its row answers that closed form, not `undefined`.
  * A `ref` reads through to its target, as the model reads the entry that `ref i` names. A `ref`
  * that no scope binds yet is a free variable, and a free variable may write every slot.
+ *
+ * **This reader runs at construction.** A scope binds its names after the fragments that name them are built, so this reader runs while a `ref` has no target. The reader reads the term, because the flat scope of the root does not exist yet.
  */
 export const occV = (t: Term): readonly SetSlot[] => {
     switch (t.kind) {
@@ -555,6 +559,8 @@ export const occV = (t: Term): readonly SetSlot[] => {
  *
  * A union's options are separated by construction, so at most one admits null and the union reaches
  * the point exactly when one of its options does.
+ *
+ * **This reader runs at construction.** A scope binds its names after the fragments that name them are built, so this reader runs while a `ref` has no target. The reader reads the term, because the flat scope of the root does not exist yet.
  */
 export const ownsNullOf = (t: Term): boolean | undefined => {
     switch (t.kind) {
@@ -876,6 +882,9 @@ export const resolvedTerm = (t: Term): Term | undefined => {
  * `waiting` receives each `ref` that no scope binds yet, because the answer reads its target later.
  * A node that the read already passed is a cycle with no container, which the guard refuses, so the
  * read answers `false` there.
+ *
+ * **This reader runs at construction, and in the judgment of a codec that no scope has closed.**
+ * A scope binds its names after the fragments that name them are built, so this reader runs while a `ref` has no target. The reader reads the term, because the flat scope of the root does not exist yet. The set `passed` stays, because the guard has not run on a scope that binds its names late.
  */
 export const holdsNoValue = (
     t: Term,
@@ -933,7 +942,7 @@ const oneAlternative = (t: Literal): Alternatives =>
  * `string('a')` and `decimal('a')` is told apart by the member and not by the value, and no single
  * base describes it.
  */
-const unionAlternatives = (
+export const unionAlternatives = (
     options: readonly Term[],
 ): Alternatives | undefined => {
     const [first, ...rest] = options.map(resolvedTerm)
@@ -1065,6 +1074,9 @@ export type RefSlot = {
 /**
  * The slots of the `ref`s that the terms reach and that no scope binds yet. A bound `ref` belongs
  * to the closed scope that bound it, so the walk stops there.
+ *
+ * **This reader defines open.** A term is open where this reader finds a slot, and a flat scope
+ * assumes a closed term, so this reader cannot read one.
  */
 export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
     const slots = new Set<RefSlot>()
@@ -1127,6 +1139,26 @@ export const freeNamesOf = (t: Term): readonly string[] => {
     const names = [...new Set([...unboundRefs([t])].map((slot) => slot.name))]
     if (names.length === 0) closedTerms.set(t, refusals)
     return names
+}
+
+/**
+ * **A read of a closed term, kept for each root.** A closed term binds each name, and a scope binds
+ * a name one time, so the read of a closed root changes only where a scope refuses. A read of an
+ * open term is not kept, because a scope that binds a name later changes the read.
+ */
+export const memoClosed = <V>(read: (root: Term) => V): ((root: Term) => V) => {
+    const known = new WeakMap<
+        Term,
+        { readonly stamp: number; readonly value: V }
+    >()
+    return (root) => {
+        if (freeNamesOf(root).length > 0) return read(root)
+        const hit = known.get(root)
+        if (hit !== undefined && hit.stamp === refusals) return hit.value
+        const value = read(root)
+        known.set(root, { stamp: refusals, value })
+        return value
+    }
 }
 
 /**
@@ -1250,28 +1282,6 @@ export const throughRefs =
         }
         return view(root)
     }
-
-/**
- * **The stored view**: each `held` becomes its inner term. The view reads each attribute that
- * the term reads. A `withLegacyRead` stays as it is. The model's stored view of it is `opaque`,
- * because the older reader reads every attribute.
- *
- * **The view keeps a predicate only where the inner term decodes the same in the view as in the
- * term**: where the inner term lies below the top ({@link belowTop}). An adapter (`held`,
- * `withLegacyRead`, a field with a stand-in) or an unbound `ref` can run caller code there. Elsewhere the view drops the predicate, because data exists only on the side where
- * it was stated: the stored side reads the predicate only through `g`, and the view keeps no
- * closure.
- */
-export const storedView = throughRefs((t, view) => {
-    switch (t.kind) {
-        case 'held':
-            return view(t.inner)
-        case 'refine':
-            return belowTop(t.inner) ? t : view(t.inner)
-        default:
-            return mapChildren(t, view)
-    }
-})
 
 /**
  * **Whether a `withLegacyRead` occurs in the term.** The model states the read widening as
@@ -1399,74 +1409,6 @@ const samePredicate = (p: Refinement, q: Refinement): boolean =>
     p.arbitrary === q.arbitrary &&
     p.onThinSearch === q.onThinSearch
 
-/* ── a term below the top ─────────────────────────────────────────────────────────────── */
-
-/**
- * **Whether a term lies below the top**, the model's `belowTop`: the term reaches no adapter.
- * Such a term writes one value to one attribute and reads one attribute to one value, as the top
- * does, so a predicate over it reads the value itself.
- *
- * The host reads three more terms as an adapter, because no bound below `opaque` covers each one.
- * An unbound `ref` can name a codec that holds a `held`. A
- * `withLegacyRead` reads an attribute through caller code. A field with a fallback reads a map
- * without the name to a value with the name.
- *
- * The walk reads each term once. A term that the walk meets again closes a cycle, and a cycle adds
- * no adapter that the first reading of the term did not find. So the walk ends, and a recursive
- * term below the top keeps its predicate.
- */
-const belowTop = (root: Term): boolean => {
-    const seen = new Set<Term>()
-    const adapts = (t: Term): boolean => {
-        if (seen.has(t)) return false
-        seen.add(t)
-        switch (t.kind) {
-            case 'ref': {
-                const target = targetOf(t)
-                return target === undefined || adapts(target)
-            }
-            case 'held':
-            case 'legacy':
-                return true
-            case 'refine':
-                return adapts(t.inner)
-            case 'set':
-                return adapts(t.elem)
-            case 'list':
-                return (
-                    t.pre.some(adapts) ||
-                    (t.spread !== undefined && adapts(t.spread)) ||
-                    t.suf.some(adapts)
-                )
-            case 'object':
-                return (
-                    Object.values(t.body.fields).some(
-                        (field) => field.mark === 'fallback' || adapts(field.t),
-                    ) ||
-                    (t.body.rest !== undefined && adapts(t.body.rest))
-                )
-            case 'union':
-                return t.options.some(adapts)
-            default:
-                return false
-        }
-    }
-    return !adapts(root)
-}
-
-/**
- * **The re-entered terms of a root**: each entry of each cycle of the term graph of the root
- * ({@link componentsOf}). The emitter prints an entry as a reference, so a path walk reads no
- * member at a re-entered term, as the model's `μG` reads none at a reference. A `ref` with no target
- * names no term, as {@link childrenOf} reads it.
- *
- * **The set holds every entry, not only the term that a walk meets on its own stack.** An entry
- * that the walk reads before its cycle closes is a reference in the print as well, and a set of
- * the stack alone read a member there, which the type and the model refuse.
- */
-export const reenteredOf = (root: Term): ReadonlySet<Term> =>
-    new Set(componentsOf([root]).flatMap(({ keys }) => [...keys.keys()]))
-
 /** A term that holds no other term. A component of the term graph never holds one. */
 export const leafKinds: ReadonlySet<Term['kind']> = new Set([
     'string',
@@ -1531,6 +1473,9 @@ export type Component = {
  * Tarjan closes them: a component comes after each component that it reaches. So an earlier
  * component is an earlier scope. `roots` holds each term that a root names. A term on no cycle is
  * in no component.
+ *
+ * **This reader builds the flat scope** ({@link flatOf} runs it), and the guard of `scope` runs it
+ * before the flat scope of the entries exists. So this reader reads the term.
  */
 export const componentsOf = (roots: readonly Term[]): readonly Component[] => {
     const index = new Map<Term, number>()
@@ -1616,7 +1561,12 @@ export type EntryOrder =
           readonly reason: string
       }
 
-/** The order of the entries of a component, or the reason that it has none. */
+/**
+ * The order of the entries of a component, or the reason that it has none.
+ *
+ * **This reader builds the flat scope**: the order is the order of the entries of the flat scope,
+ * and the guard of `scope` runs this reader before that scope exists. So this reader reads the term.
+ */
 export const entryOrder = (component: Component): EntryOrder => {
     const { members, keys } = component
     // a cycle of `ref`s alone names no term, so it reads its own input with no guard

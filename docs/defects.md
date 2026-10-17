@@ -226,32 +226,20 @@ the slice that keeps a member pinned through an adapter. No test declares a refi
 
 ---
 
-## Known: no vector puts the preconditions of the host to `Closed.preconditionOfC`
+## Partially mitigated: a clause whose type nests a map has no precondition vector
 
 **Observation.** The model states the precondition of a closed clause as data
 (`Closed.preconditionOfC`), and `Closed.preconditionOfC_exact` proves the precondition exact or
-refuses it. The host states the same
-data as `at(...).preconditions`, computed by `preconditionsOf(...)` in `src/codec/codec.ts`. The
-emitter has no form for a precondition. Measured 2026-10-09:
+refuses it. The host states the same data as `at(...).preconditions`. The emitter puts the host's
+preconditions to the model at each narrow path of the pool, as the rows `PreRowsC`, and one vector
+pins a clause key over an older reader. A clause whose type nests a map has no
+row.
 
-    grep -c -i precondition src/codec/lean.ts
-    0
+**Effect.** A host precondition that drifts from `Closed.preconditionOfC` at a clause whose type
+nests a map passes the gate.
 
-The path vectors state the decision of `at` and of `narrow(...)`, and no precondition.
-
-**Effect.** A host precondition that drifts from `Closed.preconditionOfC` passes the gate. The tests of
-the host pin each precondition form and the refusal of a clause key with no exact precondition.
-The refusal of an empty clause below the root has no test. Measured 2026-10-09: a mutant of
-`preconditionsOf(...)` that never refuses an empty clause passes `npx vitest --run src`, with 62
-files and 1349 tests passed, 9 skipped. A throwaway script shows that the refusal fires at HEAD:
-
-    object({ u: union([object({ k: number(1), a: string }), object({ k: number(2), b: string })]) })
-      .item.at((p) => p.u.narrow({}).a).preconditions
-      CodecError: the clause at 'u' names no key, so no precondition states that the attribute is a map
-
-**Pin.** `src/codec/spec/union/codec.preconditions.spec.ts`, on the host side only. No vector, and
-no test of the refusal of an empty clause.
-
+**Pin.** The rows `PreRowsC` in the path vectors, and `src/codec/spec/union/codec.preconditions.spec.ts`.
+The refusal of an empty clause below the root has no test.
 ---
 
 ## Known: a fragment that a refused scope bound overflows the stack in a second scope

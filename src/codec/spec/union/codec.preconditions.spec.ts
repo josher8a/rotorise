@@ -23,6 +23,7 @@ import {
     scope,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 
 describe('the preconditions of a path are the stored admission of each clause', () => {
@@ -68,6 +69,21 @@ describe('the preconditions of a path are the stored admission of each clause', 
         }).item
         expect(
             Untagged.at((p) => p.u.narrow({ a: opaque }).a).preconditions,
+        ).toEqual([{ segments: ['u', 'a'], exists: true }])
+    })
+
+    /**
+     * **A clause key over an older reader states that the attribute exists**, as the model's
+     * `termPreAt` does at `legacy`: the older reader reads every attribute, so the stored view of
+     * the key is `opaque`. A refusal here states a rule that the model does not state.
+     */
+    it('a clause key over withLegacyRead states that the attribute exists, as an opaque key does', () => {
+        const Untagged = object({
+            u: union([object({ a: string }), object({ b: number })]),
+        }).item
+        const older = withLegacyRead({ current: string, older: string })
+        expect(
+            Untagged.at((p) => p.u.narrow({ a: older }).a).preconditions,
         ).toEqual([{ segments: ['u', 'a'], exists: true }])
     })
 

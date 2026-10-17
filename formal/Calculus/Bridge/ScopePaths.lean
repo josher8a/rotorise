@@ -1,6 +1,7 @@
 import Calculus.Bridge.Kinds
 import Calculus.Bridge.Verdicts
 import Calculus.Dynamo.Analysis.ScopePath
+import Calculus.Dynamo.Analysis.ScopePrecondition
 
 /-!
 # The readings of a path row over a closed codec
@@ -8,7 +9,7 @@ import Calculus.Dynamo.Analysis.ScopePath
 A path row over a closed codec states the decision of `at` on the host, and the frontier of the
 graph at the path. `pathReadC` compares the two: the host gives a `HostAtC`, and the graph gives
 the frontier by `Rooted.at`, or after a clause by `narrowC` and the frontier of the rest of the
-path. `PathRowsC` and `NarrowRowsC` state the rows.
+path. `PathRowsC` and `NarrowRowsC` state the rows. `PreRowsC` states the precondition of a clause.
 
 **What a row says.** A refusal is no frontier. No
 codec is a frontier whose frames each have the head `never`. Some options is a frontier with a
@@ -78,11 +79,30 @@ def sameUpTo {N N' : Nat} (sL : Fin N → Alg.Scoped.Graph dynSig N)
 def frameSameC (f g : GFrame dynSig) : Bool :=
   sameUpTo f.d.graph g.d.graph (f.N * g.N + 1) [] f.t g.t
 
+/-- **One step of the head**: an entry reads its body, and any other term is its own head. -/
+def pathHeadStep {N : Nat} (k : Fin N → Alg.Scoped.Graph dynSig N) :
+    Alg.Scoped.Graph dynSig N → Alg.Scoped.Graph dynSig N
+  | .leaf j => k j
+  | t => t
+
 /-- **The head of a frame**: an entry reads its body. -/
-def pathHeadC (f : GFrame dynSig) : Nat → Alg.Scoped.Graph dynSig f.N → Alg.Scoped.Graph dynSig f.N
-  | 0, t => t
-  | n + 1, .leaf j => pathHeadC f n (f.d.graph j)
-  | _ + 1, t => t
+def pathHeadC (f : GFrame dynSig) (n : Nat) (t : Alg.Scoped.Graph dynSig f.N) :
+    Alg.Scoped.Graph dynSig f.N :=
+  Alg.Scoped.unfolding f.d.graph id pathHeadStep n t
+
+/-- **The head of a frame reads an entry only at the frame.** -/
+theorem pathHeadStep_local {N : Nat} (k k' : Fin N → Alg.Scoped.Graph dynSig N) :
+    ∀ t : Alg.Scoped.Graph dynSig N,
+      (∀ j, t.ulv (Alg.Scoped.TSig dynSig) j = true → k j = k' j) →
+        pathHeadStep k t = pathHeadStep k' t
+  | .leaf j, h => h j (by simp [Alg.Flat.ulv])
+  | .node _ _, _ => rfl
+
+/-- **The bound of a head is adequate.** A higher bound gives the head that the first bound gives. -/
+theorem pathHeadC_adequate (f : GFrame dynSig) (t : Alg.Scoped.Graph dynSig f.N) (m : Nat)
+    (hm : f.N + 1 ≤ m) : pathHeadC f m t = pathHeadC f (f.N + 1) t :=
+  Alg.Scoped.unfolding_adequate f.d.graph id pathHeadStep
+    (fun _ k k' h => pathHeadStep_local k k' _ h) (Alg.SSys.order f.d).1 t m hm
 
 /-- **A frame whose head is `never`**: an option that admits no value at the path. -/
 def frameNeverC (f : GFrame dynSig) : Bool :=
@@ -173,6 +193,11 @@ abbrev NarrowRowsC (os : List Closed) (rows : List (Closed × List (List Seg × 
       pathReadC (Alg.atG (GFrame.child (S := dynSyn)) r.1
         ((narrowC (S := dynSyn) .dual c.1.rooted (os.map Closed.rooted)).map Rooted.frame)) r.2) =
     rows.map (·.2.map (·.2.claim))
+
+/-- **The rows of the preconditions of a clause**: `Closed.preconditionOfC` at the path of the union
+    reads what the host states. A refusal of the host is `none`. -/
+abbrev PreRowsC (φ : Closed) (rows : List (List Seg × Option (List Cond))) : Prop :=
+  rows.map (fun r => φ.preconditionOfC r.1) = rows.map (·.2)
 
 /-- **One codec is its frontier**: the frames of the graph are one frame, and they are the
     recorded frames, one for one. -/

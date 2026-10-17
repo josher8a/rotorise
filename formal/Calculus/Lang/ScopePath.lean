@@ -104,10 +104,80 @@ def childG (sys : Fin N → Graph S.sig N) (k : Fin N → Option (List (Graph S.
       | .name _ => if apartG sys s (.node (.list n sp m) a) then some [] else none
   | t => if apartG sys s t then some [] else none
 
+end Frontier
+
+section Unfolding
+variable {B : Sig} {N : Nat}
+
+/-- **An unfolding search over the entries of a scope.** `step` reads the answer at an entry from
+    `k`. The answer at an entry is the search at one unfolding lower, on the body of the entry. An
+    empty bound answers `z`. -/
+def unfolding {X : Type} (sys : Fin N → Graph B N) (z : Graph B N → X)
+    (step : (Fin N → X) → Graph B N → X) : Nat → Graph B N → X
+  | 0, t => z t
+  | n + 1, t => step (fun j => unfolding sys z step n (sys j)) t
+
+/-- **A bound above the rank of an entry is stable.** The step reads `k` only at an unguarded entry
+    of the term. An unguarded edge lowers the entry, so the search at an entry reads no entry twice.
+    A bound that counts one unfolding above the entry gives the answer of each higher bound. -/
+theorem unfolding_stable {X : Type} (sys : Fin N → Graph B N) (z : Graph B N → X)
+    (step : (Fin N → X) → Graph B N → X)
+    (hloc : ∀ i k k', (∀ j, (sys i).ulv (TSig B) j = true → k j = k' j) →
+      step k (sys i) = step k' (sys i))
+    (hrank : ∀ i j, (sys i).ulv (TSig B) j = true → j.val < i.val) :
+    ∀ n m (i : Fin N), i.val < n → n ≤ m →
+      unfolding sys z step m (sys i) = unfolding sys z step n (sys i) := by
+  intro n
+  induction n with
+  | zero => intro _ _ h; exact absurd h (Nat.not_lt_zero _)
+  | succ n ih =>
+    intro m i hi hm
+    cases m with
+    | zero => exact absurd hm (Nat.not_succ_le_zero _)
+    | succ m =>
+      exact hloc i _ _ fun j hj => ih m j
+        (Nat.lt_of_lt_of_le (hrank i j hj) (Nat.le_of_lt_succ hi)) (Nat.le_of_succ_le_succ hm)
+
+/-- **The count of the entries plus one is an adequate bound.** The search at this bound answers as
+    the search at each higher bound, on each term. -/
+theorem unfolding_adequate {X : Type} (sys : Fin N → Graph B N) (z : Graph B N → X)
+    (step : (Fin N → X) → Graph B N → X)
+    (hloc : ∀ i k k', (∀ j, (sys i).ulv (TSig B) j = true → k j = k' j) →
+      step k (sys i) = step k' (sys i))
+    (hrank : ∀ i j, (sys i).ulv (TSig B) j = true → j.val < i.val) (t : Graph B N) (m : Nat)
+    (hm : N + 1 ≤ m) : unfolding sys z step m t = unfolding sys z step (N + 1) t := by
+  cases m with
+  | zero => exact absurd hm (Nat.not_succ_le_zero _)
+  | succ m =>
+    exact congrArg (fun k => step k t) (funext fun j =>
+      unfolding_stable sys z step hloc hrank N m j j.isLt (Nat.le_of_succ_le_succ hm))
+
+end Unfolding
+
+section Frontier
+variable {S : Syn} [Sem S] {N : Nat}
+
 /-- One segment, with a bound on the unfoldings of an entry. -/
-def childN (sys : Fin N → Graph S.sig N) : Nat → Seg → Graph S.sig N → Option (List (Graph S.sig N))
-  | 0, _, _ => none
-  | n + 1, s, t => childG sys (fun j => childN sys n s (sys j)) s t
+def childN (sys : Fin N → Graph S.sig N) (n : Nat) (s : Seg) (t : Graph S.sig N) :
+    Option (List (Graph S.sig N)) :=
+  unfolding sys (fun _ => none) (childG sys · s) n t
+
+/-- **The segment reads an entry only at an unguarded position.** A union reads the entry of each
+    option, and any other node reads none. -/
+theorem childG_local (sys : Fin N → Graph S.sig N) (s : Seg)
+    (k k' : Fin N → Option (List (Graph S.sig N))) :
+    ∀ t : Graph S.sig N, (∀ j, t.ulv (TSig S.sig) j = true → k j = k' j) →
+      childG sys k s t = childG sys k' s t := by
+  intro t
+  induction t with
+  | leaf j => intro h; exact h j (by simp [Flat.ulv])
+  | node o a ih =>
+    intro h
+    cases o with
+    | union m =>
+      exact congrArg (fun f => joinAll (List.ofFn f)) (funext fun p =>
+        ih p fun j hj => h j (Flat.ulv_node_iff.mpr ⟨rfl, p, hj⟩))
+    | _ => rfl
 
 end Frontier
 
@@ -139,6 +209,13 @@ def Rooted.frame {B : Sig} (r : Rooted B) : GFrame B := ⟨r.N, r.d, .leaf r.roo
     count of the entries plus the first step: an unguarded chain of entries visits each entry once. -/
 def GFrame.child (s : Seg) (f : GFrame S.sig) : Option (List (GFrame S.sig)) :=
   (childN f.d.graph (f.N + 1) s f.t).map (·.map fun t => ⟨f.N, f.d, t⟩)
+
+/-- **The bound of a frame is adequate.** A higher bound gives the children that the bound of the
+    frame gives. An unguarded chain of entries lowers the entry at each edge. -/
+theorem GFrame.child_adequate (f : GFrame S.sig) (s : Seg) (m : Nat) (hm : f.N + 1 ≤ m) :
+    childN f.d.graph m s f.t = childN f.d.graph (f.N + 1) s f.t :=
+  unfolding_adequate f.d.graph _ _
+    (fun _ k k' h => childG_local f.d.graph s k k' _ h) (SSys.order f.d).1 f.t m hm
 
 /-- **The frames at a path** into a closed codec. A refusal is `none`. -/
 def Rooted.at (r : Rooted S.sig) (π : List Seg) : Option (List (GFrame S.sig)) :=
@@ -547,7 +624,7 @@ theorem StepG.never (d : GSys τ N) (n : Nat) (a : (TOp.never (B := S.sig)).Pos 
 theorem StepG.opaq (d : GSys τ N) (n : Nat) (a : (TOp.opaq (B := S.sig)).Pos → Graph S.sig N)
     (s : Seg) : StepG τ d (n + 1) (.node .opaq a) s := by
   intro gs hgs A _
-  simp only [childN, childG, Option.some.injEq] at hgs
+  simp only [childN, unfolding, childG, Option.some.injEq] at hgs
   subst hgs
   exact Or.inr ⟨_, List.mem_singleton_self _, fun _ _ => rfl, fun _ _ _ _ => rfl⟩
 
@@ -612,7 +689,7 @@ theorem StepG.obj (d : GSys τ N) (n : Nat) {fs : Finset String} {md : {x // x �
     {w : Fin 2} (a : (TOp.obj fs md w (B := S.sig)).Pos → Graph S.sig N) (k : String) :
     StepG τ d (n + 1) (.node (.obj fs md w) a) (.name k) := by
   intro gs hgs A hA
-  simp only [childN, childG, Option.some.injEq] at hgs
+  simp only [childN, unfolding, childG, Option.some.injEq] at hgs
   subst hgs
   replace hA : ((TOp.run τ (.obj fs md w) fun p => mng τ d (a p)).p A).isSome = true := hA
   refine Or.inr ⟨_, List.mem_singleton_self _, ?_, ?_⟩
@@ -686,7 +763,7 @@ theorem StepG.list (d : GSys τ N) (k : Nat) {n m : Nat} {s : Fin 2}
     (a : (TOp.list n s m (B := S.sig)).Pos → Graph S.sig N) (i : Nat) :
     StepG τ d (k + 1) (.node (.list n s m) a) (.pos i) := by
   intro gs hgs A hA
-  simp only [childN, childG, Option.map_eq_some_iff] at hgs
+  simp only [childN, unfolding, childG, Option.map_eq_some_iff] at hgs
   obtain ⟨t, ht, rfl⟩ := hgs
   rcases hL : (Mean.list (B := S.sig)) with _ | L
   · replace hA : ((TOp.run τ (.list n s m) fun p => mng τ d (a p)).p A).isSome = true := hA
@@ -851,10 +928,10 @@ theorem childN_HL (sys : Fin N → Graph S.sig N) (e : Fin N → Mean.C S.sig)
       intro s gs hgs h g hg
       cases o with
       | never =>
-        simp only [childN, childG, Option.some.injEq] at hgs
+        simp only [childN, unfolding, childG, Option.some.injEq] at hgs
         subst hgs; exact nomatch hg
       | opaq =>
-        simp only [childN, childG, Option.some.injEq] at hgs
+        simp only [childN, unfolding, childG, Option.some.injEq] at hgs
         subst hgs; rw [List.mem_singleton.mp hg]; exact h
       | union m =>
         obtain ⟨_, hmem, go, rfl, hg'⟩ := joinAll_mem hgs hg
@@ -863,7 +940,7 @@ theorem childN_HL (sys : Fin N → Graph S.sig N) (e : Fin N → Mean.C S.sig)
       | obj fs md w =>
         cases s with
         | name k =>
-          simp only [childN, childG, Option.some.injEq] at hgs
+          simp only [childN, unfolding, childG, Option.some.injEq] at hgs
           subst hgs
           rw [List.mem_singleton.mp hg]
           unfold slotAtG
@@ -876,7 +953,7 @@ theorem childN_HL (sys : Fin N → Graph S.sig N) (e : Fin N → Mean.C S.sig)
       | list _ s' _ =>
         cases s with
         | pos i =>
-          simp only [childN, childG, Option.map_eq_some_iff] at hgs
+          simp only [childN, unfolding, childG, Option.map_eq_some_iff] at hgs
           obtain ⟨t, ht, rfl⟩ := hgs
           rw [List.mem_singleton.mp hg]
           rcases listChildG_mem ht with ht' | ht' | rfl

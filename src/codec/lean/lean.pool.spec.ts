@@ -1179,6 +1179,34 @@ const cycleMember = (): PathVectors => {
     return { name: 'path_cycle_member', codec: erase(A), paths: [['s', 'x']] }
 }
 
+/**
+ * **A clause key over an older reader**, beside the pool: the clause vocabulary holds literals
+ * only. The older reader reads every attribute, so the stored view of the key is `opaque`, and the
+ * precondition of the model at the key is `exists`. The row of the precondition puts the host to
+ * the model there.
+ */
+const legacyClause = (): PathVectors => ({
+    name: 'path_clause_legacy',
+    codec: erase(
+        object({
+            u: union([object({ a: string }), object({ b: number })]),
+        }),
+    ),
+    paths: [
+        [
+            'u',
+            {
+                narrow: {
+                    a: erase(
+                        withLegacyRead({ current: string, older: string }),
+                    ),
+                },
+            },
+            'a',
+        ],
+    ],
+})
+
 /** The files that the gate elaborates, by name, from one build of the pool. */
 const poolModules = (
     perSeed: ReturnType<typeof buildPool>,
@@ -1204,6 +1232,7 @@ const poolModules = (
             ...perSeed.flatMap((one) => one.paths),
             recursiveNarrowing(),
             cycleMember(),
+            legacyClause(),
         ],
         4,
     ).map((text, i) => [`.pool.paths${i}.lean`, text] as const),

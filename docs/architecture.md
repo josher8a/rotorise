@@ -530,9 +530,10 @@ store evaluates, `in`, `type` or `exists`. The precondition reads the stored vie
 a tag behind an adapter gives the test of its stored literal. The port states the precondition
 exactly or refuses: on an item, the precondition holds exactly where the stored view of the clause
 admits the attribute at the path of the union (`Closed.preconditionOfC_exact`). A literal, a union
-of literals at one base, a base, `opaque` and an open object whose slots are each required give a
-precondition. Every other stored view refuses, and so does an entry, and so does a clause with no
-key below the root. `Closed.narrow_law_precondition` is the narrowing law with the precondition in
+of literals at one base, a base, `opaque`, an older reader (an alternate reader, whose stored view
+is `opaque`) and an open object whose slots are each required give a precondition. An entry gives the
+precondition of its body. Every other stored view refuses, and so does a clause with no key below
+the root. `Closed.narrow_law_precondition` is the narrowing law with the precondition in
 place of the admission.
 Rotorise states the precondition as data and builds no expression string. An expression library
 renders the condition expression.
@@ -579,8 +580,8 @@ two declarations hold two frames (`two_frames_of_ambiguousC`).
 to `pathKindC` (`pathKindC_reads_no_closure`). There the host decides by the identity of the closure,
 and a row of two declarations has no certificate.
 
-No vector puts the host's preconditions to `Closed.preconditionOfC`: the host's tests pin each
-precondition form and each refusal.
+A vector puts the host's preconditions to `Closed.preconditionOfC` at each narrow path of the pool
+(`PreRowsC`). A clause whose type nests a map has no row, and the emitter states the reason.
 
 ---
 
