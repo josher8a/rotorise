@@ -264,6 +264,194 @@ describe('a term that holds no value is refused where never is', () => {
     })
 })
 
+describe('a chain of names holds no value when its last entry holds none, at any length', () => {
+    it('refuses a field that the row always writes at the end of a chain of 6 to 16 names, as the run time does', () => {
+        const c6 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 6 names
+        expect(() => object({ a: c6 })).toThrow(/declared at `never`/)
+        const c7 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 7 names
+        expect(() => object({ a: c7 })).toThrow(/declared at `never`/)
+        const c8 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 8 names
+        expect(() => object({ a: c8 })).toThrow(/declared at `never`/)
+        const c9 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 9 names
+        expect(() => object({ a: c9 })).toThrow(/declared at `never`/)
+        const c10 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 10 names
+        expect(() => object({ a: c10 })).toThrow(/declared at `never`/)
+        const c11 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 11 names
+        expect(() => object({ a: c11 })).toThrow(/declared at `never`/)
+        const c12 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: ref('A11'),
+            A11: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 12 names
+        expect(() => object({ a: c12 })).toThrow(/declared at `never`/)
+        const c13 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: ref('A11'),
+            A11: ref('A12'),
+            A12: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 13 names
+        expect(() => object({ a: c13 })).toThrow(/declared at `never`/)
+        const c14 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: ref('A11'),
+            A11: ref('A12'),
+            A12: ref('A13'),
+            A13: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 14 names
+        expect(() => object({ a: c14 })).toThrow(/declared at `never`/)
+        const c15 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: ref('A11'),
+            A11: ref('A12'),
+            A12: ref('A13'),
+            A13: ref('A14'),
+            A14: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 15 names
+        expect(() => object({ a: c15 })).toThrow(/declared at `never`/)
+        const c16 = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: ref('A11'),
+            A11: ref('A12'),
+            A12: ref('A13'),
+            A13: ref('A14'),
+            A14: ref('A15'),
+            A15: never,
+        }).A0
+        // @ts-expect-error the type reads the end of a chain of 16 names
+        expect(() => object({ a: c16 })).toThrow(/declared at `never`/)
+    })
+
+    it('admits a field at the end of a chain of names that holds a value', () => {
+        const chain = scope({
+            A0: ref('A1'),
+            A1: ref('A2'),
+            A2: ref('A3'),
+            A3: ref('A4'),
+            A4: ref('A5'),
+            A5: ref('A6'),
+            A6: ref('A7'),
+            A7: ref('A8'),
+            A8: ref('A9'),
+            A9: ref('A10'),
+            A10: ref('A11'),
+            A11: string,
+        }).A0
+        expect(() => object({ a: chain })).not.toThrow()
+    })
+})
+
 describe('an entry carries the capabilities of the node that its ref chain names', () => {
     it('offers the set of an entry whose node writes S, N or B, direct and through a ref', () => {
         const { S, A, L } = scope({ S: string, A: ref('S'), L: string('a') })

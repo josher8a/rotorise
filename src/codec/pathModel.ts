@@ -210,30 +210,30 @@ type Lookup<Env, N> = Env extends [infer H, ...infer R]
     : None
 
 /**
- * The fuel of a chain of names in a scope. A term enters a scope with this fuel, and a scope holds
- * no term of itself, so the reset ends.
+ * A chain of names reads each entry of a scope at most one time. `Seen` holds the entries that the
+ * chain read, as `['entry', D, K]`. An entry that `Seen` holds again closes a cycle that holds no
+ * container, and the chain stops there.
  */
-type ScopeFuel = [0, 0, 0, 0, 0, 0, 0, 0]
-type FuelOf<Env extends unknown[]> = Env extends [['scope', unknown]]
-    ? ScopeFuel
-    : [...Env, 0]
+type Listed<P, A> = A extends [infer Q, ...infer R]
+    ? FrameSame<P, Q> extends true
+        ? true
+        : Listed<P, R>
+    : false
 
 /**
  * **One frame for one entry.** An entry of a scope, or a `ref` that a scope binds, is the frame
  * of the definition of the entry, under the scope alone. So two paths to one entry give one frame,
  * as two paths to one term object give one term.
  */
-type Norm<T, Env, Fuel extends unknown[] = ScopeFuel> = Fuel extends [
-    unknown,
-    ...infer F2,
+type Norm<T, Env, Seen extends unknown[] = []> = EntryOf<T, Env> extends [
+    'some',
+    infer E,
+    infer M,
+    infer ME,
 ]
-    ? T extends ['scope', infer D, infer K]
-        ? Norm<D[K & keyof D], [['scope', D]], F2>
-        : T extends ['ref', infer N]
-          ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
-              ? Norm<M, [['scope', D]], F2>
-              : [T, Env]
-          : [T, Env]
+    ? Listed<E, Seen> extends true
+        ? [T, Env]
+        : Norm<M, ME, [E, ...Seen]>
     : [T, Env]
 
 /**
@@ -245,48 +245,47 @@ export type NodeOf<T> = Norm<T, []>[0]
 /**
  * **Whether a term holds no value**, the type of `holdsNoValue`: `never`, and a union whose every
  * option holds no value, each read at the node that a name names. An array of options with no fixed
- * length decides nothing. The fuel bounds a cycle with no container, which the guard refuses.
+ * length decides nothing. A repeated entry closes a cycle with no container, which the guard
+ * refuses, and holds a value.
  */
-export type HoldsNoValue<T> = EmptyAt<Norm<T, []>, ScopeFuel>
-type EmptyAt<N, Fuel extends unknown[]> = Fuel extends [
-    unknown,
-    ...infer F2 extends unknown[],
-]
-    ? N extends [infer T, infer Env]
-        ? T extends ['never']
-            ? true
-            : T extends ['union', infer Os]
-              ? EveryEmpty<Os, Env, F2>
-              : false
+export type HoldsNoValue<T> = EmptyAt<T, [], []>
+type EmptyAt<T, Env, Seen extends unknown[]> = T extends ['never']
+    ? true
+    : T extends ['union', infer Os]
+      ? EveryEmpty<Os, Env, Seen>
+      : EntryOf<T, Env> extends ['some', infer E, infer M, infer ME]
+        ? Listed<E, Seen> extends true
+            ? false
+            : EmptyAt<M, ME, [E, ...Seen]>
         : false
-    : false
-type EveryEmpty<Os, Env, Fuel extends unknown[]> = Os extends readonly []
+type EveryEmpty<Os, Env, Seen extends unknown[]> = Os extends readonly []
     ? true
     : Os extends readonly [infer H, ...infer R]
-      ? EmptyAt<Norm<H, Env>, Fuel> extends true
-          ? EveryEmpty<R, Env, Fuel>
+      ? EmptyAt<H, Env, Seen> extends true
+          ? EveryEmpty<R, Env, Seen>
           : false
       : false
 
 // ── `childD`, `childDL`, `childN`, `Frame.child` ──
-type ChildD<S, Env extends unknown[], T, Fuel extends unknown[]> = T extends [
+type ChildD<S, Env extends unknown[], T, Seen extends unknown[]> = T extends [
     'never',
 ]
     ? Some<[]>
     : T extends ['opaq']
       ? Some<[[T, Env]]>
-      : T extends ['scope', infer D, infer K]
-        ? ChildD<S, [['scope', D]], D[K & keyof D], ScopeFuel>
-        : T extends ['ref', infer N]
-          ? Lookup<Env, N> extends [
-                'some',
-                infer M,
-                infer Rest extends unknown[],
-            ]
-              ? ChildN<Fuel, S, M, Rest>
-              : Some<[]>
+      : EntryOf<T, Env> extends [
+              'some',
+              infer E,
+              infer M,
+              infer ME extends unknown[],
+          ]
+        ? Listed<E, Seen> extends true
+            ? None
+            : ChildD<S, ME, M, [E, ...Seen]>
+        : T extends ['ref', unknown]
+          ? Some<[]>
           : T extends ['union', infer Os]
-            ? ChildDL<S, Env, Os, Fuel>
+            ? ChildDL<S, Env, Os, Seen>
             : T extends ['object', ['mk', infer F, infer W]]
               ? S extends ['name', infer N]
                   ? Some<[Norm<SlotTerm<SlotAt<F, W, N>>, Env>]>
@@ -302,22 +301,16 @@ type ChildDL<
     S,
     Env extends unknown[],
     Os,
-    Fuel extends unknown[],
+    Seen extends unknown[],
 > = Os extends [infer H, ...infer R]
-    ? ChildD<S, Env, H, Fuel> extends ['some', infer A extends unknown[]]
-        ? ChildDL<S, Env, R, Fuel> extends ['some', infer B extends unknown[]]
+    ? ChildD<S, Env, H, Seen> extends ['some', infer A extends unknown[]]
+        ? ChildDL<S, Env, R, Seen> extends ['some', infer B extends unknown[]]
             ? Some<[...A, ...B]>
             : None
         : None
     : Some<[]>
-type ChildN<
-    Fuel extends unknown[],
-    S,
-    T,
-    Env extends unknown[],
-> = Fuel extends [unknown, ...infer F2] ? ChildD<S, Env, T, F2> : None
 type FrameChild<S, F> = F extends [infer T, infer Env extends unknown[]]
-    ? ChildN<FuelOf<Env>, S, T, Env>
+    ? ChildD<S, Env, T, []>
     : None
 
 // ── `Term.at`, one segment ──
@@ -329,19 +322,11 @@ type MapChild<S, Fs> = Fs extends [infer F, ...infer R]
         : None
     : Some<[]>
 // ── `pathHead`, `frameNever` ──
-type PathHead<Fuel extends unknown[], F> = Fuel extends [unknown, ...infer F2]
-    ? F extends [['scope', infer D, infer K], unknown]
-        ? PathHead<F2, [D[K & keyof D], [['scope', D]]]>
-        : F extends [['ref', infer N], infer Env]
-          ? Lookup<Env, N> extends ['some', infer M, infer Rest]
-              ? PathHead<F2, [M, Rest]>
-              : F
-          : F
-    : F
-type Head<F> = F extends [unknown, infer Env extends unknown[]]
-    ? PathHead<[...Env, 0, 0], F>
-    : F
-type FrameNever<F> = Head<F> extends [['never'], unknown] ? true : false
+type FrameNever<F> = F extends [infer T, infer Env]
+    ? Norm<T, Env> extends [['never'], unknown]
+        ? true
+        : false
+    : false
 
 /** `frameSame`: one datum at each position, as an exact type equality. */
 type FrameSame<F, G> = (<X>() => X extends F ? 1 : 2) extends <
@@ -397,20 +382,23 @@ export type KindOfFrames<Fs> = Fs extends [infer F, ...infer R]
  * What a frame offers one step down: `['name', K]` for the names that a head declares, `['open']`
  * where a head holds a rest or is opaque, and `['pos']` where a head is a list or is opaque.
  */
-type OffersD<Env extends unknown[], T, Fuel extends unknown[]> = T extends [
+type OffersD<Env extends unknown[], T, Seen extends unknown[]> = T extends [
     'opaq',
 ]
     ? ['open'] | ['pos']
-    : T extends ['scope', infer D, infer K]
-      ? OffersD<[['scope', D]], D[K & keyof D], ScopeFuel>
-      : T extends ['ref', infer N]
-        ? Lookup<Env, N> extends ['some', infer M, infer Rest extends unknown[]]
-            ? Fuel extends [unknown, ...infer F2]
-                ? OffersD<Rest, M, F2>
-                : never
-            : never
+    : EntryOf<T, Env> extends [
+            'some',
+            infer E,
+            infer M,
+            infer ME extends unknown[],
+        ]
+      ? Listed<E, Seen> extends true
+          ? never
+          : OffersD<ME, M, [E, ...Seen]>
+      : T extends ['ref', unknown]
+        ? never
         : T extends ['union', infer Os extends unknown[]]
-          ? { [I in keyof Os]: OffersD<Env, Os[I], Fuel> }[number]
+          ? { [I in keyof Os]: OffersD<Env, Os[I], Seen> }[number]
           : T extends ['object', ['mk', infer F, infer W]]
             ?
                   | ['name', keyof F & string]
@@ -421,7 +409,7 @@ type OffersD<Env extends unknown[], T, Fuel extends unknown[]> = T extends [
 export type OffersAt<Fs> = Fs extends unknown[]
     ? {
           [I in keyof Fs]: Fs[I] extends [infer T, infer Env extends unknown[]]
-              ? OffersD<Env, T, FuelOf<Env>>
+              ? OffersD<Env, T, []>
               : never
       }[number]
     : never
@@ -436,7 +424,7 @@ export type FirstFrame<Fs> = Fs extends [infer F, ...unknown[]] ? F : never
  * type computes: `opaque`, a cycle with no container, a set whose element has no member.
  */
 export type EncodedFrame<F> = F extends [infer T, infer Env]
-    ? MembersAt<T, Env, ScopeFuel> extends infer M
+    ? MembersAt<T, Env, []> extends infer M
         ? 'wide' extends M
             ? AttributeValue
             : Carrying<M & AttributeName>
@@ -447,31 +435,26 @@ export type EncodedFrame<F> = F extends [infer T, infer Env]
  * what the term under them writes, a union writes what its options write, and `never` writes
  * nothing.
  */
-type MembersAt<T, Env, Fuel extends unknown[]> = Fuel extends [
-    unknown,
-    ...infer F2 extends unknown[],
-]
-    ? T extends ['never']
-        ? never
-        : T extends ['scope', infer D, infer K]
-          ? MembersAt<D[K & keyof D], [['scope', D]], F2>
-          : T extends ['ref', infer N]
-            ? Lookup<Env, N> extends ['some', infer M, infer Rest]
-                ? MembersAt<M, Rest, F2>
-                : 'wide'
-            : T extends ['union', infer Os extends unknown[]]
-              ? { [I in keyof Os]: MembersAt<Os[I], Env, F2> }[number]
-              : T extends
-                      | ['held', unknown, infer I, ...unknown[]]
-                      | ['refine', infer I]
-                      | ['legacy', infer I]
-                ? MembersAt<I, Env, F2>
-                : StoredMember<T, Env> extends infer M
-                  ? M extends 'none'
-                      ? 'wide'
-                      : M
-                  : never
-    : 'wide'
+type MembersAt<T, Env, Seen extends unknown[]> = T extends ['never']
+    ? never
+    : EntryOf<T, Env> extends ['some', infer E, infer M, infer ME]
+      ? Listed<E, Seen> extends true
+          ? 'wide'
+          : MembersAt<M, ME, [E, ...Seen]>
+      : T extends ['ref', unknown]
+        ? 'wide'
+        : T extends ['union', infer Os extends unknown[]]
+          ? { [I in keyof Os]: MembersAt<Os[I], Env, Seen> }[number]
+          : T extends
+                  | ['held', unknown, infer I, ...unknown[]]
+                  | ['refine', infer I]
+                  | ['legacy', infer I]
+            ? MembersAt<I, Env, Seen>
+            : StoredMember<T, Env> extends infer M
+              ? M extends 'none'
+                  ? 'wide'
+                  : M
+              : never
 
 type Opt<S> = S extends ['optional', unknown] ? true : false
 type FloatOf<S> = S extends `${infer N extends number}` ? N : number
@@ -512,14 +495,14 @@ export type DecodeFrame<F> = F extends [infer T, infer Env extends unknown[]]
 /** The decoded type of a closed term, as of an entry of a scope. */
 export type DecodeTerm<T> = DecodeT<T, []>
 /*
- * `Fuel` bounds a chain of names with no list and no object between them. A guarded recursion
- * resets the fuel at its container, where the decoded type is lazy. An unguarded scope, which the
- * run time refuses, decodes to `never` and does not recurse without end.
+ * `Seen` holds the entries that a chain of names with no list and no object between them read. A
+ * guarded recursion starts a new chain at its container, where the decoded type is lazy. An
+ * unguarded scope, which the run time refuses, decodes to `never` and does not recurse without end.
  */
 type DecodeT<
     T,
     Env extends unknown[],
-    Fuel extends unknown[] = ScopeFuel,
+    Seen extends unknown[] = [],
 > = T extends ['prim', ['base', infer K]]
     ? DecodeBase<K>
     : T extends ['prim', ['literal', infer K, infer V]]
@@ -528,22 +511,21 @@ type DecodeT<
         ? never
         : T extends ['opaq']
           ? unknown
-          : T extends ['scope', infer D, infer K]
-            ? DecodeT<D[K & keyof D], [['scope', D]], Fuel>
-            : T extends ['ref', infer N]
-              ? Lookup<Env, N> extends [
-                    'some',
-                    infer M,
-                    infer Rest extends unknown[],
-                ]
-                  ? Fuel extends [unknown, ...infer F2 extends unknown[]]
-                      ? DecodeT<M, Rest, F2>
-                      : never
-                  : unknown
+          : EntryOf<T, Env> extends [
+                  'some',
+                  infer E,
+                  infer M,
+                  infer ME extends unknown[],
+              ]
+            ? Listed<E, Seen> extends true
+                ? never
+                : DecodeT<M, ME, [E, ...Seen]>
+            : T extends ['ref', unknown]
+              ? unknown
               : T extends ['set', infer E]
-                ? ReadonlySet<DecodeT<E, Env, Fuel>>
+                ? ReadonlySet<DecodeT<E, Env, Seen>>
                 : T extends ['union', infer Os extends unknown[]]
-                  ? { [I in keyof Os]: DecodeT<Os[I], Env, Fuel> }[number]
+                  ? { [I in keyof Os]: DecodeT<Os[I], Env, Seen> }[number]
                   : T extends [
                           'held',
                           unknown,
@@ -556,11 +538,11 @@ type DecodeT<
                         ? FloatLits<I>
                         : G extends ['caller', 'opaqueLossy' | 'opaqueRefuse']
                           ? unknown
-                          : DecodeT<O, Env, Fuel>
+                          : DecodeT<O, Env, Seen>
                     : T extends ['refine', infer I]
-                      ? DecodeT<I, Env, Fuel>
+                      ? DecodeT<I, Env, Seen>
                       : T extends ['legacy', infer I]
-                        ? DecodeT<I, Env, Fuel>
+                        ? DecodeT<I, Env, Seen>
                         : T extends [
                                 'list',
                                 infer Pre extends unknown[],
@@ -623,19 +605,6 @@ type DecodeObject<Fd, W, Env extends unknown[]> = ([ReqNames<Fd>] extends [
  * options of its union, or itself, through names. The frames of the narrowed node are the options
  * that the clause keeps ({@link Separates}).
  */
-type Resolved<
-    T,
-    Env extends unknown[],
-    Fuel extends unknown[] = ScopeFuel,
-> = Fuel extends [unknown, ...infer F2 extends unknown[]]
-    ? T extends ['scope', infer D, infer K]
-        ? Resolved<D[K & keyof D], [['scope', D]], F2>
-        : T extends ['ref', infer N]
-          ? Lookup<Env, N> extends ['some', infer M, [['scope', infer D]]]
-              ? Resolved<M, [['scope', D]], F2>
-              : [T, Env]
-          : [T, Env]
-    : [T, Env]
 type OptionsOf<F> = F extends [['union', infer Os extends unknown[]], infer Env]
     ? { [I in keyof Os]: [Os[I], Env] }
     : [F]
@@ -648,7 +617,6 @@ type OptionsOf<F> = F extends [['union', infer Os extends unknown[]], infer Env]
  * while the walk compares the two bodies: `A` holds the assumed pairs. `false` states nothing.
  * Two list shapes and the predicates of a refinement are not ported, and read as not apart.
  */
-type GraphFuel = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 /** An entry of a scope, as `['entry', D, K]` with its body and scope stack, or `None`. */
 type EntryOf<T, Env> = T extends ['scope', infer D, infer K]
     ? ['some', ['entry', D, K], D[K & keyof D], [['scope', D]]]
@@ -657,55 +625,47 @@ type EntryOf<T, Env> = T extends ['scope', infer D, infer K]
           ? ['some', ['entry', D, N], M, [['scope', D]]]
           : None
       : None
-type Assumed<P, A> = A extends [infer Q, ...infer R]
-    ? FrameSame<P, Q> extends true
-        ? true
-        : Assumed<P, R>
-    : false
-type ApartG<L, LE, R, RE, A extends unknown[], Fuel> = Fuel extends [
-    unknown,
-    ...infer F,
-]
-    ? RowG<L, LE, R, RE, A, F>
-    : false
-type RowG<L, LE, R, RE, A extends unknown[], F> = EntryOf<L, LE> extends [
+type ApartG<L, LE, R, RE, A extends unknown[]> = RowG<L, LE, R, RE, A>
+type RowG<L, LE, R, RE, A extends unknown[]> = EntryOf<L, LE> extends [
     'some',
     unknown,
     infer M,
     infer ME,
 ]
-    ? ApartG<M, ME, R, RE, A, F>
+    ? ApartG<M, ME, R, RE, A>
     : L extends ['ref', unknown]
-      ? RightG<L, LE, R, RE, A, F, ['none']>
+      ? RightG<L, LE, R, RE, A, ['none']>
       : L extends ['never']
         ? true
         : L extends
                 | ['held', unknown, infer I, ...unknown[]]
                 | ['refine', infer I]
-          ? RowG<I, LE, R, RE, A, F>
+          ? RowG<I, LE, R, RE, A>
           : L extends ['legacy', unknown] | ['opaq']
-            ? RightG<L, LE, R, RE, A, F, ['none']>
+            ? RightG<L, LE, R, RE, A, ['none']>
             : L extends ['union', infer Os extends unknown[]]
               ? false extends {
-                    [I in keyof Os]: RowG<Os[I], LE, R, RE, A, F>
+                    [I in keyof Os]: RowG<Os[I], LE, R, RE, A>
                 }[number]
                   ? false
                   : true
               : L extends ['prim', infer G]
-                ? RightG<L, LE, R, RE, A, F, ['prim', G]>
+                ? RightG<L, LE, R, RE, A, ['prim', G]>
                 : L extends ['set', infer E]
-                  ? RightG<L, LE, R, RE, A, F, ['set', E, LE]>
+                  ? RightG<L, LE, R, RE, A, ['set', E, LE]>
                   : L extends ['list', unknown, unknown, unknown]
-                    ? RightG<L, LE, R, RE, A, F, ['list']>
+                    ? RightG<L, LE, R, RE, A, ['list']>
                     : L extends ['object', ['mk', infer CF, infer CW]]
-                      ? RightG<L, LE, R, RE, A, F, ['obj', CF, CW, LE]>
+                      ? RightG<L, LE, R, RE, A, ['obj', CF, CW, LE]>
                       : false
 /** The rows of the right operand alone (`rightC`), then the family `Fam` of the left row. */
-type RightG<L, LE, R, RE, A extends unknown[], F, Fam> = EntryOf<
-    R,
-    RE
-> extends ['some', unknown, infer M, infer ME]
-    ? ApartG<L, LE, M, ME, A, F>
+type RightG<L, LE, R, RE, A extends unknown[], Fam> = EntryOf<R, RE> extends [
+    'some',
+    unknown,
+    infer M,
+    infer ME,
+]
+    ? ApartG<L, LE, M, ME, A>
     : R extends ['ref', unknown]
       ? false
       : R extends ['never']
@@ -713,15 +673,15 @@ type RightG<L, LE, R, RE, A extends unknown[], F, Fam> = EntryOf<
         : R extends
                 | ['held', unknown, infer I, ...unknown[]]
                 | ['refine', infer I]
-          ? RightG<L, LE, I, RE, A, F, Fam>
+          ? RightG<L, LE, I, RE, A, Fam>
           : R extends ['union', infer Os extends unknown[]]
             ? false extends {
-                  [I in keyof Os]: RightG<L, LE, Os[I], RE, A, F, Fam>
+                  [I in keyof Os]: RightG<L, LE, Os[I], RE, A, Fam>
               }[number]
                 ? false
                 : true
-            : FamG<Fam, R, RE, A, F>
-type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
+            : FamG<Fam, R, RE, A>
+type FamG<Fam, R, RE, A extends unknown[]> = Fam extends ['prim', infer G]
     ? R extends ['prim', infer G2]
         ? PrimsApartT<G, G2>
         : R extends
@@ -732,7 +692,7 @@ type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
           : false
     : Fam extends ['set', infer E, infer LE]
       ? R extends ['set', infer E2]
-          ? ApartG<E, LE, E2, RE, [], F>
+          ? ApartG<E, LE, E2, RE, []>
           : R extends
                   | ['prim', unknown]
                   | ['list', unknown, unknown, unknown]
@@ -753,8 +713,7 @@ type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
                                     LE,
                                     SlotTerm<SlotAt<F2, W2, K>>,
                                     RE,
-                                    A,
-                                    F
+                                    A
                                 >
                               : IsReqT<SlotAt<F2, W2, K>> extends true
                                 ? PairG<
@@ -762,8 +721,7 @@ type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
                                       LE,
                                       SlotTerm<SlotAt<F2, W2, K>>,
                                       RE,
-                                      A,
-                                      F
+                                      A
                                   >
                                 : false
                       }[keyof CF]
@@ -772,7 +730,7 @@ type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
                               ? false
                               : IsReqT<F2[K]> extends true
                                 ? CW extends ['some', infer B]
-                                    ? PairG<B, LE, SlotTerm<F2[K]>, RE, A, F>
+                                    ? PairG<B, LE, SlotTerm<F2[K]>, RE, A>
                                     : true
                                 : false
                       }[keyof F2]
@@ -788,18 +746,18 @@ type FamG<Fam, R, RE, A extends unknown[], F> = Fam extends ['prim', infer G]
 /** Whether a slot holds its name in the stored view: `req` only, as a `fallback` may lack it. */
 type IsReqT<S> = S extends ['req', unknown] ? true : false
 /** `pairX`: a pair of entries already assumed is apart, a new pair is assumed, and any other pair runs the row at the same fuel. */
-type PairG<X, XE, Y, YE, A extends unknown[], F> = EntryOf<X, XE> extends [
+type PairG<X, XE, Y, YE, A extends unknown[]> = EntryOf<X, XE> extends [
     'some',
     infer I,
     infer XM,
     infer XME,
 ]
     ? EntryOf<Y, YE> extends ['some', infer J, infer YM, infer YME]
-        ? Assumed<[I, J], A> extends true
+        ? Listed<[I, J], A> extends true
             ? true
-            : ApartG<XM, XME, YM, YME, [[I, J], ...A], F>
-        : ApartG<X, XE, Y, YE, A, F>
-    : ApartG<X, XE, Y, YE, A, F>
+            : ApartG<XM, XME, YM, YME, [[I, J], ...A]>
+        : ApartG<X, XE, Y, YE, A>
+    : ApartG<X, XE, Y, YE, A>
 /** `primsApart`: two kinds, or two literals of one kind with two texts. Bytes are not compared. */
 type PrimsApartT<G, G2> = G extends ['base' | 'literal', infer K, ...unknown[]]
     ? G2 extends ['base' | 'literal', infer K2, ...unknown[]]
@@ -826,7 +784,7 @@ type ClauseT<CT> = [
 
 /** Whether the clause separates an option. `CT` holds the term of the codec at each key. */
 type Separates<H, CT> = H extends [infer T0, infer E0 extends unknown[]]
-    ? ApartG<ClauseT<CT>, [], T0, E0, [], GraphFuel>
+    ? ApartG<ClauseT<CT>, [], T0, E0, []>
     : false
 type KeptOptions<Hs, CT> = Hs extends [infer H, ...infer R]
     ? Separates<H, CT> extends true
@@ -845,7 +803,7 @@ type NarrowEach<Fs, CT> = Fs extends [
     [infer T, infer Env extends unknown[]],
     ...infer R,
 ]
-    ? [...KeptOptions<OptionsOf<Resolved<T, Env>>, CT>, ...NarrowEach<R, CT>]
+    ? [...KeptOptions<OptionsOf<Norm<T, Env>>, CT>, ...NarrowEach<R, CT>]
     : []
 
 /**
@@ -860,7 +818,7 @@ export type HoldsFree<Fs> = Fs extends unknown[]
                       infer T,
                       infer Env extends unknown[],
                   ]
-                      ? Unbound<OptionsOf<Resolved<T, Env>>[number]>
+                      ? Unbound<OptionsOf<Norm<T, Env>>[number]>
                       : never
               }[number],
               [['ref', unknown], unknown]
