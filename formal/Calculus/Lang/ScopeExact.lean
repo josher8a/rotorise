@@ -712,6 +712,26 @@ section Exact
 variable {S : Syn} [Sem S] [Leaf S.sig] [Shapes S]
   {τ : (s : Bool) → TableAt S.sig s} {o : Orient} {setOk : S.sig.Ground → Bool}
 
+omit [Shapes S] in
+/-- **A refused pair has a common datum.** Two closed codecs of the fragment that `disjoint` does not
+    separate both accept one datum. -/
+theorem disjoint_false_witness (wl : WLaws S o setOk) {NL NR : Nat}
+    {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
+    (hL : ∀ i, Frag setOk (dL.graph i) = true) (hR : ∀ j, Frag setOk (dR.graph j) = true)
+    (hd : disjoint dL rL dR rR = false) : ∃ v : Mean.V (B := S.sig),
+      ((Closed.meaning τ dL rL).f o v).isSome = true ∧ ((Closed.meaning τ dR rR).f o v).isSome = true := by
+  have hO : decO dL.graph dR.graph (fuel NL NR) [] (.leaf rL) (.leaf rR) = false := by
+    cases hc : decO dL.graph dR.graph (fuel NL NR) [] (.leaf rL) (.leaf rR) with
+    | false => rfl
+    | true =>
+      have := decO_fuel_imp_decG dL.graph dR.graph (fun i => i.val) (fun j => j.val)
+        (Closed.fueled dL dR) rL rR hc
+      rw [disjoint] at hd
+      rw [hd] at this
+      exact nomatch this
+  obtain ⟨v, h1, h2⟩ := decO_complete (Closed.toG τ dL) (Closed.toG τ dR) wl hL hR _ [] _ _ rfl rfl hO
+  exact ⟨v, h1, h2⟩
+
 /-- **The decision is exact over the fragment.** Two closed codecs of the fragment share no datum
     exactly where `disjoint` answers `true`. The universe supplies the laws of the decision and
     their duals. -/
@@ -725,21 +745,28 @@ theorem disjoint_exact (laws : Laws S o) (wl : WLaws S o setOk) {NL NR : Nat}
   | true => rfl
   | false =>
     exfalso
-    have hO : decO dL.graph dR.graph (fuel NL NR) [] (.leaf rL) (.leaf rR) = false := by
-      cases hc : decO dL.graph dR.graph (fuel NL NR) [] (.leaf rL) (.leaf rR) with
-      | false => rfl
-      | true =>
-        have := decO_fuel_imp_decG dL.graph dR.graph (fun i => i.val) (fun j => j.val)
-          (Closed.fueled dL dR) rL rR hc
-        rw [disjoint] at hd
-        rw [hd] at this
-        exact nomatch this
-    obtain ⟨v, h1, h2⟩ := decO_complete (Closed.toG τ dL) (Closed.toG τ dR) wl hL hR _ [] _ _ rfl rfl hO
-    have h1' : ((Closed.meaning τ dL rL).f o v).isSome = true := h1
-    have h2' : ((Closed.meaning τ dR rR).f o v).isSome = true := h2
+    obtain ⟨v, h1, h2⟩ := disjoint_false_witness (τ := τ) wl hL hR hd
     have := h v
-    rw [h1', h2'] at this
+    rw [h1, h2] at this
     exact nomatch this
+
+/-- **Inhabitation is the self disjointness.** A closed codec of the fragment accepts a datum
+    exactly where `disjoint` answers `false` at the pair of the codec with itself. -/
+theorem inhabited_iff (laws : Laws S o) (wl : WLaws S o setOk) {N : Nat}
+    {d : Closed S.sig N} {r : Fin N} (h : ∀ i, Frag setOk (d.graph i) = true) :
+    (∃ v : Mean.V (B := S.sig), ((Closed.meaning τ d r).f o v).isSome = true) ↔
+      disjoint d r d r = false := by
+  constructor
+  · rintro ⟨v, hv⟩
+    cases hd : disjoint d r d r with
+    | false => rfl
+    | true =>
+      have := disjoint_sound (τ := τ) laws hd v
+      rw [hv] at this
+      exact nomatch this
+  · intro hd
+    obtain ⟨v, h1, _⟩ := disjoint_false_witness (τ := τ) wl h h hd
+    exact ⟨v, h1⟩
 
 end Exact
 

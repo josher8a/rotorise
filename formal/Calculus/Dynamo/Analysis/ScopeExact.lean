@@ -206,4 +206,12 @@ theorem Closed.disjoint_exact {x y : Closed} (hx : ∀ i, Scoped.Frag (S := dynS
       (((x.meaning α).f o v).isSome && ((y.meaning α).f o v).isSome) = false :=
   Scoped.disjoint_exact (S := dynSyn) (dynLaws o) (dynWLaws o) hx hy
 
+/-- **Inhabitation at DynamoDB.** A closed codec whose entries are in the fragment accepts a datum,
+    at one orientation and one table, exactly where `disjoint` answers `false` at the pair of the
+    codec with itself. -/
+theorem Closed.inhabited_iff {x : Closed} (hx : ∀ i, Scoped.Frag (S := dynSyn) dynSetOk (x.scope.graph i) = true)
+    (α : Table) (o : Orient) :
+    (∃ v : Value, ((x.meaning α).f o v).isSome = true) ↔ x.disjoint x = false :=
+  Scoped.inhabited_iff (S := dynSyn) (dynLaws o) (dynWLaws o) hx
+
 end Calculus

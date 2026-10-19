@@ -44,4 +44,13 @@ theorem closed_exact {τ : (s : Bool) → Alg.TableAt jsonSig s} {NL NR : Nat}
         ((Alg.Scoped.Closed.meaning τ dR rR).f o v).isSome) = false :=
   Alg.Scoped.disjoint_exact (S := jsonSyn) (jsonLaws o) (jsonWLaws o _) hL hR
 
+/-- **Inhabitation at JSON.** A closed codec whose entries are in the fragment accepts a datum
+    exactly where `disjoint` answers `false` at the pair of the codec with itself. -/
+theorem closed_inhabited_iff {τ : (s : Bool) → Alg.TableAt jsonSig s} {N : Nat}
+    {d : Alg.Scoped.Closed jsonSig N} {r : Fin N}
+    (h : ∀ i, Alg.Scoped.Frag (S := jsonSyn) (fun _ => false) (d.graph i) = true) (o : Alg.Orient) :
+    (∃ v : Json, ((Alg.Scoped.Closed.meaning τ d r).f o v).isSome = true) ↔
+      Alg.Scoped.disjoint d r d r = false :=
+  Alg.Scoped.inhabited_iff (S := jsonSyn) (jsonLaws o) (jsonWLaws o _) h
+
 end Calculus.JSON

@@ -109,8 +109,10 @@ Every other position answers the test:
 - A closure beside a finite admissible set applies its function to each alternative of the set.
   The answer is exact.
 
-**What the tree carries today.** `Scoped.disjoint` reads a raw `held`, a `legacy` and `opaq` as
-disjoint from the bottom alone. A `refine` reads through its inner term. So a closure over `boolean` that refuses every value is not disjoint
+**What the tree carries today.** Over the free fragment `Scoped.Frag` the test is exact
+(`Scoped.disjoint_exact`). The positions this entry names lie outside the fragment: `Scoped.disjoint`
+reads a raw `held`, a `legacy` and `opaq` as disjoint from the bottom alone. A `refine` reads through
+its inner term. So a closure over `boolean` that refuses every value is not disjoint
 from the literal `false`. The certificate reaches a `held` through its views (`Closed.viewsDisjoint`),
 and not through the test. `Closed.opaq_total` and `Closed.opaqA_total` state that `opaque` admits
 every value and every attribute. No theorem states when a `held` admits some value.
@@ -132,10 +134,11 @@ product of two domain idempotents, the value projections are disjoint exactly wh
 projections are. The premises are the retraction and the definedness of reads, which are fields
 of `LawfulCore`, so a term with an alternate reader still meets them.
 
-**What the tree carries today.** `Closed.AdmA` is a computable `Bool` at one attribute, the domain
-of the read of the meaning, and `#eval` runs it at DynamoDB. No declaration decides whether a term
-admits any value. The tree tests each side with `Scoped.disjoint` on the view of that side, and
-`Scoped.disjoint_sound` proves the test sound at each orientation.
+**What the tree carries today.** On the value side, over the free fragment, the decision exists:
+`Scoped.inhabited_iff` says that a closed codec admits a value exactly where `Scoped.disjoint` does not
+separate the codec from itself. No theorem derives the emptiness of the read side from the value
+side, and outside the fragment no declaration decides inhabitation. `Closed.AdmA` is a computable
+`Bool` at one attribute, the domain of the read of the meaning.
 
 **The exception is an adapter.** The certificate reads an adapter through its two views, and
 the future state keeps the views there.
@@ -198,8 +201,11 @@ union is refused where the codec works. Two functions kept in agreement by hand 
 nothing reports the drift.
 
 **What the tree carries today.** The meaning of a closed codec holds its own domains, and
-`Closed.AdmA` is the domain of its read. The certificate is a separate function, `Scoped.disjoint`, sound for the domains of the meaning
-(`Scoped.disjoint_sound`) and not complete for them.
+`Closed.AdmA` is the domain of its read. The certificate is a separate function, `Scoped.disjoint`,
+sound for the domains of the meaning (`Scoped.disjoint_sound`). Over the free fragment
+`Scoped.Frag` it is exact (`Scoped.disjoint_exact`): there the certificate answers `true` exactly
+where the two meanings share no value. Outside the fragment (a refinement, a fill, a `held`, a
+`legacy`, the top) it is sound and not complete.
 
 **What decides it.** A pass that adds a constructor, and so owes a row in both functions.
 
@@ -211,9 +217,9 @@ nothing reports the drift.
 parameter, as the disjointness test does. JSON then separates a union by the same certificate as
 DynamoDB.
 
-**What the tree carries today.** `Scoped.disjoint`, its soundness, and `Scoped.compatPair` are
-generic. A universe supplies its leaves, its shape classes and the laws `Scoped.Laws` that the
-decision reads, and JSON supplies each. `Closed.viewsDisjoint`, `certAllC`, `Closed.Separates` and
+**What the tree carries today.** `Scoped.disjoint`, its soundness and its exactness
+(`Scoped.disjoint_exact`), and `Scoped.compatPair` are generic. A universe supplies its leaves, its
+shape classes and the laws `Scoped.Laws` that the decision reads, and JSON supplies each. `Closed.viewsDisjoint`, `certAllC`, `Closed.Separates` and
 `Closed.pairwiseCompat_of_separated` read the closed codecs of DynamoDB, and JSON has none of them.
 
 **What decides it.** A second universe that needs a union of separated options.
