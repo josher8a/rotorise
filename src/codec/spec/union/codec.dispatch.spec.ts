@@ -80,31 +80,31 @@ const agreeOn = (all: readonly Option[], rows: readonly Row[]) => {
     return decoded
 }
 
-const assets = union([
-    object({ assetType: string('FIAT'), currency: string }),
-    object({ assetType: string('KIBBLE'), token: string }),
+const categories = union([
+    object({ category: string('DOG'), breed: string }),
+    object({ category: string('CAT'), coat: string }),
 ])
-const kinds = union([
-    object({ amountType: string('FIXED'), amount: decimal }),
-    object({ amountType: string('AUCTION'), min: decimal }),
-    object({ amountType: string('RENTAL'), max: decimal }),
+const listings = union([
+    object({ listing: string('SALE'), price: decimal }),
+    object({ listing: string('AUCTION'), startBid: decimal }),
+    object({ listing: string('RENTAL'), daily: decimal }),
 ])
 const statuses = union([
-    object({ status: string('PENDING') }),
-    object({ status: string('SETTLED'), adopterId: string }),
+    object({ status: string('AVAILABLE') }),
+    object({ status: string('ADOPTED'), adopterId: string }),
 ])
-const cross = product(assets, kinds, statuses)
+const cross = product(categories, listings, statuses)
 
 const cell = (a: number, k: number, s: number): Row => ({
     M: {
-        assetType: { S: ['FIAT', 'KIBBLE'][a] as string },
-        ...(a === 0 ? { currency: { S: 'USD' } } : { token: { S: 't' } }),
-        amountType: {
-            S: ['FIXED', 'AUCTION', 'RENTAL'][k] as string,
+        category: { S: ['DOG', 'CAT'][a] as string },
+        ...(a === 0 ? { breed: { S: 'beagle' } } : { coat: { S: 'tabby' } }),
+        listing: {
+            S: ['SALE', 'AUCTION', 'RENTAL'][k] as string,
         },
-        ...{ [['amount', 'min', 'max'][k] as string]: { N: '5' } },
-        status: { S: ['PENDING', 'SETTLED'][s] as string },
-        ...(s === 1 ? { adopterId: { S: 'p' } } : {}),
+        ...{ [['price', 'startBid', 'daily'][k] as string]: { N: '5' } },
+        status: { S: ['AVAILABLE', 'ADOPTED'][s] as string },
+        ...(s === 1 ? { adopterId: { S: 'owner-1' } } : {}),
     },
 })
 const crossRows = [0, 1].flatMap((a) =>
@@ -133,7 +133,7 @@ describe('a union of options that pin distinct literals decodes by the literals'
 
     it('answers a row that the named option refuses as attempting does', () => {
         const row = cell(1, 2, 1)
-        const damaged: Row = { M: { ...row.M, max: { S: 'not a number' } } }
+        const damaged: Row = { M: { ...row.M, daily: { S: 'not a number' } } }
         const fast = altSem(optionsOf(cross)).pair.decode(
             damaged as AttributeValue,
         )
@@ -174,60 +174,56 @@ describe('a union whose options pin no distinct literals still decodes', () => {
 })
 
 describe('a union of objects that differ only under a key decodes by the path', () => {
-    const amount = (assetType: string, amountType: string, extra: string) =>
+    const makePet = (category: string, listing: string, extra: string) =>
         object({
-            assetType: string(assetType),
-            amountType: string(amountType),
+            category: string(category),
+            listing: string(listing),
             [extra]: decimal,
         } as never)
-    const steps = union([
-        object({ id: string, amountIn: amount('FIAT', 'FIXED', 'amount') }),
-        object({ id: string, amountIn: amount('FIAT', 'VARIABLE', 'min') }),
+    const orders = union([
+        object({ id: string, pet: makePet('DOG', 'SALE', 'price') }),
+        object({ id: string, pet: makePet('DOG', 'AUCTION', 'startBid') }),
         object({
             id: string,
-            amountIn: amount('KIBBLE', 'FIXED', 'amount'),
+            pet: makePet('CAT', 'SALE', 'price'),
         }),
         object({
             id: string,
-            amountIn: amount('KIBBLE', 'VARIABLE', 'min'),
+            pet: makePet('CAT', 'AUCTION', 'startBid'),
         }),
     ])
-    const step = (
-        assetType: string,
-        amountType: string,
-        extra: string,
-    ): Row => ({
+    const order = (category: string, listing: string, extra: string): Row => ({
         M: {
             id: { S: 'i' },
-            amountIn: {
+            pet: {
                 M: {
-                    assetType: { S: assetType },
-                    amountType: { S: amountType },
+                    category: { S: category },
+                    listing: { S: listing },
                     [extra]: { N: '5' },
                 },
             },
         },
     })
     const valid = [
-        step('FIAT', 'FIXED', 'amount'),
-        step('FIAT', 'VARIABLE', 'min'),
-        step('KIBBLE', 'FIXED', 'amount'),
-        step('KIBBLE', 'VARIABLE', 'min'),
+        order('DOG', 'SALE', 'price'),
+        order('DOG', 'AUCTION', 'startBid'),
+        order('CAT', 'SALE', 'price'),
+        order('CAT', 'AUCTION', 'startBid'),
     ]
 
     it('gives the result and the message of attempting', () => {
         const damaged: Row[] = valid.flatMap((row): Row[] => [
-            { M: { ...row.M, amountIn: { S: 'oops' } } },
-            { M: { ...row.M, amountIn: { M: { assetType: { S: 'FIAT' } } } } },
+            { M: { ...row.M, pet: { S: 'oops' } } },
+            { M: { ...row.M, pet: { M: { category: { S: 'DOG' } } } } },
             { M: { id: { S: 'i' } } },
         ])
         expect(
-            agreeOn(optionsOf(steps), pool(valid).concat(damaged)),
+            agreeOn(optionsOf(orders), pool(valid).concat(damaged)),
         ).toBeGreaterThanOrEqual(4)
     })
 
     it('reads only the option that the literals under the key name', () => {
-        const { wrapped, calls } = counted(optionsOf(steps))
+        const { wrapped, calls } = counted(optionsOf(orders))
         const last = valid[3] as Row
         expect(
             failed(altSem(wrapped).pair.decode(last as AttributeValue)),
