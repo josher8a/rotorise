@@ -612,9 +612,10 @@ A dissection is a `union` of object members that are pairwise disjoint: two memb
 differ at a required literal name with disjoint alternatives, or the name intervals they declare
 cannot be satisfied at once. `select` admits an object option by attempt, as it admits every other
 option. The test certifies both cases: the two bodies are disjoint. A sub-selection of a
-certified union stays certified, because the certificate is `Pairwise` and `certAllC_sublist` keeps the certificate on a sublist. A
-tag table keyed by the discriminating literals is an index the host builds over such a union, and
-no term carries it.
+certified union stays certified, because the certificate is `Pairwise` and `certAllC_sublist` keeps the certificate on a sublist. The
+host decodes a certified union through an index over the literals that its options pin, at the root
+or under a key, and attempts the options where no such index exists. The index changes no answer,
+because the options are disjoint, and no term carries it.
 
 **The criterion is necessary and not sufficient.** A move can pass it and still not pay, when the
 bundling it invites re-threads the parts a stratum exists to bundle, or when it crosses a stated

@@ -48,6 +48,7 @@ import { agrees } from './scoped'
 import type { Alternatives, Body, Field, Literal, Term } from './term'
 import {
     alwaysWritten,
+    clauseLiteralsOf,
     cycleEntryOf,
     elementMember,
     holdsNoValue,
@@ -58,6 +59,7 @@ import {
     openRefusal,
     RecursionRefused,
     recursionUse,
+    resolvedTerm,
     storedAlternatives,
     member as termMember,
     unboundRefs,
@@ -578,6 +580,119 @@ export const restrict = (
     },
 })
 
+/** How many objects deep a key path may go. */
+const PIN_DEPTH = 3
+
+/**
+ * The string literals that an object term pins, by key path.
+ *
+ * A path names a key of the object that a required field holds. The pin is required, has no
+ * adapter, and has the base `string`. Each such pin is an upper bound on the stored value at the
+ * path, so an attribute with another literal there is outside the option.
+ */
+const pinsByPath = (
+    term: Term,
+    prefix: readonly string[],
+    out: Map<string, { path: readonly string[]; ls: readonly string[] }>,
+    depth: number,
+): void => {
+    if (term.kind !== 'object') return
+    for (const [name, form] of Object.entries(clauseLiteralsOf(term) ?? {})) {
+        if (
+            form.required &&
+            form.adapter === undefined &&
+            form.alts.base === 'string'
+        ) {
+            const path = [...prefix, name]
+            out.set(JSON.stringify(path), { path, ls: form.alts.ls })
+        }
+    }
+    if (depth === 0) return
+    for (const [name, field] of Object.entries(term.body.fields)) {
+        const inner = alwaysWritten(field) ? resolvedTerm(field.t) : undefined
+        if (inner) pinsByPath(inner, [...prefix, name], out, depth - 1)
+    }
+}
+
+/** A lookup from the stored literals at some key paths to the option that pins them. */
+type LiteralIndex = {
+    readonly paths: readonly (readonly string[])[]
+    readonly table: ReadonlyMap<string, Option>
+}
+
+/**
+ * The key paths at which every option pins a string literal, and no two options pin one tuple.
+ *
+ * An attribute has one tuple of literals at the paths. The tuples of two options never meet, so at
+ * most one option admits the attribute, and the lookup names that option. The search takes the
+ * smallest set of paths, up to six. No set gives no index, and the union attempts each option.
+ */
+const literalIndex = (all: readonly Option[]): LiteralIndex | undefined => {
+    if (all.length < 2) return undefined
+    const per = all.map((option) => {
+        const pins = new Map<
+            string,
+            { path: readonly string[]; ls: readonly string[] }
+        >()
+        pinsByPath(option.codec.def, [], pins, PIN_DEPTH)
+        return pins
+    })
+    const [head, ...others] = per
+    const common = [...(head?.keys() ?? [])].filter((id) =>
+        others.every((pins) => pins.has(id)),
+    )
+    const subsets = (size: number, from: number): string[][] =>
+        size === 0
+            ? [[]]
+            : common
+                  .slice(from)
+                  .flatMap((id, i) =>
+                      subsets(size - 1, from + i + 1).map((rest) => [
+                          id,
+                          ...rest,
+                      ]),
+                  )
+    for (let size = 1; size <= Math.min(common.length, 6); size++) {
+        for (const ids of subsets(size, 0)) {
+            const table = new Map<string, Option>()
+            let distinct = true
+            for (let at = 0; distinct && at < all.length; at++) {
+                let tuples: string[][] = [[]]
+                for (const id of ids) {
+                    const pinned = per[at]?.get(id)?.ls ?? []
+                    tuples = tuples.flatMap((t) => pinned.map((v) => [...t, v]))
+                    if (tuples.length > 64) distinct = false
+                }
+                for (const tuple of distinct ? tuples : []) {
+                    const key = JSON.stringify(tuple)
+                    if (table.has(key)) distinct = false
+                    table.set(key, all[at] as Option)
+                }
+            }
+            if (distinct) {
+                return {
+                    paths: ids.map((id) => per[0]?.get(id)?.path ?? []),
+                    table,
+                }
+            }
+        }
+    }
+    return undefined
+}
+
+/** The string stored at a key path, where each step is a map. */
+const storedStringAt = (
+    attribute: AttributeValue,
+    path: readonly string[],
+): string | undefined => {
+    let at: AttributeValue | undefined = attribute
+    for (const name of path) {
+        at = (at as { readonly M?: AttributeMap }).M?.[name]
+        if (at === undefined) return undefined
+    }
+    return (at as { readonly S?: string }).S
+}
+
 /**
  * The rule `(union)`'s resolution: which option an input is for, and the pair that follows.
  *
@@ -589,6 +704,7 @@ export const restrict = (
  */
 export const altSem = (
     all: readonly Option[],
+    dispatch = true,
 ): {
     readonly pair: Pair
     readonly only: <A>(
@@ -716,8 +832,37 @@ export const altSem = (
 
     type T = unknown
 
-    /** The same, from the stored side, where the member carried is what filters. */
+    /**
+     * The option that the stored literals name, where {@link literalIndex} finds key paths.
+     * `dispatch` is `false` for the reference that the tests compare against: it attempts.
+     */
+    let index: LiteralIndex | undefined | null = null
+    const named = (attribute: AttributeValue): Option | undefined => {
+        if (!dispatch) return undefined
+        if (index === null) index = literalIndex(all)
+        if (index === undefined) return undefined
+        const tuple: string[] = []
+        for (const path of index.paths) {
+            const literal = storedStringAt(attribute, path)
+            if (literal === undefined) return undefined
+            tuple.push(literal)
+        }
+        return index.table.get(JSON.stringify(tuple))
+    }
+
+    /**
+     * The same, from the stored side, where the member carried is what filters.
+     *
+     * **A lookup first, where the options pin distinct literals.** The option that the literals name
+     * reads the attribute, and a success answers. A failure falls through to the attempt, so the
+     * result and the message are the attempt's whatever the lookup found.
+     */
     const read = (attribute: AttributeValue): Result<T> => {
+        const hit = named(attribute)
+        if (hit !== undefined) {
+            const direct = hit.codec.decode(attribute) as Result<T>
+            if (!failed(direct)) return direct
+        }
         const member = memberOf(attribute)
         const carriedMap =
             member === 'M'
