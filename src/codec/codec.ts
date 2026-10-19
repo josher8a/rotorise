@@ -6190,6 +6190,8 @@ const patternRefusal = (
                 if (!sameBase) {
                     return `the pattern at '${name}' is a \`${form.form}\` literal${form.adapter ? ' under an adapter' : ''} and no member pins '${name}' at that base and adapter, so it describes no member whatever its alternatives; the bases pinned at '${name}' are ${[...new Set(pins.map((one) => one.form))].map((one) => `\`${one}\``).join(', ')}`
                 }
+            } else if (resolvedTerm(field.t)?.kind === 'refine') {
+                return `the pattern at '${name}' holds a refinement, and the host cannot decide whether a member lies inside a predicate. Pin the key to a literal, or slice the field first`
             } else {
                 const inner = patternRefusal(
                     here.map((mine) => mine.t),

@@ -194,35 +194,30 @@ repair is to route the remaining site through the same seam, not to write a rend
 
 ## Partially mitigated: the type level reads a literal off a type, and the term is what the runtime reads
 
-**Observation.** A clause pins a key at the term only where a literal constructor built the codec.
+**Observation.** A pattern pins a key at the term only where a literal constructor built the codec.
 The type reads that fact from the phantom mark literalMarker in `src/codec/codec.ts`: the literal
 overloads of `string`, `decimal`, `number` and `boolean` set the mark, `refine` over a marked codec
 keeps the mark, and `union` sets the mark where each option carries the mark. A caller's adapter
 and a `ref(...)` carry no mark. So `extract(...)`, `exclude(...)` and their result types read the same members
-as the runtime for a key pinned by a caller's adapter, and the result type of `exclude(...)` no longer
-omits a member that the runtime keeps. Three cases remain. The second and the third were measured
-2026-10-09 with throwaway scripts, `npx tsc --noEmit` and `vite-node`. The first was measured
-2026-10-10 with `npx tsc --noEmit` and the pin below:
+as the runtime for a key pinned by a caller's adapter. Two cases remain. The first was measured
+2026-10-10 with `npx tsc --noEmit` and the pin below. The second was measured 2026-10-19 with a
+throwaway spec:
 
     a key pinned through `ref('Colour')`, where the scope binds `Colour: string('red', 'blue')`
-      type checker: the clause on that key is refused
+      type checker: the pattern on that key is refused
       runtime:      the key is pinned, and the member is kept
-    u.extract({ k: refine(string('A', 'C'), (v): v is 'A' => v === 'A') })
+    u.extract(object({ k: refine(string('A', 'C'), (v): v is 'A' => v === 'A') }))
       type checker: accepted
-      runtime:      CodecError: the clause at 'k' is not a literal codec
-    held(string('a'), string, ...) at a member key
-      type checker: no clause names the key
-      runtime:      the key is pinned under the adapter
+      runtime:      CodecError: the pattern at 'k' holds a refinement
 
-**Effect.** A `ref(...)` carries the term of a name and no literal mark, so a clause cannot name a
-key pinned through a `ref(...)`. A refinement passes as a clause at the type, and the runtime
-refuses the clause at the call. A caller's adapter over a literal pins the literal at the runtime,
-and the type refuses the clause. Each case refuses: none gives a green typecheck and a wrong member
+**Effect.** A `ref(...)` carries the term of a name and no literal mark, so a pattern cannot name a
+key pinned through a `ref(...)`. A refinement passes as a pattern at the type, and the runtime
+refuses the pattern at the call. Each case refuses: none gives a green typecheck and a wrong member
 set.
 
 **Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the refusal of a key pinned through a
-`ref(...)`, the adapter clause refused at the type, the exclusion that keeps the adapter member, and
-the slice that keeps a member pinned through an adapter. No test declares a refinement as a clause.
+`ref(...)`, the exclusion that keeps the adapter member, and the slice that keeps a member pinned
+through an adapter. `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
 
 ---
 
@@ -272,7 +267,7 @@ Measured 2026-10-13 at 3838e2f: the type bridge holds 25 exclude refuse ids, and
 one is a binary literal. One example:
 
     const r = union([object({ a: binary(new Uint8Array([1, 2])) }), object({ c: string })])
-      .exclude({ a: binary(new Uint8Array([1, 2])) })
+      .exclude(object({ a: binary(new Uint8Array([1, 2])) }))
       runtime: member 0 dropped
       type: the decoded type of r still admits member 0
 

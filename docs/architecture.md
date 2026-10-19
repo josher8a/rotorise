@@ -522,6 +522,15 @@ read (`narrowC_reads`), and a dropped option reads nothing that the stored view 
 (`narrowC_drops`). The slice of a certified union (`AltClause.extractC`) keeps fewer options: the
 options that the clause describes.
 
+**The host takes the clause as a codec.** `extract(pattern)` keeps the options that fit the pattern,
+and `exclude(pattern)` keeps the rest. An option fits where every value that the option holds lies
+inside what the pattern holds. The host decides this on a fragment. A literal fits a literal of one
+base and adapter, and a literal fits its base. A base fits itself. An option fits a union that holds
+a member of the option. An object fits an object pattern that names a subset of its keys. Any other
+pair fits only where the two terms are one term. An object with a union at a field is the union of
+the objects (`Term.product_join`). So an option splits at each field that the pattern names, and the
+parts that fit stay. A dissection splits no member, because its tag table is keyed by literals.
+
 **The strong law after narrowing needs a condition on the update, and the port states the condition
 as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to
 another item can reach a dropped option. The DynamoDB port states the condition as a precondition

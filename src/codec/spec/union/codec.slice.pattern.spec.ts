@@ -18,6 +18,7 @@ import {
     object,
     optional,
     product,
+    refine,
     string,
     union,
 } from '../../codec'
@@ -282,6 +283,20 @@ describe('a pattern that describes no member is refused', () => {
             // @ts-expect-error a decimal literal at a key that the members pin to a string
             order.extract(object({ kind: decimal('1') }))
         expect(wrongBase).toThrow(CodecError)
+    })
+
+    /**
+     * A refinement narrows a literal by a predicate, and no function decides whether a member lies
+     * inside a closure. The type passes the pattern, because the refinement keeps the literal mark,
+     * so the run time refuses at the call and no empty slice stands for an answer.
+     */
+    it('refuses a pattern field that holds a refinement', () => {
+        const refined = refine(
+            string('ADOPT', 'RETURN'),
+            (v): v is 'ADOPT' => v === 'ADOPT',
+        )
+        const byPredicate = () => order.extract(object({ kind: refined }))
+        expect(byPredicate).toThrow(/holds a refinement/)
     })
 
     it('keeps no option for a literal at the right base that no member pins', () => {
