@@ -171,8 +171,8 @@ describe('a set element and a slice read the node that a ref names', () => {
             O: object({ m: string }),
             U: union([h, ref('O')]),
         })
-        expect(() => U.extract({ b: decimal('1') })).not.toThrow()
-        expect(() => U.exclude({ b: decimal('2.5') })).not.toThrow()
+        expect(() => U.extract(object({ b: decimal('1') }))).not.toThrow()
+        expect(() => U.exclude(object({ b: decimal('2.5') }))).not.toThrow()
     })
 })
 

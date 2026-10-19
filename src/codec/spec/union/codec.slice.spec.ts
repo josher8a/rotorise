@@ -8,7 +8,7 @@
  * no normalisation drops a constant key, because the codec writes the tag out of the member's own
  * field whatever the key set says.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
 import {
     binary,
@@ -45,7 +45,7 @@ describe('the extraction keeps the members a clause describes', () => {
      * one tag reaches one member, and naming two reaches the fibre over both.
      */
     it('keeps every member whose tags lie inside the clause set', () => {
-        const small = twoKey.extract({ size: string('small', 'large') })
+        const small = twoKey.extract(object({ size: string('small', 'large') }))
         // all three, because every member's `size` is one of the two named
         expect(
             small.unsafeEncode({ kind: 'pet', size: 'small', toy: 't' }),
@@ -68,7 +68,7 @@ describe('the extraction keeps the members a clause describes', () => {
     })
 
     it('drops the members the clause does not describe', () => {
-        const pets = twoKey.extract({ kind: string('pet') })
+        const pets = twoKey.extract(object({ kind: string('pet') }))
         // `food` is gone, so the codec that admitted it no longer does — which is the whole of
         // what an extraction is, and it is visible only as a refusal
         expect(
@@ -93,10 +93,12 @@ describe('the extraction keeps the members a clause describes', () => {
      * literal in every member's body, so every item still carries it.
      */
     it('keeps every key, so a one-member result still reads its key', () => {
-        const one = twoKey.extract({
-            kind: string('pet'),
-            size: string('large'),
-        })
+        const one = twoKey.extract(
+            object({
+                kind: string('pet'),
+                size: string('large'),
+            }),
+        )
         expect(one.item.keys).toEqual(['kind', 'size'])
         const written = one.unsafeEncode({
             kind: 'pet',
@@ -128,7 +130,7 @@ describe('the extraction keeps the members a clause describes', () => {
             object({ tier: string('gold', 'silver'), n: boolean }),
             object({ tier: string('bronze'), m: boolean }),
         ])
-        const none = spans.extract({ tier: string('gold') })
+        const none = spans.extract(object({ tier: string('gold') }))
         expect(none.def).toEqual({ kind: 'never' })
         expect(failed(none.encode({} as never))).toBe(true)
     })
@@ -146,12 +148,12 @@ describe('the extraction keeps the members a clause describes', () => {
             object({ tier: string('gold', 'silver'), n: boolean }),
             object({ tier: string('bronze'), m: boolean }),
         ])
-        expect(tiers.extract({ tier: string('gold') }).def).toEqual({
+        expect(tiers.extract(object({ tier: string('gold') })).def).toEqual({
             kind: 'never',
         })
-        expect(tiers.extract({ tier: string('gold', 'silver') }).def.kind).toBe(
-            'union',
-        )
+        expect(
+            tiers.extract(object({ tier: string('gold', 'silver') })).def.kind,
+        ).toBe('union')
     })
 })
 
@@ -170,7 +172,7 @@ describe('a clause is a literal at a base', () => {
     ])
 
     it('keeps the string member for a string literal', () => {
-        const kept = byBase.extract({ k: string('1') })
+        const kept = byBase.extract(object({ k: string('1') }))
         expect(kept.unsafeEncode({ k: '1', a: 'x' })).toEqual({
             M: { k: { S: '1' }, a: { S: 'x' } },
         })
@@ -178,7 +180,7 @@ describe('a clause is a literal at a base', () => {
     })
 
     it('keeps the decimal member for a decimal literal, at the same text', () => {
-        const kept = byBase.extract({ k: decimal('1') })
+        const kept = byBase.extract(object({ k: decimal('1') }))
         expect(kept.unsafeEncode({ k: '1', b: true } as never)).toEqual({
             M: { k: { N: '1' }, b: { BOOL: true } },
         })
@@ -196,10 +198,10 @@ describe('a clause is a literal at a base', () => {
         // so the cast is a caller reaching past it, which is who the runtime refusal is for. What
         // the type cannot catch is `string('1')` against `decimal('1')`: both decode to `'1'`, and
         // the base is exactly what an entity type does not carry
-        expect(() => byBase.extract({ k: number(1) } as never)).toThrow(
+        expect(() => byBase.extract(object({ k: number(1) }) as never)).toThrow(
             CodecError,
         )
-        expect(() => byBase.extract({ k: number(1) } as never)).toThrow(
+        expect(() => byBase.extract(object({ k: number(1) }) as never)).toThrow(
             /`number` literal under an adapter and no member pins 'k' at that base and adapter/,
         )
     })
@@ -219,7 +221,7 @@ describe('a clause is a literal at a base', () => {
             object({ t: toX, k: string('h') }),
             object({ k: string('p') }),
         ])
-        expect(() => viaX.extract({ t: string('a') } as never)).toThrow(
+        expect(() => viaX.extract(object({ t: string('a') }) as never)).toThrow(
             /`string` literal and no member pins 't' at that base and adapter/,
         )
     })
@@ -231,7 +233,7 @@ describe('a clause is a literal at a base', () => {
      * type as they do at run time, and the entity type of the result is the kept member's alone.
      */
     it('narrows the entity type to the member kept, and no further', () => {
-        const kept = byBase.extract({ k: string('1') })
+        const kept = byBase.extract(object({ k: string('1') }))
         // the kept member is exactly what the result carries, asserted both ways with no call
         type Kept = ReturnType<typeof kept.unsafeDecode>
         const read: { readonly k: '1'; readonly a: string } = {} as Kept
@@ -245,15 +247,21 @@ describe('a clause is a literal at a base', () => {
         kept.encode({ k: '1', b: true })
     })
 
-    it('refuses a clause value that is no literal at all', () => {
-        expect(() =>
-            // @ts-expect-error a bare tag says nothing about the base
-            byBase.extract({ k: '1' }),
-        ).toThrow(CodecError)
-        expect(() =>
-            // @ts-expect-error the plain base admits more than a literal does
-            byBase.extract({ k: string }),
-        ).toThrow(/is not a literal codec/)
+    /**
+     * **A base is a pattern too.** The argument is a codec, so `string` says "a key that holds a
+     * string", and a member whose key pins a string literal fits it. A member whose key holds
+     * another base does not.
+     */
+    it('keeps the members whose key fits a base codec', () => {
+        const kept = byBase.extract(object({ k: string }))
+        expect(kept.unsafeEncode({ k: '1', a: 'x' })).toEqual({
+            M: { k: { S: '1' }, a: { S: 'x' } },
+        })
+        expect(failed(kept.encode({ k: '1', b: true } as never))).toBe(true)
+        expectTypeOf<ReturnType<typeof kept.unsafeDecode>>().toEqualTypeOf<{
+            readonly k: '1'
+            readonly a: string
+        }>()
     })
 
     /**
@@ -273,12 +281,9 @@ describe('a clause is a literal at a base', () => {
             object({ t: string('z'), k: string('p') }),
         ])
         // the other member pins `t` at a plain string, so the clause is answered, and it keeps nothing
-        const plain = viaX.extract({ t: string('a') })
+        const plain = viaX.extract(object({ t: string('a') }))
         expect(plain.def).toEqual({ kind: 'never' })
-        const same = viaX.extract(
-            // @ts-expect-error a clause pins a literal at the type, and `toX` decodes `string`
-            { t: toX },
-        )
+        const same = viaX.extract(object({ t: toX }))
         expect(
             same.unsafeDecode({ M: { t: { S: 'a' }, k: { S: 'h' } } }),
         ).toEqual({ t: 'x', k: 'h' })
@@ -293,7 +298,7 @@ describe('a clause is a literal at a base', () => {
             object({ t: toText, k: string('h') }),
             object({ t: decimal('2'), k: string('p') }),
         ])
-        const text = viaText.extract({ t: decimal('1') })
+        const text = viaText.extract(object({ t: decimal('1') }))
         expect(text.def).toEqual({ kind: 'never' })
 
         const toTwo = held(dynamoNumber(one), number, {
@@ -305,7 +310,7 @@ describe('a clause is a literal at a base', () => {
             object({ t: toTwo, k: string('h') }),
             object({ t: number(3), k: string('p') }),
         ])
-        const two = viaTwo.extract({ t: number(1) })
+        const two = viaTwo.extract(object({ t: number(1) }))
         expect(two.def).toEqual({ kind: 'never' })
 
         // a library adapter carries one identity for each name, so its members stay kept
@@ -315,7 +320,7 @@ describe('a clause is a literal at a base', () => {
         ])
         expect(
             byDecimal
-                .extract({ t: decimal('1') })
+                .extract(object({ t: decimal('1') }))
                 .unsafeDecode({ M: { t: { N: '1' }, k: { S: 'a' } } }),
         ).toEqual({ t: '1', k: 'a' })
         const byNumber = union([
@@ -324,7 +329,7 @@ describe('a clause is a literal at a base', () => {
         ])
         expect(
             byNumber
-                .extract({ t: number(1) })
+                .extract(object({ t: number(1) }))
                 .unsafeDecode({ M: { t: { N: '1' }, k: { S: 'a' } } }),
         ).toEqual({ t: 1, k: 'a' })
     })
@@ -332,7 +337,7 @@ describe('a clause is a literal at a base', () => {
 
 describe('the exclusion is the complement of the same clause', () => {
     it('keeps exactly the members the extraction drops, over the same keys', () => {
-        const kept = twoKey.exclude({ kind: string('pet') })
+        const kept = twoKey.exclude(object({ kind: string('pet') }))
         expect(kept.item.keys).toEqual(['kind', 'size'])
         expect(
             kept.unsafeEncode({ kind: 'food', size: 'small', gram: true }),
@@ -355,7 +360,9 @@ describe('the exclusion is the complement of the same clause', () => {
     })
 
     it('answers never where the clause describes every member', () => {
-        expect(twoKey.exclude({ size: string('small', 'large') }).def).toEqual({
+        expect(
+            twoKey.exclude(object({ size: string('small', 'large') })).def,
+        ).toEqual({
             kind: 'never',
         })
     })
@@ -368,14 +375,18 @@ describe('the clause carries no order', () => {
      * clause are one clause.
      */
     it('gives the same result whichever order the keys are written in', () => {
-        const one = twoKey.extract({
-            kind: string('pet'),
-            size: string('large'),
-        })
-        const other = twoKey.extract({
-            size: string('large'),
-            kind: string('pet'),
-        })
+        const one = twoKey.extract(
+            object({
+                kind: string('pet'),
+                size: string('large'),
+            }),
+        )
+        const other = twoKey.extract(
+            object({
+                size: string('large'),
+                kind: string('pet'),
+            }),
+        )
         expect(one.def).toEqual(other.def)
     })
 
@@ -386,7 +397,7 @@ describe('the clause carries no order', () => {
      */
     it('drops the member from the slice, so a clause that keeps only that member is a type error', () => {
         const Holder = object({
-            x: twoKey.extract({ kind: string('pet') }),
+            x: twoKey.extract(object({ kind: string('pet') })),
         }).item
         expect(
             Holder.at(
@@ -401,10 +412,11 @@ describe('the clause carries no order', () => {
 
     it('gives the same members whichever order they were declared in', () => {
         const reversed = mdunion(['kind', 'size'], [food, dog, pet])
-        const fromOne = twoKey.extract({ kind: string('pet') }).def as {
+        const fromOne = twoKey.extract(object({ kind: string('pet') })).def as {
             readonly options: readonly unknown[]
         }
-        const fromOther = reversed.extract({ kind: string('pet') }).def as {
+        const fromOther = reversed.extract(object({ kind: string('pet') }))
+            .def as {
             readonly options: readonly unknown[]
         }
         // the same two members, and the declaration order each was written in is what each keeps —
@@ -423,18 +435,18 @@ describe('a clause key no member pins is refused', () => {
      */
     it('names the keys a clause may use', () => {
         expect(() =>
-            twoKey.extract({ colour: string('red') } as never),
+            twoKey.extract(object({ colour: string('red') }) as never),
         ).toThrow(CodecError)
         expect(() =>
-            twoKey.extract({ colour: string('red') } as never),
+            twoKey.extract(object({ colour: string('red') }) as never),
         ).toThrow(/'kind', 'size'/)
     })
 
     it('refuses a key declared without a literal, which pins nothing', () => {
         // `toy` is declared by one member and is a plain `string`, so no clause can select on it
-        expect(() => twoKey.extract({ toy: string('t') } as never)).toThrow(
-            CodecError,
-        )
+        expect(() =>
+            twoKey.extract(object({ toy: string('t') }) as never),
+        ).toThrow(CodecError)
     })
 
     /**
@@ -455,7 +467,7 @@ describe('a clause key no member pins is refused', () => {
         const viaRef = mdunion(['kind', 'size'], [pet, Large])
         const kept = viaRef.extract(
             // @ts-expect-error the type reads no literal mark through a ref
-            { colour: string('red', 'blue') },
+            object({ colour: string('red', 'blue') }),
         )
         // the runtime answers for a caller who reaches past the type
         expect(
@@ -490,7 +502,7 @@ describe('a clause key no member pins is refused', () => {
         const viaOption = mdunion(['kind', 'size'], [pet, Large])
         const kept = viaOption.extract(
             // @ts-expect-error the type reads no literal mark through a ref
-            { colour: string('red', 'blue') },
+            object({ colour: string('red', 'blue') }),
         )
         expect(
             kept.unsafeEncode({
@@ -530,19 +542,19 @@ describe('the type pins a key only where a literal constructor built the codec',
     ])
 
     it('answers a literal that only an adapter decodes to with no member, because a plain clause never meets an adapter', () => {
-        const kept = adapterOrB.extract({ k: string('A') })
+        const kept = adapterOrB.extract(object({ k: string('A') }))
         expect(kept.def).toEqual({ kind: 'never' })
     })
 
     it('accepts a literal that a literal constructor pins', () => {
-        const kept = adapterOrB.extract({ k: string('B') })
+        const kept = adapterOrB.extract(object({ k: string('B') }))
         expect(
             kept.unsafeDecode({ M: { k: { S: 'B' }, b: { S: 'y' } } }),
         ).toEqual({ k: 'B', b: 'y' })
     })
 
     it('keeps the adapter member in the exclusion, as the runtime keeps it', () => {
-        const rest = threeWays.exclude({ k: string('A') })
+        const rest = threeWays.exclude(object({ k: string('A') }))
         // the type of the result admits the row of the adapter member, which the runtime decodes
         const adapterRow: ReturnType<typeof rest.unsafeDecode> = {
             k: 'A',
@@ -554,7 +566,7 @@ describe('the type pins a key only where a literal constructor built the codec',
     })
 
     it('drops the adapter member from the extraction, as the runtime drops it', () => {
-        const kept = threeWays.extract({ k: string('A') })
+        const kept = threeWays.extract(object({ k: string('A') }))
         const adapterRow: ReturnType<typeof kept.unsafeDecode> = {
             k: 'A',
             // @ts-expect-error the extraction keeps the member with the literal only
@@ -580,7 +592,7 @@ describe('a union of objects has the same slice', () => {
     ])
 
     it('keeps the options the clause describes, and rebuilds a union', () => {
-        const kept = plain.extract({ kind: string('a', 'b') })
+        const kept = plain.extract(object({ kind: string('a', 'b') }))
         expect(kept.def.kind).toBe('union')
         expect(kept.unsafeEncode({ kind: 'a', x: 'v' })).toEqual({
             M: { kind: { S: 'a' }, x: { S: 'v' } },
@@ -595,7 +607,7 @@ describe('a union of objects has the same slice', () => {
      * answer (`Calculus.AltClause.keyedC`).
      */
     it('answers a tag no option carries with no member, at the type as at run time', () => {
-        const none = plain.extract({ kind: string('z') })
+        const none = plain.extract(object({ kind: string('z') }))
         expect(none.def).toEqual({ kind: 'never' })
     })
 
@@ -606,7 +618,7 @@ describe('a union of objects has the same slice', () => {
      * certifies, so rebuilding through `union` is how the host keeps it.
      */
     it('rebuilds through the declaration guard rather than assembling the term', () => {
-        const kept = plain.exclude({ kind: string('c') })
+        const kept = plain.exclude(object({ kind: string('c') }))
         // two options with one name set, told apart by their required literals — which stands only
         // because structural admission decides it, and the guard is what says so
         expect(
@@ -622,7 +634,7 @@ describe('discriminatedUnion slices like the dissection it is', () => {
     ])
 
     it('keeps the variant named and still reads its discriminator', () => {
-        const only = visit.extract({ type: string('CHECKUP') })
+        const only = visit.extract(object({ type: string('CHECKUP') }))
         const written = only.unsafeEncode({ type: 'CHECKUP', petId: 'p1' })
         expect(written).toEqual({
             M: { type: { S: 'CHECKUP' }, petId: { S: 'p1' } },
@@ -635,7 +647,7 @@ describe('discriminatedUnion slices like the dissection it is', () => {
     })
 
     it('excludes it and leaves the other', () => {
-        const rest = visit.exclude({ type: string('CHECKUP') })
+        const rest = visit.exclude(object({ type: string('CHECKUP') }))
         expect(rest.unsafeEncode({ type: 'SHOT', vaccine: 'v' })).toEqual({
             M: { type: { S: 'SHOT' }, vaccine: { S: 'v' } },
         })
@@ -660,14 +672,14 @@ describe('a clause at a literal whose carrier is no primitive', () => {
             object({ k: string('a'), n: dynamoNumber(one) }),
             object({ k: string('b'), n: dynamoNumber(two) }),
         ])
-        const kept = byNumeral.extract({ n: dynamoNumber(one) })
+        const kept = byNumeral.extract(object({ n: dynamoNumber(one) }))
         expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
             M: { k: { S: 'a' }, n: { N: '1' } },
         })
         // @ts-expect-error the run time drops the member at `2`, and the type compares the numerals
         expect(failed(kept.encode({ k: 'b', n: two }))).toBe(true)
 
-        const rest = byNumeral.exclude({ n: dynamoNumber(one) })
+        const rest = byNumeral.exclude(object({ n: dynamoNumber(one) }))
         expect(rest.unsafeEncode({ k: 'b', n: two })).toEqual({
             M: { k: { S: 'b' }, n: { N: '2' } },
         })
@@ -680,9 +692,11 @@ describe('a clause at a literal whose carrier is no primitive', () => {
             object({ k: string('a'), n: dynamoNumber(one) }),
             object({ k: string('b'), n: dynamoNumber(two) }),
         ])
-        const kept = byNumeral.extract({
-            n: dynamoNumber(orThrow(DynamoNumber.from('1.0'))),
-        })
+        const kept = byNumeral.extract(
+            object({
+                n: dynamoNumber(orThrow(DynamoNumber.from('1.0'))),
+            }),
+        )
         expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
             M: { k: { S: 'a' }, n: { N: '1' } },
         })
@@ -695,9 +709,11 @@ describe('a clause at a literal whose carrier is no primitive', () => {
             object({ k: string('a'), n: dynamoNumber(one) }),
             object({ k: string('b'), n: dynamoNumber(two) }),
         ])
-        const none = byNumeral.extract({
-            n: dynamoNumber(orThrow(DynamoNumber.from('3'))),
-        })
+        const none = byNumeral.extract(
+            object({
+                n: dynamoNumber(orThrow(DynamoNumber.from('3'))),
+            }),
+        )
         expect(none.def).toEqual({ kind: 'never' })
         // @ts-expect-error the run time keeps no member, and the type compares the numerals
         expect(failed(none.encode({ k: 'a', n: one }))).toBe(true)
@@ -709,9 +725,11 @@ describe('a clause at a literal whose carrier is no primitive', () => {
             object({ k: string('a'), n: dynamoNumber(one) }),
             object({ k: string('b'), n: dynamoNumber(two) }),
         ])
-        const kept = byNumeral.extract({
-            n: dynamoNumber(orThrow(DynamoNumber.from(spelled))),
-        })
+        const kept = byNumeral.extract(
+            object({
+                n: dynamoNumber(orThrow(DynamoNumber.from(spelled))),
+            }),
+        )
         expect(kept.unsafeEncode({ k: 'a', n: one })).toEqual({
             M: { k: { S: 'a' }, n: { N: '1' } },
         })
@@ -727,7 +745,7 @@ describe('a clause at a literal whose carrier is no primitive', () => {
             object({ k: string('a'), b: binary(ab) }),
             object({ k: string('b'), b: binary(cd) }),
         ])
-        const kept = byBytes.extract({ b: binary(ab) })
+        const kept = byBytes.extract(object({ b: binary(ab) }))
         expect(kept.unsafeEncode({ k: 'a', b: ab })).toEqual({
             M: { k: { S: 'a' }, b: { B: ab } },
         })

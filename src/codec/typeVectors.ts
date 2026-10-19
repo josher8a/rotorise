@@ -36,7 +36,7 @@
 import { createHash } from 'node:crypto'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec } from './codec'
-import { number } from './codec'
+import { number, object } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, leanClosedOf, reachable } from './lean'
@@ -639,11 +639,11 @@ const keptOptions = (
 
 /** The run-time slice, or nothing where the run time refuses the clause. */
 const sliced = (
-    run: (clause: Readonly<Record<string, AnyCodec>>) => AnyCodec,
+    run: (pattern: AnyCodec) => AnyCodec,
     clause: Readonly<Record<string, AnyCodec>>,
 ): readonly Term[] | undefined => {
     try {
-        return membersOf(run(clause).def)
+        return membersOf(run(object(clause)).def)
     } catch (error) {
         if (!(error instanceof CodecError)) throw error
         return undefined
@@ -704,9 +704,11 @@ const sliceRoot = (
         for (const make of vocabulary)
             for (const op of ['extract', 'exclude'] as const) {
                 const clause = { [name]: make() }
-                const text = `${op}({ ${keyText(name)}: ${p.clause(make())} })`
+                const spelled = p.clause(make())
+                const text = `${op}({ ${keyText(name)}: ${spelled} })`
+                const call = `${op}(object({ ${keyText(name)}: ${spelled} }))`
                 const kept = sliced(slice.codec[op], clause)
-                const call = rowId(
+                const callRow = rowId(
                     'call',
                     kept === undefined ? 'refuse' : 'accept',
                     root,
@@ -716,10 +718,10 @@ const sliceRoot = (
                 assert(
                     b,
                     {
-                        id: call,
+                        id: callRow,
                         expect: kept === undefined ? 'refuse' : 'accept',
                     },
-                    `const r = C.${p.full('root')}.${text}`,
+                    `const r = C.${p.full('root')}.${call}`,
                 )
                 if (kept !== undefined)
                     keptOptions(options, kept).forEach((keeps, i) => {
@@ -734,7 +736,7 @@ const sliceRoot = (
                                     `${text} member ${i}`,
                                 ),
                                 expect,
-                                after: call,
+                                after: callRow,
                             },
                             `const m${i}: Decoded<typeof r> = C.${p.full(`m${i}`)}`,
                         )
@@ -895,7 +897,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { binary, boolean, decimal, dynamoNumber, number, string } from '${library}/codec'`,
+    `import { binary, boolean, decimal, dynamoNumber, number, object, string } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",

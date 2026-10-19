@@ -215,11 +215,13 @@ describe('an entry of a scope', () => {
         type TP = { readonly k: 'a'; readonly next?: TP } | { readonly k: 'b' }
         const row: TP = { k: 'a', next: { k: 'b' } }
         expect(P.item.decode(P.item.unsafeEncode(row))).toEqual(row)
-        const kept = P.extract({ k: string('a') })
+        const kept = P.extract(object({ k: string('a') }))
         const one: Decoded<typeof kept> = { k: 'a', next: { k: 'a' } }
         expect(kept.decode(kept.unsafeEncode(one))).toEqual(one)
         expect(kept.decode({ M: { k: { S: 'b' } } })).toBeInstanceOf(CodecError)
-        expect(P.exclude({ k: string('a') }).unsafeEncode({ k: 'b' })).toEqual({
+        expect(
+            P.exclude(object({ k: string('a') })).unsafeEncode({ k: 'b' }),
+        ).toEqual({
             M: { k: { S: 'b' } },
         })
     })
@@ -364,7 +366,7 @@ describe('the free names of a codec', () => {
             object({ t: string('b') }),
         ])
         // @ts-expect-error a use needs a closed codec
-        expect(() => options.extract({ t: string('a') })).toThrow(free)
+        expect(() => options.extract(object({ t: string('a') }))).toThrow(free)
     })
 
     it('closes a fragment that a scope binds, and the entry is the codec to use', () => {

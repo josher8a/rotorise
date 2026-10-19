@@ -77,13 +77,14 @@ import type {
     Term,
 } from './term'
 import {
+    alwaysWritten,
     clauseForm,
-    clauseLiteralsOf,
     holdsNoValue,
     literalAlternatives,
     member as memberOf,
     openRefusal,
     ownsNullOf,
+    pinnedForm,
     refuseSlots,
     resolvedTerm,
     sameAdapter,
@@ -3718,22 +3719,22 @@ export type DiscriminatedCodec<
      * filtered in step with the entity union, and the two are matched by their decoded types rather
      * than positionally.
      */
-    readonly extract: <const C extends ClauseOf<Spec[keyof Spec]>>(
+    readonly extract: <const P extends AnyCodec>(
         this: Closed,
-        clause: C & ValidateClause<Spec[keyof Spec], C>,
+        pattern: P & ValidatePattern<Spec[keyof Spec], P>,
     ) => DiscriminatedCodec<
-        VariantsOf<KeptByTag<Spec, C>>,
+        VariantsOf<KeptByTag<Spec, P>>,
         D,
-        KeptByTag<Spec, C>
+        KeptByTag<Spec, P>
     >
-    /** …and the members it rejects, the complement of the same clause. */
-    readonly exclude: <const C extends ClauseOf<Spec[keyof Spec]>>(
+    /** …and the members it rejects, the complement of the same pattern. */
+    readonly exclude: <const P extends AnyCodec>(
         this: Closed,
-        clause: C & ValidateClause<Spec[keyof Spec], C>,
+        pattern: P & ValidatePattern<Spec[keyof Spec], P>,
     ) => DiscriminatedCodec<
-        VariantsOf<KeptByTag<Spec, C, false>>,
+        VariantsOf<KeptByTag<Spec, P, false>>,
         D,
-        KeptByTag<Spec, C, false>
+        KeptByTag<Spec, P, false>
     >
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
@@ -3791,23 +3792,23 @@ export type DissectedCodec<
     readonly item: Dissected<T, Ks, Specs> & Free<F>
     /** The free names of this codec. Type-level only. */
     readonly [freeMarker]?: [F]
-    /** **The members a clause keeps**, over the same keys — or `never` where it keeps none. */
-    readonly extract: <const C extends ClauseOf<Specs[number]>>(
+    /** **The members a pattern keeps**, over the same keys — or `never` where it keeps none. */
+    readonly extract: <const P extends AnyCodec>(
         this: Closed,
-        clause: C & ValidateClause<Specs[number], C>,
+        pattern: P & ValidatePattern<Specs[number], P>,
     ) => DissectedCodec<
-        DerivedVariants<Extracted<Specs, C>>,
+        DerivedVariants<Extracted<Specs, P>>,
         Ks,
-        Extracted<Specs, C>
+        Extracted<Specs, P>
     >
-    /** …and the members it rejects, the complement of the same clause. */
-    readonly exclude: <const C extends ClauseOf<Specs[number]>>(
+    /** …and the members it rejects, the complement of the same pattern. */
+    readonly exclude: <const P extends AnyCodec>(
         this: Closed,
-        clause: C & ValidateClause<Specs[number], C>,
+        pattern: P & ValidatePattern<Specs[number], P>,
     ) => DissectedCodec<
-        DerivedVariants<Excluded<Specs, C>>,
+        DerivedVariants<Excluded<Specs, P>>,
         Ks,
-        Excluded<Specs, C>
+        Excluded<Specs, P>
     >
 }
 
@@ -3858,26 +3859,24 @@ export type UnionCodec<
         ? Untagged<T, SpecsOf<Options>> & Free<UnionFree<Options, Tm>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so it has no whole-item reading — an item is always a map'>
     /**
-     * **The options a clause keeps** — only where every option is an object, for the reason `item`
-     * gives: a clause names attributes, and an option that writes no map declares none.
+     * **The options a pattern keeps**: the options whose values all lie inside what the pattern
+     * holds. The pattern is a codec, so the slice of a union takes what a codec takes, a union
+     * that holds a string beside objects included.
      *
-     * The same operation the dissection has, and the same implementation, because a dissection is a
-     * union of objects with a tag table over it. Every option survives or is dropped whole; no key
-     * moves.
+     * An object pattern names the keys that it needs, and an option may declare more. An object with
+     * a union at a field is the union of the objects, so an option splits at each field that the
+     * pattern names and that holds a union of objects, and the parts that fit stay. The result is
+     * rebuilt through {@link union}, so a slice of a certified union is certified.
      */
-    readonly extract: AllObjects<Options> extends true
-        ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
-              this: Closed,
-              clause: C & ValidateClause<SpecsOf<Options>[number], C>,
-          ) => UnionSlice<Tm, KeptOptions<Options, C>>
-        : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
-    /** …and the options it rejects, the complement of the same clause. */
-    readonly exclude: AllObjects<Options> extends true
-        ? <const C extends ClauseOf<SpecsOf<Options>[number]>>(
-              this: Closed,
-              clause: C & ValidateClause<SpecsOf<Options>[number], C>,
-          ) => UnionSlice<Tm, KeptOptions<Options, C, false>>
-        : ErrorMessage<'[union] this union can hold an attribute that is not a map, so a clause has nothing to name — only a union of objects has a slice'>
+    readonly extract: <const P extends AnyCodec>(
+        this: Closed,
+        pattern: P & ValidatePattern<SpecsOf<Options>[number], P>,
+    ) => UnionSlice<Tm, KeptOptions<Options, P>>
+    /** …and the options it rejects, the complement of the same pattern. */
+    readonly exclude: <const P extends AnyCodec>(
+        this: Closed,
+        pattern: P & ValidatePattern<SpecsOf<Options>[number], P>,
+    ) => UnionSlice<Tm, KeptOptions<Options, P, false>>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
     /** The model's term of this codec. Type-level only. */
@@ -5225,15 +5224,15 @@ const dissect = <T extends Record<string, unknown>>(
         // codec writes the tag out of the member's own field, so every item carries it whatever
         // the key set says. So a one-member result is a one-member dissection that still reads its
         // key, and `dissect` is handed the same `ks` it was built with.
-        extract: (clause: Readonly<Record<string, unknown>>) => {
+        extract: (pattern: unknown) => {
             const open = openRefusal(unionDef)
             if (open) throw open
-            return slicedDissection(ks, options, clause, true)
+            return slicedDissection(ks, options, pattern, true)
         },
-        exclude: (clause: Readonly<Record<string, unknown>>) => {
+        exclude: (pattern: unknown) => {
             const open = openRefusal(unionDef)
             if (open) throw open
-            return slicedDissection(ks, options, clause, false)
+            return slicedDissection(ks, options, pattern, false)
         },
     } as DiscriminatedCodec<T, string, Record<string, unknown>>
 }
@@ -5249,10 +5248,10 @@ const dissect = <T extends Record<string, unknown>>(
 const slicedDissection = (
     ks: readonly string[],
     options: readonly AnyObjectCodec[],
-    clause: Readonly<Record<string, unknown>>,
+    pattern: unknown,
     keep: boolean,
 ): unknown => {
-    const kept = sliced(options, clause, keep)
+    const kept = picked(options, pattern, keep, false)
     return kept.length === 0 ? never : dissect(ks, kept)
 }
 
@@ -5656,143 +5655,258 @@ type EveryOptionTagged<
 /* ── the slice of a union ─────────────────────────────────────────────────────────────── */
 
 /**
- * **A clause**: a partial assignment pinning each key it names to a **literal codec**.
+ * **A pattern**: a codec that says which options to keep.
  *
- * `Calculus.AltClause` at the host, whose value at each key is `Alts` — a base with a non-empty set
- * of that base's carriers. A codec and not a tag, because a tag is text and text does not say which
- * base it was written at: `string('1')` and `decimal('1')` carry the same character and are read
- * from different members, and `number(1)` is a third thing again. A clause spelled as text cannot
- * tell the three apart, and one spelled as a codec cannot fail to.
+ * `extract(pattern)` keeps the options that fit the pattern, and `exclude(pattern)` keeps the rest.
+ * An option fits where every value that it holds lies inside what the pattern holds. The host
+ * decides that on a fragment: a literal inside a literal of the same base and adapter, a base
+ * inside itself, an option inside a union that holds a member of it, and an object inside an object
+ * pattern. An object pattern names the keys that it needs. The other keys of the option are free,
+ * as in a type that extends another type, so the pattern is read as the keys that it declares and
+ * not as a closed object. Each other pair fits only where the two terms are one term.
  *
- * A set of tags is a literal with several alternatives — `string('dog', 'cat')` — so there is one
- * spelling and not two. An object literal and not a list of pairs, so the keys carry no order and
- * no repeat, which is the reason the model's clause is a `Finset` and a function on it.
+ * **An object with a union at a field is the union of the objects**, one for each member of the
+ * field (`Calculus.Term.product_join` states the product form). So an option splits at each field
+ * that the pattern names and that holds a union of objects, and then each part fits or not.
  *
- * **Over the member specs, not over the entity type.** A union is a pair — the type it carries and
- * the structure it is — and the slice acts on the structure. `S` is the union of the members'
- * specs, and {@link ClauseKeys} distributes over it explicitly: a mapped type whose constraint is
- * `keyof S` would be homomorphic and distribute on its own, giving one clause type per member.
+ * The slice of a union and the slice of a field are one operation, and a pattern nests as a
+ * codec nests: `pet: pet.extract(object({ status: string('AVAILABLE') }))`.
  */
-export type ClauseOf<S> = {
-    readonly [K in ClauseKeys<S>]?: AnyLiteralCodec
-}
+type PatternSpecs<P> = FieldSpecList<P>[number]
 
-/** Every name some member requires, which is every name a clause may speak about. */
-type ClauseKeys<S> = S extends unknown
-    ? Extract<RequiredKeysOf<S>, PropertyKey>
+/** The member specs of the codec at a field: each option of a union of objects, or the object itself. */
+type FieldSpecList<F> = F extends { readonly item: { readonly spec: infer Sp } }
+    ? Sp extends readonly unknown[]
+        ? Sp
+        : [Sp]
     : never
 
+type FieldSpecsAt<S, K> = S extends unknown
+    ? K extends keyof S
+        ? FieldSpecList<S[K]>[number]
+        : never
+    : never
+
+type KeysOfUnion<U> = U extends unknown ? keyof U : never
+
 /**
- * The shape of a clause value: something with a term and a read.
- *
- * Read-only and structural, not `AttributeCodec<…>` at the members' tags. A codec is invariant in
- * the value it carries — `encode` takes it — so a slot typed at the members' whole tag set would
- * refuse `string('CHECKUP')` against members carrying `'CHECKUP' | 'SHOT'`, which is every clause
- * that selects anything. The slot admits any codec and {@link ValidateClause} is what asks whether
- * it fits, which also lets the refusal name the key.
+ * The keys of a union as a tuple. The order is the order that the checker gives, which no reader
+ * relies on: each key splits one object field, and the decoded type is a union.
  */
-type AnyLiteralCodec = {
-    readonly def: Term
-    readonly decode: (attribute: AttributeValue) => Result<unknown>
+type KeyTuple<U, Last = LastOf<U>> = [U] extends [never]
+    ? []
+    : [...KeyTuple<Exclude<U, Last>>, Last]
+type LastOf<U> = UnionToIntersection<
+    U extends unknown ? () => U : never
+> extends () => infer R
+    ? R
+    : never
+
+type ObjectOfSpec<S> = S extends Record<string, ObjectSlot>
+    ? ObjectCodec<show<S>>
+    : never
+
+/** A spec, split at the keys of the pattern specs `PU` where the spec holds objects. */
+type SplitSpec<Spec, PU> = SplitKeys<[Spec], KeyTuple<KeysOfUnion<PU>>, PU>
+type SplitKeys<
+    States extends readonly unknown[],
+    Keys extends readonly unknown[],
+    PU,
+> = Keys extends readonly [infer Key, ...infer Rest extends readonly unknown[]]
+    ? SplitKeys<SplitAt<States, Key, PU>, Rest, PU>
+    : States
+type SplitAt<
+    States extends readonly unknown[],
+    Key,
+    PU,
+> = States extends readonly [
+    infer State,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [...SplitState<State, Key, PU>, ...SplitAt<Rest, Key, PU>]
+    : []
+type SplitState<State, Key, PU> = Key extends keyof State
+    ? [FieldSpecList<State[Key]>] extends [never]
+        ? [State]
+        : ReplaceField<
+              InnerSpecs<FieldSpecList<State[Key]>, FieldSpecsAt<PU, Key>>,
+              State,
+              Key
+          >
+    : [State]
+type InnerSpecs<
+    Members extends readonly unknown[],
+    PU,
+> = Members extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [...SplitSpec<Head, PU>, ...InnerSpecs<Rest, PU>]
+    : []
+type ReplaceField<
+    Inner extends readonly unknown[],
+    State,
+    Key,
+> = Inner extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [
+          {
+              [P in keyof State]: P extends Key ? ObjectOfSpec<Head> : State[P]
+          },
+          ...ReplaceField<Rest, State, Key>,
+      ]
+    : []
+
+/** The options split at the keys of a pattern. An option that is no object stays whole. */
+type SplitOptions<
+    Options extends readonly unknown[],
+    P,
+> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [
+          ...(Head extends { readonly item: { readonly spec: infer Sp } }
+              ? Sp extends readonly unknown[]
+                  ? [Head]
+                  : FitsCodec<Head, P> extends 't'
+                    ? [Head]
+                    : MapObjects<SplitSpec<Sp, PatternSpecs<P>>>
+              : [Head]),
+          ...SplitOptions<Rest, P>,
+      ]
+    : []
+type MapObjects<Specs extends readonly unknown[]> = {
+    [I in keyof Specs]: ObjectOfSpec<Specs[I]>
 }
 
-/** The codec a spec declares at one name, or nothing where it declares none. */
-type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
-
 /**
- * **Whether one member's spec answers a clause** — `clauseKeeps` at the type, reading the same two
- * facts off the same declaration.
+ * **Whether a codec fits a pattern**, as the run time decides it, read on the types that the codecs
+ * carry. `'t'` fits, `'f'` does not, and `'u'` is where the type cannot decide: the extraction and
+ * the exclusion each keep such an option, so each result type admits every option that the run time
+ * keeps.
  *
- * At every clause key the member must **require** the name, write it at the clause's **attribute**,
- * and admit **only** values the clause admits. The attribute is what carries the base: `string`
- * writes `S`, `decimal` and `number` write `N`, and those two are told apart by the values, `'1'`
- * against `1`. So the pair (attribute, values) is a base and its alternatives, and the two levels
- * cannot disagree about which member a clause keeps.
- *
- * `boolean` where the type cannot decide: a clause meets the member's form, and the type cannot
- * name the alternatives of one side ({@link UnnamedValues}). The extraction and the exclusion each
- * keep such a member, so each result type admits every member that the run time keeps.
+ * A pattern that pins a literal is met by a codec that pins one, at the same stored type and a
+ * decoded type inside the pattern's. The mark is what tells a literal from a caller's adapter that
+ * decodes to a literal type. The stored type is what tells `string('1')` from `decimal('1')`, which
+ * decode to one text. A pattern that holds objects is met by a codec that holds objects, each of
+ * them inside some object of the pattern ({@link SpecFits}). Any other pattern is met by a codec
+ * whose decoded and stored types lie inside the pattern's. A literal whose alternatives the type
+ * cannot name ({@link UnnamedValues}) is `'u'`.
  */
-type SpecKeeps<Spec, C> = [SpecMisses<Spec, C>] extends [never]
-    ? true
-    : 'apart' extends SpecMisses<Spec, C>
+type Fit = 't' | 'f' | 'u'
+type FitsCodec<A, P> = PinsALiteral<MarkedCodec<P>> extends true
+    ? PinsALiteral<MarkedCodec<A>> extends true
+        ? [AttributeOf<A>] extends [AttributeOf<P>]
+            ? [Decoded<A>] extends [Decoded<P>]
+                ? true extends UnnamedValues<Decoded<P>>
+                    ? 'u'
+                    : 't'
+                : 'f'
+            : 'f'
+        : 'f'
+    : [FieldSpecList<P>] extends [never]
+      ? [Decoded<A>] extends [Decoded<P>]
+          ? [AttributeOf<A>] extends [AttributeOf<P>]
+              ? 't'
+              : 'f'
+          : 'f'
+      : [FieldSpecList<A>] extends [never]
+        ? 'f'
+        : EveryFits<FieldSpecList<A>[number], FieldSpecList<P>[number]>
+/** Whether a member spec fits a pattern codec: the pattern must hold objects. */
+type FitsSpec<A, P> = [FieldSpecList<P>] extends [never]
+    ? 'f'
+    : EveryFits<A, PatternSpecs<P>>
+/** Each member spec of the codec fits some member spec of the pattern. */
+type EveryFits<A, P> = AllOf<A extends unknown ? SomeFit<A, P> : never>
+type SomeFit<A, P> = 't' extends SpecFits<A, P>
+    ? 't'
+    : 'u' extends SpecFits<A, P>
+      ? 'u'
+      : 'f'
+type SpecFits<A, P> = P extends unknown
+    ? AllOf<
+          {
+              [K in keyof P]-?: K extends keyof A
+                  ? [P[K]] extends [{ readonly [optionalMarker]: true }]
+                      ? FitsCodec<A[K], P[K]>
+                      : [A[K]] extends [{ readonly [optionalMarker]: true }]
+                        ? 'f'
+                        : FitsCodec<A[K], P[K]>
+                  : [P[K]] extends [{ readonly [optionalMarker]: true }]
+                    ? 't'
+                    : 'f'
+          }[keyof P]
+      >
+    : never
+type AllOf<U extends Fit> = 'f' extends U ? 'f' : 'u' extends U ? 'u' : 't'
+/** Whether the extraction (`Keep` true) or the exclusion keeps a codec with this fit. */
+type KeepsFit<Keep extends boolean, F extends Fit> = Keep extends true
+    ? F extends 'f'
+        ? false
+        : true
+    : F extends 't'
       ? false
-      : boolean
+      : true
 
 /**
- * At each clause key, why the member can miss the clause: `'apart'` where the declaration decides
- * the miss, and `'values'` where only alternatives that the type cannot name decide it.
+ * **The option codecs a pattern keeps**, in the order they were declared, after the split. `Keep`
+ * is `true` for the extraction and `false` for the exclusion, so the two are one walk and the
+ * complement cannot drift from the selection.
  */
-type SpecMisses<Spec, C> = {
-    [K in keyof C]-?: K extends RequiredKeysOf<Spec>
-        ? PinsALiteral<MarkedCodec<FieldAt<Spec, K>>> extends true
-            ? [AttributeOf<FieldAt<Spec, K>>] extends [AttributeOf<C[K]>]
-                ? [Decoded<FieldAt<Spec, K>>] extends [Decoded<C[K]>]
-                    ? true extends UnnamedValues<Decoded<C[K]>>
-                        ? 'values'
-                        : never
-                    : true extends UnnamedValues<Decoded<FieldAt<Spec, K>>>
-                      ? 'values'
-                      : 'apart'
-                : 'apart'
-            : 'apart'
-        : 'apart'
-}[keyof C]
+export type KeptOptions<
+    Options extends readonly unknown[],
+    P,
+    Keep extends boolean = true,
+> = KeptBy<SplitOptions<Options, P>, P, Keep>
+type KeptBy<
+    Options extends readonly unknown[],
+    P,
+    Keep extends boolean,
+> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [
+          ...(KeepsFit<Keep, FitsCodec<Head, P>> extends true ? [Head] : []),
+          ...KeptBy<Rest, P, Keep>,
+      ]
+    : []
 
-/**
- * **The member specs a clause keeps**, in the order they were declared.
- *
- * `Keep` is `true` for the extraction and `false` for the exclusion, so the two are one walk and
- * the complement cannot drift from the selection.
- */
+/** The member specs of a dissection that a pattern keeps. A dissection splits no member. */
 export type Extracted<
     Specs extends readonly unknown[],
-    C,
+    P,
     Keep extends boolean = true,
 > = Specs extends readonly [
     infer Head,
     ...infer Tail extends readonly unknown[],
 ]
     ? [
-          ...([Keep] extends [SpecKeeps<Head, C>] ? [Head] : []),
-          ...Extracted<Tail, C, Keep>,
+          ...(KeepsFit<Keep, FitsSpec<Head, P>> extends true ? [Head] : []),
+          ...Extracted<Tail, P, Keep>,
       ]
     : []
 
 /** …and the ones it rejects, the same walk at the complement. */
-export type Excluded<Specs extends readonly unknown[], C> = Extracted<
+export type Excluded<Specs extends readonly unknown[], P> = Extracted<
     Specs,
-    C,
+    P,
     false
 >
 
-/** The option codecs a clause keeps, read through each option's own spec. */
-export type KeptOptions<
-    Options extends readonly unknown[],
-    C,
-    Keep extends boolean = true,
-> = Options extends readonly [
-    infer Head,
-    ...infer Tail extends readonly unknown[],
-]
-    ? [
-          ...([Keep] extends [SpecKeeps<SpecOf<Head>, C>] ? [Head] : []),
-          ...KeptOptions<Tail, C, Keep>,
-      ]
-    : []
-
-type SpecOf<Option> = Option extends {
-    readonly item: { readonly spec: infer S }
-}
-    ? S
-    : never
-
-/** The members of a tag table a clause keeps, keyed as they were. */
-export type KeptByTag<Spec, C, Keep extends boolean = true> = {
-    [K in keyof Spec as [Keep] extends [SpecKeeps<Spec[K], C>]
+/** The members of a tag table a pattern keeps, keyed as they were. */
+export type KeptByTag<Spec, P, Keep extends boolean = true> = {
+    [K in keyof Spec as KeepsFit<Keep, FitsSpec<Spec[K], P>> extends true
         ? K
         : never]: Spec[K]
 }
+
+/** The codec a spec declares at one name, or nothing where it declares none. */
+type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
 
 /** The entity a tag table describes, which is what its members describe. */
 export type VariantsOf<Spec> = {
@@ -5817,21 +5931,46 @@ type TagsAtSpecs<S, K, A> = S extends unknown
     : never
 
 /**
- * A clause key no member could ever answer, whatever the values turn out to be: the model's clause
- * that is not keyed (`Calculus.AltClause.keyedC`). A literal whose alternatives meet no member's is
- * keyed, and keeps nothing: that is a fact about the values, and the run time answers it.
+ * A key of a pattern that describes no member, whatever the values turn out to be: the model's
+ * clause that is not keyed (`Calculus.AltClause.keyedC`), read at a pattern. A key is bad where no
+ * member declares it, and where it pins a literal that no member pins at that base. A key that
+ * holds objects is read one level down. A literal whose alternatives meet no member's is keyed, and
+ * keeps nothing: that is a fact about the values, and the run time answers it.
  */
-type BadClauseKey<S, C> = {
-    [K in keyof C]: PinsALiteral<C[K]> extends true
-        ? [TagsAtSpecs<S, K, AttributeOf<C[K]>>] extends [never]
+type BadPatternKey<S, PSpec> = {
+    [K in keyof PSpec]: PinsALiteral<PSpec[K]> extends true
+        ? [TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>] extends [never]
             ? K
-            : [CarrierOf<Decoded<C[K]>>] extends [
-                    CarrierOf<TagsAtSpecs<S, K, AttributeOf<C[K]>>>,
+            : [CarrierOf<Decoded<PSpec[K]>>] extends [
+                    CarrierOf<TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>>,
                 ]
               ? never
               : K
-        : K
-}[keyof C]
+        : [FieldSpecList<PSpec[K]>] extends [never]
+          ? [K] extends [KeysOfUnion<S>]
+              ? never
+              : K
+          : [FieldSpecsAt<S, K>] extends [never]
+            ? K
+            : [
+                    BadPatternKey<
+                        FieldSpecsAt<S, K>,
+                        FieldSpecList<PSpec[K]>[number]
+                    >,
+                ] extends [never]
+              ? never
+              : K
+}[keyof PSpec]
+
+/**
+ * Rejects a pattern that no member could answer, at the call rather than on the result. Each
+ * failure is decidable from the declaration, which is the line that the run time refuses on too.
+ */
+export type ValidatePattern<S, P> = [FieldSpecList<P>] extends [never]
+    ? unknown
+    : [BadPatternKey<S, PatternSpecs<P>>] extends [never]
+      ? unknown
+      : ErrorMessage<`[extract] the pattern at '${BadPatternKey<S, PatternSpecs<P>> & string}' describes no member — no member declares the key, or none pins it to that literal at that base, or it holds no objects where the pattern nests`>
 
 /**
  * **The carrier of a decoded literal**: the base type that the literal widens to. At one attribute
@@ -5849,38 +5988,6 @@ type CarrierOf<V> = V extends string
           : V
 
 /**
- * Rejects a clause a member could never answer, at the call rather than on the result.
- *
- * Two failures with one message, because they are one mistake in two spellings: a value that is no
- * literal at all, and a literal at a base no member pins that key at. Each is decidable from the
- * declaration, which is the line the runtime's refusals draw too.
- */
-export type ValidateClause<S, C> = [BadClauseKey<S, C>] extends [never]
-    ? unknown
-    : ErrorMessage<`[extract] the clause at '${BadClauseKey<S, C> & string}' is not a literal the members pin that key to — a clause pins each key it names to a literal codec at the base the members declare, written as \`string('a')\`, \`decimal('1')\` or \`number(1)\`, because a bare tag does not say which base it was written at`>
-
-/**
- * The alternatives a clause pins one key to, or a refusal naming the key.
- *
- * A clause value is a codec and the question is asked of its term, which is where a base lives. The
- * type refuses a non-literal codec by its decoded type; this is the same refusal for a caller who
- * reached here through a cast or through plain JavaScript.
- *
- * A set of tags is `string('a', 'b')`, which is a union of literals, so the reader is
- * {@link literalAlternatives} and not a test for one constructor.
- */
-const clauseLiteral = (name: string, value: unknown): NameForm => {
-    const def = (value as { readonly def?: Term } | undefined)?.def
-    const pinned = def && clauseForm(def)
-    if (!pinned) {
-        throw new CodecError(
-            `the clause at '${name}' is not a literal codec — a clause pins each key it names to a literal, written as \`string('a')\`, \`decimal('1')\`, \`number(1)\`, \`boolean(true)\` or \`binary(...)\`, because a bare tag does not say which base it was written at`,
-        )
-    }
-    return { required: true, ...pinned }
-}
-
-/**
  * **Two literals of one form**: the same base, and the same adapter, or none on either. This is the
  * form of the model's pin (`Calculus.pinForm`), the adapter word and the base.
  */
@@ -5891,88 +5998,259 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
         : sameAdapter(a.adapter, b.adapter))
 
 /**
- * **Whether a clause describes one member**: the member declares every clause key as a *required*
- * literal **at the clause's base**, and that literal's alternatives all lie inside the clause's.
+ * Whether every value that the term `a` holds lies inside what the term `p` holds, on the fragment
+ * that the host decides. A literal is read through a refinement on the side of the option, because
+ * a refinement narrows a literal and the literal stays an upper bound. A pair that no rule here
+ * covers fits only where the two terms are one term, so the answer errs towards no fit.
  *
- * `required` is read for `Calculus.litSubAt`'s reason: an optional literal name admits the map that
- * omits the name, so the member holds values outside every fibre the clause describes.
- *
- * The base is compared before the alternatives, and a mismatch keeps the member out. That is
- * `Calculus.altsSub`, whose four rows are four bases and whose fall-through row is every pair that
- * does not share one. Each row compares the adapter word, and then the two sets of alternatives.
- *
- * **The adapter is compared with the base.** The form names the kind of the held side and not the
- * conversion, so a caller's adapter that decodes `'a'` to `'x'` has the form of `string('a')`. Kept
- * on the form alone, the member decodes a value outside the clause. A library adapter carries one
- * identity for each name, so `decimal` against `decimal` keeps the member, and a caller's adapter
- * matches only itself. A plain literal and a literal under an adapter never match.
+ * The literal rule is `Calculus.altsSub`, and the object rule asks each key of the pattern: a
+ * required key of the pattern is a required key of the option, and an absent key of the option fits
+ * an optional key of the pattern only where the option has no open key entry.
  */
-const clauseKeeps = (
-    clause: ReadonlyMap<string, NameForm>,
-    term: Term,
-): boolean => {
-    const literals = clauseLiteralsOf(term)
-    if (!literals) return false
-    for (const [name, pinned] of clause) {
-        const mine = literals[name]
-        if (!mine?.required || mine.form !== pinned.form) return false
-        if (!sameForm(mine, pinned)) return false
-        const inside = (mine.alts.ls as readonly LiteralValue[]).every((one) =>
-            (pinned.alts.ls as readonly LiteralValue[]).some((tag) =>
-                sameLiteral(one, tag),
-            ),
+const fits = (a: Term, p: Term): boolean => {
+    const A = resolvedTerm(a)
+    const P = resolvedTerm(p)
+    if (A === undefined || P === undefined) return false
+    if (A === P) return true
+    if (A.kind === 'union') return A.options.every((one) => fits(one, P))
+    if (P.kind === 'union') return P.options.some((one) => fits(A, one))
+    const pinned = clauseForm(P)
+    if (pinned) {
+        const mine = pinnedForm(A)
+        return (
+            mine !== undefined &&
+            mine.form === pinned.form &&
+            sameForm(
+                { required: true, ...mine },
+                { required: true, ...pinned },
+            ) &&
+            (mine.alts.ls as readonly LiteralValue[]).every((one) =>
+                (pinned.alts.ls as readonly LiteralValue[]).some((tag) =>
+                    sameLiteral(one, tag),
+                ),
+            )
         )
-        if (!inside) return false
     }
-    return true
+    if (P.kind === 'object') {
+        if (A.kind !== 'object') return false
+        for (const [name, wanted] of Object.entries(P.body.fields)) {
+            const mine = A.body.fields[name]
+            if (mine === undefined) {
+                if (alwaysWritten(wanted) || A.body.rest !== undefined) {
+                    return false
+                }
+                continue
+            }
+            if (alwaysWritten(wanted) && !alwaysWritten(mine)) return false
+            if (!fits(mine.t, wanted.t)) return false
+        }
+        return true
+    }
+    if (A.kind === 'held' && P.kind === 'held') {
+        return sameAdapter(A, P) && fits(A.inner, P.inner)
+    }
+    // a literal fits the base that it is a literal of
+    const literal = pinnedForm(A)
+    if (
+        literal &&
+        literal.adapter === undefined &&
+        literal.alts.base === P.kind
+    ) {
+        return true
+    }
+    if (A.kind !== P.kind) return false
+    return (
+        A.kind === 'string' ||
+        A.kind === 'number' ||
+        A.kind === 'boolean' ||
+        A.kind === 'binary' ||
+        A.kind === 'null'
+    )
+}
+
+/** The object nodes that a term names: the object itself, or each object option of a union. */
+const objectMembersOf = (
+    t: Term,
+): readonly Extract<Term, { kind: 'object' }>[] => {
+    const node = resolvedTerm(t)
+    if (node === undefined) return []
+    if (node.kind === 'object') return [node]
+    return node.kind === 'union' ? node.options.flatMap(objectMembersOf) : []
 }
 
 /**
- * The members kept, with two refusals taken before anything is filtered.
+ * A spec, split at each field that the pattern names and that holds objects. The spec comes back
+ * as it was, and as the one element, where no field splits.
  *
- * **A clause key no member pins to a literal**, and **a clause at a base no member carries at that
- * key**. Both keep nothing, and both keep nothing *whatever the values are*: they are facts about
- * the declaration, decidable before any item exists, and a clause that cannot describe a member is
- * a typo rather than an answer. An empty result stays a legitimate answer where the bases agree and
- * the alternatives simply do not meet, because that is a fact about values. That line is where the
- * foreign-key refusal already sits, and the base refusal sits beside it for the same reason.
- *
- * The model states the same refusal (`AltClause.keyedC`): some option pins each clause key at the
- * form of the clause, or the clause describes no option (`AltClause.extractC_eq_nil_of_keyedC_false`).
+ * An object that is split and has an open key entry is refused, because the type of a part holds
+ * the declared names only, and a part that reads more would decode a value that its type does not
+ * name. The type cannot state the refusal, so the run time does.
  */
-const sliced = <O>(
+const splitBy = (
+    spec: Record<string, ObjectSlot>,
+    pattern: Term,
+): Record<string, ObjectSlot>[] => {
+    const members = objectMembersOf(pattern)
+    let states: Record<string, ObjectSlot>[] = [spec]
+    const names = new Set(members.flatMap((m) => Object.keys(m.body.fields)))
+    for (const name of names) {
+        const sub: Term = {
+            kind: 'union',
+            options: members.flatMap((m) => {
+                const field = m.body.fields[name]
+                return field ? [field.t] : []
+            }),
+        }
+        states = states.flatMap((state) => {
+            const slot = state[name]
+            if (slot === undefined || 'codec' in slot) return [state]
+            const field = entryCodec(slot)
+            const node = resolvedTerm(termOf(field))
+            const holdsObjects =
+                node?.kind === 'union'
+                    ? node.options.every(
+                          (option) => objectNamed(option) !== undefined,
+                      )
+                    : node !== undefined && objectNamed(node) !== undefined
+            if (!holdsObjects) return [state]
+            const parts = optionsOfFactor(field).flatMap((one) =>
+                splitBy(one.spec as Record<string, ObjectSlot>, sub).map(
+                    (inner) => ({ one, inner }),
+                ),
+            )
+            const [only] = parts
+            if (parts.length === 1 && only?.inner === only?.one.spec) {
+                return [state]
+            }
+            return parts.map(({ one, inner }) => {
+                if (one.rest !== undefined) {
+                    throw new CodecError(
+                        `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
+                    )
+                }
+                return {
+                    ...state,
+                    [name]: objectFromMap(
+                        inner,
+                        undefined,
+                    ) as unknown as ObjectSlot,
+                }
+            })
+        })
+    }
+    return states
+}
+
+/**
+ * Why a pattern describes no member, or nothing. A key that no member declares, a literal that no
+ * member pins at that key, and a literal at a base that no member pins there are facts of the
+ * declaration, decidable before any item exists, so a pattern that names one is a typo and not an
+ * answer. An empty result stays a legitimate answer where the bases agree and the alternatives
+ * simply do not meet, because that is a fact about values.
+ *
+ * The model states the same refusal (`AltClause.keyedC`): some option pins each key at the form of
+ * the clause, or the clause describes no option (`AltClause.extractC_eq_nil_of_keyedC_false`).
+ */
+const patternRefusal = (
+    members: readonly Term[],
+    pattern: Term,
+): string | undefined => {
+    const candidates = members.flatMap(objectMembersOf)
+    for (const wanted of objectMembersOf(pattern)) {
+        for (const [name, field] of Object.entries(wanted.body.fields)) {
+            const here = candidates.flatMap((m) => {
+                const mine = m.body.fields[name]
+                return mine ? [mine] : []
+            })
+            if (here.length === 0) {
+                const known = [
+                    ...new Set(
+                        candidates.flatMap((m) => Object.keys(m.body.fields)),
+                    ),
+                ]
+                return `'${name}' is not a key any member declares; the keys available are ${known.map((one) => `'${one}'`).join(', ') || '(none)'}`
+            }
+            const form = clauseForm(field.t)
+            if (form) {
+                const pins = here.flatMap((mine) => {
+                    const one = pinnedForm(mine.t)
+                    return one ? [one] : []
+                })
+                if (pins.length === 0) {
+                    return `'${name}' is declared without a literal by every member, so a pattern cannot select on it`
+                }
+                const sameBase = pins.some(
+                    (one) =>
+                        one.form === form.form &&
+                        sameForm(
+                            { required: true, ...one },
+                            { required: true, ...form },
+                        ),
+                )
+                if (!sameBase) {
+                    return `the pattern at '${name}' is a \`${form.form}\` literal${form.adapter ? ' under an adapter' : ''} and no member pins '${name}' at that base and adapter, so it describes no member whatever its alternatives; the bases pinned at '${name}' are ${[...new Set(pins.map((one) => one.form))].map((one) => `\`${one}\``).join(', ')}`
+                }
+            } else {
+                const inner = patternRefusal(
+                    here.map((mine) => mine.t),
+                    field.t,
+                )
+                if (inner) return inner
+            }
+        }
+    }
+    return undefined
+}
+
+/**
+ * The options that fit a pattern, each option split first at the fields that the pattern names.
+ *
+ * `splits` is `false` for a dissection, whose table is keyed by the literals of its members: a
+ * part has no key there, so a pattern that splits a member is refused and the caller slices the
+ * field first.
+ */
+const picked = <O>(
     options: readonly O[],
-    clause: Readonly<Record<string, unknown>>,
+    pattern: unknown,
     keep: boolean,
+    splits: boolean,
 ): readonly O[] => {
-    const terms = options.map((option) => termOf(option as unknown as AnyCodec))
-    const pinned = new Map<string, NameForm[]>()
-    for (const term of terms) {
-        for (const [name, one] of Object.entries(
-            clauseLiteralsOf(term) ?? {},
-        )) {
-            pinned.set(name, [...(pinned.get(name) ?? []), one])
-        }
-    }
-    const read = new Map<string, NameForm>()
-    for (const [name, value] of Object.entries(clause)) {
-        const forms = pinned.get(name)
-        if (!forms) {
-            throw new CodecError(
-                `'${name}' is not a key any member pins to a literal, so a clause naming it selects nothing; the keys available are ${[...pinned.keys()].map((one) => `'${one}'`).join(', ') || '(none)'}`,
-            )
-        }
-        const literal = clauseLiteral(name, value)
-        if (!forms.some((one) => sameForm(one, literal))) {
-            throw new CodecError(
-                `the clause at '${name}' is a \`${literal.form}\` literal${literal.adapter ? ' under an adapter' : ''} and no member pins '${name}' at that base and adapter, so it describes no member whatever its alternatives; the bases declared at '${name}' are ${[...new Set(forms.map((one) => one.form))].map((one) => `\`${one}\``).join(', ')}`,
-            )
-        }
-        read.set(name, literal)
-    }
-    return options.filter(
-        (_option, at) => clauseKeeps(read, terms[at] as Term) === keep,
+    const wanted = termOf(pattern as AnyCodec)
+    const why = patternRefusal(
+        options.map((option) => termOf(option as unknown as AnyCodec)),
+        wanted,
     )
+    if (why) throw new CodecError(why)
+    return options.flatMap((option) => {
+        // an option that fits whole has parts that all fit, so it stays whole and no part remains
+        if (fits(termOf(option as unknown as AnyCodec), wanted)) {
+            return keep ? [option] : []
+        }
+        const item = objectNamed(termOf(option as unknown as AnyCodec))
+        const parts: readonly O[] = item
+            ? ((specs) => {
+                  const [only] = specs
+                  if (specs.length === 1 && only === item.spec) return [option]
+                  if (!splits) {
+                      throw new CodecError(
+                          'a dissection keeps its members whole, and this pattern splits a member at a field that holds a union of objects. Slice the field first, or take the pattern from a union',
+                      )
+                  }
+                  if (item.rest !== undefined) {
+                      throw new CodecError(
+                          'a member has an open key entry, and a pattern splits declared names only',
+                      )
+                  }
+                  return specs.map(
+                      (spec) => objectFromMap(spec, undefined) as unknown as O,
+                  )
+              })(splitBy(item.spec as Record<string, ObjectSlot>, wanted))
+            : [option]
+        return parts.filter(
+            (part) =>
+                fits(termOf(part as unknown as AnyCodec), wanted) === keep,
+        )
+    })
 }
 
 /**
@@ -6221,13 +6499,13 @@ export const union = <const Options extends readonly AnyCodec[]>(
         // built either way rather than branched, exactly as `item` is: an option that writes no map
         // declares no name, so it survives no clause, and the type is what says the capability does
         // not apply to such a union
-        extract: ((clause: Readonly<Record<string, unknown>>) => {
+        extract: ((pattern: unknown) => {
             closed()
-            return slicedUnion(options as readonly AnyCodec[], clause, true)
+            return slicedUnion(options as readonly AnyCodec[], pattern, true)
         }) as never,
-        exclude: ((clause: Readonly<Record<string, unknown>>) => {
+        exclude: ((pattern: unknown) => {
             closed()
-            return slicedUnion(options as readonly AnyCodec[], clause, false)
+            return slicedUnion(options as readonly AnyCodec[], pattern, false)
         }) as never,
     }
     // the mark is phantom, so no value carries it and no check can produce it. A union of literal
@@ -6246,10 +6524,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
  */
 const slicedUnion = (
     options: readonly AnyCodec[],
-    clause: Readonly<Record<string, unknown>>,
+    pattern: unknown,
     keep: boolean,
 ): unknown => {
-    const kept = sliced(options, clause, keep)
+    const kept = picked(options, pattern, keep, true)
     return kept.length === 0 ? never : union(kept as never)
 }
 

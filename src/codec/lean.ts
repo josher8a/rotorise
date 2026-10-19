@@ -2194,12 +2194,12 @@ const legacyReadOf = (
 /**
  * A union or a dissection, with the two slices that `src/` runs on it.
  *
- * The public `extract` and `exclude` are generic over the clauses that the options admit. This is
+ * The public `extract` and `exclude` are generic over the patterns that the options admit. This is
  * the erased form, as {@link AnyCodec} is the erased form of a codec.
  */
 export type Sliceable = AnyCodec & {
-    readonly extract: (clause: Readonly<Record<string, AnyCodec>>) => AnyCodec
-    readonly exclude: (clause: Readonly<Record<string, AnyCodec>>) => AnyCodec
+    readonly extract: (pattern: AnyCodec) => AnyCodec
+    readonly exclude: (pattern: AnyCodec) => AnyCodec
 }
 
 /**
@@ -2275,7 +2275,7 @@ const keptBy = (
 ): Omit<SliceRow, 'clause'> => {
     let result: AnyCodec
     try {
-        result = codec.extract(clause)
+        result = codec.extract(object(clause))
     } catch (error) {
         // the host refuses a clause key that no member pins, and a clause at a base that no
         // member carries, as the model refuses a clause that is not keyed. The refusal keeps

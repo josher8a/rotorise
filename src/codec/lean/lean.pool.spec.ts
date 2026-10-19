@@ -191,8 +191,8 @@ const declare = (
 
 /** The two slices of a dissection, which `mdunion` returns. */
 type Slices = {
-    readonly extract: (clause: Readonly<Record<string, unknown>>) => unknown
-    readonly exclude: (clause: Readonly<Record<string, unknown>>) => unknown
+    readonly extract: (pattern: unknown) => unknown
+    readonly exclude: (pattern: unknown) => unknown
 }
 
 /**
@@ -491,12 +491,12 @@ const draw = (depth: number): Entry => {
             if (slice < 0.33)
                 return {
                     name: `extract(s=x,${name})`,
-                    codec: erase(whole.extract({ s: string('x') })),
+                    codec: erase(whole.extract(object({ s: string('x') }))),
                 }
             if (slice < 0.67)
                 return {
                     name: `exclude(s=x,${name})`,
-                    codec: erase(whole.exclude({ s: string('x') })),
+                    codec: erase(whole.exclude(object({ s: string('x') }))),
                 }
             return { name, codec: whole }
         }
