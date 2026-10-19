@@ -8,7 +8,15 @@
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import type { Option } from '../../codec'
-import { decimal, number, object, product, string, union } from '../../codec'
+import {
+    boolean,
+    decimal,
+    number,
+    object,
+    product,
+    string,
+    union,
+} from '../../codec'
 import { altSem, optionOfTerm } from '../../denote'
 import { failed } from '../../result'
 
@@ -225,5 +233,90 @@ describe('a union of objects that differ only under a key decodes by the path', 
             failed(altSem(wrapped).pair.decode(last as AttributeValue)),
         ).toBe(false)
         expect(calls.n).toBe(1)
+    })
+})
+
+describe('a union of options that pin distinct literals of any base decodes by the literals', () => {
+    const decodesAsAttempting = (
+        options: readonly Parameters<typeof union>[0][number][],
+        valid: readonly Row[],
+    ) => {
+        const all = optionsOf(union(options as never))
+        expect(agreeOn(all, pool(valid))).toBeGreaterThanOrEqual(valid.length)
+        const { wrapped, calls } = counted(all)
+        const last = valid[valid.length - 1] as Row
+        expect(
+            failed(altSem(wrapped).pair.decode(last as AttributeValue)),
+        ).toBe(false)
+        expect(calls.n).toBe(1)
+    }
+
+    it('reads one option where the tags are numbers under an adapter', () => {
+        decodesAsAttempting(
+            [
+                object({ v: number(1), a: string }),
+                object({ v: number(2), b: string }),
+                object({ v: number(3), c: string }),
+            ],
+            [
+                { M: { v: { N: '1' }, a: { S: 'x' } } },
+                { M: { v: { N: '2' }, b: { S: 'x' } } },
+                { M: { v: { N: '3' }, c: { S: 'x' } } },
+            ],
+        )
+    })
+
+    it('reads one option where the tags are decimals', () => {
+        decodesAsAttempting(
+            [
+                object({ v: decimal('1.5'), a: string }),
+                object({ v: decimal('2'), b: string }),
+            ],
+            [
+                { M: { v: { N: '1.5' }, a: { S: 'x' } } },
+                { M: { v: { N: '2' }, b: { S: 'x' } } },
+            ],
+        )
+    })
+
+    it('reads one option where the tags are booleans', () => {
+        decodesAsAttempting(
+            [
+                object({ flag: boolean(true), a: string }),
+                object({ flag: boolean(false), b: string }),
+            ],
+            [
+                { M: { flag: { BOOL: true }, a: { S: 'x' } } },
+                { M: { flag: { BOOL: false }, b: { S: 'x' } } },
+            ],
+        )
+    })
+
+    it('keeps a string tag and a number tag of one text apart', () => {
+        decodesAsAttempting(
+            [
+                object({ k: string('1'), a: string }),
+                object({ k: number(1), b: string }),
+            ],
+            [
+                { M: { k: { S: '1' }, a: { S: 'x' } } },
+                { M: { k: { N: '1' }, b: { S: 'x' } } },
+            ],
+        )
+    })
+
+    it('answers a number that is no stored numeral as attempting does', () => {
+        const all = optionsOf(
+            union([
+                object({ v: number(1), a: string }),
+                object({ v: number(2), b: string }),
+            ]),
+        )
+        const row = { M: { v: { N: '2.0' }, b: { S: 'x' } } } as Row
+        const fast = altSem(all).pair.decode(row as AttributeValue)
+        const slow = altSem(all, false).pair.decode(row as AttributeValue)
+        expect(failed(fast)).toBe(failed(slow))
+        if (failed(fast) && failed(slow))
+            expect(fast.message).toBe(slow.message)
     })
 })

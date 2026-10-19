@@ -584,11 +584,25 @@ export const restrict = (
 const PIN_DEPTH = 3
 
 /**
- * The string literals that an object term pins, by key path.
+ * The stored key of each alternative: the member that the attribute carries, then the text. Binary
+ * has none, so a binary pin gives no index and the union attempts.
+ */
+const storedKeys = (alts: Alternatives): readonly string[] | undefined =>
+    alts.base === 'string'
+        ? alts.ls.map((one) => `S${one}`)
+        : alts.base === 'number'
+          ? alts.ls.map((one) => `N${one.digits}`)
+          : alts.base === 'boolean'
+            ? alts.ls.map((one) => `B${one}`)
+            : undefined
+
+/**
+ * The literals that an object term pins, by key path, as stored keys.
  *
- * A path names a key of the object that a required field holds. The pin is required, has no
- * adapter, and has the base `string`. Each such pin is an upper bound on the stored value at the
- * path, so an attribute with another literal there is outside the option.
+ * A path names a key of the object that a required field holds. The pin is required. An adapter
+ * does not matter, because the alternatives are the stored literals and the adapter converts after
+ * the read. Each pin is an upper bound on the stored value at the path, so an attribute with
+ * another literal there is outside the option.
  */
 const pinsByPath = (
     term: Term,
@@ -598,13 +612,10 @@ const pinsByPath = (
 ): void => {
     if (term.kind !== 'object') return
     for (const [name, form] of Object.entries(clauseLiteralsOf(term) ?? {})) {
-        if (
-            form.required &&
-            form.adapter === undefined &&
-            form.alts.base === 'string'
-        ) {
+        const ls = form.required ? storedKeys(form.alts) : undefined
+        if (ls) {
             const path = [...prefix, name]
-            out.set(JSON.stringify(path), { path, ls: form.alts.ls })
+            out.set(JSON.stringify(path), { path, ls })
         }
     }
     if (depth === 0) return
@@ -621,7 +632,7 @@ type LiteralIndex = {
 }
 
 /**
- * The key paths at which every option pins a string literal, and no two options pin one tuple.
+ * The key paths at which every option pins a literal, and no two options pin one tuple.
  *
  * An attribute has one tuple of literals at the paths. The tuples of two options never meet, so at
  * most one option admits the attribute, and the lookup names that option. The search takes the
@@ -680,8 +691,8 @@ const literalIndex = (all: readonly Option[]): LiteralIndex | undefined => {
     return undefined
 }
 
-/** The string stored at a key path, where each step is a map. */
-const storedStringAt = (
+/** The stored key of the literal at a key path, where each step is a map. */
+const storedKeyAt = (
     attribute: AttributeValue,
     path: readonly string[],
 ): string | undefined => {
@@ -690,7 +701,18 @@ const storedStringAt = (
         at = (at as { readonly M?: AttributeMap }).M?.[name]
         if (at === undefined) return undefined
     }
-    return (at as { readonly S?: string }).S
+    const stored = at as {
+        readonly S?: string
+        readonly N?: string
+        readonly BOOL?: boolean
+    }
+    return stored.S !== undefined
+        ? `S${stored.S}`
+        : stored.N !== undefined
+          ? `N${stored.N}`
+          : stored.BOOL !== undefined
+            ? `B${stored.BOOL}`
+            : undefined
 }
 
 /**
@@ -843,7 +865,7 @@ export const altSem = (
         if (index === undefined) return undefined
         const tuple: string[] = []
         for (const path of index.paths) {
-            const literal = storedStringAt(attribute, path)
+            const literal = storedKeyAt(attribute, path)
             if (literal === undefined) return undefined
             tuple.push(literal)
         }
