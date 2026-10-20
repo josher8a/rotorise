@@ -1809,6 +1809,7 @@ export {
     union,
     withLegacyRead,
 } from './codec/codec'
+export { pin } from './codec/pin'
 export type { Field, Term } from './codec/term'
 // `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve
 // others `denote.ts` needs. The name on the surface is unchanged; only the module that declares

@@ -3867,10 +3867,11 @@ const fieldOf = (declared: ObjectSlot): Field => {
  * Whatever else is worth checking is asked of the codec afterwards, and asked separately, because
  * they are separate questions:
  *
- * - `satisfies ItemCodec<Entity>` — the entity, exactly. `ItemCodec` is invariant in it, sitting in
- *   `encode`'s parameter and `decode`'s return, so a missing attribute, an extra one, and one that
- *   decodes to the wrong type are all caught. This is the totality the entity-first form used to
- *   check by construction.
+ * - `satisfies ItemCodec<Entity>` — the entity, up to assignability both ways. `ItemCodec` is
+ *   invariant in it, sitting in `encode`'s parameter and `decode`'s return, so a required attribute
+ *   that is missing or extra, and one that decodes to the wrong type, are caught. An optional key
+ *   that is added or dropped is not caught: an object without `k?` is assignable to an object with
+ *   it, and back. {@link pin} compares the key paths with their optional marks, and refuses it.
  * - `satisfies Writes<Row>` — the stored shape. Covariant on its own, hence {@link Writes}.
  *
  * Which is the whole reason the entity is no longer a type parameter: it never needed to be one.

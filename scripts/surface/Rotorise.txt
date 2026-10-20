@@ -123,6 +123,7 @@ opaque
 optional
 orThrow
 pathBuilder
+pin
 product
 ref
 refine
