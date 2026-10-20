@@ -528,8 +528,12 @@ inside what the pattern holds. The host decides this on a fragment. A literal fi
 base and adapter, and a literal fits its base. A base fits itself. An option fits a union that holds
 a member of the option. An object fits an object pattern that names a subset of its keys. Any other
 pair fits only where the two terms are one term. An object with a union at a field is the union of
-the objects (`Term.product_join`). So an option splits at each field that the pattern names, and the
-parts that fit stay. A dissection splits no member, because its tag table is keyed by literals.
+the objects (`Term.product_join`). The slice goes into that field, and the result stays compact, as
+the Extract of TypeScript reads it. An option with a union at a field keeps the part of the union
+that fits the pattern, in place. So the extraction has no option that the original lacks. The
+rejection has one option for each field that the pattern names, because the complement of a product
+is no product. A union pattern is no product of its keys, so it splits the option, and the parts
+that fit stay. A dissection changes no member, because its tag table is keyed by literals.
 
 **The strong law after narrowing needs a condition on the update, and the port states the condition
 as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to

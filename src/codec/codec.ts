@@ -3863,10 +3863,11 @@ export type UnionCodec<
      * holds. The pattern is a codec, so the slice of a union takes what a codec takes, a union
      * that holds a string beside objects included.
      *
-     * An object pattern names the keys that it needs, and an option may declare more. An object with
-     * a union at a field is the union of the objects, so an option splits at each field that the
-     * pattern names and that holds a union of objects, and the parts that fit stay. The result is
-     * rebuilt through {@link union}, so a slice of a certified union is certified.
+     * An object pattern names the keys that it needs, and an option may declare more. The slice goes
+     * into a field that holds a union of objects, and the result stays compact, as the `Extract` of
+     * TypeScript reads it: `{ k, pet: U }` against `{ pet: P }` keeps `{ k, pet: Extract<U, P> }`. So
+     * the extraction has no option that the original lacks. The result is rebuilt through
+     * {@link union}, so a slice of a certified union is certified.
      */
     readonly extract: <const P extends AnyCodec>(
         this: Closed,
@@ -5666,8 +5667,9 @@ type EveryOptionTagged<
  * not as a closed object. Each other pair fits only where the two terms are one term.
  *
  * **An object with a union at a field is the union of the objects**, one for each member of the
- * field (`Calculus.Term.product_join` states the product form). So an option splits at each field
- * that the pattern names and that holds a union of objects, and then each part fits or not.
+ * field (`Calculus.Term.product_join` states the product form). The slice goes into the field and
+ * keeps the members that fit, in place, so an option stays one option. A union pattern is no
+ * product of its keys, and there the option splits and each part fits or not.
  *
  * The slice of a union and the slice of a field are one operation, and a pattern nests as a
  * codec nests: `pet: pet.extract(object({ status: string('AVAILABLE') }))`.
@@ -5853,11 +5855,12 @@ type KeepsFit<Keep extends boolean, F extends Fit> = Keep extends true
       : true
 
 /**
- * **The option codecs a pattern keeps**, in the order they were declared, after the split. `Keep`
- * is `true` for the extraction and `false` for the exclusion, so the two are one walk and the
- * complement cannot drift from the selection.
+ * **The option codecs that a union pattern keeps**, in the order they were declared, after the
+ * split. A union pattern is no product of its keys, so an option splits at each field that the
+ * pattern names, and the parts that fit stay. `Keep` is `true` for the extraction and `false` for
+ * the exclusion, so the two are one walk and the complement cannot drift from the selection.
  */
-export type KeptOptions<
+type KeptSplit<
     Options extends readonly unknown[],
     P,
     Keep extends boolean = true,
@@ -5875,6 +5878,265 @@ type KeptBy<
           ...KeptBy<Rest, P, Keep>,
       ]
     : []
+
+type SameList<A extends readonly unknown[], B extends readonly unknown[]> = [
+    A,
+] extends [B]
+    ? [B] extends [A]
+        ? true
+        : false
+    : false
+
+/** A split key of an option: the summand specs that the pattern keeps and rejects, and the summands as declared. */
+type NestedKey<
+    K,
+    Keep extends readonly unknown[],
+    Rest extends readonly unknown[],
+    Orig extends readonly unknown[],
+> = { key: K; keep: Keep; rest: Rest; orig: Orig }
+
+/**
+ * The summands of a field, each kept whole, rejected whole, or sliced against the one object that
+ * the pattern holds there. A summand that fits whole stays whole.
+ */
+type SliceSummands<
+    Summands extends readonly unknown[],
+    PK extends readonly unknown[],
+    Keep extends readonly unknown[] = [],
+    Rest extends readonly unknown[] = [],
+> = Summands extends readonly [
+    infer Head,
+    ...infer Tail extends readonly unknown[],
+]
+    ? EveryFits<Head, PK[number]> extends 't'
+        ? SliceSummands<Tail, PK, [...Keep, Head], Rest>
+        : true extends IsUnion<PK[number]>
+          ? EveryFits<Head, PK[number]> extends 'u'
+              ? SliceSummands<Tail, PK, [...Keep, Head], [...Rest, Head]>
+              : SliceSummands<Tail, PK, Keep, [...Rest, Head]>
+          : SliceSpecOf<Head, PK[number]> extends {
+                  keep: infer K extends readonly unknown[]
+                  rest: infer R extends readonly unknown[]
+              }
+            ? SliceSummands<Tail, PK, [...Keep, ...K], [...Rest, ...R]>
+            : never
+    : { keep: Keep; rest: Rest }
+
+/** A spec against one object pattern: the fit of the keys that do not split, and the keys that split. */
+type SliceKeys<
+    S,
+    Keys extends readonly unknown[],
+    PS,
+    Leaf extends Fit,
+    Nested extends readonly unknown[],
+> = Keys extends readonly [infer K, ...infer R extends readonly unknown[]]
+    ? K extends keyof PS
+        ? K extends keyof S
+            ? FitsCodec<S[K], PS[K]> extends 't'
+                ? SliceKeys<S, R, PS, Leaf, Nested>
+                : [FieldSpecList<S[K]>] extends [never]
+                  ? SliceKeys<S, R, PS, Leaf | FitsCodec<S[K], PS[K]>, Nested>
+                  : [FieldSpecList<PS[K]>] extends [never]
+                    ? SliceKeys<S, R, PS, Leaf | FitsCodec<S[K], PS[K]>, Nested>
+                    : SliceSummands<
+                            FieldSpecList<S[K]>,
+                            FieldSpecList<PS[K]>
+                        > extends {
+                            keep: infer Kp extends readonly unknown[]
+                            rest: infer Rs extends readonly unknown[]
+                        }
+                      ? SliceKeys<
+                            S,
+                            R,
+                            PS,
+                            Leaf,
+                            [
+                                ...Nested,
+                                NestedKey<K, Kp, Rs, FieldSpecList<S[K]>>,
+                            ]
+                        >
+                      : never
+            : [PS[K]] extends [{ readonly [optionalMarker]: true }]
+              ? SliceKeys<S, R, PS, Leaf, Nested>
+              : SliceKeys<S, R, PS, Leaf | 'f', Nested>
+        : SliceKeys<S, R, PS, Leaf, Nested>
+    : { leaf: AllOf<Leaf>; nested: Nested }
+
+type Replacement = {
+    key: unknown
+    list: readonly unknown[]
+    orig: readonly unknown[]
+}
+
+/** The slot that holds the kept summands: the declared slot where they are all of them, else their union. */
+type FieldOf<
+    L extends readonly unknown[],
+    Orig extends readonly unknown[],
+    Slot,
+> = true extends SameList<L, Orig>
+    ? Slot
+    : L extends readonly [infer One]
+      ? ObjectOfSpec<One>
+      : UnionCodec<DerivedUnion<MapObjects<L>>, MapObjects<L>>
+type ReplaceAll<S, Rs extends readonly unknown[]> = Rs extends readonly [
+    infer Head extends Replacement,
+    ...infer Tail extends readonly unknown[],
+]
+    ? ReplaceAll<
+          {
+              [P in keyof S]: P extends Head['key']
+                  ? FieldOf<Head['list'], Head['orig'], S[P]>
+                  : S[P]
+          },
+          Tail
+      >
+    : S
+type Lists<Nested extends readonly unknown[], Of extends 'keep' | 'rest'> = {
+    [I in keyof Nested]: Nested[I] extends {
+        key: infer K
+        keep: infer Kp
+        rest: infer Rs
+        orig: infer O
+    }
+        ? { key: K; list: Of extends 'keep' ? Kp : Rs; orig: O }
+        : never
+}
+type NonEmptyAll<Ls extends readonly unknown[]> = Ls extends readonly [
+    infer H extends { list: readonly unknown[] },
+    ...infer T extends readonly unknown[],
+]
+    ? H['list'] extends readonly []
+        ? false
+        : NonEmptyAll<T>
+    : true
+
+type SliceInfo = { leaf: Fit; nested: readonly unknown[] }
+
+/** The kept spec: one spec with a union at each split field, or nothing. */
+type KeptSpecs<S, Info extends SliceInfo> = Info['leaf'] extends 'f'
+    ? []
+    : Info['nested'] extends readonly []
+      ? [S]
+      : NonEmptyAll<Lists<Info['nested'], 'keep'>> extends true
+        ? [ReplaceAll<S, Lists<Info['nested'], 'keep'>>]
+        : []
+
+/**
+ * The rejected specs: one for each split key whose rejected summands remain, with the keys before it
+ * kept and the keys after it as declared. The complement of a product is no product, and this is
+ * its cover.
+ */
+type RestSpecs<S, Info extends SliceInfo> = Info['leaf'] extends 'f' | 'u'
+    ? [S]
+    : RestAt<S, Info['nested'], []>
+type RestAt<
+    S,
+    Nested extends readonly unknown[],
+    Before extends readonly unknown[],
+> = Nested extends readonly [
+    infer N extends {
+        key: unknown
+        keep: readonly unknown[]
+        rest: readonly unknown[]
+        orig: readonly unknown[]
+    },
+    ...infer Tail extends readonly unknown[],
+]
+    ? [
+          ...(N['rest'] extends readonly []
+              ? []
+              : NonEmptyAll<Lists<Before, 'keep'>> extends true
+                ? [
+                      ReplaceAll<
+                          S,
+                          [
+                              ...Lists<Before, 'keep'>,
+                              {
+                                  key: N['key']
+                                  list: N['rest']
+                                  orig: N['orig']
+                              },
+                          ]
+                      >,
+                  ]
+                : []),
+          ...RestAt<S, Tail, [...Before, N]>,
+      ]
+    : []
+
+type SliceSpecOf<S, PS> = SliceKeys<
+    S,
+    KeyTuple<keyof PS>,
+    PS,
+    't',
+    []
+> extends infer Info extends SliceInfo
+    ? { keep: KeptSpecs<S, Info>; rest: RestSpecs<S, Info> }
+    : never
+
+/**
+ * **The option codecs that a pattern keeps**, in the order they were declared. `Keep` is `true` for
+ * the extraction and `false` for the exclusion.
+ *
+ * **The slice goes into the field and the result stays compact.** An option `{ k, pet: U }` against
+ * the pattern `{ pet: P }` is `{ k, pet: Extract<U, P> }`, one option with a narrower union, as
+ * TypeScript's `Extract` reads it. So the extraction has one option for each option that it keeps,
+ * and no more, which is what the model's slice of a union states. The exclusion has one option for
+ * each split key, because the complement of a product is no product. A union pattern is no product of
+ * its keys, and keeps the split ({@link KeptSplit}), and so does a pattern that holds no object.
+ */
+export type KeptOptions<
+    Options extends readonly unknown[],
+    P,
+    Keep extends boolean = true,
+> = [FieldSpecList<P>] extends [never]
+    ? KeptSplit<Options, P, Keep>
+    : true extends IsUnion<PatternSpecs<P>>
+      ? KeptSplit<Options, P, Keep>
+      : KeptCompact<Options, P, Keep>
+type KeptCompact<
+    Options extends readonly unknown[],
+    P,
+    Keep extends boolean,
+> = Options extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [
+          ...(Head extends { readonly item: { readonly spec: infer Sp } }
+              ? Sp extends readonly unknown[]
+                  ? KeepsFit<Keep, FitsCodec<Head, P>> extends true
+                      ? [Head]
+                      : []
+                  : FitsCodec<Head, P> extends 't'
+                    ? Keep extends true
+                        ? [Head]
+                        : []
+                    : SliceSpecOf<Sp, PatternSpecs<P>> extends infer Sl extends
+                            {
+                                keep: readonly unknown[]
+                                rest: readonly unknown[]
+                            }
+                      ? SameSpecOrObject<
+                            Keep extends true ? Sl['keep'] : Sl['rest'],
+                            Sp,
+                            Head
+                        >
+                      : []
+              : KeepsFit<Keep, FitsCodec<Head, P>> extends true
+                ? [Head]
+                : []),
+          ...KeptCompact<Rest, P, Keep>,
+      ]
+    : []
+/** The option itself where its spec is unchanged, else the object of the new spec. */
+type SameSpecOrObject<Specs extends readonly unknown[], Sp, Head> = {
+    [I in keyof Specs]: [Specs[I]] extends [Sp]
+        ? [Sp] extends [Specs[I]]
+            ? Head
+            : ObjectOfSpec<Specs[I]>
+        : ObjectOfSpec<Specs[I]>
+}
 
 /** The member specs of a dissection that a pattern keeps. A dissection splits no member. */
 export type Extracted<
@@ -6204,12 +6466,198 @@ const patternRefusal = (
     return undefined
 }
 
+/** An object spec, with the open key entry of the object that holds it. */
+type Piece = {
+    readonly spec: Record<string, ObjectSlot>
+    readonly rest: AnyCodec | undefined
+}
+type SpecSlice = {
+    readonly keep: readonly Piece[]
+    readonly rest: readonly Piece[]
+}
+
+/** The object nodes that a term names: the object itself, or each object option of a union. */
+const objectNodesOf = (t: Term): readonly Term[] => {
+    const node = resolvedTerm(t)
+    if (node === undefined) return []
+    return node.kind === 'union' ? node.options.flatMap(objectNodesOf) : [node]
+}
+
 /**
- * The options that fit a pattern, each option split first at the fields that the pattern names.
+ * The part of an object that a pattern keeps, and the part that it rejects, each as a list of
+ * objects that hold a union at the fields that the pattern splits.
+ *
+ * The slice goes into the field and the result stays compact: an object `{ k, pet: U }` against
+ * the pattern `{ pet: P }` keeps `{ k, pet: Extract<U, P> }`. A key of an object pattern fits
+ * apart from the other keys, so the kept set is a product over the keys, and the product is one
+ * object. The complement of a product is no product, and the rejected part is its cover: one
+ * object for each split key, with the keys before it kept and the keys after it as declared.
+ *
+ * Nothing where the pattern is a union of objects, because a union pattern is no product of its
+ * keys. The caller splits then. An object with an open key entry is refused where a field changes,
+ * because the type of a part holds the declared names only, and the type cannot state the refusal.
+ */
+const sliceSpec = (
+    piece: Piece,
+    node: Extract<Term, { kind: 'object' }>,
+    pattern: Term,
+): SpecSlice | undefined => {
+    const wantedObject = resolvedTerm(pattern)
+    if (wantedObject?.kind !== 'object') return undefined
+    let leafFits = true
+    const nested: {
+        name: string
+        keep: Piece[]
+        rest: Piece[]
+        original: Piece[]
+    }[] = []
+    for (const [name, wanted] of Object.entries(wantedObject.body.fields)) {
+        const mine = node.body.fields[name]
+        if (mine === undefined) {
+            if (alwaysWritten(wanted) || node.body.rest !== undefined) {
+                leafFits = false
+            }
+            continue
+        }
+        if (alwaysWritten(wanted) && !alwaysWritten(mine)) {
+            leafFits = false
+            continue
+        }
+        if (fits(mine.t, wanted.t)) continue
+        const slot = piece.spec[name]
+        const summands = objectNodesOf(mine.t)
+        const members = objectNodesOf(wanted.t)
+        if (
+            slot === undefined ||
+            'codec' in slot ||
+            summands.length === 0 ||
+            members.length === 0 ||
+            summands.some((one) => objectNamed(one) === undefined)
+        ) {
+            leafFits = false
+            continue
+        }
+        const wantedNode = resolvedTerm(wanted.t)
+        const keep: Piece[] = []
+        const rest: Piece[] = []
+        const original: Piece[] = []
+        for (const summand of summands) {
+            const one = objectNamed(summand) as ObjectItem
+            const here: Piece = {
+                spec: one.spec as Record<string, ObjectSlot>,
+                rest: one.rest,
+            }
+            original.push(here)
+            if (fits(summand, wanted.t)) keep.push(here)
+            else if (
+                wantedNode?.kind === 'object' &&
+                summand.kind === 'object'
+            ) {
+                const inner = sliceSpec(here, summand, wanted.t)
+                if (inner === undefined) return undefined
+                keep.push(...inner.keep)
+                rest.push(...inner.rest)
+            } else if (
+                summand.kind === 'object' &&
+                members.some(
+                    (member) =>
+                        member.kind === 'object' &&
+                        (sliceSpec(here, summand, member)?.keep.length ?? 0) >
+                            0,
+                )
+            ) {
+                // a summand that fits a member of a union pattern in part: the caller splits
+                return undefined
+            } else rest.push(here)
+        }
+        nested.push({ name, keep, rest, original })
+    }
+    if (!leafFits) return { keep: [], rest: [piece] }
+    if (nested.length === 0) return { keep: [piece], rest: [] }
+    const rebuild = (
+        replaced: ReadonlyMap<string, readonly Piece[]>,
+    ): Piece => {
+        const spec: Record<string, ObjectSlot> = { ...piece.spec }
+        for (const [name, list] of replaced) {
+            const entry = nested.find((one) => one.name === name)
+            const same =
+                entry !== undefined &&
+                list.length === entry.original.length &&
+                list.every((one, at) => one === entry.original[at])
+            if (same) continue
+            if (list.some((one) => one.rest !== undefined)) {
+                throw new CodecError(
+                    `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
+                )
+            }
+            const codecs = list.map(
+                (one) =>
+                    objectFromMap(one.spec, undefined) as unknown as AnyCodec,
+            )
+            spec[name] = (codecs.length === 1
+                ? codecs[0]
+                : union(codecs as never)) as unknown as ObjectSlot
+        }
+        return { spec, rest: piece.rest }
+    }
+    const keepAll = new Map(nested.map((one) => [one.name, one.keep] as const))
+    const keep = nested.every((one) => one.keep.length > 0)
+        ? [rebuild(keepAll)]
+        : []
+    const rest: Piece[] = []
+    for (const [at, one] of nested.entries()) {
+        if (one.rest.length === 0) continue
+        const before = nested.slice(0, at)
+        if (before.some((other) => other.keep.length === 0)) break
+        const replaced = new Map<string, readonly Piece[]>()
+        for (const other of before) replaced.set(other.name, other.keep)
+        replaced.set(one.name, one.rest)
+        rest.push(rebuild(replaced))
+    }
+    return { keep, rest }
+}
+
+/** The parts of an option that fit a pattern, where each field that the pattern names is split. */
+const splitParts = <O>(
+    option: O,
+    wanted: Term,
+    keep: boolean,
+    splits: boolean,
+): readonly O[] => {
+    const item = objectNamed(termOf(option as unknown as AnyCodec))
+    const parts: readonly O[] = item
+        ? ((specs) => {
+              const [only] = specs
+              if (specs.length === 1 && only === item.spec) return [option]
+              if (!splits) {
+                  throw new CodecError(
+                      'a dissection keeps its members whole, and this pattern splits a member at a field that holds a union of objects. Slice the field first, or take the pattern from a union',
+                  )
+              }
+              if (item.rest !== undefined) {
+                  throw new CodecError(
+                      'a member has an open key entry, and a pattern splits declared names only',
+                  )
+              }
+              return specs.map(
+                  (spec) => objectFromMap(spec, undefined) as unknown as O,
+              )
+          })(splitBy(item.spec as Record<string, ObjectSlot>, wanted))
+        : [option]
+    return parts.filter(
+        (part) => fits(termOf(part as unknown as AnyCodec), wanted) === keep,
+    )
+}
+
+/**
+ * The options that fit a pattern. An option that fits whole stays whole. An option that an object
+ * pattern slices keeps its place and holds a narrower union at the fields that the pattern names:
+ * the extraction has no option that the original lacks. A union pattern splits the option, and the
+ * parts that fit stay.
  *
  * `splits` is `false` for a dissection, whose table is keyed by the literals of its members: a
- * part has no key there, so a pattern that splits a member is refused and the caller slices the
- * field first.
+ * member that changes has no key there, so a pattern that changes a member is refused and the
+ * caller slices the field first.
  */
 const picked = <O>(
     options: readonly O[],
@@ -6224,34 +6672,38 @@ const picked = <O>(
     )
     if (why) throw new CodecError(why)
     return options.flatMap((option) => {
+        const term = termOf(option as unknown as AnyCodec)
         // an option that fits whole has parts that all fit, so it stays whole and no part remains
-        if (fits(termOf(option as unknown as AnyCodec), wanted)) {
-            return keep ? [option] : []
-        }
-        const item = objectNamed(termOf(option as unknown as AnyCodec))
-        const parts: readonly O[] = item
-            ? ((specs) => {
-                  const [only] = specs
-                  if (specs.length === 1 && only === item.spec) return [option]
-                  if (!splits) {
-                      throw new CodecError(
-                          'a dissection keeps its members whole, and this pattern splits a member at a field that holds a union of objects. Slice the field first, or take the pattern from a union',
-                      )
-                  }
-                  if (item.rest !== undefined) {
-                      throw new CodecError(
-                          'a member has an open key entry, and a pattern splits declared names only',
-                      )
-                  }
-                  return specs.map(
-                      (spec) => objectFromMap(spec, undefined) as unknown as O,
+        if (fits(term, wanted)) return keep ? [option] : []
+        const item = objectNamed(term)
+        const node = resolvedTerm(term)
+        const sliced =
+            item && node?.kind === 'object'
+                ? sliceSpec(
+                      {
+                          spec: item.spec as Record<string, ObjectSlot>,
+                          rest: item.rest,
+                      },
+                      node,
+                      wanted,
                   )
-              })(splitBy(item.spec as Record<string, ObjectSlot>, wanted))
-            : [option]
-        return parts.filter(
-            (part) =>
-                fits(termOf(part as unknown as AnyCodec), wanted) === keep,
-        )
+                : undefined
+        if (sliced === undefined)
+            return splitParts(option, wanted, keep, splits)
+        return (keep ? sliced.keep : sliced.rest).map((one) => {
+            if (one.spec === item?.spec) return option
+            if (!splits) {
+                throw new CodecError(
+                    'a dissection keeps its members whole, and this pattern changes a member at a field that holds a union of objects. Slice the field first, or take the pattern from a union',
+                )
+            }
+            if (item?.rest !== undefined) {
+                throw new CodecError(
+                    'a member has an open key entry, and a pattern splits declared names only',
+                )
+            }
+            return objectFromMap(one.spec, undefined) as unknown as O
+        })
     })
 }
 

@@ -2,10 +2,10 @@
  * The argument of `extract` and `exclude` is a codec: the pattern that says which options to keep.
  *
  * An option fits a pattern where every value that it holds lies inside what the pattern holds, and
- * an object pattern names the keys that it needs. An object with a union at a field is the union of
- * the objects, so an option splits at each field that the pattern names and that holds a union of
- * objects, and the parts that fit stay. Every test that compares a slice with the original does so
- * on a pool of rows, valid and damaged.
+ * an object pattern names the keys that it needs. The slice goes into a field that holds a union and
+ * the result stays compact, as TypeScript's `Extract` reads it: `{ k, pet: U }` against `{ pet: P }`
+ * is `{ k, pet: Extract<U, P> }`. So the extraction has no option that the original lacks. Every
+ * test that compares a slice with the original does so on a pool of rows, valid and damaged.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
@@ -25,6 +25,7 @@ import {
 import { failed } from '../../result'
 import { disjoint } from '../../scoped'
 import type { Term } from '../../term'
+import { clauseLiteralsOf } from '../../term'
 
 type Dec = Decoded<typeof decimal>
 
@@ -106,16 +107,16 @@ const decodes = (
     return failed(out) ? undefined : out
 }
 
-describe('an object with a union at a field is the union of the objects', () => {
+describe('a slice goes into a field that holds a union and stays compact', () => {
     const dogs = object({
         pet: pet.extract(object({ category: string('DOG') })),
     })
     const kept = order.extract(dogs)
     const rest = order.exclude(dogs)
 
-    it('splits each option at the field, and each slice is a certified union', () => {
-        expect(optionsOf(kept)).toHaveLength(6)
-        expect(optionsOf(rest)).toHaveLength(6)
+    it('keeps each option in place with a narrower union, and each slice is a certified union', () => {
+        expect(optionsOf(kept)).toHaveLength(2)
+        expect(optionsOf(rest)).toHaveLength(2)
         for (const slice of [kept, rest]) {
             const options = optionsOf(slice)
             for (const [at, one] of options.entries()) {
@@ -159,7 +160,7 @@ describe('an object with a union at a field is the union of the objects', () => 
     })
 })
 
-describe('a pattern that nests keeps the objects whose member it keeps', () => {
+describe('a pattern that nests keeps the members of the field that it keeps', () => {
     const pattern = object({
         kind: string('ADOPT'),
         pet: pet.extract(object({ status: string('AVAILABLE') })),
@@ -167,12 +168,12 @@ describe('a pattern that nests keeps the objects whose member it keeps', () => {
     const kept = order.extract(pattern)
     const rest = order.exclude(pattern)
 
-    it('keeps one option for each member of the field that the pattern keeps', () => {
-        expect(optionsOf(kept)).toHaveLength(2)
-        expect(optionsOf(rest)).toHaveLength(10)
+    it('keeps one option, and rejects the other members of its field and the option of another kind', () => {
+        expect(optionsOf(kept)).toHaveLength(1)
+        expect(optionsOf(rest)).toHaveLength(2)
     })
 
-    it('types the kept options as the split type reads them', () => {
+    it('types the kept option with the union at the field', () => {
         type Dog = {
             readonly category: 'DOG'
             readonly breed: string
@@ -185,10 +186,10 @@ describe('a pattern that nests keeps the objects whose member it keeps', () => {
             readonly status: 'AVAILABLE'
             readonly price: Dec
         }
-        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
-            | { readonly kind: 'ADOPT'; readonly pet: Dog }
-            | { readonly kind: 'ADOPT'; readonly pet: Cat }
-        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<{
+            readonly kind: 'ADOPT'
+            readonly pet: Dog | Cat
+        }>()
         expectTypeOf<
             Extract<Decoded<typeof rest>, { kind: 'ADOPT' }>['pet']['status']
         >().toEqualTypeOf<'PENDING' | 'SOLD'>()
@@ -220,7 +221,7 @@ describe('a pattern that nests keeps the objects whose member it keeps', () => {
                 }),
             }),
         )
-        expect(optionsOf(available)).toHaveLength(2)
+        expect(optionsOf(available)).toHaveLength(1)
         expectTypeOf<
             Decoded<typeof available>['kind']
         >().toEqualTypeOf<'BOOKED'>()
@@ -236,7 +237,93 @@ describe('a pattern that nests keeps the objects whose member it keeps', () => {
                 take: pet.extract(object({ status: string('AVAILABLE') })),
             }),
         )
-        expect(optionsOf(swap)).toHaveLength(6)
+        expect(optionsOf(swap)).toHaveLength(1)
+    })
+})
+
+describe('the slice is the Extract of TypeScript, applied inside the field', () => {
+    type Pet = Decoded<typeof pet>
+    type Dogs = Extract<Pet, { readonly category: 'DOG' }>
+    type Model =
+        | { readonly kind: 'ADOPT'; readonly pet: Dogs }
+        | { readonly kind: 'RETURN'; readonly pet: Dogs; readonly note: string }
+    const dogs = object({
+        pet: pet.extract(object({ category: string('DOG') })),
+    })
+    const kept = order.extract(dogs)
+
+    it('types the extraction as the form that a model writes', () => {
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<Model>()
+    })
+
+    it('lets a value of the model form stand for a value of the slice', () => {
+        const model = {} as Model
+        const decoded: Decoded<typeof kept> = model
+        expect(decoded).toBe(model)
+    })
+
+    it('keeps no option that the original lacks, and each option its own tag', () => {
+        const tagsOf = (codec: { readonly def: Term }) =>
+            optionsOf(codec).map((one) => {
+                const pins = clauseLiteralsOf(one)
+                return pins?.kind?.alts.ls[0]
+            })
+        const patterns = [
+            dogs,
+            object({ kind: string('ADOPT'), pet }),
+            object({
+                kind: string('RETURN'),
+                pet: pet.extract(object({ status: string('SOLD') })),
+            }),
+            object({
+                pet: pet.extract(
+                    object({
+                        category: string('CAT'),
+                        status: string('PENDING'),
+                    }),
+                ),
+            }),
+        ]
+        for (const pattern of patterns) {
+            const slice = order.extract(pattern)
+            expect(optionsOf(slice).length).toBeLessThanOrEqual(
+                optionsOf(order).length,
+            )
+            expect(
+                tagsOf(slice).every((tag) => tagsOf(order).includes(tag)),
+            ).toBe(true)
+        }
+    })
+
+    it('rejects with one option for each split key, because the complement of a product is no product', () => {
+        const swap = union([object({ give: pet, take: pet })])
+        const both = object({
+            give: pet.extract(object({ category: string('DOG') })),
+            take: pet.extract(object({ status: string('AVAILABLE') })),
+        })
+        expect(optionsOf(swap.extract(both))).toHaveLength(1)
+        expect(optionsOf(swap.exclude(both))).toHaveLength(2)
+        const single = object({
+            take: pet.extract(object({ status: string('AVAILABLE') })),
+        })
+        expect(optionsOf(swap.exclude(single))).toHaveLength(1)
+    })
+
+    it('splits an option at a union pattern, and the parts still partition the values', () => {
+        const eitherPet = union([
+            object({ pet: pet.extract(object({ category: string('DOG') })) }),
+            object({ pet: pet.extract(object({ status: string('SOLD') })) }),
+        ])
+        const kept = order.extract(eitherPet)
+        const rest = order.exclude(eitherPet)
+        for (const row of valid) {
+            const inKept = decodes(kept, row)
+            const inRest = decodes(rest, row)
+            expect(inKept === undefined, JSON.stringify(row)).not.toBe(
+                inRest === undefined,
+            )
+            expect(inKept ?? inRest).toEqual(decodes(order, row))
+        }
     })
 })
 
