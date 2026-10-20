@@ -24,7 +24,12 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
-import { checkDecodesAreWritable, checkRoundTrip } from '../../testing'
+import {
+    arbitraryOf,
+    checkDecodesAreWritable,
+    checkRoundTrip,
+    rngFrom,
+} from '../../testing'
 
 const Pet = object({ petId: string, name: string })
 const Price = object({ price: decimal, gift: optional(boolean) })
@@ -291,6 +296,26 @@ describe('the factors a product refuses until the owner rules', () => {
             gone: { NULL: true },
         })
         expect(() => Nul.unsafeEncode({ a: 'q' } as never)).toThrow(CodecError)
+    })
+
+    /**
+     * A name at `never` under a mark that admits absence holds no value, so the generator has
+     * nothing to draw for it. `optional` leaves the key out, and `undefinable` keeps the key at
+     * `undefined`, which is the one value that the key can take.
+     */
+    it('generates a name at never as absent under optional, and as undefined under undefinable', () => {
+        const Opt = object({ a: string, gone: optional(never) })
+        const Und = object({ a: string, gone: undefinable(never) })
+        const rng = rngFrom(7)
+        for (let i = 0; i < 100; i++) {
+            const opt = arbitraryOf(Opt, rng, 4) as Record<string, unknown>
+            expect('gone' in opt).toBe(false)
+            const und = arbitraryOf(Und, rng, 4) as Record<string, unknown>
+            expect('gone' in und).toBe(true)
+            expect(und.gone).toBeUndefined()
+        }
+        checkRoundTrip(Opt.item)
+        checkRoundTrip(Und.item)
     })
 
     /**

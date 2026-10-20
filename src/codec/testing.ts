@@ -54,6 +54,7 @@ import { accepts, holds } from './denote'
 import type { Term } from './term'
 import {
     componentsOf,
+    holdsNoValue,
     isOpaqueSugar,
     member as termMember,
     usedTargetOf,
@@ -1089,7 +1090,8 @@ export const arbitraryOf = (
             for (const name in fields) {
                 const field = fields[name]
                 if (field === undefined) continue
-                const sparse = size <= 0 || rng() < 0.5
+                // a term with no value leaves no draw: the field is always sparse
+                const sparse = size <= 0 || rng() < 0.5 || holdsNoValue(field.t)
                 if (field.mark === 'optional' && sparse) continue
                 // the key is always emitted; what varies is whether it holds a value
                 if (field.mark === 'undefinable' && sparse) {
