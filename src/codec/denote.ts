@@ -44,11 +44,10 @@ import type {
 } from './codec'
 import type { Result } from './result'
 import { andThen, CodecError, every, everyEntry, failed } from './result'
-import { agrees } from './scoped'
+import { agrees, guardAt, sideOf } from './scoped'
 import type { Alternatives, Body, Field, Literal, Term } from './term'
 import {
     alwaysWritten,
-    clauseLiteralsOf,
     cycleEntryOf,
     elementMember,
     holdsNoValue,
@@ -59,7 +58,6 @@ import {
     openRefusal,
     RecursionRefused,
     recursionUse,
-    resolvedTerm,
     storedAlternatives,
     member as termMember,
     unboundRefs,
@@ -580,54 +578,42 @@ export const restrict = (
     },
 })
 
-/** How many objects deep a key path may go. */
-const PIN_DEPTH = 3
-
 /**
- * The stored key of each alternative: the member that the attribute carries, then the text. Binary
- * has none, so a binary pin gives no index and the union attempts.
- */
-const storedKeys = (alts: Alternatives): readonly string[] | undefined =>
-    alts.base === 'string'
-        ? alts.ls.map((one) => `S${one}`)
-        : alts.base === 'number'
-          ? alts.ls.map((one) => `N${one.digits}`)
-          : alts.base === 'boolean'
-            ? alts.ls.map((one) => `B${one}`)
-            : undefined
-
-/**
- * The literals that an object term pins, by key path, as stored keys.
+ * The literals that the guard of an option pins, by key path, as stored keys.
  *
- * A path names a key of the object that a required field holds. The pin is required. An adapter
- * does not matter, because the alternatives are the stored literals and the adapter converts after
- * the read. Each pin is an upper bound on the stored value at the path, so an attribute with
- * another literal there is outside the option.
+ * Each `in` conjunct of the guard is an upper bound on the stored value at the path, so an attribute
+ * with another literal there is outside the option. Binary has no stored key, so a binary pin gives
+ * no index and the union attempts.
  */
-const pinsByPath = (
-    term: Term,
-    prefix: readonly string[],
-    out: Map<string, { path: readonly string[]; ls: readonly string[] }>,
-    depth: number,
-): void => {
-    if (term.kind !== 'object') return
-    for (const [name, form] of Object.entries(clauseLiteralsOf(term) ?? {})) {
-        const ls = form.required ? storedKeys(form.alts) : undefined
-        if (ls) {
-            const path = [...prefix, name]
-            out.set(JSON.stringify(path), { path, ls })
+const pinsOf = (term: Term) => {
+    const pins = new Map<
+        string,
+        { path: readonly (string | number)[]; ls: readonly string[] }
+    >()
+    const side = sideOf(term, 'raw')
+    if (side === undefined) return pins
+    const { conjuncts } = guardAt(
+        side,
+        { kind: 'entry', j: side.root },
+        [],
+        side.bodies.length + 1,
+    )
+    for (const conjunct of conjuncts) {
+        if (!('in' in conjunct)) continue
+        const ls = conjunct.in.map((one) => storedKeyAt(one, []))
+        if (ls.every((one): one is string => one !== undefined)) {
+            pins.set(JSON.stringify(conjunct.segments), {
+                path: conjunct.segments,
+                ls,
+            })
         }
     }
-    if (depth === 0) return
-    for (const [name, field] of Object.entries(term.body.fields)) {
-        const inner = alwaysWritten(field) ? resolvedTerm(field.t) : undefined
-        if (inner) pinsByPath(inner, [...prefix, name], out, depth - 1)
-    }
+    return pins
 }
 
 /** A lookup from the stored literals at some key paths to the option that pins them. */
 type LiteralIndex = {
-    readonly paths: readonly (readonly string[])[]
+    readonly paths: readonly (readonly (string | number)[])[]
     readonly table: ReadonlyMap<string, Option>
 }
 
@@ -640,14 +626,7 @@ type LiteralIndex = {
  */
 const literalIndex = (all: readonly Option[]): LiteralIndex | undefined => {
     if (all.length < 2) return undefined
-    const per = all.map((option) => {
-        const pins = new Map<
-            string,
-            { path: readonly string[]; ls: readonly string[] }
-        >()
-        pinsByPath(option.codec.def, [], pins, PIN_DEPTH)
-        return pins
-    })
+    const per = all.map((option) => pinsOf(option.codec.def))
     const [head, ...others] = per
     const common = [...(head?.keys() ?? [])].filter((id) =>
         others.every((pins) => pins.has(id)),
@@ -694,7 +673,7 @@ const literalIndex = (all: readonly Option[]): LiteralIndex | undefined => {
 /** The stored key of the literal at a key path, where each step is a map. */
 const storedKeyAt = (
     attribute: AttributeValue,
-    path: readonly string[],
+    path: readonly (string | number)[],
 ): string | undefined => {
     let at: AttributeValue | undefined = attribute
     for (const name of path) {
@@ -744,6 +723,7 @@ export const altSem = (
         label: string,
         names: ReadonlySet<string> | undefined,
     ) => string
+    readonly named: (attribute: AttributeValue) => Option | undefined
 } => {
     /** Every option, for a message that says what was available. */
     const listed = () => all.map((option) => option.describe).join(' | ')
@@ -921,6 +901,7 @@ export const altSem = (
         only,
         onlyAdmitting,
         naming,
+        named,
     }
 }
 /**

@@ -16,6 +16,7 @@ import {
     product,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { altSem, optionOfTerm } from '../../denote'
 import { failed } from '../../result'
@@ -314,5 +315,35 @@ describe('a union of options that pin distinct literals of any base decodes by t
         expect(failed(fast)).toBe(failed(slow))
         if (failed(fast) && failed(slow))
             expect(fast.message).toBe(slow.message)
+    })
+})
+
+describe('a union whose tag sits under a fallback field decodes as attempting does', () => {
+    // A row that lacks the tag reads as the stand-in, so the tag is no required literal of the stored
+    // view. The row must still reach the option that the stand-in names.
+    const tagged = union([
+        object({
+            kind: withLegacyRead({ current: string('A'), whenMissing: 'A' }),
+            a: string,
+        }),
+        object({ kind: string('B'), b: string }),
+    ])
+    const valid: Row[] = [
+        { M: { kind: { S: 'A' }, a: { S: 'x' } } },
+        { M: { kind: { S: 'B' }, b: { S: 'x' } } },
+    ]
+
+    it('gives the result and the message of attempting, on valid and damaged rows', () => {
+        expect(agreeOn(optionsOf(tagged), pool(valid))).toBeGreaterThanOrEqual(
+            valid.length,
+        )
+    })
+
+    it('reads a row that lacks the tag as the option that the stand-in names', () => {
+        const row: Row = { M: { a: { S: 'x' } } }
+        expect(tagged.decode(row as AttributeValue)).toEqual({
+            kind: 'A',
+            a: 'x',
+        })
     })
 })

@@ -11,17 +11,21 @@
  * **The host has one disjointness decision**, the walk of this file. {@link agrees}, path narrowing
  * and the disjointness rows each read the walk, and each Lean twin reads `Scoped.disjoint`.
  */
-import type { Body, Field, Term } from './term'
+import type { AttributeName } from './attribute'
+import type { Precondition, StoredLiteral } from './codec'
+import type { Alternatives, Body, Field, NonEmpty, Term } from './term'
 import {
     childrenOf,
     componentsOf,
     entryOrder,
     isPrim,
+    literalAlternatives,
     memoClosed,
     otherShape,
     primsApart,
     sameAdapter,
     targetOf,
+    unionAlternatives,
 } from './term'
 
 /** The term, or one of its two views. */
@@ -1042,6 +1046,243 @@ const standInsAgree = (a: Field, b: Field): boolean =>
     a.mark === 'fallback'
         ? b.mark === 'req' || (b.mark === 'fallback' && Object.is(a.v, b.v))
         : b.mark !== 'fallback' || a.mark === 'req'
+
+/**
+ * **The guard of a position at a path**, the model's `termPreAt`, as conjuncts: `in` for a literal
+ * or a union of literals at one base, `type` for a ground base, `exists` for `opaque` and for
+ * `withLegacyRead`, and `type M` with the conjuncts of each required key for an object. A `held`
+ * reads its stored side, and a refinement reads its inner term.
+ *
+ * **Each conjunct holds of each attribute that the position stores**, so the conjuncts are an upper
+ * bound on the position. `inexact` names the first position where the conjunction admits more than
+ * the position: a refinement below the top, a closed object, a key that is not required, a list, a
+ * set, `never`, a recursion, or a union of terms that are not literals at one base. A precondition
+ * refuses at `inexact`. A dispatch reads the conjuncts alone, because a dispatch needs an upper bound.
+ *
+ * `fuel` is the model's bound on the unfoldings of an entry: the count of the entries plus one. An
+ * entry met again is a recursion, which no finite conjunction states, and the walk spends the bound
+ * on it.
+ */
+export const guardAt = (
+    side: Side,
+    at: At,
+    segments: readonly (string | number)[],
+    fuel: number,
+): Guard => {
+    const conjuncts: Precondition[] = []
+    let inexact: Guard['inexact']
+    const walk = (
+        at: At,
+        segments: readonly (string | number)[],
+        fuel: number,
+    ): void => {
+        const refuse = (what: string) => {
+            inexact ??= { segments, what }
+        }
+        if (fuel === 0) return refuse('a recursion')
+        switch (at.kind) {
+            case 'entry':
+                return walk(body(side, at.j), segments, fuel - 1)
+            case 'free':
+                return refuse('a name that no scope binds')
+            case 'refine':
+                if (belowTopAt(side, at.inner)) refuse('a refinement')
+                return walk(at.inner, segments, fuel)
+        }
+        const t = at.t
+        switch (t.kind) {
+            case 'literal': {
+                const alts = literalAlternatives(t)
+                if (alts) conjuncts.push({ segments, in: storedLiterals(alts) })
+                else
+                    refuse('a union of terms that are not literals at one base')
+                return
+            }
+            case 'union': {
+                const options: Term[] = []
+                for (const option of t.options) {
+                    const one = storedLiteralAt(
+                        side,
+                        inPlace(side, option, at.closed),
+                    )
+                    if (one !== undefined) options.push(one)
+                }
+                const alts =
+                    options.length === t.options.length
+                        ? unionAlternatives(options)
+                        : undefined
+                if (alts) {
+                    conjuncts.push({ segments, in: storedLiterals(alts) })
+                    return
+                }
+                refuse('a union of terms that are not literals at one base')
+                // the union stores what one option stores, so a path that each option pins holds
+                // one of the literals of the options there
+                const each = t.options.map(
+                    (option) =>
+                        guardAt(
+                            side,
+                            inPlace(side, option, at.closed),
+                            segments,
+                            fuel,
+                        ).conjuncts,
+                )
+                conjuncts.push(...pinnedByEach(each))
+                return
+            }
+            case 'string':
+            case 'number':
+            case 'boolean':
+            case 'binary':
+            case 'null':
+                conjuncts.push({ segments, type: groundMember[t.kind] })
+                return
+            case 'opaq':
+            case 'legacy':
+                conjuncts.push({ segments, exists: true })
+                return
+            case 'held':
+                return walk(closedAt(side, t.inner), segments, fuel)
+            case 'object': {
+                const { rest } = t.body
+                if (
+                    rest === undefined ||
+                    !storedOpaqueAt(side, childAt(side, rest, at.closed))
+                )
+                    refuse('a closed object')
+                conjuncts.push({ segments, type: 'M' })
+                for (const [key, field] of Object.entries(t.body.fields)) {
+                    if (field.mark !== 'req') {
+                        refuse(`an object whose key '${key}' is not required`)
+                        continue
+                    }
+                    walk(
+                        childAt(side, field.t, at.closed),
+                        [...segments, key],
+                        fuel,
+                    )
+                }
+                return
+            }
+            case 'list':
+                return refuse('a list')
+            case 'set':
+                return refuse('a set')
+            case 'never':
+                return refuse('`never`')
+            // the flat scope reads a `ref` as its target or as an entry, and a `refine` as a position
+            case 'ref':
+            case 'refine':
+                throw new Error(
+                    `a position of the flat scope holds a \`${t.kind}\``,
+                )
+        }
+    }
+    walk(at, segments, fuel)
+    return { conjuncts, inexact }
+}
+
+/** The `in` conjunct at each path that every guard pins, at the union of their literals. */
+const pinnedByEach = (
+    each: readonly (readonly Precondition[])[],
+): Precondition[] => {
+    const [head, ...others] = each.map((conjuncts) => {
+        const pins = new Map<string, Extract<Precondition, { in: unknown }>>()
+        for (const one of conjuncts) {
+            if ('in' in one) pins.set(JSON.stringify(one.segments), one)
+        }
+        return pins
+    })
+    const met: Precondition[] = []
+    for (const [id, pin] of head ?? []) {
+        const theirs = others.map((pins) => pins.get(id))
+        if (theirs.some((one) => one === undefined)) continue
+        const ls = new Map<string, StoredLiteral>()
+        for (const one of [pin, ...theirs]) {
+            for (const l of one?.in ?? []) ls.set(JSON.stringify(l), l)
+        }
+        met.push({
+            segments: pin.segments,
+            in: [pin.in[0], ...[...ls.values()].slice(1)],
+        })
+    }
+    return met
+}
+
+/** The conjuncts of a guard, and the first position where the conjunction admits more. */
+export type Guard = {
+    readonly conjuncts: readonly Precondition[]
+    readonly inexact?: {
+        readonly segments: readonly (string | number)[]
+        readonly what: string
+    }
+}
+
+/** The member of each ground base, which a `type` precondition tests. */
+const groundMember = {
+    string: 'S',
+    number: 'N',
+    boolean: 'BOOL',
+    binary: 'B',
+    null: 'NULL',
+} as const satisfies Readonly<Record<string, AttributeName>>
+
+/**
+ * **The literal that the stored view of a position is**, the model's `storedLitG`: a literal, or
+ * the stored side of a `held` over one. An entry is no literal.
+ */
+const storedLiteralAt = (side: Side, at: At): Term | undefined => {
+    if (at.kind !== 'term') return undefined
+    switch (at.t.kind) {
+        case 'literal':
+            return at.t
+        case 'held':
+            return storedLiteralAt(side, closedAt(side, at.t.inner))
+        default:
+            return undefined
+    }
+}
+
+/**
+ * **Whether the stored view of a position is `opaque`**, the model's `storedOpaqG` at the body of
+ * the entry that the position names. A `withLegacyRead` reads every attribute, so the stored view
+ * of the older reader is `opaque`.
+ */
+const storedOpaqueAt = (side: Side, at: At): boolean => {
+    const here = at.kind === 'entry' ? body(side, at.j) : at
+    if (here.kind !== 'term') return false
+    switch (here.t.kind) {
+        case 'opaq':
+        case 'legacy':
+            return true
+        case 'held':
+            return storedOpaqueAt(side, closedAt(side, here.t.inner))
+        default:
+            return false
+    }
+}
+
+/** The stored attribute of each alternative, as the base writes it. */
+const storedLiterals = (alts: Alternatives): NonEmpty<StoredLiteral> => {
+    switch (alts.base) {
+        case 'string':
+            return eachOf(alts.ls, (v) => ({ S: v }))
+        case 'number':
+            return eachOf(alts.ls, (v) => ({ N: v.digits }))
+        case 'boolean':
+            return eachOf(alts.ls, (v) => ({ BOOL: v }))
+        case 'binary':
+            return eachOf(alts.ls, (v) => ({ B: v }))
+    }
+}
+
+const eachOf = <V>(
+    ls: NonEmpty<V>,
+    stored: (v: V) => StoredLiteral,
+): NonEmpty<StoredLiteral> => {
+    const [one, ...more] = ls
+    return [stored(one), ...more.map(stored)]
+}
 
 const never: Term = { kind: 'never' }
 const opaque: Term = { kind: 'opaq' }

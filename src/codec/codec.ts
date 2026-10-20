@@ -56,31 +56,12 @@ import {
     orThrow,
     type Result,
 } from './result'
-import {
-    type At,
-    belowTopAt,
-    childAt,
-    closedAt,
-    body as entryBody,
-    flatOf,
-    inPlace,
-    type Side,
-    sideOf,
-    storedApart,
-} from './scoped'
-import type {
-    Alternatives,
-    Body,
-    Field,
-    NameForm,
-    NonEmpty,
-    Term,
-} from './term'
+import { childAt, flatOf, guardAt, sideOf, storedApart } from './scoped'
+import type { Body, Field, NameForm, NonEmpty, Term } from './term'
 import {
     alwaysWritten,
     clauseForm,
     holdsNoValue,
-    literalAlternatives,
     member as memberOf,
     openRefusal,
     ownsNullOf,
@@ -92,7 +73,6 @@ import {
     targetOf,
     unanimous,
     unboundRefs,
-    unionAlternatives,
     usedTargetOf,
     whenBound,
 } from './term'
@@ -756,7 +736,7 @@ const narrowAcross = (
 }
 
 /** The stored value of a literal: the members a literal stores, and no set, list or map. */
-type StoredLiteral =
+export type StoredLiteral =
     | Attribute<'S'>
     | Attribute<'N'>
     | Attribute<'BOOL'>
@@ -817,202 +797,21 @@ const preconditionsOf = (
         }
         for (const [key, field] of fields) {
             if (side === undefined) break
-            const at = preconditionsAt(
+            const at = guardAt(
                 side,
                 childAt(side, field.t, false),
                 [...prefix, key],
                 side.bodies.length + 1,
             )
-            if (failed(at)) return at
-            preconditions.push(...at)
+            if (at.inexact) {
+                return new CodecError(
+                    `'${asPath(at.inexact.segments)}' gives no exact precondition: the clause stores ${at.inexact.what} there, and a condition on the path would admit more than the clause`,
+                )
+            }
+            preconditions.push(...at.conjuncts)
         }
     }
     return preconditions
-}
-
-/** The member of each ground base, which a `type` precondition tests. */
-const groundMember = {
-    string: 'S',
-    number: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
-    null: 'NULL',
-} as const satisfies Readonly<Record<string, AttributeName>>
-
-/**
- * **The preconditions of a position of the clause at a path**, the model's `termPreAt`: `in` for a
- * literal or a union of literals at one base, `type` for a ground base, `exists` for `opaque` and
- * for `withLegacyRead`, and `type M` with the preconditions of each key for an object whose keys
- * are each required and whose open block stores `opaque`. A `held` reads its stored side. A
- * refinement over a term with an adapter reads its inner term. Any other term admits less than any
- * conjunction of these forms states, so the term is a refusal.
- *
- * `fuel` is the model's bound on the unfoldings of an entry: the count of the entries plus one. An
- * entry met again is a recursion, which no finite conjunction states, and the walk spends the bound
- * on it.
- */
-const preconditionsAt = (
-    side: Side,
-    at: At,
-    segments: readonly (string | number)[],
-    fuel: number,
-): Result<readonly Precondition[]> => {
-    const refuse = (what: string) =>
-        new CodecError(
-            `'${asPath(segments)}' gives no exact precondition: the clause stores ${what} there, and a condition on the path would admit more than the clause`,
-        )
-    if (fuel === 0) return refuse('a recursion')
-    switch (at.kind) {
-        case 'entry':
-            return preconditionsAt(
-                side,
-                entryBody(side, at.j),
-                segments,
-                fuel - 1,
-            )
-        case 'free':
-            return refuse('a name that no scope binds')
-        case 'refine':
-            return belowTopAt(side, at.inner)
-                ? refuse('a refinement')
-                : preconditionsAt(side, at.inner, segments, fuel)
-    }
-    const t = at.t
-    switch (t.kind) {
-        case 'literal': {
-            const alts = literalAlternatives(t)
-            return alts
-                ? [{ segments, in: storedLiterals(alts) }]
-                : refuse('a union of terms that are not literals at one base')
-        }
-        case 'union': {
-            const options: Term[] = []
-            for (const option of t.options) {
-                const one = storedLiteralAt(
-                    side,
-                    inPlace(side, option, at.closed),
-                )
-                if (one !== undefined) options.push(one)
-            }
-            const alts =
-                options.length === t.options.length
-                    ? unionAlternatives(options)
-                    : undefined
-            return alts
-                ? [{ segments, in: storedLiterals(alts) }]
-                : refuse('a union of terms that are not literals at one base')
-        }
-        case 'string':
-        case 'number':
-        case 'boolean':
-        case 'binary':
-        case 'null':
-            return [{ segments, type: groundMember[t.kind] }]
-        case 'opaq':
-        case 'legacy':
-            return [{ segments, exists: true }]
-        case 'held':
-            return preconditionsAt(
-                side,
-                closedAt(side, t.inner),
-                segments,
-                fuel,
-            )
-        case 'object': {
-            const { rest } = t.body
-            if (
-                rest === undefined ||
-                !storedOpaqueAt(side, childAt(side, rest, at.closed))
-            )
-                return refuse('a closed object')
-            const preconditions: Precondition[] = [{ segments, type: 'M' }]
-            for (const [key, field] of Object.entries(t.body.fields)) {
-                if (field.mark !== 'req') {
-                    return refuse(
-                        `an object whose key '${key}' is not required`,
-                    )
-                }
-                const here = preconditionsAt(
-                    side,
-                    childAt(side, field.t, at.closed),
-                    [...segments, key],
-                    fuel,
-                )
-                if (failed(here)) return here
-                preconditions.push(...here)
-            }
-            return preconditions
-        }
-        case 'list':
-            return refuse('a list')
-        case 'set':
-            return refuse('a set')
-        case 'never':
-            return refuse('`never`')
-        // the flat scope reads a `ref` as its target or as an entry, and a `refine` as a position
-        case 'ref':
-        case 'refine':
-            throw new Error(
-                `a position of the flat scope holds a \`${t.kind}\``,
-            )
-    }
-}
-
-/**
- * **The literal that the stored view of a position is**, the model's `storedLitG`: a literal, or
- * the stored side of a `held` over one. An entry is no literal.
- */
-const storedLiteralAt = (side: Side, at: At): Term | undefined => {
-    if (at.kind !== 'term') return undefined
-    switch (at.t.kind) {
-        case 'literal':
-            return at.t
-        case 'held':
-            return storedLiteralAt(side, closedAt(side, at.t.inner))
-        default:
-            return undefined
-    }
-}
-
-/**
- * **Whether the stored view of a position is `opaque`**, the model's `storedOpaqG` at the body of
- * the entry that the position names. A `withLegacyRead` reads every attribute, so the stored view
- * of the older reader is `opaque`.
- */
-const storedOpaqueAt = (side: Side, at: At): boolean => {
-    const here = at.kind === 'entry' ? entryBody(side, at.j) : at
-    if (here.kind !== 'term') return false
-    switch (here.t.kind) {
-        case 'opaq':
-        case 'legacy':
-            return true
-        case 'held':
-            return storedOpaqueAt(side, closedAt(side, here.t.inner))
-        default:
-            return false
-    }
-}
-
-/** The stored attribute of each alternative, as the base writes it. */
-const storedLiterals = (alts: Alternatives): NonEmpty<StoredLiteral> => {
-    switch (alts.base) {
-        case 'string':
-            return eachOf(alts.ls, (v) => ({ S: v }))
-        case 'number':
-            return eachOf(alts.ls, (v) => ({ N: v.digits }))
-        case 'boolean':
-            return eachOf(alts.ls, (v) => ({ BOOL: v }))
-        case 'binary':
-            return eachOf(alts.ls, (v) => ({ B: v }))
-    }
-}
-
-const eachOf = <V>(
-    ls: NonEmpty<V>,
-    stored: (v: V) => StoredLiteral,
-): NonEmpty<StoredLiteral> => {
-    const [one, ...more] = ls
-    return [stored(one), ...more.map(stored)]
 }
 
 /**
@@ -6922,7 +6721,16 @@ export const union = <const Options extends readonly AnyCodec[]>(
         const deep = membersTooDeeply(item, 0)
         if (deep) return deep
         const names = namesOf(item)
-        const { only, naming } = resolution()
+        const { only, naming, named } = resolution()
+        // The item reading asks the same lookup as the attribute reading, so the outer union of a table
+        // dispatches. The cast drops the `undefined` that `StoredItem` admits: a lookup reads it as missing.
+        const hit = named({ M: item } as AttributeValue)
+        if (hit?.item) {
+            const direct = (
+                hit.item as ItemCodec<Record<string, unknown>, unknown>
+            ).decode(item) as Result<T>
+            if (!failed(direct)) return direct
+        }
         return only(
             () => true,
             naming('this item', names),
