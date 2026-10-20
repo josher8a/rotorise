@@ -526,14 +526,17 @@ options that the clause describes.
 and `exclude(pattern)` keeps the rest. An option fits where every value that the option holds lies
 inside what the pattern holds. The host decides this on a fragment. A literal fits a literal of one
 base and adapter, and a literal fits its base. A base fits itself. An option fits a union that holds
-a member of the option. An object fits an object pattern that names a subset of its keys. Any other
-pair fits only where the two terms are one term. An object with a union at a field is the union of
-the objects (`Term.product_join`). The slice goes into that field, and the result stays compact, as
-the Extract of TypeScript reads it. An option with a union at a field keeps the part of the union
-that fits the pattern, in place. So the extraction has no option that the original lacks. The
-rejection has one option for each field that the pattern names, because the complement of a product
-is no product. A union pattern is no product of its keys, so it splits the option, and the parts
-that fit stay. A dissection changes no member, because its tag table is keyed by literals.
+a member of the option. An object fits an object pattern that names a subset of its keys. A list
+with fixed positions fits a list pattern with the same positions where each position fits. An array
+declares no position, because its length is a run-time fact, so a fixed pattern against an array is
+a refusal. Any other pair fits only where the two terms are one term. An object with a union at a
+field is the union of the objects (`Term.product_join`), and a fixed list is the same product over
+its positions. The slice goes into that field or position, and the result stays compact, as the
+Extract of TypeScript reads it. An option with a union at a field keeps the part of the union that
+fits the pattern, in place. So the extraction has no option that the original lacks. The rejection
+has one option for each field or position that the pattern names, because the complement of a
+product is no product. A union pattern is no product of its keys, so it splits the option, and the
+parts that fit stay. A dissection changes no member, because its tag table is keyed by literals.
 
 **The strong law after narrowing needs a condition on the update, and the port states the condition
 as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to

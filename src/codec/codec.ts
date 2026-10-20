@@ -153,6 +153,26 @@ declare const termMarker: unique symbol
  */
 declare const optionsMarker: unique symbol
 type OptionsMark<Os> = { readonly [optionsMarker]?: Os }
+/**
+ * **The element codecs of a list, in declared order**, which a pattern reaches by position. The term
+ * of a list keeps the terms of its elements, and a slice at a position rebuilds the codec there.
+ * Optional and type-level only.
+ */
+declare const elementsMarker: unique symbol
+type ElementsMark<Cs> = { readonly [elementsMarker]?: Cs }
+/** The declared positions of a list with no spread, or `never`. */
+type FixedElements<C> = C extends {
+    readonly [elementsMarker]?: infer Cs extends readonly unknown[]
+}
+    ? true extends HasSpreadIn<Cs>
+        ? never
+        : Cs
+    : never
+type HasSpreadIn<Cs extends readonly unknown[]> = Cs[number] extends infer E
+    ? E extends AnySpread
+        ? true
+        : false
+    : false
 type TermMark<T> = { readonly [termMarker]?: T }
 type FreeTerm = ['ref', '#free']
 /**
@@ -1586,9 +1606,7 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
     // of one per position, and the diagnostic lands on the call either way. Mapping cost +10%
     // across this repo, measured
     ...elements: Cs & SpreadOnce<Cs> & NoNeverSlot<Cs>
-): AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>> &
-    TermMark<ListTermOf<Cs>> &
-    Free<FreeOf<Cs[number]>> => {
+): ListCodec<Cs> => {
     const all = elements as readonly unknown[]
 
     /**
@@ -1619,8 +1637,17 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
         suf: (at === -1 ? [] : all.slice(at + 1)).map((c) =>
             termOf(c as AnyCodec),
         ),
-    }) as unknown as AttributeCodec<ListOf<Cs>, L<ListWrites<Cs>>>
+    }) as unknown as ListCodec<Cs>
 }
+
+/** The codec that {@link list} returns, and the one that a slice at a position rebuilds. */
+type ListCodec<Cs extends readonly unknown[]> = AttributeCodec<
+    ListOf<Cs>,
+    L<ListWrites<Cs>>
+> &
+    TermMark<ListTermOf<Cs>> &
+    Free<FreeOf<Cs[number]>> &
+    ElementsMark<Cs>
 
 /**
  * The elements split at the one spread: what comes before it, what it marks, and what comes after.
@@ -5527,14 +5554,95 @@ type SplitAt<
     ? [...SplitState<State, Key, PU>, ...SplitAt<Rest, Key, PU>]
     : []
 type SplitState<State, Key, PU> = Key extends keyof State
-    ? [FieldSpecList<State[Key]>] extends [never]
-        ? [State]
-        : ReplaceField<
-              InnerSpecs<FieldSpecList<State[Key]>, FieldSpecsAt<PU, Key>>,
-              State,
-              Key
-          >
+    ? SplitSlot<
+          State[Key],
+          PatternCodecsAt<PU, Key>
+      > extends infer Parts extends readonly unknown[]
+        ? ReplaceField<Parts, State, Key>
+        : [State]
     : [State]
+/** The codec at a key in each spec of a union of specs. */
+type PatternCodecsAt<PU, Key> = PU extends unknown
+    ? Key extends keyof PU
+        ? PU[Key]
+        : never
+    : never
+/**
+ * One slot, a field or a position of a fixed list, split against the pattern codecs there: the
+ * codecs of its parts, or `false` where it splits nowhere. A slot that holds objects splits as the
+ * objects do. A fixed list is a product of its positions, so it splits at each position, and a
+ * position is a slot again.
+ */
+type SplitSlot<C, PC> = [FixedElements<C>] extends [never]
+    ? [FieldSpecList<C>] extends [never]
+        ? false
+        : MapObjects<InnerSpecs<FieldSpecList<C>, FieldSpecList<PC>[number]>>
+    : SplitPositions<
+            [C],
+            PC,
+            FixedElements<C>['length']
+        > extends infer Ls extends readonly unknown[]
+      ? [Ls] extends [[C]]
+          ? [[C]] extends [Ls]
+              ? false
+              : Ls
+          : Ls
+      : false
+/** The lists split at each position, against the positions that the pattern lists of its arity hold. */
+type SplitPositions<
+    Ls extends readonly unknown[],
+    PC,
+    N extends number,
+    I extends readonly unknown[] = [],
+> = I['length'] extends N
+    ? Ls
+    : SplitPositions<SplitAtPosition<Ls, PC, N, I['length']>, PC, N, [...I, 0]>
+type SplitAtPosition<
+    Ls extends readonly unknown[],
+    PC,
+    N extends number,
+    I extends number,
+> = Ls extends readonly [infer L, ...infer Rest extends readonly unknown[]]
+    ? [...SplitPositionState<L, PC, N, I>, ...SplitAtPosition<Rest, PC, N, I>]
+    : []
+type SplitPositionState<
+    L,
+    PC,
+    N extends number,
+    I extends number,
+> = FixedElements<L> extends infer Es extends readonly unknown[]
+    ? [PositionCodecsAt<PC, `${I}`, N>] extends [never]
+        ? [L]
+        : SplitSlot<
+                Es[I],
+                PositionCodecsAt<PC, `${I}`, N>
+            > extends infer Parts extends readonly unknown[]
+          ? WithPosition<Parts, Es, I>
+          : [L]
+    : [L]
+/** The codec at a position in each pattern list of the arity `N`. */
+type PositionCodecsAt<PC, I, N> = PC extends unknown
+    ? FixedElements<PC>['length'] extends N
+        ? I extends keyof FixedElements<PC>
+            ? FixedElements<PC>[I]
+            : never
+        : never
+    : never
+type WithPosition<
+    Parts extends readonly unknown[],
+    Es extends readonly unknown[],
+    I extends number,
+> = Parts extends readonly [
+    infer Head,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [
+          ListCodec<{
+              [J in keyof Es]: J extends `${I}` ? Head : Es[J]
+          }>,
+          ...WithPosition<Rest, Es, I>,
+      ]
+    : []
 type InnerSpecs<
     Members extends readonly unknown[],
     PU,
@@ -5545,16 +5653,16 @@ type InnerSpecs<
     ? [...SplitSpec<Head, PU>, ...InnerSpecs<Rest, PU>]
     : []
 type ReplaceField<
-    Inner extends readonly unknown[],
+    Parts extends readonly unknown[],
     State,
     Key,
-> = Inner extends readonly [
+> = Parts extends readonly [
     infer Head,
     ...infer Rest extends readonly unknown[],
 ]
     ? [
           {
-              [P in keyof State]: P extends Key ? ObjectOfSpec<Head> : State[P]
+              [P in keyof State]: P extends Key ? Head : State[P]
           },
           ...ReplaceField<Rest, State, Key>,
       ]
@@ -5608,15 +5716,36 @@ type FitsCodec<A, P> = PinsALiteral<MarkedCodec<P>> extends true
                 : 'f'
             : 'f'
         : 'f'
-    : [FieldSpecList<P>] extends [never]
-      ? [Decoded<A>] extends [Decoded<P>]
-          ? [AttributeOf<A>] extends [AttributeOf<P>]
-              ? 't'
-              : 'f'
-          : 'f'
-      : [FieldSpecList<A>] extends [never]
-        ? 'f'
-        : EveryFits<FieldSpecList<A>[number], FieldSpecList<P>[number]>
+    : ListFit<A, P> extends infer LF extends Fit
+      ? LF
+      : [FieldSpecList<P>] extends [never]
+        ? [Decoded<A>] extends [Decoded<P>]
+            ? [AttributeOf<A>] extends [AttributeOf<P>]
+                ? 't'
+                : 'f'
+            : 'f'
+        : [FieldSpecList<A>] extends [never]
+          ? 'f'
+          : EveryFits<FieldSpecList<A>[number], FieldSpecList<P>[number]>
+/** The fit of two lists with fixed positions, or `'none'` where either has none. */
+type ListFit<A, P> = [FixedElements<P>] extends [never]
+    ? 'none'
+    : [FixedElements<A>] extends [never]
+      ? 'none'
+      : FitsPositions<FixedElements<A>, FixedElements<P>>
+/** A list fits a list pattern of its arity where each position fits, as the run time reads a product. */
+type FitsPositions<
+    AE extends readonly unknown[],
+    PE extends readonly unknown[],
+> = AE['length'] extends PE['length']
+    ? AllOf<
+          {
+              [I in keyof AE]: I extends keyof PE
+                  ? FitsCodec<AE[I], PE[I]>
+                  : 'f'
+          }[number]
+      >
+    : 'f'
 /** Whether a member spec fits a pattern codec: the pattern must hold objects. */
 type FitsSpec<A, P> = [FieldSpecList<P>] extends [never]
     ? 'f'
@@ -5733,33 +5862,120 @@ type SliceKeys<
         ? K extends keyof S
             ? FitsCodec<S[K], PS[K]> extends 't'
                 ? SliceKeys<S, R, PS, Leaf, Nested>
-                : [FieldSpecList<S[K]>] extends [never]
-                  ? SliceKeys<S, R, PS, Leaf | FitsCodec<S[K], PS[K]>, Nested>
-                  : [FieldSpecList<PS[K]>] extends [never]
+                : ListFit<S[K], PS[K]> extends 'u' | 'f'
+                  ? FixedElements<S[K]>['length'] extends FixedElements<
+                        PS[K]
+                    >['length']
+                      ? SlicePositions<
+                            S,
+                            R,
+                            PS,
+                            K,
+                            FixedElements<S[K]>,
+                            FixedElements<PS[K]>,
+                            Leaf,
+                            Nested
+                        >
+                      : SliceKeys<S, R, PS, Leaf | 'f', Nested>
+                  : [FieldSpecList<S[K]>] extends [never]
                     ? SliceKeys<S, R, PS, Leaf | FitsCodec<S[K], PS[K]>, Nested>
-                    : SliceSummands<
-                            FieldSpecList<S[K]>,
-                            FieldSpecList<PS[K]>
-                        > extends {
-                            keep: infer Kp extends readonly unknown[]
-                            rest: infer Rs extends readonly unknown[]
-                        }
+                    : [FieldSpecList<PS[K]>] extends [never]
                       ? SliceKeys<
                             S,
                             R,
                             PS,
-                            Leaf,
-                            [
-                                ...Nested,
-                                NestedKey<K, Kp, Rs, FieldSpecList<S[K]>>,
-                            ]
+                            Leaf | FitsCodec<S[K], PS[K]>,
+                            Nested
                         >
-                      : never
+                      : SliceSummands<
+                              FieldSpecList<S[K]>,
+                              FieldSpecList<PS[K]>
+                          > extends {
+                              keep: infer Kp extends readonly unknown[]
+                              rest: infer Rs extends readonly unknown[]
+                          }
+                        ? SliceKeys<
+                              S,
+                              R,
+                              PS,
+                              Leaf,
+                              [
+                                  ...Nested,
+                                  NestedKey<K, Kp, Rs, FieldSpecList<S[K]>>,
+                              ]
+                          >
+                        : never
             : [PS[K]] extends [{ readonly [optionalMarker]: true }]
               ? SliceKeys<S, R, PS, Leaf, Nested>
               : SliceKeys<S, R, PS, Leaf | 'f', Nested>
         : SliceKeys<S, R, PS, Leaf, Nested>
     : { leaf: AllOf<Leaf>; nested: Nested }
+
+/**
+ * The positions of a fixed list at the key `K`, each read as a slot of the object: a position that
+ * the pattern does not hold whole is one more split slot, keyed `[K, index]`.
+ */
+type SlicePositions<
+    S,
+    R extends readonly unknown[],
+    PS,
+    K,
+    AE extends readonly unknown[],
+    PE extends readonly unknown[],
+    Leaf extends Fit,
+    Nested extends readonly unknown[],
+    I extends readonly unknown[] = [],
+> = I['length'] extends AE['length']
+    ? SliceKeys<S, R, PS, Leaf, Nested>
+    : SlotSlice<AE[I['length']], PE[I['length']]> extends infer Out
+      ? Out extends {
+            keep: infer Kp extends readonly unknown[]
+            rest: infer Rs extends readonly unknown[]
+        }
+          ? SlicePositions<
+                S,
+                R,
+                PS,
+                K,
+                AE,
+                PE,
+                Leaf,
+                [
+                    ...Nested,
+                    NestedKey<
+                        [K, I['length']],
+                        Kp,
+                        Rs,
+                        FieldSpecList<AE[I['length']]>
+                    >,
+                ],
+                [...I, 0]
+            >
+          : Out extends { fit: infer F extends Fit }
+            ? SlicePositions<S, R, PS, K, AE, PE, Leaf | F, Nested, [...I, 0]>
+            : never
+      : never
+/** One slot against the pattern there: its fit where it does not split, else its summands kept and rejected. */
+type SlotSlice<A, P> = FitsCodec<A, P> extends 't'
+    ? { fit: 't' }
+    : [FieldSpecList<A>] extends [never]
+      ? { fit: FitsCodec<A, P> }
+      : [FieldSpecList<P>] extends [never]
+        ? { fit: FitsCodec<A, P> }
+        : SliceSummands<FieldSpecList<A>, FieldSpecList<P>>
+
+/** The list at a key with one position replaced by the kept or the rejected summands. */
+type ReplacePosition<
+    Slot,
+    I,
+    Head extends Replacement,
+> = FixedElements<Slot> extends infer Es extends readonly unknown[]
+    ? ListCodec<{
+          [J in keyof Es]: J extends `${I & number}`
+              ? FieldOf<Head['list'], Head['orig'], Es[J]>
+              : Es[J]
+      }>
+    : Slot
 
 type Replacement = {
     key: unknown
@@ -5782,11 +5998,17 @@ type ReplaceAll<S, Rs extends readonly unknown[]> = Rs extends readonly [
     ...infer Tail extends readonly unknown[],
 ]
     ? ReplaceAll<
-          {
-              [P in keyof S]: P extends Head['key']
-                  ? FieldOf<Head['list'], Head['orig'], S[P]>
-                  : S[P]
-          },
+          Head['key'] extends readonly [infer K, infer I]
+              ? {
+                    [P in keyof S]: P extends K
+                        ? ReplacePosition<S[P], I, Head>
+                        : S[P]
+                }
+              : {
+                    [P in keyof S]: P extends Head['key']
+                        ? FieldOf<Head['list'], Head['orig'], S[P]>
+                        : S[P]
+                },
           Tail
       >
     : S
@@ -6053,21 +6275,57 @@ type BadPatternKey<S, PSpec> = {
                 ]
               ? never
               : K
-        : [FieldSpecList<PSpec[K]>] extends [never]
-          ? [K] extends [KeysOfUnion<S>]
-              ? never
-              : K
-          : [FieldSpecsAt<S, K>] extends [never]
-            ? K
-            : [
-                    BadPatternKey<
-                        FieldSpecsAt<S, K>,
-                        FieldSpecList<PSpec[K]>[number]
-                    >,
-                ] extends [never]
-              ? never
-              : K
+        : [FixedElements<PSpec[K]>] extends [never]
+          ? BadObjectKey<S, PSpec, K>
+          : [K] extends [KeysOfUnion<S>]
+            ? BadPosition<S, K, FixedElements<PSpec[K]>>
+            : K
 }[keyof PSpec]
+/**
+ * A position of a fixed list answers to the refusals of a key, and a position that holds a fixed
+ * list is a slot again. A position that no member declares is a refusal at the key: an `array`
+ * declares no position, because its length is a run-time fact, so `FixedElements` of an array is
+ * `never` and a fixed pattern reaches nothing in it.
+ */
+type BadPosition<
+    S,
+    K,
+    PE extends readonly unknown[],
+> = true extends BadPositions<PatternCodecsAt<S, K>, PE> ? K : never
+type BadPositions<MC, PE extends readonly unknown[]> = {
+    [I in keyof PE]: BadAtPosition<PositionCodecsAt<MC, I, number>, PE[I]>
+}[number]
+/** Whether the pattern codec `PC` at a slot describes nothing that the member codecs `MC` hold there. */
+type BadAtPosition<MC, PC> = [FixedElements<PC>] extends [never]
+    ? [FieldSpecList<PC>] extends [never]
+        ? never
+        : [FieldSpecList<MC>] extends [never]
+          ? true
+          : [
+                  BadPatternKey<
+                      FieldSpecList<MC>[number],
+                      FieldSpecList<PC>[number]
+                  >,
+              ] extends [never]
+            ? never
+            : true
+    : BadPositions<MC, FixedElements<PC>>
+type BadObjectKey<S, PSpec, K extends keyof PSpec> = [
+    FieldSpecList<PSpec[K]>,
+] extends [never]
+    ? [K] extends [KeysOfUnion<S>]
+        ? never
+        : K
+    : [FieldSpecsAt<S, K>] extends [never]
+      ? K
+      : [
+              BadPatternKey<
+                  FieldSpecsAt<S, K>,
+                  FieldSpecList<PSpec[K]>[number]
+              >,
+          ] extends [never]
+        ? never
+        : K
 
 /**
  * Rejects a pattern that no member could answer, at the call rather than on the result. Each
@@ -6153,6 +6411,26 @@ const fits = (a: Term, p: Term): boolean => {
         }
         return true
     }
+    // a list is a product of its positions: the same layout, and each position inside the pattern's
+    if (P.kind === 'list') {
+        if (A.kind !== 'list') return false
+        const { spread } = P
+        return (
+            A.pre.length === P.pre.length &&
+            A.suf.length === P.suf.length &&
+            (A.spread === undefined) === (spread === undefined) &&
+            A.pre.every((one, at) => {
+                const there = P.pre[at]
+                return there !== undefined && fits(one, there)
+            }) &&
+            A.suf.every((one, at) => {
+                const there = P.suf[at]
+                return there !== undefined && fits(one, there)
+            }) &&
+            (A.spread === undefined ||
+                (spread !== undefined && fits(A.spread, spread)))
+        )
+    }
     if (A.kind === 'held' && P.kind === 'held') {
         return sameAdapter(A, P) && fits(A.inner, P.inner)
     }
@@ -6185,13 +6463,104 @@ const objectMembersOf = (
     return node.kind === 'union' ? node.options.flatMap(objectMembersOf) : []
 }
 
+/** Whether a term is an object, or a union of objects only. */
+const holdsObjects = (node: Term | undefined): boolean =>
+    node?.kind === 'union'
+        ? node.options.every((option) => objectNamed(option) !== undefined)
+        : node !== undefined && objectNamed(node) !== undefined
+
 /**
- * A spec, split at each field that the pattern names and that holds objects. The spec comes back
- * as it was, and as the one element, where no field splits.
+ * The codecs that a pattern splits one slot into, where a slot is a field or a position of a fixed
+ * list. The slot comes back as the one element where it splits nowhere. A slot that holds objects
+ * splits as the objects do. A fixed list is a product of its positions, as an object is a product of
+ * its keys, so it splits at each position, and a position is a slot again.
  *
  * An object that is split and has an open key entry is refused, because the type of a part holds
  * the declared names only, and a part that reads more would decode a value that its type does not
  * name. The type cannot state the refusal, so the run time does.
+ */
+const splitSlot = (
+    name: string,
+    slot: AnyCodec,
+    pattern: Term,
+): readonly AnyCodec[] => {
+    const node = resolvedTerm(termOf(slot))
+    if (node?.kind === 'list') return splitList(name, slot, node, pattern)
+    if (!holdsObjects(node)) return [slot]
+    const parts = optionsOfFactor(slot).flatMap((one) =>
+        splitBy(one.spec as Record<string, ObjectSlot>, pattern).map(
+            (inner) => ({ one, inner }),
+        ),
+    )
+    const [only] = parts
+    if (parts.length === 1 && only?.inner === only?.one.spec) return [slot]
+    return parts.map(({ one, inner }) => {
+        if (one.rest !== undefined) {
+            throw new CodecError(
+                `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
+            )
+        }
+        return objectFromMap(inner, undefined) as unknown as AnyCodec
+    })
+}
+
+/** The list term that a term is, where it has no spread and no suffix: its length is fixed. */
+const fixedList = (t: Term | undefined) =>
+    t?.kind === 'list' && t.spread === undefined && t.suf.length === 0
+        ? t
+        : undefined
+
+/**
+ * A fixed list split at each position, against the positions that the pattern lists of the same
+ * arity hold there. A pattern list of another arity names no position of this list. The parts of the
+ * earlier positions split again at the later ones.
+ */
+const splitList = (
+    name: string,
+    slot: AnyCodec,
+    node: Term,
+    pattern: Term,
+): readonly AnyCodec[] => {
+    const arity = fixedList(node)?.pre.length
+    if (arity === undefined) return [slot]
+    const wanted = (
+        pattern.kind === 'union' ? pattern.options : [pattern]
+    ).flatMap((one) => {
+        const list = fixedList(resolvedTerm(one))
+        return list?.pre.length === arity ? [list] : []
+    })
+    let codecs = [slot]
+    for (let at = 0; at < arity; at++) {
+        const sub: Term = {
+            kind: 'union',
+            options: wanted.flatMap((list) => list.pre.slice(at, at + 1)),
+        }
+        codecs = codecs.flatMap((one) => {
+            const list = fixedList(resolvedTerm(termOf(one)))
+            const there = list?.pre[at]
+            if (list === undefined || there === undefined) return [one]
+            if (sub.options.length === 0) return [one]
+            const position = codecOfTerm(there)
+            const parts = splitSlot(name, position, sub)
+            if (parts.length === 1 && parts[0] === position) return [one]
+            return parts.map(
+                (part) =>
+                    codecOfTerm({
+                        kind: 'list',
+                        pre: list.pre.map((held, i) =>
+                            i === at ? termOf(part) : held,
+                        ),
+                        suf: [],
+                    }) as unknown as AnyCodec,
+            )
+        })
+    }
+    return codecs
+}
+
+/**
+ * A spec, split at each field that the pattern names and that holds objects or a fixed list. The
+ * spec comes back as it was, and as the one element, where no field splits.
  */
 const splitBy = (
     spec: Record<string, ObjectSlot>,
@@ -6212,37 +6581,12 @@ const splitBy = (
             const slot = state[name]
             if (slot === undefined || 'codec' in slot) return [state]
             const field = entryCodec(slot)
-            const node = resolvedTerm(termOf(field))
-            const holdsObjects =
-                node?.kind === 'union'
-                    ? node.options.every(
-                          (option) => objectNamed(option) !== undefined,
-                      )
-                    : node !== undefined && objectNamed(node) !== undefined
-            if (!holdsObjects) return [state]
-            const parts = optionsOfFactor(field).flatMap((one) =>
-                splitBy(one.spec as Record<string, ObjectSlot>, sub).map(
-                    (inner) => ({ one, inner }),
-                ),
-            )
-            const [only] = parts
-            if (parts.length === 1 && only?.inner === only?.one.spec) {
-                return [state]
-            }
-            return parts.map(({ one, inner }) => {
-                if (one.rest !== undefined) {
-                    throw new CodecError(
-                        `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
-                    )
-                }
-                return {
-                    ...state,
-                    [name]: objectFromMap(
-                        inner,
-                        undefined,
-                    ) as unknown as ObjectSlot,
-                }
-            })
+            const parts = splitSlot(name, field, sub)
+            if (parts.length === 1 && parts[0] === field) return [state]
+            return parts.map((part) => ({
+                ...state,
+                [name]: part as unknown as ObjectSlot,
+            }))
         })
     }
     return states
@@ -6300,13 +6644,41 @@ const patternRefusal = (
             } else if (resolvedTerm(field.t)?.kind === 'refine') {
                 return `the pattern at '${name}' holds a refinement, and the host cannot decide whether a member lies inside a predicate. Pin the key to a literal, or slice the field first`
             } else {
-                const inner = patternRefusal(
+                const inner = slotRefusal(
+                    name,
                     here.map((mine) => mine.t),
                     field.t,
                 )
                 if (inner) return inner
             }
         }
+    }
+    return undefined
+}
+
+/**
+ * Why a pattern at one slot, a field or a position of a list, describes no member. A fixed list is a
+ * product of its positions, so each position is a slot again, and a pattern there answers to the
+ * same refusals as a key. An array declares no position, because its length is a run-time fact, so a
+ * fixed pattern that holds objects reaches nothing in it, and the refusal names the position.
+ */
+const slotRefusal = (
+    name: string,
+    mine: readonly Term[],
+    there: Term,
+): string | undefined => {
+    const list = resolvedTerm(there)
+    if (list?.kind !== 'list') return patternRefusal(mine, there)
+    for (const [at, position] of list.pre.entries()) {
+        const held = mine.flatMap((one) => {
+            const node = resolvedTerm(one)
+            return node?.kind === 'list' ? node.pre.slice(at, at + 1) : []
+        })
+        if (held.length === 0 && objectMembersOf(position).length > 0) {
+            return `the pattern at '${name}' reaches position ${at}, and no member holds a list with that position. An array declares no position, because its length is a run-time fact`
+        }
+        const inner = slotRefusal(name, held, position)
+        if (inner) return inner
     }
     return undefined
 }
@@ -6350,12 +6722,66 @@ const sliceSpec = (
     const wantedObject = resolvedTerm(pattern)
     if (wantedObject?.kind !== 'object') return undefined
     let leafFits = true
-    const nested: {
+    type Entry = {
         name: string
+        at: number | undefined
         keep: Piece[]
         rest: Piece[]
         original: Piece[]
-    }[] = []
+    }
+    const nested: Entry[] = []
+    /**
+     * The summands of one slot against the pattern there: a field, or a position of a fixed list.
+     * `'leaf'` where the slot holds no union of objects, `'split'` where the caller splits.
+     */
+    const sliceSlot = (
+        mine: Term,
+        wanted: Term,
+    ): Omit<Entry, 'name' | 'at'> | 'leaf' | 'split' => {
+        const summands = objectNodesOf(mine)
+        const members = objectNodesOf(wanted)
+        if (
+            summands.length === 0 ||
+            members.length === 0 ||
+            summands.some((one) => objectNamed(one) === undefined)
+        ) {
+            return 'leaf'
+        }
+        const wantedNode = resolvedTerm(wanted)
+        const keep: Piece[] = []
+        const rest: Piece[] = []
+        const original: Piece[] = []
+        for (const summand of summands) {
+            const one = objectNamed(summand) as ObjectItem
+            const here: Piece = {
+                spec: one.spec as Record<string, ObjectSlot>,
+                rest: one.rest,
+            }
+            original.push(here)
+            if (fits(summand, wanted)) keep.push(here)
+            else if (
+                wantedNode?.kind === 'object' &&
+                summand.kind === 'object'
+            ) {
+                const inner = sliceSpec(here, summand, wanted)
+                if (inner === undefined) return 'split'
+                keep.push(...inner.keep)
+                rest.push(...inner.rest)
+            } else if (
+                summand.kind === 'object' &&
+                members.some(
+                    (member) =>
+                        member.kind === 'object' &&
+                        (sliceSpec(here, summand, member)?.keep.length ?? 0) >
+                            0,
+                )
+            ) {
+                // a summand that fits a member of a union pattern in part: the caller splits
+                return 'split'
+            } else rest.push(here)
+        }
+        return { keep, rest, original }
+    }
     for (const [name, wanted] of Object.entries(wantedObject.body.fields)) {
         const mine = node.body.fields[name]
         if (mine === undefined) {
@@ -6370,66 +6796,61 @@ const sliceSpec = (
         }
         if (fits(mine.t, wanted.t)) continue
         const slot = piece.spec[name]
-        const summands = objectNodesOf(mine.t)
-        const members = objectNodesOf(wanted.t)
-        if (
-            slot === undefined ||
-            'codec' in slot ||
-            summands.length === 0 ||
-            members.length === 0 ||
-            summands.some((one) => objectNamed(one) === undefined)
-        ) {
+        if (slot === undefined || 'codec' in slot) {
             leafFits = false
             continue
         }
-        const wantedNode = resolvedTerm(wanted.t)
-        const keep: Piece[] = []
-        const rest: Piece[] = []
-        const original: Piece[] = []
-        for (const summand of summands) {
-            const one = objectNamed(summand) as ObjectItem
-            const here: Piece = {
-                spec: one.spec as Record<string, ObjectSlot>,
-                rest: one.rest,
+        /**
+         * A fixed list is a product of its positions, as an object is a product of its keys. So each
+         * position that the pattern does not hold whole is one more split slot of this object, and
+         * the kept part and the cover below read it as they read a key. A list with a spread has no
+         * fixed positions: its length is free, so no finite product of slots states it.
+         */
+        const mineList = resolvedTerm(mine.t)
+        const wantedList = resolvedTerm(wanted.t)
+        if (mineList?.kind === 'list' && wantedList?.kind === 'list') {
+            if (
+                mineList.spread !== undefined ||
+                wantedList.spread !== undefined ||
+                mineList.suf.length > 0 ||
+                wantedList.suf.length > 0 ||
+                mineList.pre.length !== wantedList.pre.length
+            ) {
+                leafFits = false
+                continue
             }
-            original.push(here)
-            if (fits(summand, wanted.t)) keep.push(here)
-            else if (
-                wantedNode?.kind === 'object' &&
-                summand.kind === 'object'
-            ) {
-                const inner = sliceSpec(here, summand, wanted.t)
-                if (inner === undefined) return undefined
-                keep.push(...inner.keep)
-                rest.push(...inner.rest)
-            } else if (
-                summand.kind === 'object' &&
-                members.some(
-                    (member) =>
-                        member.kind === 'object' &&
-                        (sliceSpec(here, summand, member)?.keep.length ?? 0) >
-                            0,
-                )
-            ) {
-                // a summand that fits a member of a union pattern in part: the caller splits
-                return undefined
-            } else rest.push(here)
+            for (const [at, position] of mineList.pre.entries()) {
+                const there = wantedList.pre[at]
+                if (there === undefined || fits(position, there)) continue
+                const one = sliceSlot(position, there)
+                if (one === 'split') return undefined
+                if (one === 'leaf') {
+                    leafFits = false
+                    continue
+                }
+                nested.push({ name, at, ...one })
+            }
+            continue
         }
-        nested.push({ name, keep, rest, original })
+        const one = sliceSlot(mine.t, wanted.t)
+        if (one === 'split') return undefined
+        if (one === 'leaf') {
+            leafFits = false
+            continue
+        }
+        nested.push({ name, at: undefined, ...one })
     }
     if (!leafFits) return { keep: [], rest: [piece] }
     if (nested.length === 0) return { keep: [piece], rest: [] }
-    const rebuild = (
-        replaced: ReadonlyMap<string, readonly Piece[]>,
-    ): Piece => {
+    const rebuild = (replaced: ReadonlyMap<Entry, readonly Piece[]>): Piece => {
         const spec: Record<string, ObjectSlot> = { ...piece.spec }
-        for (const [name, list] of replaced) {
-            const entry = nested.find((one) => one.name === name)
+        const positions = new Map<string, Map<number, Term>>()
+        for (const [entry, list] of replaced) {
             const same =
-                entry !== undefined &&
                 list.length === entry.original.length &&
                 list.every((one, at) => one === entry.original[at])
             if (same) continue
+            const { name } = entry
             if (list.some((one) => one.rest !== undefined)) {
                 throw new CodecError(
                     `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
@@ -6439,13 +6860,35 @@ const sliceSpec = (
                 (one) =>
                     objectFromMap(one.spec, undefined) as unknown as AnyCodec,
             )
-            spec[name] = (codecs.length === 1
-                ? codecs[0]
-                : union(codecs as never)) as unknown as ObjectSlot
+            const codec = (
+                codecs.length === 1 ? codecs[0] : union(codecs as never)
+            ) as AnyCodec
+            if (entry.at === undefined) {
+                spec[name] = codec as unknown as ObjectSlot
+                continue
+            }
+            const at = positions.get(name) ?? new Map<number, Term>()
+            at.set(entry.at, termOf(codec))
+            positions.set(name, at)
+        }
+        for (const [name, at] of positions) {
+            const declared = resolvedTerm(
+                termOf(piece.spec[name] as unknown as AnyCodec),
+            )
+            if (declared?.kind !== 'list') {
+                throw new Error(
+                    `'${name}' was split by position and holds no list`,
+                )
+            }
+            spec[name] = codecOfTerm({
+                kind: 'list',
+                pre: declared.pre.map((one, i) => at.get(i) ?? one),
+                suf: [],
+            }) as unknown as ObjectSlot
         }
         return { spec, rest: piece.rest }
     }
-    const keepAll = new Map(nested.map((one) => [one.name, one.keep] as const))
+    const keepAll = new Map(nested.map((one) => [one, one.keep] as const))
     const keep = nested.every((one) => one.keep.length > 0)
         ? [rebuild(keepAll)]
         : []
@@ -6454,9 +6897,9 @@ const sliceSpec = (
         if (one.rest.length === 0) continue
         const before = nested.slice(0, at)
         if (before.some((other) => other.keep.length === 0)) break
-        const replaced = new Map<string, readonly Piece[]>()
-        for (const other of before) replaced.set(other.name, other.keep)
-        replaced.set(one.name, one.rest)
+        const replaced = new Map<Entry, readonly Piece[]>()
+        for (const other of before) replaced.set(other, other.keep)
+        replaced.set(one, one.rest)
         rest.push(rebuild(replaced))
     }
     return { keep, rest }
