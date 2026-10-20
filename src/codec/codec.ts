@@ -6075,6 +6075,48 @@ type SliceSpecOf<S, PS> = SliceKeys<
     : never
 
 /**
+ * Whether a summand of a field fits a member of a union pattern in part: some of its values fit,
+ * and not all. The run time splits the option then, and keeps the parts that fit.
+ */
+type PartialMember<Hd, M> = M extends unknown
+    ? SliceSpecOf<Hd, M>['keep'] extends readonly []
+        ? false
+        : true
+    : never
+type PartialSummand<Hd, PK extends readonly unknown[]> = EveryFits<
+    Hd,
+    PK[number]
+> extends 't'
+    ? false
+    : true extends IsUnion<PK[number]>
+      ? PartialMember<Hd, PK[number]>
+      : HasPartialFit<Hd, PK[number]>
+type PartialSummands<
+    Summands extends readonly unknown[],
+    PK extends readonly unknown[],
+> = {
+    [I in keyof Summands]: PartialSummand<Summands[I], PK>
+}[number]
+/**
+ * Whether some field of a spec holds a summand that fits a union-pattern member in part. The
+ * compact slice cannot state that case, because it would drop the whole summand and the run time
+ * keeps the parts. The type splits the option as the run time does ({@link KeptSplit}).
+ */
+type HasPartialFit<S, PS> = true extends {
+    [K in keyof PS]: K extends keyof S
+        ? [FieldSpecList<S[K]>] extends [never]
+            ? false
+            : [FieldSpecList<PS[K]>] extends [never]
+              ? false
+              : FitsCodec<S[K], PS[K]> extends 't'
+                ? false
+                : PartialSummands<FieldSpecList<S[K]>, FieldSpecList<PS[K]>>
+        : false
+}[keyof PS]
+    ? true
+    : false
+
+/**
  * **The option codecs that a pattern keeps**, in the order they were declared. `Keep` is `true` for
  * the extraction and `false` for the exclusion.
  *
@@ -6112,17 +6154,21 @@ type KeptCompact<
                     ? Keep extends true
                         ? [Head]
                         : []
-                    : SliceSpecOf<Sp, PatternSpecs<P>> extends infer Sl extends
-                            {
-                                keep: readonly unknown[]
-                                rest: readonly unknown[]
-                            }
-                      ? SameSpecOrObject<
-                            Keep extends true ? Sl['keep'] : Sl['rest'],
-                            Sp,
-                            Head
-                        >
-                      : []
+                    : HasPartialFit<Sp, PatternSpecs<P>> extends true
+                      ? KeptSplit<[Head], P, Keep>
+                      : SliceSpecOf<
+                              Sp,
+                              PatternSpecs<P>
+                          > extends infer Sl extends {
+                              keep: readonly unknown[]
+                              rest: readonly unknown[]
+                          }
+                        ? SameSpecOrObject<
+                              Keep extends true ? Sl['keep'] : Sl['rest'],
+                              Sp,
+                              Head
+                          >
+                        : []
               : KeepsFit<Keep, FitsCodec<Head, P>> extends true
                 ? [Head]
                 : []),
