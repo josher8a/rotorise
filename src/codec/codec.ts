@@ -5512,7 +5512,7 @@ type FieldSpecList<F> = F extends { readonly item: { readonly spec: infer Sp } }
 
 type FieldSpecsAt<S, K> = S extends unknown
     ? K extends keyof S
-        ? FieldSpecList<S[K]>[number]
+        ? FieldSpecList<Marks<S[K]>>[number]
         : never
     : never
 
@@ -5555,12 +5555,26 @@ type SplitAt<
     ? [...SplitState<State, Key, PU>, ...SplitAt<Rest, Key, PU>]
     : []
 type SplitState<State, Key, PU> = Key extends keyof State
-    ? SplitSlot<
-          State[Key],
-          PatternCodecsAt<PU, Key>
-      > extends infer Parts extends readonly unknown[]
-        ? ReplaceField<Parts, State, Key>
-        : [State]
+    ? SplitsAtPresence<State[Key], PatternCodecsAt<PU, Key>> extends true
+        ? ReplaceField<
+              [
+                  ...(SplitSlot<
+                      Marks<State[Key]>,
+                      PatternCodecsAt<PU, Key>
+                  > extends infer Parts extends readonly unknown[]
+                      ? Parts
+                      : [Marks<State[Key]>]),
+                  MarkLike<State[Key], typeof never>,
+              ],
+              State,
+              Key
+          >
+        : SplitSlot<
+                State[Key],
+                PatternCodecsAt<PU, Key>
+            > extends infer Parts extends readonly unknown[]
+          ? ReplaceField<Parts, State, Key>
+          : [State]
     : [State]
 /** The codec at a key in each spec of a union of specs. */
 type PatternCodecsAt<PU, Key> = PU extends unknown
@@ -5822,7 +5836,58 @@ type NestedKey<
     Keep extends readonly unknown[],
     Rest extends readonly unknown[],
     Orig extends readonly unknown[],
-> = { key: K; keep: Keep; rest: Rest; orig: Orig }
+    Opt = never,
+> = { key: K; keep: Keep; rest: Rest; orig: Orig; opt: Opt }
+
+/** The one summand of a field that holds no object: the field as declared. */
+type WholeField = { readonly whole: true }
+
+/** Whether a field may be absent where the pattern requires the key: the field splits at presence. */
+type SplitsAtPresence<A, P> = [A] extends [{ readonly [optionalMarker]: true }]
+    ? [P] extends [{ readonly [optionalMarker]: true }]
+        ? false
+        : true
+    : false
+
+/**
+ * A field that may be absent, against a pattern that requires the key: the present part follows
+ * the fit of the declared codec, and the absent part is rejected.
+ */
+type SlicePresence<
+    S,
+    K extends keyof S,
+    R extends readonly unknown[],
+    PS,
+    PK,
+    Leaf extends Fit,
+    Nested extends readonly unknown[],
+> = SlotSlice<Marks<S[K]>, PK> extends infer Out
+    ? Out extends { fit: 't' }
+        ? SliceKeys<
+              S,
+              R,
+              PS,
+              Leaf,
+              [...Nested, NestedKey<K, [WholeField], [], [WholeField], S[K]>]
+          >
+        : Out extends { fit: infer F extends Fit }
+          ? SliceKeys<S, R, PS, Leaf | F, Nested>
+          : Out extends {
+                  keep: infer Kp extends readonly unknown[]
+                  rest: infer Rs extends readonly unknown[]
+              }
+            ? SliceKeys<
+                  S,
+                  R,
+                  PS,
+                  Leaf,
+                  [
+                      ...Nested,
+                      NestedKey<K, Kp, Rs, FieldSpecList<Marks<S[K]>>, S[K]>,
+                  ]
+              >
+            : never
+    : never
 
 /**
  * The summands of a field, each kept whole, rejected whole, or sliced against the one object that
@@ -5861,26 +5926,26 @@ type SliceKeys<
 > = Keys extends readonly [infer K, ...infer R extends readonly unknown[]]
     ? K extends keyof PS
         ? K extends keyof S
-            ? FitsCodec<S[K], PS[K]> extends 't'
-                ? SliceKeys<S, R, PS, Leaf, Nested>
-                : ListFit<S[K], PS[K]> extends 'u' | 'f'
-                  ? FixedElements<S[K]>['length'] extends FixedElements<
-                        PS[K]
-                    >['length']
-                      ? SlicePositions<
-                            S,
-                            R,
-                            PS,
-                            K,
-                            FixedElements<S[K]>,
-                            FixedElements<PS[K]>,
-                            Leaf,
-                            Nested
-                        >
-                      : SliceKeys<S, R, PS, Leaf | 'f', Nested>
-                  : [FieldSpecList<S[K]>] extends [never]
-                    ? SliceKeys<S, R, PS, Leaf | FitsCodec<S[K], PS[K]>, Nested>
-                    : [FieldSpecList<PS[K]>] extends [never]
+            ? SplitsAtPresence<S[K], PS[K]> extends true
+                ? SlicePresence<S, K, R, PS, PS[K], Leaf, Nested>
+                : FitsCodec<S[K], PS[K]> extends 't'
+                  ? SliceKeys<S, R, PS, Leaf, Nested>
+                  : ListFit<S[K], PS[K]> extends 'u' | 'f'
+                    ? FixedElements<S[K]>['length'] extends FixedElements<
+                          PS[K]
+                      >['length']
+                        ? SlicePositions<
+                              S,
+                              R,
+                              PS,
+                              K,
+                              FixedElements<S[K]>,
+                              FixedElements<PS[K]>,
+                              Leaf,
+                              Nested
+                          >
+                        : SliceKeys<S, R, PS, Leaf | 'f', Nested>
+                    : [FieldSpecList<S[K]>] extends [never]
                       ? SliceKeys<
                             S,
                             R,
@@ -5888,24 +5953,32 @@ type SliceKeys<
                             Leaf | FitsCodec<S[K], PS[K]>,
                             Nested
                         >
-                      : SliceSummands<
-                              FieldSpecList<S[K]>,
-                              FieldSpecList<PS[K]>
-                          > extends {
-                              keep: infer Kp extends readonly unknown[]
-                              rest: infer Rs extends readonly unknown[]
-                          }
+                      : [FieldSpecList<PS[K]>] extends [never]
                         ? SliceKeys<
                               S,
                               R,
                               PS,
-                              Leaf,
-                              [
-                                  ...Nested,
-                                  NestedKey<K, Kp, Rs, FieldSpecList<S[K]>>,
-                              ]
+                              Leaf | FitsCodec<S[K], PS[K]>,
+                              Nested
                           >
-                        : never
+                        : SliceSummands<
+                                FieldSpecList<S[K]>,
+                                FieldSpecList<PS[K]>
+                            > extends {
+                                keep: infer Kp extends readonly unknown[]
+                                rest: infer Rs extends readonly unknown[]
+                            }
+                          ? SliceKeys<
+                                S,
+                                R,
+                                PS,
+                                Leaf,
+                                [
+                                    ...Nested,
+                                    NestedKey<K, Kp, Rs, FieldSpecList<S[K]>>,
+                                ]
+                            >
+                          : never
             : [PS[K]] extends [{ readonly [optionalMarker]: true }]
               ? SliceKeys<S, R, PS, Leaf, Nested>
               : SliceKeys<S, R, PS, Leaf | 'f', Nested>
@@ -5982,7 +6055,32 @@ type Replacement = {
     key: unknown
     list: readonly unknown[]
     orig: readonly unknown[]
+    opt: unknown
+    of: 'keep' | 'rest'
 }
+
+/**
+ * The field that holds the kept or the rejected part of a field that may be absent. The kept part
+ * is present, so the key is required. The rejected part keeps the mark, and holds `never` where
+ * the pattern rejects no present value.
+ */
+type PresenceField<Head extends Replacement> = (
+    Head['list'] extends readonly []
+        ? typeof never
+        : FieldOf<Head['list'], Head['orig'], Marks<Head['opt']>>
+) extends infer C extends AnyCodec
+    ? Head['of'] extends 'keep'
+        ? C
+        : MarkLike<Head['opt'], C>
+    : never
+/** The codec `C` under the presence mark of the declared field `Opt`. */
+type MarkLike<Opt, C extends AnyCodec> = Opt extends {
+    readonly [undefinableMarker]: true
+}
+    ? UndefinableCodec<Decoded<C>, AttributeOf<C>, C> &
+          TermMark<['optional', TermOf<C>]>
+    : OptionalCodec<Decoded<C>, AttributeOf<C>, C> &
+          TermMark<['optional', TermOf<C>]>
 
 /** The slot that holds the kept summands: the declared slot where they are all of them, else their union. */
 type FieldOf<
@@ -6007,7 +6105,9 @@ type ReplaceAll<S, Rs extends readonly unknown[]> = Rs extends readonly [
                 }
               : {
                     [P in keyof S]: P extends Head['key']
-                        ? FieldOf<Head['list'], Head['orig'], S[P]>
+                        ? [Head['opt']] extends [never]
+                            ? FieldOf<Head['list'], Head['orig'], S[P]>
+                            : PresenceField<Head>
                         : S[P]
                 },
           Tail
@@ -6019,8 +6119,15 @@ type Lists<Nested extends readonly unknown[], Of extends 'keep' | 'rest'> = {
         keep: infer Kp
         rest: infer Rs
         orig: infer O
+        opt: infer Opt
     }
-        ? { key: K; list: Of extends 'keep' ? Kp : Rs; orig: O }
+        ? {
+              key: K
+              list: Of extends 'keep' ? Kp : Rs
+              orig: O
+              opt: Opt
+              of: Of
+          }
         : never
 }
 type NonEmptyAll<Ls extends readonly unknown[]> = Ls extends readonly [
@@ -6061,28 +6168,44 @@ type RestAt<
         keep: readonly unknown[]
         rest: readonly unknown[]
         orig: readonly unknown[]
+        opt: unknown
     },
     ...infer Tail extends readonly unknown[],
 ]
     ? [
+          // the absent part of a field that may be absent is rejected whatever the present part holds
           ...(N['rest'] extends readonly []
-              ? []
-              : NonEmptyAll<Lists<Before, 'keep'>> extends true
-                ? [
-                      ReplaceAll<
-                          S,
-                          [
-                              ...Lists<Before, 'keep'>,
-                              {
-                                  key: N['key']
-                                  list: N['rest']
-                                  orig: N['orig']
-                              },
-                          ]
-                      >,
-                  ]
-                : []),
+              ? [N['opt']] extends [never]
+                  ? []
+                  : RestOf<S, Before, N>
+              : RestOf<S, Before, N>),
           ...RestAt<S, Tail, [...Before, N]>,
+      ]
+    : []
+type RestOf<
+    S,
+    Before extends readonly unknown[],
+    N extends {
+        key: unknown
+        rest: readonly unknown[]
+        orig: readonly unknown[]
+        opt: unknown
+    },
+> = NonEmptyAll<Lists<Before, 'keep'>> extends true
+    ? [
+          ReplaceAll<
+              S,
+              [
+                  ...Lists<Before, 'keep'>,
+                  {
+                      key: N['key']
+                      list: N['rest']
+                      orig: N['orig']
+                      opt: N['opt']
+                      of: 'rest'
+                  },
+              ]
+          >,
       ]
     : []
 
@@ -6566,6 +6689,7 @@ const splitList = (
 const splitBy = (
     spec: Record<string, ObjectSlot>,
     pattern: Term,
+    presence = true,
 ): Record<string, ObjectSlot>[] => {
     const members = objectMembersOf(pattern)
     let states: Record<string, ObjectSlot>[] = [spec]
@@ -6578,9 +6702,28 @@ const splitBy = (
                 return field ? [field.t] : []
             }),
         }
+        const required = members.some((m) => {
+            const field = m.body.fields[name]
+            return field !== undefined && alwaysWritten(field)
+        })
         states = states.flatMap((state) => {
             const slot = state[name]
-            if (slot === undefined || 'codec' in slot) return [state]
+            if (slot === undefined) return [state]
+            // a field that may be absent is the union of a present part and an absent part
+            const declared = fieldOf(slot)
+            if (presence && required && !alwaysWritten(declared)) {
+                const absent =
+                    declared.mark === 'undefinable'
+                        ? undefinable(never)
+                        : optional(never)
+                return [...splitSlot(name, entryCodec(slot), sub), absent].map(
+                    (part) => ({
+                        ...state,
+                        [name]: part as unknown as ObjectSlot,
+                    }),
+                )
+            }
+            if ('codec' in slot) return [state]
             const field = entryCodec(slot)
             const parts = splitSlot(name, field, sub)
             if (parts.length === 1 && parts[0] === field) return [state]
@@ -6714,11 +6857,19 @@ const objectNodesOf = (t: Term): readonly Term[] => {
  * Nothing where the pattern is a union of objects, because a union pattern is no product of its
  * keys. The caller splits then. An object with an open key entry is refused where a field changes,
  * because the type of a part holds the declared names only, and the type cannot state the refusal.
+ *
+ * `presence` is `true` where the caller can replace an option by parts. A field that may be absent,
+ * against a pattern that requires the key, then splits into a present part and an absent part. It is
+ * `false` for a dissection. The tag table of a dissection maps each literal to one member whole, and
+ * a part is a member that changed, which the table cannot key. The dissection then keeps its old
+ * answer: a member that does not fit whole stays out of the extraction, and the exclusion keeps the
+ * member whole.
  */
 const sliceSpec = (
     piece: Piece,
     node: Extract<Term, { kind: 'object' }>,
     pattern: Term,
+    presence = true,
 ): SpecSlice | undefined => {
     const wantedObject = resolvedTerm(pattern)
     if (wantedObject?.kind !== 'object') return undefined
@@ -6729,8 +6880,17 @@ const sliceSpec = (
         keep: Piece[]
         rest: Piece[]
         original: Piece[]
+        /**
+         * The declared field where the field may be absent and the pattern requires the key. The
+         * field is the union of a present part and an absent part. The kept part holds the present
+         * part, and the rejected part holds the absent part beside the present part that the
+         * pattern rejects.
+         */
+        presence?: { readonly inner: AnyCodec; readonly mark: Field['mark'] }
     }
     const nested: Entry[] = []
+    /** The one summand of a field that holds no object: the field as declared. */
+    const whole: Piece = { spec: {}, rest: undefined }
     /**
      * The summands of one slot against the pattern there: a field, or a position of a fixed list.
      * `'leaf'` where the slot holds no union of objects, `'split'` where the caller splits.
@@ -6764,7 +6924,7 @@ const sliceSpec = (
                 wantedNode?.kind === 'object' &&
                 summand.kind === 'object'
             ) {
-                const inner = sliceSpec(here, summand, wanted)
+                const inner = sliceSpec(here, summand, wanted, presence)
                 if (inner === undefined) return 'split'
                 keep.push(...inner.keep)
                 rest.push(...inner.rest)
@@ -6773,8 +6933,8 @@ const sliceSpec = (
                 members.some(
                     (member) =>
                         member.kind === 'object' &&
-                        (sliceSpec(here, summand, member)?.keep.length ?? 0) >
-                            0,
+                        (sliceSpec(here, summand, member, presence)?.keep
+                            .length ?? 0) > 0,
                 )
             ) {
                 // a summand that fits a member of a union pattern in part: the caller splits
@@ -6792,7 +6952,34 @@ const sliceSpec = (
             continue
         }
         if (alwaysWritten(wanted) && !alwaysWritten(mine)) {
-            leafFits = false
+            const declared = piece.spec[name]
+            if (!presence || declared === undefined || !('codec' in declared)) {
+                leafFits = false
+                continue
+            }
+            if (fits(mine.t, wanted.t)) {
+                nested.push({
+                    name,
+                    at: undefined,
+                    keep: [whole],
+                    rest: [],
+                    original: [whole],
+                    presence: { inner: entryCodec(declared), mark: mine.mark },
+                })
+                continue
+            }
+            const one = sliceSlot(mine.t, wanted.t)
+            if (one === 'split') return undefined
+            if (one === 'leaf') {
+                leafFits = false
+                continue
+            }
+            nested.push({
+                name,
+                at: undefined,
+                ...one,
+                presence: { inner: entryCodec(declared), mark: mine.mark },
+            })
             continue
         }
         if (fits(mine.t, wanted.t)) continue
@@ -6850,8 +7037,17 @@ const sliceSpec = (
             const same =
                 list.length === entry.original.length &&
                 list.every((one, at) => one === entry.original[at])
-            if (same) continue
-            const { name } = entry
+            const { name, presence } = entry
+            if (same && presence === undefined) continue
+            if (presence !== undefined && (same || list.length === 0)) {
+                const held = same ? presence.inner : (never as AnyCodec)
+                spec[name] = (list === entry.keep
+                    ? held
+                    : presence.mark === 'undefinable'
+                      ? undefinable(held)
+                      : optional(held)) as unknown as ObjectSlot
+                continue
+            }
             if (list.some((one) => one.rest !== undefined)) {
                 throw new CodecError(
                     `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
@@ -6865,7 +7061,11 @@ const sliceSpec = (
                 codecs.length === 1 ? codecs[0] : union(codecs as never)
             ) as AnyCodec
             if (entry.at === undefined) {
-                spec[name] = codec as unknown as ObjectSlot
+                spec[name] = (presence === undefined || list === entry.keep
+                    ? codec
+                    : presence.mark === 'undefinable'
+                      ? undefinable(codec)
+                      : optional(codec)) as unknown as ObjectSlot
                 continue
             }
             const at = positions.get(name) ?? new Map<number, Term>()
@@ -6895,7 +7095,8 @@ const sliceSpec = (
         : []
     const rest: Piece[] = []
     for (const [at, one] of nested.entries()) {
-        if (one.rest.length === 0) continue
+        // the absent part of a field that may be absent is rejected whatever the present part holds
+        if (one.rest.length === 0 && one.presence === undefined) continue
         const before = nested.slice(0, at)
         if (before.some((other) => other.keep.length === 0)) break
         const replaced = new Map<Entry, readonly Piece[]>()
@@ -6931,7 +7132,7 @@ const splitParts = <O>(
               return specs.map(
                   (spec) => objectFromMap(spec, undefined) as unknown as O,
               )
-          })(splitBy(item.spec as Record<string, ObjectSlot>, wanted))
+          })(splitBy(item.spec as Record<string, ObjectSlot>, wanted, splits))
         : [option]
     return parts.filter(
         (part) => fits(termOf(part as unknown as AnyCodec), wanted) === keep,
@@ -6975,6 +7176,7 @@ const picked = <O>(
                       },
                       node,
                       wanted,
+                      splits,
                   )
                 : undefined
         if (sliced === undefined)
