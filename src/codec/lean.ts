@@ -67,7 +67,7 @@ import type {
     Precondition,
     Refinement,
 } from './codec'
-import { exclude, extract, object, optional, union } from './codec'
+import { at, exclude, extract, object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed, type Result } from './result'
 import { agrees, disjoint, flatOf, storedApart, viewsDisjoint } from './scoped'
@@ -2472,20 +2472,26 @@ type Recorder = { readonly [name: string]: Recorder } & {
     readonly narrow: (clause: Readonly<Record<string, AnyCodec>>) => Recorder
 }
 
-/** The item codec that holds a codec at {@link wrapped}, with `at` over a loop's steps. */
-type Wrapper = AnyCodec & {
-    readonly at: (
-        select: (path: Recorder) => Recorder,
-    ) => AnyCodec & { readonly preconditions: Result<readonly Precondition[]> }
-}
+/** The item codec that holds a codec at {@link wrapped}. */
+type Wrapper = AnyCodec
+
+/**
+ * {@link at} read through the erased signature, for a loop's steps. The type of `at` follows the
+ * spec of the item and the steps of the path, and the spec and the steps here are variables. The
+ * recorder gives each step at run time, so the cast states what the type cannot.
+ */
+const atErased = at as unknown as (
+    item: Wrapper,
+    select: (path: Recorder) => Recorder,
+) => AnyCodec & { readonly preconditions: Result<readonly Precondition[]> }
 
 /** The name at which the wrapper holds the codec under test. */
 const wrapped = 'r'
 
 /**
- * **A path enters a codec through an item.** `at` belongs to the item of an object, so the codec
- * sits at an optional name, which takes every codec and `never` too. The type of `at` follows the
- * spec, and the spec here is a variable, so the item is cast one time to the erased signature.
+ * **A path enters a codec through an item.** `at` takes the item of an object, so the codec
+ * sits at an optional name, which takes every codec and `never` too. The spec here is a variable,
+ * so the item is cast one time to the erased signature.
  */
 const wrapperOf = (codec: AnyCodec): Wrapper =>
     object({ [wrapped]: optional(codec) }).item as unknown as Wrapper
@@ -2543,9 +2549,9 @@ const stepOf = (path: Recorder, step: PathStep): Recorder =>
  */
 export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
     const item = wrapperOf(codec)
-    let reached: ReturnType<Wrapper['at']>
+    let reached: ReturnType<typeof atErased>
     try {
-        reached = item.at((path) =>
+        reached = atErased(item, (path) =>
             steps.reduce(stepOf, path[wrapped] as Recorder),
         )
     } catch (error) {

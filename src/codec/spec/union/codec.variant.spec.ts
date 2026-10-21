@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap } from '../../attribute'
 import {
+    at,
     CodecError,
     decimal,
     discriminatedUnion,
@@ -100,14 +101,16 @@ describe('tagged', () => {
     it('writes an attribute with the codec of the variant that the clause keeps', () => {
         const Holder = object({ account: AccountCodec }).item
         expect(
-            Holder.at(
+            at(
+                Holder,
                 (p) => p.account.narrow({ type: string('STAFF') }).weight,
             ).unsafeEncode(7),
         ).toEqual({
             N: '7',
         })
         expect(
-            Holder.at(
+            at(
+                Holder,
                 (p) => p.account.narrow({ type: string('OWNER') }).balance,
             ).unsafeEncode('1.5'),
         ).toEqual({

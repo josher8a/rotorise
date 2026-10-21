@@ -11,6 +11,7 @@ import type { AttributeValue } from '../../attribute'
 import {
     type AttributeCodec,
     array,
+    at,
     CodecError,
     type Decoded,
     discriminatedUnion,
@@ -25,6 +26,7 @@ import {
     object,
     opaque,
     optional,
+    path,
     ref,
     refine,
     scope,
@@ -58,7 +60,7 @@ describe('a scope', () => {
 
     it('reaches a path through two refs', () => {
         const W = object({ r: optional(S.A) }).item
-        expect(W.at((p) => p.r.b.a.b.a.v).path()).toBe('r.b.a.b.a.v')
+        expect(path(at(W, (p) => p.r.b.a.b.a.v))).toBe('r.b.a.b.a.v')
     })
 
     it('builds a term graph whose cycle passes through a ref node at each ref', () => {
@@ -199,8 +201,8 @@ describe('a ref as a union option', () => {
  */
 describe('an entry of a scope', () => {
     it('keeps the item of an object, with a path through the refs', () => {
-        const located = S.A.item.at((p) => p.b.a.v)
-        expect(located.path()).toBe('b.a.v')
+        const located = at(S.A.item, (p) => p.b.a.v)
+        expect(path(located)).toBe('b.a.v')
         const v: Decoded<typeof located> = 'leaf'
         expect(located.encode(v)).toEqual({ S: 'leaf' })
         const row: TA = { v: 'x', b: { n: null } }
@@ -242,7 +244,7 @@ describe('an entry of a scope', () => {
         })
         expect(() =>
             // @ts-expect-error the path reads a member across the entry `B` of a cycle
-            C.A.item.at((p) => p.s.x),
+            at(C.A.item, (p) => p.s.x),
         ).toThrow(/a path cannot go into `refine` at 'x'/)
     })
 })
@@ -250,8 +252,8 @@ describe('an entry of a scope', () => {
 describe('an open name of a path', () => {
     it('is selected by entry, as the codec of the open entry', () => {
         const Open = object({ id: string }, [string, optional(number)]).item
-        const located = Open.at((p) => p.entry('size'))
-        expect(located.path()).toBe('size')
+        const located = at(Open, (p) => p.entry('size'))
+        expect(path(located)).toBe('size')
         expect(located.encode(3)).toEqual({ N: '3' })
         // the codec of the open entry, with no `| undefined` that a property step adds
         const read: number = located.unsafeDecode({ N: '3' })
@@ -361,7 +363,7 @@ describe('the free names of a codec', () => {
         // @ts-expect-error a use needs a closed codec
         expect(String(open.item.encode({ k: [], v: 'x' }))).toMatch(free)
         // @ts-expect-error a use needs a closed codec
-        const located = open.item.at((p) => p.v)
+        const located = at(open.item, (p) => p.v)
         expect(String(located.encode('x'))).toMatch(free)
         const options = union([
             object({ t: string('a'), k: ref('k') }),

@@ -3745,47 +3745,6 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     /** The entity, or why the item could not be read. */
     readonly decode: (this: Closed, item: StoredItem) => Result<T>
     readonly unsafeDecode: (this: Closed, item: StoredItem) => T
-    /** One attribute's codec, for building `ExpressionAttributeValues` by hand. */
-    readonly field: <K extends keyof Spec>(name: K) => Marks<Spec[K]>
-    /**
-     * The codec at a path, together with the path.
-     *
-     * A nested update needs both halves and they must agree: the document path to write at, and the
-     * codec declared for what lives there. Deriving them from one expression is what keeps them
-     * agreeing — reaching for the generic marshaller at a nested path, which is the alternative,
-     * drops out of the schema for that subtree and loses every guarantee it makes.
-     *
-     * @example
-     * ```ts
-     * const delivered = Adoption.at((p) => p.shipment.legs.at(i).deliveredAt)
-     * delivered.path()            // 'shipment.legs[1].deliveredAt'
-     * delivered.encode(stamp)     // through the codec declared for it
-     * ```
-     *
-     * The codec keeps the attribute it writes: `A` is the member that the model reads at the
-     * resolved frame, as the one attribute of that member, so `encode` gives `{ S: string }` at a
-     * string. A frame where the model reads no one member gives the union of the attributes of
-     * its options, and the wide `AttributeValue` where an option has no member the type computes
-     * (`opaque`). The root of the item writes a row, and keeps the wide `AttributeValue`.
-     */
-    readonly at: <X, A extends AttributeValue = AttributeValue>(
-        this: Closed,
-        select: (
-            path: TermPath<
-                [[[Tm] extends [OfParts] ? ObjectTermOf<Spec, Rest> : Tm, []]],
-                T,
-                ItemFrontier<T, Spec, Rest>,
-                true
-            >,
-        ) => PathTerminal<X> & PathResolved & PathEncoded<A>,
-    ) => LocatedCodec<X, A>
-    /**
-     * A builder for document paths into this item.
-     *
-     * One instance builds any number of independent paths: every hop returns a new builder carrying
-     * its own segments, so nothing accumulates and nothing is consumed. Hoist it.
-     */
-    readonly path: () => PathOf<T, ItemFrontier<T, Spec, Rest>>
     readonly spec: Spec
     /** The codec of an attribute the spec does not declare, or `undefined` for a closed object. */
     readonly rest: Rest
@@ -3793,16 +3752,25 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     readonly def: Term
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
+    /** The term that {@link at} walks. Type-level only. */
+    readonly [itemTermMarker]?: [Tm]
 }
+
+/**
+ * Type-level only, for the same reason as {@link optionalMarker}. Wrapped in a tuple, because a
+ * reader infers an optional `never` as `string`.
+ */
+declare const itemTermMarker: unique symbol
 
 /** An {@link AttributeCodec} that also knows where it lives, and keeps the attribute it writes. */
 export type LocatedCodec<
     T,
     A extends AttributeValue = AttributeValue,
+    P = unknown,
 > = AttributeCodec<T, A> & {
-    /** The document path, as DynamoDB expression syntax. */
-    readonly path: () => string
     readonly segments: readonly (string | number)[]
+    /** The node of the path where this codec sits, which {@link at} continues. Type-level only. */
+    readonly [locatedFrom]?: [P]
     /**
      * **The condition under which a write at this path is safe**, as a conjunction of
      * {@link Precondition}s: one group for each `narrow` on the path, empty where the path has no
@@ -3813,6 +3781,183 @@ export type LocatedCodec<
      * A refusal where a clause key stores a term that no exact precondition states.
      */
     readonly preconditions: Result<readonly Precondition[]>
+}
+
+/**
+ * The codec at a path, together with the path.
+ *
+ * A nested update needs both halves and they must agree: the document path to write at, and the
+ * codec declared for what lives there. Deriving them from one expression is what keeps them
+ * agreeing — reaching for the generic marshaller at a nested path, which is the alternative,
+ * drops out of the schema for that subtree and loses every guarantee it makes.
+ *
+ * @example
+ * ```ts
+ * const delivered = at(item(Adoption), (p) => p.shipment.legs.at(i).deliveredAt)
+ * path(delivered)             // 'shipment.legs[1].deliveredAt'
+ * delivered.encode(stamp)     // through the codec declared for it
+ * ```
+ *
+ * The codec keeps the attribute it writes: `A` is the member that the model reads at the
+ * resolved frame, as the one attribute of that member, so `encode` gives `{ S: string }` at a
+ * string. A frame where the model reads no one member gives the union of the attributes of
+ * its options, and the wide `AttributeValue` where an option has no member the type computes
+ * (`opaque`). The root of the item writes a row, and keeps the wide `AttributeValue`.
+ *
+ * A free function and not a member: a member is typed on each codec type that carries the member,
+ * and a function is typed only at a call. The parameter is {@link Closed}, so a codec that reads an
+ * unbound name is refused at the call.
+ */
+export function at<
+    T,
+    Spec,
+    Rest,
+    Tm,
+    X,
+    P,
+    A extends AttributeValue = AttributeValue,
+>(
+    codec: Closed & ItemCodec<T, Spec, Rest, Tm>,
+    select: (
+        path: TermPath<
+            [[[Tm] extends [OfParts] ? ObjectTermOf<Spec, Rest> : Tm, []]],
+            T,
+            ItemFrontier<T, Spec, Rest>,
+            true
+        >,
+    ) => P & PathTerminal<X> & PathResolved & PathEncoded<A>,
+): LocatedCodec<X, A, P>
+export function at<From, X, P, A extends AttributeValue = AttributeValue>(
+    codec: Closed & {
+        readonly def: Term
+        readonly segments: readonly (string | number)[]
+        readonly [locatedFrom]?: [From]
+    },
+    select: (path: From) => P & PathTerminal<X> & PathResolved & PathEncoded<A>,
+): LocatedCodec<X, A, P>
+export function at(
+    codec: { readonly def: Term },
+    select: (path: never) => unknown,
+): unknown {
+    // a located codec continues its own path from its own root, so `at(at(c, p), q)` walks
+    // `p ++ q` from the root of `c`: the segments join, and the preconditions conjoin
+    // the slot is a symbol property and not a registry entry, so a spread copy of a located codec
+    // keeps its location. The read casts, because no type names the slot
+    const prior = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
+    // the walk reads the item codec as one codec among those it carries, which it is at run time
+    const root = prior?.root ?? (codec as unknown as AnyCodec)
+    const steps = stepsOf(
+        select(
+            // the recorder is a proxy that answers every name, so no type names its shape. The
+            // overloads state the shape of the path at a call, and the signature takes `never`
+            recordPath(prior?.steps ?? []) as never,
+        ),
+    )
+    const itemDef = root.def
+    const segments = segmentsIn(steps)
+    const located = asPath(segments)
+
+    /**
+     * The walk carries a *set* of codecs, not one.
+     *
+     * A path may pass through a segment the variants declare differently and still arrive
+     * where they agree — `legs` is a one-tuple in `SINGLE_LEG` and a two-tuple in
+     * `MULTI_LEG`, but indexing either reaches the same leg codec. So the disagreement is
+     * carried along and reported only if it survives to the end, where using it would mean
+     * encoding with a codec nobody declared.
+     */
+    const walk = (): AnyCodec => {
+        const open = openRefusal(itemDef)
+        if (open) return refusedAt(open)
+        let frontier: readonly AnyCodec[] = [root]
+        const flat = flatOf(itemDef)
+        if (flat.kind === 'refused')
+            return refusedAt(new CodecError(flat.reason))
+        for (const step of steps) {
+            const next =
+                typeof step === 'object'
+                    ? narrowAcross(frontier, step)
+                    : acrossVariants(frontier, step, flat.cycles)
+            if (next instanceof CodecError) return refusedAt(next)
+            // a frontier where no codec admits a value is a name that no codec declares
+            if (next.every(admitsNothing)) {
+                throw new CodecError(`no attribute is declared at '${located}'`)
+            }
+            frontier = next
+        }
+        // a clause at the root narrows the values, and the item codec writes each value
+        // of a kept option as that option writes it
+        if (segments.length === 0) return root
+        const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
+        // the item root is no level, and each segment past the first crosses one L or M
+        return ambiguous.length === 0
+            ? segments.length <= 1
+                ? first
+                : codecAtLevel(first.def, segments.length - 1)
+            : unresolvedAt(String(located), frontier.some(admitsNothing))
+    }
+    const here = walk()
+
+    const made: Located = { root, steps, path: located }
+    return {
+        ...here,
+        segments,
+        preconditions: preconditionsOf(steps),
+        [locatedSlot]: made,
+    }
+}
+
+/**
+ * **Where a located codec sits, at run time only**: the root that {@link at} walked, the steps of
+ * the path, and the path. No type names the slot, so no codec type carries the root, and
+ * {@link at} and {@link path} are the readers. The slot is a property, so a spread keeps it.
+ */
+const locatedSlot = Symbol('located')
+type Located = {
+    readonly root: AnyCodec
+    readonly steps: readonly Step[]
+    readonly path: string
+}
+
+/** Type-level only, for the same reason as {@link optionalMarker}. */
+declare const locatedFrom: unique symbol
+
+/**
+ * A builder for document paths into this item, or the document path of a located codec, as
+ * DynamoDB expression syntax.
+ *
+ * One builder builds any number of independent paths: every hop returns a new builder carrying
+ * its own segments, so nothing accumulates and nothing is consumed. Hoist it.
+ */
+export function path<T, Spec, Rest, Tm>(
+    codec: ItemCodec<T, Spec, Rest, Tm>,
+): PathOf<T, ItemFrontier<T, Spec, Rest>>
+export function path(codec: {
+    readonly segments: readonly (string | number)[]
+}): string
+export function path(codec: object): unknown {
+    // read through a cast, for the reason at {@link at}: a spread copy must keep its location
+    const located = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
+    return located?.path ?? pathBuilder()
+}
+
+/**
+ * One attribute's codec, for building `ExpressionAttributeValues` by hand.
+ *
+ * The codec the member declares, never the field that marks it: a field has no pair, and a
+ * caller that asked for the attribute at a name asked for the thing that reads and writes it.
+ *
+ * This is not `at(codec, (p) => p[name])`. The type of `field` is the declared codec, callable and
+ * with its `.constant`, and `at` gives a {@link LocatedCodec}, which carries a path and no marks.
+ */
+export const field = <T, Spec, Rest, Tm, K extends keyof Spec>(
+    codec: ItemCodec<T, Spec, Rest, Tm>,
+    name: K,
+): Marks<Spec[K]> => {
+    const declared = (codec.spec as Readonly<Record<PropertyKey, ObjectSlot>>)[
+        name
+    ]
+    return (declared && codecOfTerm(fieldOf(declared).t)) as Marks<Spec[K]>
 }
 
 /**
@@ -3961,93 +4106,6 @@ const objectFromMap = <
         unsafeDecode: (item) => orThrow(self.decode(item)),
         unsafeEncodePartial: (patch) => orThrow(self.encodePartial(patch)),
 
-        path: () => pathBuilder<T, ItemFrontier<T, Spec, Rest>>(),
-        at: <X, A extends AttributeValue = AttributeValue>(
-            select: (
-                path: TermPath<
-                    [[ObjectTermOf<Spec, Rest>, []]],
-                    T,
-                    ItemFrontier<T, Spec, Rest>,
-                    true
-                >,
-            ) => PathTerminal<X> & PathResolved & PathEncoded<A>,
-        ) => {
-            const steps = stepsOf(
-                select(
-                    rootPath<
-                        TermPath<
-                            [[ObjectTermOf<Spec, Rest>, []]],
-                            T,
-                            ItemFrontier<T, Spec, Rest>,
-                            true
-                        >
-                    >(),
-                ),
-            )
-            const segments = segmentsIn(steps)
-            const path = asPath(segments)
-
-            /**
-             * The walk carries a *set* of codecs, not one.
-             *
-             * A path may pass through a segment the variants declare differently and still arrive
-             * where they agree — `legs` is a one-tuple in `SINGLE_LEG` and a two-tuple in
-             * `MULTI_LEG`, but indexing either reaches the same leg codec. So the disagreement is
-             * carried along and reported only if it survives to the end, where using it would mean
-             * encoding with a codec nobody declared.
-             */
-            const walk = (): AnyCodec => {
-                const open = openRefusal(itemDef)
-                if (open) return refusedAt(open)
-                let frontier: readonly AnyCodec[] = [
-                    self as unknown as AnyCodec,
-                ]
-                const flat = flatOf(itemDef)
-                if (flat.kind === 'refused')
-                    return refusedAt(new CodecError(flat.reason))
-                for (const step of steps) {
-                    const next =
-                        typeof step === 'object'
-                            ? narrowAcross(frontier, step)
-                            : acrossVariants(frontier, step, flat.cycles)
-                    if (next instanceof CodecError) return refusedAt(next)
-                    // a frontier where no codec admits a value is a name that no codec declares
-                    if (next.every(admitsNothing)) {
-                        throw new CodecError(
-                            `no attribute is declared at '${path}'`,
-                        )
-                    }
-                    frontier = next
-                }
-                // a clause at the root narrows the values, and the item codec writes each value
-                // of a kept option as that option writes it
-                if (segments.length === 0) return self as unknown as AnyCodec
-                const [first, ...ambiguous] = frontier as [
-                    AnyCodec,
-                    ...AnyCodec[],
-                ]
-                // the item root is no level, and each segment past the first crosses one L or M
-                return ambiguous.length === 0
-                    ? segments.length <= 1
-                        ? first
-                        : codecAtLevel(first.def, segments.length - 1)
-                    : unresolvedAt(String(path), frontier.some(admitsNothing))
-            }
-            const here = walk()
-
-            return {
-                ...(here as AttributeCodec<X, A>),
-                path: () => path,
-                segments,
-                preconditions: preconditionsOf(steps),
-            }
-        },
-        // the codec the member declares, never the field that marks it: a field has no pair, and a
-        // caller that asked for the attribute at a name asked for the thing that reads and writes it
-        field: <K extends keyof Spec>(name: K) => {
-            const declared = fields[name as string]
-            return (declared && codecOfTerm(declared.t)) as Marks<Spec[K]>
-        },
         spec: spec as Spec,
         rest,
         def: itemDef,
@@ -4477,7 +4535,7 @@ export const product = <const Fs extends readonly unknown[]>(
 /**
  * A builder for document paths into `T`.
  *
- * The one implementation behind both `item(...).path()` and `tableEntry(...).path()`. They must
+ * The one implementation behind both `path(item(...))` and `tableEntry(...).path()`. They must
  * agree about what a path means — `at` resolves a codec by walking the same segments this records —
  * and the surest way for two implementations to agree is for there to be one.
  */

@@ -49,7 +49,14 @@
 import type { AttributeMap, AttributeValue } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
 import type { AnyCodec, AttributeCodec, ItemCodec, Rng } from './codec'
-import { CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
+import {
+    CodecError,
+    codecOfTerm,
+    failed,
+    field as fieldOf,
+    opaque,
+    orThrow,
+} from './codec'
 import { accepts, holds } from './denote'
 import type { Term } from './term'
 import {
@@ -619,7 +626,7 @@ export const checkEncodePaths = <T, Spec>(
             }
 
             const viaField = (
-                subject.field(name as keyof Spec) as unknown as AnyCodec
+                fieldOf(subject, name as keyof Spec) as unknown as AnyCodec
             ).unsafeEncode(one as never)
             if (!equals(viaField, attribute)) {
                 fail(

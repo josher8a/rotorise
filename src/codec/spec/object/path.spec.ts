@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { number, object, optional, string } from '../../codec'
+import { number, object, optional, path as pathOf, string } from '../../codec'
 
 type Leg = {
     readonly legType: string
@@ -124,7 +124,7 @@ describe('both entry points build the same paths', () => {
     }).item
 
     const fromEntry = AdoptionEntry().path()
-    const fromCodec = Codec.path()
+    const fromCodec = pathOf(Codec)
 
     for (const [name, a, b] of [
         ['a scalar', fromEntry.adoptionId, fromCodec.adoptionId],
@@ -215,11 +215,11 @@ describe('what a path is, to the runtime', () => {
     }).item
 
     it('is an object, not a function', () => {
-        expect(typeof Pet.path().id).toBe('object')
+        expect(typeof pathOf(Pet).id).toBe('object')
     })
 
     it('is not a thenable, so awaiting one does not hang', async () => {
-        const path = Pet.path().id
+        const path = pathOf(Pet).id
         const settled = await Promise.race([
             Promise.resolve(path).then(() => 'resolved'),
             new Promise((stop) => setTimeout(() => stop('hung'), 250)),
@@ -229,6 +229,6 @@ describe('what a path is, to the runtime', () => {
 
     /** And `then` stays an attribute name a schema may use, rather than a hole in the namespace. */
     it('records an attribute called `then` like any other', () => {
-        expect(Pet.path().then.toString()).toBe('then')
+        expect(pathOf(Pet).then.toString()).toBe('then')
     })
 })

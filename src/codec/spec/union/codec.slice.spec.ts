@@ -11,6 +11,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
 import {
+    at,
     binary,
     boolean,
     CodecError,
@@ -412,14 +413,15 @@ describe('the clause carries no order', () => {
             x: extract(twoKey, object({ kind: string('pet') })),
         }).item
         expect(
-            Holder.at(
+            at(
+                Holder,
                 (p) =>
                     p.x.narrow({ kind: string('pet'), size: string('large') })
                         .pen,
             ).unsafeEncode('p1'),
         ).toEqual({ S: 'p1' })
         // @ts-expect-error `food` is not a member of the extraction
-        Holder.at((p) => p.x.narrow({ kind: string('food') }))
+        at(Holder, (p) => p.x.narrow({ kind: string('food') }))
     })
 
     it('gives the same members whichever order they were declared in', () => {

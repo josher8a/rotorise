@@ -18,6 +18,7 @@ import {
     boolean,
     CodecError,
     decimal,
+    field,
     number,
     object,
     opaque,
@@ -339,11 +340,13 @@ describe('a wide entity, encoded', () => {
 
     it('hands back a single attribute for ExpressionAttributeValues', () => {
         expect(
-            Listing.field('status').unsafeEncode(ListingStatus.DRAFT),
+            field(Listing, 'status').unsafeEncode(ListingStatus.DRAFT),
         ).toEqual({
             N: '0',
         })
-        expect(Listing.field('ownerId').unsafeEncode('u1')).toEqual({ S: 'u1' })
+        expect(field(Listing, 'ownerId').unsafeEncode('u1')).toEqual({
+            S: 'u1',
+        })
     })
 
     /**
@@ -354,7 +357,7 @@ describe('a wide entity, encoded', () => {
      * `ExpressionAttributeValues` entry for an optional attribute is exactly what this member is for.
      */
     it('hands back the codec an optional attribute marks, not the mark', () => {
-        expect(Listing.field('handle').unsafeEncode('h1')).toEqual({ S: 'h1' })
+        expect(field(Listing, 'handle').unsafeEncode('h1')).toEqual({ S: 'h1' })
     })
 })
 

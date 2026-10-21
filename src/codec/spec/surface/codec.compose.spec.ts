@@ -9,11 +9,13 @@
 import { describe, expect, it } from 'vitest'
 import {
     array,
+    at,
     discriminatedUnion,
     list,
     number,
     object,
     optional,
+    path,
     string,
     union,
 } from '../../codec'
@@ -74,9 +76,9 @@ describe('a codec used where an attribute codec is expected', () => {
     })
 
     it('reaches a path through a piece that was never named', () => {
-        expect(Adoption.path().tender.code.toString()).toBe('tender.code')
-        expect(Adoption.path().legs.at(1).n.toString()).toBe('legs[1].n')
-        expect(Adoption.at((p) => p.legs.at(0).n).unsafeEncode(4)).toEqual({
+        expect(path(Adoption).tender.code.toString()).toBe('tender.code')
+        expect(path(Adoption).legs.at(1).n.toString()).toBe('legs[1].n')
+        expect(at(Adoption, (p) => p.legs.at(0).n).unsafeEncode(4)).toEqual({
             N: '4',
         })
     })

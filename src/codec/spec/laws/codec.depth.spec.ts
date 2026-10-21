@@ -19,6 +19,7 @@ import { MAX_DOCUMENT_NESTING } from '../../attribute'
 import {
     type AnyCodec,
     array,
+    at as atOf,
     CodecError,
     discriminatedUnion,
     held,
@@ -324,7 +325,7 @@ describe('the nesting bound at a path', () => {
     ])[] = [
         [
             'an object path',
-            anObject.at((p) => p.a.b),
+            atOf(anObject, (p) => p.a.b),
             anObject,
             1,
             nestL,
@@ -332,7 +333,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a list path',
-            aList.at((p) => p.xs.at(0).at(0)),
+            atOf(aList, (p) => p.xs.at(0).at(0)),
             aList,
             2,
             nestL,
@@ -340,7 +341,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a recursive path',
-            aRecursive.at((p) => p.root.next.next.next),
+            atOf(aRecursive, (p) => p.root.next.next.next),
             aRecursive,
             3,
             nestNode,
@@ -348,7 +349,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a union path',
-            aUnion.at((p) => p.u.narrow({ x: opaque }).x),
+            atOf(aUnion, (p) => p.u.narrow({ x: opaque }).x),
             aUnion,
             1,
             nestL,
@@ -356,7 +357,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a discriminated union path',
-            aDiscriminated.at((p) => p.d.x),
+            atOf(aDiscriminated, (p) => p.d.x),
             aDiscriminated,
             1,
             nestL,
@@ -364,7 +365,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'an open rest path',
-            anOpenRest.at((p) => p.at('k').y),
+            atOf(anOpenRest, (p) => p.at('k').y),
             anOpenRest,
             1,
             nestL,
@@ -372,7 +373,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a tuple path',
-            aTuple.at((p) => p.tup.at(1).z),
+            atOf(aTuple, (p) => p.tup.at(1).z),
             aTuple,
             2,
             nestL,
@@ -418,7 +419,7 @@ describe('the nesting bound at a path', () => {
 
     /** A path of one segment names an item attribute, which sits inside no list and no map. */
     it('counts a path of one segment from zero, as the item does', () => {
-        const at = object({ a: opaque }).item.at((p) => p.a)
+        const at = atOf(object({ a: opaque }).item, (p) => p.a)
         expect(at.encode(nestL(MAX_DOCUMENT_NESTING))).not.toBeInstanceOf(
             CodecError,
         )
@@ -497,7 +498,7 @@ describe('the nesting bound on a read', () => {
 
     /** A path of two segments reads an attribute that sits inside one map. */
     it('counts the level of a path on a read, as on a write', () => {
-        const at = object({ a: object({ b: opaque }) }).item.at((p) => p.a.b)
+        const at = atOf(object({ a: object({ b: opaque }) }).item, (p) => p.a.b)
         expect(at.decode(storedL(MAX_DOCUMENT_NESTING - 1))).not.toBeInstanceOf(
             CodecError,
         )

@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest'
 import type { N, NS, S, SS } from '../../attribute'
 import {
+    at,
     CodecError,
     discriminatedUnion,
     number,
@@ -109,7 +110,8 @@ describe('a numeric tag', () => {
     it('reaches a variant by its numeric tag', () => {
         const Holder = object({ row: Rows }).item
         expect(
-            Holder.at(
+            at(
+                Holder,
                 (p) => p.row.narrow({ kind: number(0) }).draftedAt,
             ).unsafeEncode('t'),
         ).toEqual({ S: 't' })

@@ -837,7 +837,7 @@ const pathRoot = (
         const expect = host.kind === 'resolved' ? 'accept' : 'refuse'
         const text = `r${spelled(path)}`
         const id = rowId('path', expect, root, text)
-        const call = `C.${p.full('w')}.at((p) => p.${text})`
+        const call = `at(C.${p.full('w')}, (p) => p.${text})`
         assert(b, { id, expect }, call)
         if (host.kind !== 'resolved') continue
         // the type of `encode` at the path admits the key of each attribute that the run time writes
@@ -897,7 +897,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { binary, boolean, decimal, dynamoNumber, exclude, extract, number, object, string } from '${library}/codec'`,
+    `import { at, binary, boolean, decimal, dynamoNumber, exclude, extract, number, object, string } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",

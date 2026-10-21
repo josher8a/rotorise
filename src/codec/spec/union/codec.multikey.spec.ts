@@ -7,7 +7,7 @@
  * below names one rule that index needs.
  */
 import { describe, expect, it } from 'vitest'
-import { boolean, mdunion, object, string } from '../../codec'
+import { at, boolean, mdunion, object, string } from '../../codec'
 import type { ItemPair } from '../../denote'
 import { assignmentOf } from '../../denote'
 import { failed } from '../../result'
@@ -198,11 +198,13 @@ describe('a member is selected by its assignment', () => {
     /** An object literal, matched key by key: the clause is as unordered as the term's key. */
     it('reaches a member by the assignment it carries', () => {
         const Holder = object({ x: twoKey }).item
-        const chosen = Holder.at(
+        const chosen = at(
+            Holder,
             (p) =>
                 p.x.narrow({ kind: string('pet'), size: string('large') }).pen,
         )
-        const reordered = Holder.at(
+        const reordered = at(
+            Holder,
             (p) =>
                 p.x.narrow({ size: string('large'), kind: string('pet') }).pen,
         )

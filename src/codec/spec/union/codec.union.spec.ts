@@ -7,6 +7,7 @@ import { DynamoNumber, MAX_DOCUMENT_NESTING } from '../../attribute'
 import type { AnyCodec, UnionCodec } from '../../codec'
 import {
     array,
+    at as atOf,
     boolean,
     CodecError,
     decimal,
@@ -213,7 +214,8 @@ describe('untagged', () => {
     it('writes an attribute with the codec of the variant that the clause keeps', () => {
         const Holder = object({ leg: LegCodec }).item
         expect(
-            Holder.at(
+            atOf(
+                Holder,
                 (p) => p.leg.narrow({ petIds: array(string) }).petIds,
             ).unsafeEncode(['x']),
         ).toEqual({

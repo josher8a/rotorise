@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import {
     array,
+    at,
     boolean,
     CodecError,
     discriminatedUnion,
@@ -18,6 +19,7 @@ import {
     object,
     opaque,
     optional,
+    path,
     ref,
     refine,
     scope,
@@ -174,8 +176,8 @@ describe('a union that names itself', () => {
         const List = object({ v: string, next: nullable(ref('List')) })
         const Doc = object({ head: List }).item
         // @ts-expect-error a use needs a closed codec
-        const located = Doc.at((p) => p.head.v)
-        expect(located.path()).toBe('head.v')
+        const located = at(Doc, (p) => p.head.v)
+        expect(path(located)).toBe('head.v')
         const written = located.encode('a')
         expect(written).toBeInstanceOf(CodecError)
         expect(String(written)).toMatch(/reads 'List' through a `ref`/)
@@ -246,8 +248,8 @@ describe('a union that names itself', () => {
             List: object({ v: string, next: nullable(ref('List')) }),
         })
         const Doc = object({ head: List }).item
-        const located = Doc.at((p) => p.head.next.v)
-        expect(located.path()).toBe('head.next.v')
+        const located = at(Doc, (p) => p.head.next.v)
+        expect(path(located)).toBe('head.next.v')
         expect(located.encode('a')).toEqual({ S: 'a' })
         expect(located.decode({ S: 'a' })).toBe('a')
     })

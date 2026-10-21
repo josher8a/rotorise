@@ -1214,12 +1214,13 @@ type ItemCodecRuntime = ItemCodec<
 /**
  * An item codec, as opposed to any other codec that could be passed here.
  *
- * `field` is what separates one: a union of maps has `unsafeEncode`, `unsafeDecode` and even `unsafeEncodePartial`,
- * but no single set of attributes to name one of. Checking the member this actually uses is what
+ * `rest` is what separates one: a union of maps has `unsafeEncode`, `unsafeDecode` and even `unsafeEncodePartial`,
+ * but no single set of attributes, and so no open entry for an attribute that the set lacks. Checking the member this actually uses is what
  * keeps a wrong argument a reported error rather than a `TypeError` two lines later.
  */
 const isItemCodec = (value: unknown): value is ItemCodecRuntime =>
-    callable<ItemCodecRuntime>(value, ['unsafeEncodePartial', 'field'])
+    callable<ItemCodecRuntime>(value, ['unsafeEncodePartial']) &&
+    'rest' in (value as object)
 
 /** Anything that reads and writes an attribute — the shape a spec is *not*. */
 const isCodecLike = (value: unknown): value is AnyCodec =>
@@ -1779,6 +1780,7 @@ export type {
 export {
     andThen,
     array,
+    at,
     binary,
     boolean,
     CodecError,
@@ -1789,6 +1791,7 @@ export {
     exclude,
     extract,
     failed,
+    field,
     held,
     list,
     mdunion,
@@ -1800,6 +1803,7 @@ export {
     opaque,
     optional,
     orThrow,
+    path,
     pathBuilder,
     product,
     ref,

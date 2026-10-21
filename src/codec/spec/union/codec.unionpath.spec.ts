@@ -10,9 +10,11 @@
 import { describe, expect, it } from 'vitest'
 import {
     array,
+    at,
     discriminatedUnion,
     number,
     object,
+    path,
     pathBuilder,
     refine,
     string,
@@ -46,7 +48,7 @@ const Adoption = object({
 }).item
 
 describe('a path into a union', () => {
-    const p = Adoption.path()
+    const p = path(Adoption)
 
     it('reaches a key every member shares', () => {
         expect(p.priceIn.tender.toString()).toBe('priceIn.tender')
@@ -72,17 +74,18 @@ describe('a path into a union', () => {
 describe('a codec at a path into a union', () => {
     it('resolves the variant that has the attribute, under the clause that keeps that variant', () => {
         // only CASH declares cardId, so the clause keeps one candidate
-        const cardId = Adoption.at(
+        const cardId = at(
+            Adoption,
             (q) => q.priceIn.narrow({ tenderType: string('CASH') }).cardId,
         )
-        expect(cardId.path()).toBe('priceIn.cardId')
+        expect(path(cardId)).toBe('priceIn.cardId')
         expect(cardId.unsafeEncode('CASH')).toEqual({
             S: 'CASH',
         })
     })
 
     it('resolves a shared attribute the variants agree on', () => {
-        const tender = Adoption.at((q) => q.priceIn.tender)
+        const tender = at(Adoption, (q) => q.priceIn.tender)
         expect(tender.unsafeEncode('AKC')).toEqual({ S: 'AKC' })
     })
 
@@ -92,7 +95,7 @@ describe('a codec at a path into a union', () => {
             object({ kind: string('PALLET'), region: string('EU', 'US') }),
         ])
         const Order = object({ shipment: Shipment }).item
-        const region = Order.at((q) => q.shipment.region)
+        const region = at(Order, (q) => q.shipment.region)
         expect(region.unsafeEncode('EU')).toEqual({ S: 'EU' })
     })
 
@@ -110,7 +113,7 @@ describe('a codec at a path into a union', () => {
             }),
         ])
         const Order = object({ shipment: Shipment }).item
-        const label = Order.at((q) => q.shipment.label)
+        const label = at(Order, (q) => q.shipment.label)
         expect(() => label.unsafeEncode('AB')).toThrow(
             /declared differently in different variants/,
         )
@@ -118,7 +121,7 @@ describe('a codec at a path into a union', () => {
 
     it('refuses at the type a path that a variant does not declare, as the walk refuses on use', () => {
         // @ts-expect-error a variant does not declare `cardId`, so the path refuses at the type as on use
-        const cardId = Adoption.at((q) => q.priceIn.cardId)
+        const cardId = at(Adoption, (q) => q.priceIn.cardId)
         const _wrong = () => cardId.unsafeEncode(1)
         expect(typeof _wrong).toBe('function')
     })

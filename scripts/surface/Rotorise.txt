@@ -99,6 +99,7 @@ Writes
 WrittenBy
 andThen
 array
+at
 binary
 boolean
 carrying
@@ -109,6 +110,7 @@ everyEntry
 exclude
 extract
 failed
+field
 held
 isNumeral
 isStoredNumeral
@@ -124,6 +126,7 @@ object
 opaque
 optional
 orThrow
+path
 pathBuilder
 pin
 product

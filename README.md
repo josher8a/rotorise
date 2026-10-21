@@ -178,7 +178,7 @@ Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs
 `at(...).preconditions` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
 
 ```ts
-import { discriminatedUnion, failed, number, object, string } from 'rotorise'
+import { at, discriminatedUnion, failed, number, object, path, string } from 'rotorise'
 
 const Order = object({
   pay: discriminatedUnion('tender', [
@@ -187,13 +187,13 @@ const Order = object({
   ]),
 }).item
 
-const cardId = Order.at((p) => p.pay.narrow({ tender: string('CARD') }).cardId)
-cardId.path()          // 'pay.cardId'
+const cardId = at(Order, (p) => p.pay.narrow({ tender: string('CARD') }).cardId)
+path(cardId)          // 'pay.cardId'
 cardId.preconditions   // [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
 cardId.encode('c-1')   // { S: 'c-1' }
 
 // only the CARD option declares `cardId`
-Order.at((p) => p.pay.cardId).encode('c-1')   // a CodecError that names `narrow`
+at(Order, (p) => p.pay.cardId).encode('c-1')   // a CodecError that names `narrow`
 ```
 
 Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the alias of each value, with no leading `:`, because Brushless adds the `:`.
