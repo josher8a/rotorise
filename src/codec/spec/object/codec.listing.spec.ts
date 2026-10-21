@@ -15,10 +15,10 @@ import type { Attribute, AttributeMap } from '../../attribute'
 import type { ItemCodec, OptionalCodec, StringCodec } from '../../codec'
 import {
     array,
+    at,
     boolean,
     CodecError,
     decimal,
-    field,
     item as itemOf,
     number,
     object,
@@ -343,11 +343,11 @@ describe('a wide entity, encoded', () => {
 
     it('hands back a single attribute for ExpressionAttributeValues', () => {
         expect(
-            field(Listing, 'status').unsafeEncode(ListingStatus.DRAFT),
+            at(Listing, ['status']).unsafeEncode(ListingStatus.DRAFT),
         ).toEqual({
             N: '0',
         })
-        expect(field(Listing, 'ownerId').unsafeEncode('u1')).toEqual({
+        expect(at(Listing, ['ownerId']).unsafeEncode('u1')).toEqual({
             S: 'u1',
         })
     })
@@ -360,7 +360,7 @@ describe('a wide entity, encoded', () => {
      * `ExpressionAttributeValues` entry for an optional attribute is exactly what this member is for.
      */
     it('hands back the codec an optional attribute marks, not the mark', () => {
-        expect(field(Listing, 'handle').unsafeEncode('h1')).toEqual({ S: 'h1' })
+        expect(at(Listing, ['handle']).unsafeEncode('h1')).toEqual({ S: 'h1' })
     })
 })
 

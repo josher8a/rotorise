@@ -48,15 +48,8 @@
  */
 import type { AttributeMap, AttributeValue } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
-import type { AnyCodec, AttributeCodec, ItemCodec, Rng } from './codec'
-import {
-    CodecError,
-    codecOfTerm,
-    failed,
-    field as fieldOf,
-    opaque,
-    orThrow,
-} from './codec'
+import type { AnyCodec, AttributeCodec, ItemCodec, Rng, Segment } from './codec'
+import { at, CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
 import { accepts, holds } from './denote'
 import type { Term } from './term'
 import {
@@ -554,10 +547,10 @@ const membersOf = (value: AttributeValue): unknown => {
  * ```
  * encodePartial(x)           = encode(x)              for a complete x
  * encodePartial({ k: x[k] }) = { k: encode(x)[k] }
- * field(k).encode(x[k])      = encode(x)[k]
+ * at(k).encode(x[k])         = encode(x)[k]
  * ```
  *
- * `encode` builds a `PutItem`, `encodePartial` an `UpdateItem`, `field(k).encode` one
+ * `encode` builds a `PutItem`, `encodePartial` an `UpdateItem`, `at(item, [k]).encode` one
  * `ExpressionAttributeValues` entry. Nothing structural forces them to agree, and a divergence means
  * a row that reads back differently depending on how it was last touched.
  *
@@ -625,12 +618,12 @@ export const checkEncodePaths = <T, Spec>(
                 )
             }
 
-            const viaField = (
-                fieldOf(subject, name as keyof Spec) as unknown as AnyCodec
-            ).unsafeEncode(one as never)
+            // the names are the names that the value carries, so the path is no tuple of the spec
+            const named: readonly Segment[] = [name]
+            const viaField = at(subject, named).unsafeEncode(one as never)
             if (!equals(viaField, attribute)) {
                 fail(
-                    `field('${name}').unsafeEncode differs from unsafeEncode`,
+                    `at(item, ['${name}']).unsafeEncode differs from unsafeEncode`,
                     i,
                     viaField,
                     attribute,

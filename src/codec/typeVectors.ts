@@ -41,7 +41,6 @@ import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, leanClosedOf, reachable } from './lean'
 import { CodecError, failed } from './result'
-import { storedApart } from './scoped'
 import type { Literal, Term } from './term'
 import { componentsOf, leafKinds, sameTerm, targetOf } from './term'
 import { arbitraryOf, rngFrom } from './testing'
@@ -758,86 +757,34 @@ const pathRoot = (
         vectors.codec.def,
         `export const ${p.full('w')} = item(object({ r: optional(${p.full('root')}) }))`,
     )
-    const stepText = (s: PathStep): string =>
-        typeof s === 'number'
-            ? `.at(${s})`
-            : typeof s === 'string'
-              ? /^[A-Za-z_$][\w$]*$/.test(s)
-                  ? `.${s}`
-                  : `[${quoted(s)}]`
-              : `.narrow({ ${Object.entries(s.narrow)
-                    .map(([k, c]) => `${keyText(k)}: ${p.clause(c)}`)
-                    .join(', ')} })`
     /*
-     * A name that no head declares, where a head is open, is spelled `.entry('k')`. The
-     * heads are the terms at the path, through `ref`s and the options of a union. A clause
-     * keeps each head that the stored view of the clause does not separate, as `narrow` does.
+     * The call of a path is the steps themselves: each run of segments is one `at`, and each
+     * clause is one `narrow`. A path that ends at a clause ends in `at(…, [])`, which checks that
+     * one codec stands at the place.
      */
-    const headsOf = (t: Term): readonly Term[] => {
-        if (t.kind === 'ref') {
-            const target = targetOf(t)
-            return target === undefined ? [] : headsOf(target)
-        }
-        if (t.kind === 'union') return t.options.flatMap(headsOf)
-        return [t]
-    }
-    const childOf = (t: Term, s: string | number): readonly Term[] => {
-        if (t.kind === 'opaq') return [t]
-        if (t.kind === 'object' && typeof s === 'string') {
-            const f = t.body.fields[s]
-            if (f !== undefined) return [f.t]
-            return t.body.rest === undefined ? [] : [t.body.rest]
-        }
-        if (t.kind === 'list' && typeof s === 'number') {
-            const at = s < t.pre.length ? t.pre[s] : t.spread
-            return at === undefined ? [] : [at]
-        }
-        return []
-    }
-    const clauseOf = (clause: Readonly<Record<string, AnyCodec>>): Term => ({
-        kind: 'object',
-        body: {
-            fields: Object.fromEntries(
-                Object.entries(clause).map(([k, c]) => [
-                    k,
-                    { mark: 'req', t: c.def },
-                ]),
-            ),
-            rest: { kind: 'opaq' },
-        },
-    })
     const spelled = (path: readonly PathStep[]): string => {
-        let heads: readonly Term[] = headsOf(vectors.codec.def)
-        let out = ''
+        let call = `C.${p.full('w')}`
+        let run: string[] = [quoted('r')]
         for (const s of path) {
-            if (typeof s === 'string') {
-                const declared = heads.some(
-                    (h) =>
-                        h.kind === 'object' && Object.hasOwn(h.body.fields, s),
-                )
-                const open = heads.some(
-                    (h) =>
-                        h.kind === 'opaq' ||
-                        (h.kind === 'object' && h.body.rest !== undefined),
-                )
-                out += !declared && open ? `.entry(${quoted(s)})` : stepText(s)
-            } else out += stepText(s)
-            if (typeof s !== 'object')
-                heads = heads.flatMap((h) => childOf(h, s)).flatMap(headsOf)
-            else {
-                const clause = clauseOf(s.narrow)
-                heads = heads.filter((h) => !storedApart(clause, h))
+            if (typeof s !== 'object') {
+                run.push(typeof s === 'number' ? String(s) : quoted(s))
+                continue
             }
+            const clause = Object.entries(s.narrow)
+                .map(([k, c]) => `${keyText(k)}: ${p.clause(c)}`)
+                .join(', ')
+            call = `narrow(${run.length === 0 ? call : `at(${call}, [${run.join(', ')}])`}, { ${clause} })`
+            run = []
         }
-        return out
+        return `at(${call}, [${run.join(', ')}])`
     }
     const b = block()
     for (const path of vectors.paths) {
         const host = hostAt(vectors.codec, path)
         const expect = host.kind === 'resolved' ? 'accept' : 'refuse'
-        const text = `r${spelled(path)}`
+        const call = spelled(path)
+        const text = call
         const id = rowId('path', expect, root, text)
-        const call = `at(C.${p.full('w')}, (p) => p.${text})`
         assert(b, { id, expect }, call)
         if (host.kind !== 'resolved') continue
         // the type of `encode` at the path admits the key of each attribute that the run time writes
@@ -897,7 +844,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { at, binary, boolean, decimal, dynamoNumber, exclude, extract, number, object, string } from '${library}/codec'`,
+    `import { at, binary, boolean, decimal, dynamoNumber, exclude, extract, narrow, number, object, string } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",

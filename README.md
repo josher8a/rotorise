@@ -175,10 +175,10 @@ Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs
 
 `narrow(spec)` narrows a path through a union to the options that the clause does not separate. The clause is an object of codecs, and each key of the clause is required at its codec. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
 
-`at(...).preconditions` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
+`preconditions(at(...))` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
 
 ```ts
-import { at, discriminatedUnion, failed, item, number, object, path, string } from 'rotorise'
+import { at, discriminatedUnion, failed, item, narrow, number, object, path, preconditions, string } from 'rotorise'
 
 const Order = item(object({
   pay: discriminatedUnion('tender', [
@@ -187,13 +187,13 @@ const Order = item(object({
   ]),
 }))
 
-const cardId = at(Order, (p) => p.pay.narrow({ tender: string('CARD') }).cardId)
-path(cardId)          // 'pay.cardId'
-cardId.preconditions   // [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
+const cardId = at(narrow(at(Order, ['pay']), { tender: string('CARD') }), ['cardId'])
+path(cardId)           // 'pay.cardId'
+preconditions(cardId)  // the Result of [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
 cardId.encode('c-1')   // { S: 'c-1' }
 
 // only the CARD option declares `cardId`
-at(Order, (p) => p.pay.cardId).encode('c-1')   // a CodecError that names `narrow`
+at(Order, ['pay', 'cardId']).encode('c-1')   // a CodecError that names `narrow`
 ```
 
 Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the alias of each value, with no leading `:`, because Brushless adds the `:`.
@@ -221,11 +221,11 @@ const conditionOf = (preconditions: readonly Precondition[], alias: () => string
     )
     .reduce((all, one) => C.and(all, one))
 
-const preconditions = cardId.preconditions
-if (failed(preconditions)) throw preconditions
+const guards = preconditions(cardId)
+if (failed(guards)) throw guards
 let n = 0
 const register = Register.make()
-C.build(conditionOf(preconditions, () => `v${n++}`), register)
+C.build(conditionOf(guards, () => `v${n++}`), register)
 // => '#pay.#tender IN (:v0)', and `register` holds the names and the value
 ```
 

@@ -225,7 +225,7 @@ through an adapter. `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refu
 
 **Observation.** The model states the precondition of a closed clause as data
 (`Closed.preconditionOfC`), and `Closed.preconditionOfC_exact` proves the precondition exact or
-refuses it. The host states the same data as `at(...).preconditions`. The emitter puts the host's
+refuses it. The host states the same data as `preconditions(at(...))`. The emitter puts the host's
 preconditions to the model at each narrow path of the pool, as the rows `PreRowsC`, and one vector
 pins a clause key over an older reader. A clause whose type nests a map has no
 row.

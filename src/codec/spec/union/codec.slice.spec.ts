@@ -23,6 +23,7 @@ import {
     held,
     item,
     mdunion,
+    narrow,
     number,
     object,
     optional,
@@ -417,14 +418,15 @@ describe('the clause carries no order', () => {
         )
         expect(
             at(
-                Holder,
-                (p) =>
-                    p.x.narrow({ kind: string('pet'), size: string('large') })
-                        .pen,
+                narrow(at(Holder, ['x']), {
+                    kind: string('pet'),
+                    size: string('large'),
+                }),
+                ['pen'],
             ).unsafeEncode('p1'),
         ).toEqual({ S: 'p1' })
         // @ts-expect-error `food` is not a member of the extraction
-        at(Holder, (p) => p.x.narrow({ kind: string('food') }))
+        narrow(at(Holder, ['x']), { kind: string('food') })
     })
 
     it('gives the same members whichever order they were declared in', () => {

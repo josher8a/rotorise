@@ -14,6 +14,7 @@ import {
     discriminatedUnion,
     held,
     item,
+    item as itemOf,
     list,
     mdunion,
     nullable,
@@ -177,7 +178,7 @@ describe('a union that names itself', () => {
         const List = object({ v: string, next: nullable(ref('List')) })
         const Doc = item(object({ head: List }))
         // @ts-expect-error a use needs a closed codec
-        const located = at(Doc, (p) => p.head.v)
+        const located = at(Doc, ['head', 'v'])
         expect(path(located)).toBe('head.v')
         const written = located.encode('a')
         expect(written).toBeInstanceOf(CodecError)
@@ -248,8 +249,8 @@ describe('a union that names itself', () => {
         const { List } = scope({
             List: object({ v: string, next: nullable(ref('List')) }),
         })
-        const Doc = item(object({ head: List }))
-        const located = at(Doc, (p) => p.head.next.v)
+        const Doc = itemOf(object({ head: List }))
+        const located = at(Doc, ['head', 'next', 'v'])
         expect(path(located)).toBe('head.next.v')
         expect(located.encode('a')).toEqual({ S: 'a' })
         expect(located.decode({ S: 'a' })).toBe('a')

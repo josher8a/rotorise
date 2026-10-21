@@ -7,7 +7,7 @@
  * below names one rule that index needs.
  */
 import { describe, expect, it } from 'vitest'
-import { at, boolean, item, mdunion, object, string } from '../../codec'
+import { at, boolean, item, mdunion, narrow, object, string } from '../../codec'
 import type { ItemPair } from '../../denote'
 import { assignmentOf } from '../../denote'
 import { failed } from '../../result'
@@ -201,14 +201,18 @@ describe('a member is selected by its assignment', () => {
     it('reaches a member by the assignment it carries', () => {
         const Holder = item(object({ x: twoKey }))
         const chosen = at(
-            Holder,
-            (p) =>
-                p.x.narrow({ kind: string('pet'), size: string('large') }).pen,
+            narrow(at(Holder, ['x']), {
+                kind: string('pet'),
+                size: string('large'),
+            }),
+            ['pen'],
         )
         const reordered = at(
-            Holder,
-            (p) =>
-                p.x.narrow({ size: string('large'), kind: string('pet') }).pen,
+            narrow(at(Holder, ['x']), {
+                size: string('large'),
+                kind: string('pet'),
+            }),
+            ['pen'],
         )
         expect(chosen.unsafeEncode('p1')).toEqual({ S: 'p1' })
         expect(reordered.unsafeEncode('p1')).toEqual({ S: 'p1' })

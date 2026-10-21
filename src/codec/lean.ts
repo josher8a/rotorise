@@ -73,8 +73,11 @@ import {
     exclude,
     extract,
     item as itemOf,
+    narrow,
     object,
     optional,
+    preconditions as preconditionsOf,
+    type Segment,
     union,
 } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
@@ -2471,39 +2474,15 @@ export type HostAt = {
     | { readonly kind: 'resolved'; readonly codec: AnyCodec }
 )
 
-/**
- * The recorder that `at` hands its selector, as a loop drives it. The path type names the steps
- * that a selector literal writes, and a loop computes its steps, so the one cast is at
- * {@link wrapperOf}.
- */
-type Recorder = { readonly [name: string]: Recorder } & {
-    readonly at: (index: number) => Recorder
-    readonly narrow: (clause: Readonly<Record<string, AnyCodec>>) => Recorder
-}
-
-/** The item codec that holds a codec at {@link wrapped}. */
-type Wrapper = AnyCodec
-
-/**
- * {@link at} read through the erased signature, for a loop's steps. The type of `at` follows the
- * spec of the item and the steps of the path, and the spec and the steps here are variables. The
- * recorder gives each step at run time, so the cast states what the type cannot.
- */
-const atErased = at as unknown as (
-    item: Wrapper,
-    select: (path: Recorder) => Recorder,
-) => AnyCodec & { readonly preconditions: Result<readonly Precondition[]> }
-
 /** The name at which the wrapper holds the codec under test. */
 const wrapped = 'r'
 
 /**
- * **A path enters a codec through an item.** `at` takes the item of an object, so the codec
- * sits at an optional name, which takes every codec and `never` too. The spec here is a variable,
- * so the item is cast one time to the erased signature.
+ * **A path enters a codec through an item.** The codec sits at an optional name of an item, which
+ * takes every codec and `never` too, so a path of the model reads the codec one level down.
  */
-const wrapperOf = (codec: AnyCodec): Wrapper =>
-    itemOf(object({ [wrapped]: optional(codec) })) as unknown as Wrapper
+const wrapperOf = (codec: AnyCodec) =>
+    itemOf(object({ [wrapped]: optional(codec) }))
 
 /** Every term that the walk can reach from a root, through each `ref` that has a target. */
 export const reachable = (root: Term): ReadonlySet<Term> => {
@@ -2543,13 +2522,27 @@ export const reachable = (root: Term): ReadonlySet<Term> => {
     return seen
 }
 
-/** One step of the recorder. */
-const stepOf = (path: Recorder, step: PathStep): Recorder =>
-    typeof step === 'number'
-        ? path.at(step)
-        : typeof step === 'string'
-          ? (path[step] as Recorder)
-          : path.narrow(step.narrow)
+/**
+ * **The codec at a path under {@link wrapped}**: each run of segments is one `at`, and each clause
+ * is one `narrow`. A loop computes the steps, so the path is no tuple that the type can check.
+ */
+const reach = (
+    item: ReturnType<typeof wrapperOf>,
+    steps: readonly PathStep[],
+): AnyCodec => {
+    let run: Segment[] = [wrapped]
+    let reached = at(item, run)
+    run = []
+    for (const step of steps) {
+        if (typeof step !== 'object') {
+            run.push(step)
+            continue
+        }
+        reached = narrow(at(reached, run), step.narrow)
+        run = []
+    }
+    return at(reached, run)
+}
 
 /**
  * **The decision of `at` at a path under {@link wrapped}.** A throw of the call is a refusal at the
@@ -2558,11 +2551,9 @@ const stepOf = (path: Recorder, step: PathStep): Recorder =>
  */
 export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
     const item = wrapperOf(codec)
-    let reached: ReturnType<typeof atErased>
+    let reached: AnyCodec
     try {
-        reached = atErased(item, (path) =>
-            steps.reduce(stepOf, path[wrapped] as Recorder),
-        )
+        reached = reach(item, steps)
     } catch (error) {
         if (!(error instanceof CodecError)) throw error
         return {
@@ -2575,11 +2566,11 @@ export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
         return {
             kind: 'resolved',
             codec: reached,
-            preconditions: reached.preconditions,
+            preconditions: preconditionsOf(reached),
         }
     const refusal = reached.decode({ NULL: true })
     const message = refusal instanceof CodecError ? refusal.message : ''
-    const { preconditions } = reached
+    const preconditions = preconditionsOf(reached)
     if (message.includes('is declared by some variants only'))
         return { kind: 'someVariants', preconditions }
     if (message.includes('is declared differently in different variants'))

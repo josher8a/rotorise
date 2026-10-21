@@ -71,6 +71,7 @@ Rng
 RotoriseError
 S
 SS
+Segment
 SetBase
 SetCapable
 SetOf
@@ -110,7 +111,6 @@ everyEntry
 exclude
 extract
 failed
-field
 held
 isNumeral
 isStoredNumeral
@@ -119,6 +119,7 @@ keyComponents
 list
 mdunion
 memberOf
+narrow
 never
 nullValue
 nullable
@@ -130,6 +131,7 @@ orThrow
 path
 pathBuilder
 pin
+preconditions
 product
 ref
 refine

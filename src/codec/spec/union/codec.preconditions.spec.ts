@@ -16,10 +16,12 @@ import {
     decimal,
     discriminatedUnion,
     item as itemOf,
+    narrow,
     number,
     object,
     opaque,
     type Precondition,
+    preconditions as preconditionsOf,
     ref,
     refine,
     scope,
@@ -31,7 +33,7 @@ import {
 describe('the preconditions of a path are the stored admission of each clause', () => {
     it('a path with no clause has no precondition', () => {
         const Plain = itemOf(object({ a: object({ b: string }) }))
-        expect(atOf(Plain, (p) => p.a.b).preconditions).toEqual([])
+        expect(preconditionsOf(atOf(Plain, ['a', 'b']))).toEqual([])
     })
 
     it('a string tag pins the stored text', () => {
@@ -44,7 +46,9 @@ describe('the preconditions of a path are the stored admission of each clause', 
             }),
         )
         expect(
-            atOf(M, (p) => p.m.narrow({ tag: string('A') }).only).preconditions,
+            preconditionsOf(
+                atOf(narrow(atOf(M, ['m']), { tag: string('A') }), ['only']),
+            ),
         ).toEqual([{ segments: ['m', 'tag'], in: [{ S: 'A' }] }])
     })
 
@@ -59,14 +63,17 @@ describe('the preconditions of a path are the stored admission of each clause', 
 
     it('a numeric tag pins the stored numeral, not the number', () => {
         expect(
-            atOf(Numeric, (p) => p.u.narrow({ k: number(1) }).a).preconditions,
+            preconditionsOf(
+                atOf(narrow(atOf(Numeric, ['u']), { k: number(1) }), ['a']),
+            ),
         ).toEqual([{ segments: ['u', 'k'], in: [{ N: '1' }] }])
     })
 
     it('a decimal tag pins the stored numeral, which a number tag stores too', () => {
         expect(
-            atOf(Numeric, (p) => p.u.narrow({ k: decimal('1') }).a)
-                .preconditions,
+            preconditionsOf(
+                atOf(narrow(atOf(Numeric, ['u']), { k: decimal('1') }), ['a']),
+            ),
         ).toEqual([{ segments: ['u', 'k'], in: [{ N: '1' }] }])
     })
 
@@ -77,7 +84,9 @@ describe('the preconditions of a path are the stored admission of each clause', 
             }),
         )
         expect(
-            atOf(Untagged, (p) => p.u.narrow({ a: opaque }).a).preconditions,
+            preconditionsOf(
+                atOf(narrow(atOf(Untagged, ['u']), { a: opaque }), ['a']),
+            ),
         ).toEqual([{ segments: ['u', 'a'], exists: true }])
     })
 
@@ -94,7 +103,9 @@ describe('the preconditions of a path are the stored admission of each clause', 
         )
         const older = withLegacyRead({ current: string, older: string })
         expect(
-            atOf(Untagged, (p) => p.u.narrow({ a: older }).a).preconditions,
+            preconditionsOf(
+                atOf(narrow(atOf(Untagged, ['u']), { a: older }), ['a']),
+            ),
         ).toEqual([{ segments: ['u', 'a'], exists: true }])
     })
 
@@ -108,7 +119,9 @@ describe('the preconditions of a path are the stored admission of each clause', 
             }),
         )
         expect(
-            atOf(ByMember, (p) => p.u.narrow({ v: number }).tag).preconditions,
+            preconditionsOf(
+                atOf(narrow(atOf(ByMember, ['u']), { v: number }), ['tag']),
+            ),
         ).toEqual([{ segments: ['u', 'v'], type: 'N' }])
     })
 
@@ -128,13 +141,20 @@ describe('the preconditions of a path are the stored admission of each clause', 
             }),
         )
         expect(
-            atOf(
-                Nested,
-                (p) =>
-                    p.u
-                        .narrow({ tag: string('OUTER') })
-                        .inner.narrow({ kind: string('x') }).x,
-            ).preconditions,
+            preconditionsOf(
+                atOf(
+                    narrow(
+                        atOf(
+                            narrow(atOf(Nested, ['u']), {
+                                tag: string('OUTER'),
+                            }),
+                            ['inner'],
+                        ),
+                        { kind: string('x') },
+                    ),
+                    ['x'],
+                ),
+            ),
         ).toEqual([
             { segments: ['u', 'tag'], in: [{ S: 'OUTER' }] },
             { segments: ['u', 'inner', 'kind'], in: [{ S: 'x' }] },
@@ -164,13 +184,14 @@ describe('the preconditions of a path are the stored admission of each clause', 
             }),
         )
         expect(
-            atOf(
-                Two,
-                (p) =>
-                    p.u.narrow({ kind: string('pet') }).narrow({
+            preconditionsOf(
+                atOf(
+                    narrow(narrow(atOf(Two, ['u']), { kind: string('pet') }), {
                         size: string('large'),
-                    }).pen,
-            ).preconditions,
+                    }),
+                    ['pen'],
+                ),
+            ),
         ).toEqual([
             { segments: ['u', 'kind'], in: [{ S: 'pet' }] },
             { segments: ['u', 'size'], in: [{ S: 'large' }] },
@@ -186,10 +207,11 @@ describe('the preconditions of a path are the stored admission of each clause', 
                 ]),
             }),
         )
-        const preconditions = atOf(
-            Closed,
-            (p) => p.u.narrow({ data: object({ n: number }) }).tag,
-        ).preconditions
+        const preconditions = preconditionsOf(
+            atOf(narrow(atOf(Closed, ['u']), { data: object({ n: number }) }), [
+                'tag',
+            ]),
+        )
         expect(preconditions).toBeInstanceOf(CodecError)
         expect(String(preconditions)).toMatch(
             /'u\.data' gives no exact precondition: the clause stores a closed object/,
@@ -213,10 +235,9 @@ describe('the preconditions of a path are the stored admission of each clause', 
                 ]),
             }),
         )
-        const preconditions = atOf(
-            Drawing,
-            (p) => p.u.narrow({ shape: Filled }).tag,
-        ).preconditions
+        const preconditions = preconditionsOf(
+            atOf(narrow(atOf(Drawing, ['u']), { shape: Filled }), ['tag']),
+        )
         expect(preconditions).toBeInstanceOf(CodecError)
         expect(String(preconditions)).toMatch(
             /'u\.shape' gives no exact precondition: the clause stores a refinement/,
@@ -270,8 +291,10 @@ describe('a write at a narrowed path is safe only under its preconditions', () =
     const itemB = M.unsafeEncode({ m: { tag: 'B', shared: 's' } })
 
     it('refuses the write on an item of the dropped option, which the write would leave unreadable', () => {
-        const only = atOf(M, (p) => p.m.narrow({ tag: string('A') }).only)
-        const preconditions = only.preconditions
+        const only = atOf(narrow(atOf(M, ['m']), { tag: string('A') }), [
+            'only',
+        ])
+        const preconditions = preconditionsOf(only)
         if (preconditions instanceof CodecError) throw preconditions
         const wrote = only.unsafeEncode(7)
         // the write at the path, as `UpdateItem` sets `m.only`

@@ -20,6 +20,7 @@ import {
     type FreeOf,
     held,
     item,
+    item as itemOf,
     list,
     nullable,
     nullValue,
@@ -60,8 +61,8 @@ describe('a scope', () => {
     })
 
     it('reaches a path through two refs', () => {
-        const W = item(object({ r: optional(S.A) }))
-        expect(path(at(W, (p) => p.r.b.a.b.a.v))).toBe('r.b.a.b.a.v')
+        const W = itemOf(object({ r: optional(S.A) }))
+        expect(path(at(W, ['r', 'b', 'a', 'b', 'a', 'v']))).toBe('r.b.a.b.a.v')
     })
 
     it('builds a term graph whose cycle passes through a ref node at each ref', () => {
@@ -202,7 +203,7 @@ describe('a ref as a union option', () => {
  */
 describe('an entry of a scope', () => {
     it('keeps the item of an object, with a path through the refs', () => {
-        const located = at(item(S.A), (p) => p.b.a.v)
+        const located = at(itemOf(S.A), ['b', 'a', 'v'])
         expect(path(located)).toBe('b.a.v')
         const v: Decoded<typeof located> = 'leaf'
         expect(located.encode(v)).toEqual({ S: 'leaf' })
@@ -245,15 +246,15 @@ describe('an entry of a scope', () => {
         })
         expect(() =>
             // @ts-expect-error the path reads a member across the entry `B` of a cycle
-            at(item(C.A), (p) => p.s.x),
+            at(itemOf(C.A), ['s', 'x']),
         ).toThrow(/a path cannot go into `refine` at 'x'/)
     })
 })
 
 describe('an open name of a path', () => {
     it('is selected by entry, as the codec of the open entry', () => {
-        const Open = item(object({ id: string }, [string, optional(number)]))
-        const located = at(Open, (p) => p.entry('size'))
+        const Open = itemOf(object({ id: string }, [string, optional(number)]))
+        const located = at(Open, ['size'])
         expect(path(located)).toBe('size')
         expect(located.encode(3)).toEqual({ N: '3' })
         // the codec of the open entry, with no `| undefined` that a property step adds
@@ -364,7 +365,7 @@ describe('the free names of a codec', () => {
         // @ts-expect-error a use needs a closed codec
         expect(String(item(open).encode({ k: [], v: 'x' }))).toMatch(free)
         // @ts-expect-error a use needs a closed codec
-        const located = at(item(open), (p) => p.v)
+        const located = at(itemOf(open), ['v'])
         expect(String(located.encode('x'))).toMatch(free)
         const options = union([
             object({ t: string('a'), k: ref('k') }),

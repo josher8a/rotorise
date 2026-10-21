@@ -5,14 +5,17 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
+    type AnyCodec,
     array,
     at,
     discriminatedUnion,
     item,
+    narrow,
     number,
     object,
     optional,
     path,
+    preconditions,
     string,
 } from '../../codec'
 
@@ -29,23 +32,16 @@ const Adoption = item(
 )
 
 /** The facts of a located codec that the law compares. */
-const factsOf = (codec: {
-    readonly segments: readonly (string | number)[]
-    readonly preconditions: unknown
-    readonly encode: (value: never) => unknown
-}) => ({
-    segments: codec.segments,
-    preconditions: codec.preconditions,
+const factsOf = (codec: AnyCodec) => ({
+    path: path(codec),
+    preconditions: preconditions(codec),
     written: codec.encode('x' as never),
 })
 
 describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p ++ q)', () => {
     it('joins the segments of a name below a name', () => {
-        const composed = at(
-            at(Adoption, (p) => p.shipment),
-            (q) => q.carrier,
-        )
-        const direct = at(Adoption, (p) => p.shipment.carrier)
+        const composed = at(at(Adoption, ['shipment']), ['carrier'])
+        const direct = at(Adoption, ['shipment', 'carrier'])
         expect(path(composed)).toBe('shipment.carrier')
         expect(path(composed)).toBe(path(direct))
         expect(factsOf(composed)).toEqual(factsOf(direct))
@@ -53,11 +49,11 @@ describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p +
     })
 
     it('joins the segments of a position and a name below a list', () => {
-        const composed = at(
-            at(Adoption, (p) => p.shipment.legs),
-            (q) => q.at(1).deliveredAt,
-        )
-        const direct = at(Adoption, (p) => p.shipment.legs.at(1).deliveredAt)
+        const composed = at(at(Adoption, ['shipment', 'legs']), [
+            1,
+            'deliveredAt',
+        ])
+        const direct = at(Adoption, ['shipment', 'legs', 1, 'deliveredAt'])
         expect(path(composed)).toBe('shipment.legs[1].deliveredAt')
         expect(path(composed)).toBe(path(direct))
         expect(factsOf(composed)).toEqual(factsOf(direct))
@@ -66,17 +62,17 @@ describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p +
 
     it('conjoins the preconditions of a narrow in the prefix with the path below it', () => {
         const composed = at(
-            at(Adoption, (p) => p.pay.narrow({ tender: string('CARD') })),
-            (q) => q.card.last4,
+            narrow(at(Adoption, ['pay']), { tender: string('CARD') }),
+            ['card', 'last4'],
         )
         const direct = at(
-            Adoption,
-            (p) => p.pay.narrow({ tender: string('CARD') }).card.last4,
+            narrow(at(Adoption, ['pay']), { tender: string('CARD') }),
+            ['card', 'last4'],
         )
         expect(path(composed)).toBe('pay.card.last4')
         expect(path(composed)).toBe(path(direct))
         expect(factsOf(composed)).toEqual(factsOf(direct))
-        expect(composed.preconditions).toEqual([
+        expect(preconditions(composed)).toEqual([
             { segments: ['pay', 'tender'], in: [{ S: 'CARD' }] },
         ])
         expectTypeOf(composed).toEqualTypeOf(direct)
@@ -87,11 +83,11 @@ describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p +
      * original, and `at` continues the path of the original, so no copy reads as a root.
      */
     it('gives a spread copy the same path and the same composition as the original', () => {
-        const located = at(Adoption, (p) => p.shipment)
+        const located = at(Adoption, ['shipment'])
         const copy = { ...located }
         expect(path(copy)).toBe(path(located))
-        const composed = at(copy, (q) => q.carrier)
-        const direct = at(Adoption, (p) => p.shipment.carrier)
+        const composed = at(copy, ['carrier'])
+        const direct = at(Adoption, ['shipment', 'carrier'])
         expect(path(composed)).toBe('shipment.carrier')
         expect(factsOf(composed)).toEqual(factsOf(direct))
     })

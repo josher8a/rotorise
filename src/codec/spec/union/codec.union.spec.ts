@@ -15,6 +15,7 @@ import {
     dynamoNumber,
     held,
     item,
+    narrow,
     never,
     nullValue,
     number,
@@ -217,10 +218,9 @@ describe('untagged', () => {
     it('writes an attribute with the codec of the variant that the clause keeps', () => {
         const Holder = item(object({ leg: LegCodec }))
         expect(
-            atOf(
-                Holder,
-                (p) => p.leg.narrow({ petIds: array(string) }).petIds,
-            ).unsafeEncode(['x']),
+            atOf(narrow(atOf(Holder, ['leg']), { petIds: array(string) }), [
+                'petIds',
+            ]).unsafeEncode(['x']),
         ).toEqual({
             L: [{ S: 'x' }],
         })

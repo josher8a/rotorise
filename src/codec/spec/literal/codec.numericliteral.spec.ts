@@ -15,6 +15,7 @@ import {
     CodecError,
     discriminatedUnion,
     item,
+    narrow,
     number,
     object,
     string,
@@ -111,10 +112,9 @@ describe('a numeric tag', () => {
     it('reaches a variant by its numeric tag', () => {
         const Holder = item(object({ row: Rows }))
         expect(
-            at(
-                Holder,
-                (p) => p.row.narrow({ kind: number(0) }).draftedAt,
-            ).unsafeEncode('t'),
+            at(narrow(at(Holder, ['row']), { kind: number(0) }), [
+                'draftedAt',
+            ]).unsafeEncode('t'),
         ).toEqual({ S: 't' })
     })
 

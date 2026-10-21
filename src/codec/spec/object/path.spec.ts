@@ -9,10 +9,12 @@
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import {
+    at,
     item,
     number,
     object,
     optional,
+    pathBuilder,
     path as pathOf,
     string,
 } from '../../codec'
@@ -115,10 +117,8 @@ describe('paths need no non-null assertions', () => {
 
 describe('both entry points build the same paths', () => {
     /**
-     * `tableEntry(...).path()` and `object(...).path()` are one implementation.
-     *
-     * They have to agree: `at` resolves a codec by walking the segments the builder records, so a
-     * second implementation that drifted would resolve a codec for one path and hand back another.
+     * `tableEntry(...).path()` and the path of a codec that `at` located render one path in one
+     * syntax. They have to agree: an expression that mixes the two must name one attribute.
      */
     const Codec = item(
         object({
@@ -133,19 +133,17 @@ describe('both entry points build the same paths', () => {
     )
 
     const fromEntry = AdoptionEntry().path()
-    const fromCodec = pathOf(Codec)
-
     for (const [name, a, b] of [
-        ['a scalar', fromEntry.adoptionId, fromCodec.adoptionId],
+        ['a scalar', fromEntry.adoptionId, pathOf(at(Codec, ['adoptionId']))],
         [
             'another scalar',
             fromEntry.currentLegIndex,
-            fromCodec.currentLegIndex,
+            pathOf(at(Codec, ['currentLegIndex'])),
         ],
-        ['a literal union', fromEntry.status, fromCodec.status],
+        ['a literal union', fromEntry.status, pathOf(at(Codec, ['status']))],
     ] as const) {
         it(`agrees on ${name}`, () => {
-            expect(a.toString()).toBe(b.toString())
+            expect(a.toString()).toBe(b)
         })
     }
 
@@ -218,19 +216,14 @@ describe('a map whose keys are not known ahead of time', () => {
  * error. The segments live in a side table for this reason.
  */
 describe('what a path is, to the runtime', () => {
-    const Pet = item(
-        object({
-            id: string,
-            then: string,
-        }),
-    )
+    const Pet = pathBuilder<{ id: string; then: string }>()
 
     it('is an object, not a function', () => {
-        expect(typeof pathOf(Pet).id).toBe('object')
+        expect(typeof Pet.id).toBe('object')
     })
 
     it('is not a thenable, so awaiting one does not hang', async () => {
-        const path = pathOf(Pet).id
+        const path = Pet.id
         const settled = await Promise.race([
             Promise.resolve(path).then(() => 'resolved'),
             new Promise((stop) => setTimeout(() => stop('hung'), 250)),
@@ -240,6 +233,6 @@ describe('what a path is, to the runtime', () => {
 
     /** And `then` stays an attribute name a schema may use, rather than a hole in the namespace. */
     it('records an attribute called `then` like any other', () => {
-        expect(pathOf(Pet).then.toString()).toBe('then')
+        expect(Pet.then.toString()).toBe('then')
     })
 })

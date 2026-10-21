@@ -203,6 +203,16 @@ type Free<F extends string> = { readonly [freeMarker]?: [F] }
  */
 declare const itemMarker: unique symbol
 export type Itemable<X> = { readonly [itemMarker]: [X] }
+/*
+ * **The union that a reading reads, in its type.** The reading of a union holds the options of the
+ * union as specs, and holds no term, so `at` cannot walk the reading. The marker carries the union,
+ * and the term and the members of the union are the term and the members of the reading. Optional,
+ * so no value carries it. The marker tells no item from a codec: {@link itemMark} tells that.
+ */
+declare const itemOfMarker: unique symbol
+type ReadingOf<C> = C extends Itemable<infer X>
+    ? X & { readonly [itemOfMarker]?: [C] }
+    : never
 export type FreeOf<C> = C extends {
     readonly [freeMarker]?: [infer F extends string]
 }
@@ -3325,94 +3335,14 @@ export type PathTerminal<T> = {
 
 declare const pathValue: unique symbol
 
-/*
- * **The selector of `at`, read from the term.** A node holds the frames of `Term.at` at its path.
- * The node offers each name that a head declares, each name where a head is open, and each
- * position where a head is a list. The decision of the node is `pathKind` of its frames, and the
- * selector admits a node where the decision is one codec. The decoded type at the node is a
- * function of its first frame. `T` and `F` follow the path as the decoded type and the frontier,
- * so a key or an index that is no literal keeps the typing of {@link PathOf}, and so does a
- * `narrow` over a codec whose type carries no term.
- */
-declare const pathKindMarker: unique symbol
-type PathResolved = { readonly [pathKindMarker]?: 'resolved' }
-declare const pathEncoded: unique symbol
-/**
- * The attribute that the codec at a node writes, as a phantom: a function of the first frame,
- * where the node resolves. The root of an item is the item codec, which writes a row and no
- * attribute, so the root keeps the wide `AttributeValue`.
- */
-type PathEncoded<A> = { readonly [pathEncoded]?: A }
-type TermPath<Fs, T, F, Root = false> = PathTerminal<TermPathValue<Fs>> &
-    PathEncoded<Root extends true ? AttributeValue : TermPathEncoded<Fs>> & {
-        readonly [pathKindMarker]?: KindOfFrames<Fs>
-    } & TermPathBody<Fs, NonNullable<T>, F, OffersAt<Fs>, Root>
+/** The decoded type at the first frame of a place that resolves, and `never` elsewhere. */
 type TermPathValue<Fs> = KindOfFrames<Fs> extends 'resolved'
     ? DecodeFrame<FirstFrame<Fs>>
     : never
 type TermPathEncoded<Fs> = KindOfFrames<Fs> extends 'resolved'
     ? EncodedFrame<FirstFrame<Fs>>
     : never
-type TermPathBody<Fs, T, F, O, Root> = {
-    readonly [K in Extract<O, ['name', unknown]>[1] & string]: TermPath<
-        StepFrames<['name', K], Fs>,
-        ValueAt<T, K>,
-        ChildAt<F, K>
-    >
-} & ([Extract<O, ['open']>] extends [never]
-    ? unknown
-    : { readonly [name: string]: PathOf<ValueAt<T, string>> } & {
-          at<const K extends string>(
-              key: K,
-          ): string extends K
-              ? PathOf<ValueAt<T, string>>
-              : TermPath<
-                    StepFrames<['name', K], Fs>,
-                    ValueAt<T, K>,
-                    ChildAt<F, K>
-                >
-          /** An open name, selected by a method, so the step adds no `| undefined`. */
-          entry<const K extends string>(
-              key: K,
-          ): TermPath<StepFrames<['name', K], Fs>, ValueAt<T, K>, ChildAt<F, K>>
-      }) &
-    ([Extract<O, ['pos']>] extends [never]
-        ? unknown
-        : { readonly [index: number]: PathOf<ElementOf<T>> } & {
-              at<const I extends number>(
-                  index: I,
-              ): number extends I
-                  ? PathOf<ElementOf<T>>
-                  : TermPath<StepFrames<['pos', I], Fs>, ElementOf<T>, unknown>
-          }) &
-    TodayNarrowing<T, F, Fs, Root>
 type ElementOf<T> = T extends readonly unknown[] ? T[number] : never
-/**
- * `narrow` at a node. A node that holds frames offers {@link TermNarrowing}, whatever its decoded
- * type, because the frames decide the clause. A node whose type carries no term offers
- * {@link PathNarrowing} where {@link PathOf} offers it: on an object type that is no list.
- */
-type TodayNarrowing<T, F, Fs, Root> = HoldsFree<Fs> extends true
-    ? [T] extends [readonly unknown[]]
-        ? unknown
-        : [T] extends [object]
-          ? PathNarrowing<T, F>
-          : unknown
-    : TermNarrowing<Fs, Root>
-/**
- * {@link PathNarrowing}, where the node holds frames, and read on the terms alone: the narrowed node
- * holds the options that the clause keeps ({@link NarrowFrames}), so its decision is the decision of
- * the walk of `at`. The clause is refused where it keeps no option of the frames, as the walk refuses
- * it. The decoded type of the narrowed node is the decoded type of the kept frames.
- */
-type TermNarrowing<Fs, Root> = {
-    narrow<
-        const C extends Readonly<Record<string, AnyCodec>>,
-        K = NarrowFrames<Fs, ClauseTerms<C>>,
-    >(
-        clause: C & ClauseOnFrames<K>,
-    ): TermPath<K, DecodeFrames<K>, unknown, Root>
-}
 /** The decoded type of the codecs at the frames of a node. */
 type DecodeFrames<Fs> = Fs extends unknown[]
     ? { [I in keyof Fs]: DecodeFrame<Fs[I]> }[number]
@@ -3422,6 +3352,333 @@ type ClauseTerms<C> = { [K in keyof C]: TermOf<C[K]> }
 type ClauseOnFrames<K> = K extends []
     ? ErrorMessage<'[narrow] the clause separates every member of this union'>
     : unknown
+
+/**
+ * **A segment of a document path**: a name, or a position of a list. The model's `Seg`: a string is
+ * `.name`, and a number is `.pos`. A path is a tuple of segments, so a name in digits stays a name.
+ */
+export type Segment = string | number
+
+/*
+ * **Where the walk of a path stands, at the type level.** `['term', Fs, T, F, Root]` holds the
+ * frames of `Term.at`, the decoded type, the frontier, and whether the walk stands at the root of an
+ * item. `['path', T, F]` stands where the type knows no frame: below a key or an index that is no
+ * literal, and below a codec whose type carries no term. There the decoded type and the frontier
+ * type the path, as {@link PathOf} does. A located codec carries the place in its type, so `at` and
+ * `narrow` continue from the place.
+ */
+type Refused = 'refused'
+
+/**
+ * **The place of a path that the type does not know**: a path that is no tuple, or no string
+ * literal, as a loop computes it. The type checks no segment there, and the located codec is the
+ * erasure {@link AnyCodec}: `never` in, `unknown` out. A walk past such a place stays unknown.
+ */
+type Wide = 'wide'
+
+/** The place one segment down, or {@link Refused}. */
+type StepAt<H, S> = H extends ['term', infer Fs, infer T, infer F, unknown]
+    ? StepTerm<Fs, NonNullable<T>, F, OffersAt<Fs>, S>
+    : H extends ['path', infer T, infer F]
+      ? StepPath<NonNullable<T>, F, S>
+      : Refused
+type StepTerm<Fs, T, F, O, S> = S extends string
+    ? string extends S
+        ? [Extract<O, ['open']>] extends [never]
+            ? Refused
+            : ['path', ValueAt<T, string>, unknown]
+        : [S] extends [Extract<O, ['name', unknown]>[1]]
+          ? [
+                'term',
+                StepFrames<['name', S], Fs>,
+                ValueAt<T, S>,
+                ChildAt<F, S>,
+                false,
+            ]
+          : [Extract<O, ['open']>] extends [never]
+            ? Refused
+            : [
+                  'term',
+                  StepFrames<['name', S], Fs>,
+                  ValueAt<T, S>,
+                  ChildAt<F, S>,
+                  false,
+              ]
+    : S extends number
+      ? [Extract<O, ['pos']>] extends [never]
+          ? Refused
+          : number extends S
+            ? ['path', ElementOf<T>, unknown]
+            : ['term', StepFrames<['pos', S], Fs>, ElementOf<T>, unknown, false]
+      : Refused
+type StepPath<T, F, S> = [T] extends [readonly unknown[]]
+    ? [T[number]] extends [never]
+        ? Refused
+        : S extends number
+          ? ['path', T[number], unknown]
+          : Refused
+    : [T] extends [object]
+      ? S extends string
+          ? [S] extends [UnionKeys<T>]
+              ? ['path', ValueAt<T, S>, ChildAt<F, S>]
+              : Refused
+          : Refused
+      : Refused
+
+/** The segments that a place offers one step down: the names, any name where open, a position. */
+type OfferedAt<H> = H extends ['term', infer Fs, unknown, unknown, unknown]
+    ? OffersAt<Fs> extends infer O
+        ?
+              | Extract<O, ['name', unknown]>[1]
+              | ([Extract<O, ['open']>] extends [never] ? never : string)
+              | ([Extract<O, ['pos']>] extends [never] ? never : number)
+        : never
+    : H extends ['path', infer T, unknown]
+      ? [NonNullable<T>] extends [readonly unknown[]]
+          ? number
+          : [NonNullable<T>] extends [object]
+            ? UnionKeys<NonNullable<T>> & string
+            : never
+      : never
+
+/** The place at the end of a path, or {@link Refused}. A path that is no tuple has no place. */
+type WalkAt<H, S> = H extends Wide
+    ? Wide
+    : S extends readonly [infer Head, ...infer Tail]
+      ? WalkAt<StepAt<H, Head>, Tail>
+      : S extends readonly []
+        ? H
+        : Wide
+
+/** Why the place at the end of a path holds no one codec, or nothing where the place holds one. */
+type ResolvesAt<H> = H extends ['term', infer Fs, unknown, unknown, unknown]
+    ? [KindOfFrames<Fs>] extends ['resolved']
+        ? unknown
+        : ErrorMessage<`[at] the path is ${KindOfFrames<Fs> & string}: no one codec stands at the path`>
+    : H extends ['path', unknown, unknown]
+      ? unknown
+      : ErrorMessage<'[at] no codec stands at the path'>
+
+/** The refusal of a segment, with the segments that the place offers. */
+type NoSegment<O> = ErrorMessage<'[at] the place offers no such segment'> & {
+    readonly '[at] the place offers': O
+}
+
+/**
+ * **The check of a tuple path**, as an intersection with the parameter. A segment that the place
+ * does not offer meets a refusal that names the segments that the place offers, so the refusal lands
+ * on that segment. A path to a place that holds no one codec is a refusal of the path.
+ */
+type CheckPath<H, S, Done extends readonly unknown[] = []> = H extends
+    | Wide
+    | Refused
+    ? unknown
+    : S extends readonly [infer Head, ...infer Tail]
+      ? StepAt<H, Head> extends infer N
+          ? N extends Refused
+              ? readonly [...Done, Head & NoSegment<OfferedAt<H>>, ...Tail]
+              : CheckPath<N, Tail, [...Done, Head]>
+          : never
+      : S extends readonly []
+        ? ResolvesAt<H>
+        : unknown
+
+/**
+ * **A document path in DynamoDB syntax, as its segments**: `'legs[1].at'` is `['legs', 1, 'at']`.
+ * A name holds no `.`, `[` or `]`, and the tuple form carries such a name. A part that is no name
+ * and no position is a segment that no place offers.
+ */
+type ParsePath<S extends string> = S extends '' ? [] : PathParts<S>
+type PathParts<S extends string> = S extends `${infer Head}.${infer Tail}`
+    ? [...PathPart<Head>, ...PathParts<Tail>]
+    : PathPart<S>
+type PathPart<S extends string> =
+    S extends `${infer Name}[${infer I}]${infer Rest}`
+        ? [
+              ...(Name extends '' ? [] : PathName<Name>),
+              I extends `${infer N extends number}` ? N : ['no segment'],
+              ...(Rest extends '' ? [] : PathPart<Rest>),
+          ]
+        : PathName<S>
+type PathName<S extends string> = S extends `${string}${'[' | ']'}${string}`
+    ? [['no segment']]
+    : [S]
+
+/** The segments of a path in either form. */
+type SegmentsOf<S> = S extends string
+    ? string extends S
+        ? Segment[]
+        : ParsePath<S>
+    : S
+
+/** The check of a path in DynamoDB syntax: the refusal names the path. */
+type CheckString<H, S extends string> = string extends S
+    ? unknown
+    : WalkAt<H, ParsePath<S>> extends infer N
+      ? N extends Refused
+          ? ErrorMessage<`[at] '${S}' is no path of this codec`>
+          : ResolvesAt<N>
+      : never
+
+/**
+ * **The segments that an editor completes**, as a second member of the parameter, which accepts
+ * no path that the check refuses. The editor blocks the inference from the element that it
+ * completes, so that element infers as `unknown`, and no path that the user writes holds `unknown`.
+ * At that element the member offers the segments that the place offers after the elements before
+ * it. A string path gets the text up to the last `.`, followed by each name that the place there
+ * offers. The member excludes each string of the path, so the member never accepts the path that
+ * the user wrote, and the check alone decides.
+ */
+type CompleteAt<H, S> = [S] extends [string]
+    ? CompleteString<H, S, LastPart<S>>
+    : S extends readonly unknown[]
+      ? unknown extends S[number]
+          ? CompletePath<H, S>
+          : never
+      : never
+type CompletePath<H, S, Done extends readonly unknown[] = []> = H extends
+    | Wide
+    | Refused
+    ? never
+    : S extends readonly [infer Head, ...infer Tail]
+      ? unknown extends Head
+          ? 0 extends 1 & Head
+              ? never
+              : readonly [...Done, OfferedAt<H>, ...Tail]
+          : CompletePath<StepAt<H, Head>, Tail, [...Done, Head]>
+      : never
+/** The text up to the last `.`, and the part after it. */
+type LastPart<
+    S extends string,
+    P extends string = '',
+> = S extends `${infer Head}.${infer Tail}`
+    ? LastPart<Tail, `${P}${Head}.`>
+    : [P, S]
+/** A name that the string form can write: no `.`, `[` or `]`. */
+type PlainName<N> = N extends string
+    ? string extends N
+        ? never
+        : N extends `${string}${'.' | '[' | ']'}${string}`
+          ? never
+          : N
+    : never
+type CompleteString<H, S extends string, L> = L extends [
+    infer P extends string,
+    unknown,
+]
+    ? WalkAt<H, ParsePath<P extends `${infer Q}.` ? Q : P>> extends infer N
+        ? N extends Wide | Refused
+            ? never
+            : Exclude<`${P}${PlainName<OfferedAt<N>>}`, S>
+        : never
+    : never
+
+/** The check of a path in either form. */
+type CheckAt<H, S> = S extends string ? CheckString<H, S> : CheckPath<H, S>
+
+/**
+ * **The place at the start of a walk.** A located codec continues its own place. An item starts at
+ * its root, which writes a row. Any other codec starts at its own term, an attribute at level 0.
+ */
+type StartOf<C> = C extends { readonly [locatedFrom]?: [infer H, RootKind] }
+    ? unknown extends H
+        ? StartOfCodec<C>
+        : H
+    : StartOfCodec<C>
+type StartOfCodec<C> = C extends { readonly [itemOfMarker]?: [infer U] }
+    ? unknown extends U
+        ? StartOfItem<C>
+        : ['term', [[TermOf<U>, []]], Decoded<U>, MembersOf<U>, true]
+    : StartOfItem<C>
+type StartOfItem<C> = C extends {
+    readonly encodePartial: unknown
+    readonly spec: infer Spec
+    readonly rest: infer Rest
+    readonly unsafeDecode: (this: Closed, item: StoredItem) => infer T
+}
+    ? [
+          'term',
+          [
+              [
+                  C extends { readonly [itemTermMarker]?: [infer Tm] }
+                      ? [Tm] extends [OfParts]
+                          ? ObjectTermOf<Spec, Rest>
+                          : Tm
+                      : ObjectTermOf<Spec, Rest>,
+                  [],
+              ],
+          ],
+          T,
+          ItemFrontier<T, Spec, Rest>,
+          true,
+      ]
+    : ['term', [[TermOf<C>, []]], Decoded<C>, MembersOf<C>, false]
+
+/**
+ * **The located codec at a place.** The decoded type is a function of the first frame, and the
+ * attribute is the member that the model reads there. The root of an item writes a row, and keeps
+ * the wide `AttributeValue`. A place where the type knows no frame keeps the decoded type and the
+ * wide `AttributeValue`. A place that holds no one codec is a codec that refuses each value on use,
+ * so a `narrow` that keeps several options continues, and `at(l, [])` refuses where it ends.
+ */
+type FocusAt<H, R extends RootKind> = H extends Wide
+    ? AnyCodec & { readonly [locatedFrom]?: [Wide, R] }
+    : H extends ['term', infer Fs, unknown, unknown, infer Root]
+      ? (
+            Root extends true
+                ? AttributeValue
+                : TermPathEncoded<Fs>
+        ) extends infer A extends AttributeValue
+          ? [KindOfFrames<Fs>] extends ['resolved']
+              ? LocatedCodec<Exclude<TermPathValue<Fs>, undefined>, A, H, R>
+              : LocatedCodec<unknown, AttributeValue, H, R>
+          : never
+      : H extends ['path', infer T, unknown]
+        ? LocatedCodec<Exclude<T, undefined>, AttributeValue, H, R>
+        : // a refused place follows a refusal of the type, and keeps the codec usable after it
+          LocatedCodec<unknown, AttributeValue, Refused, R>
+
+/**
+ * **The place after `narrow`**, or {@link Refused}: the options that the clause does not separate.
+ * Where the place holds frames, the frames decide the clause. Where it holds none, the decoded type
+ * and the frontier decide it, on a union only.
+ */
+type NarrowAt<H, C> = H extends Wide
+    ? Wide
+    : H extends ['term', infer Fs, infer T, infer F, infer Root]
+      ? HoldsFree<Fs> extends true
+          ? NarrowPath<NonNullable<T>, F, C>
+          : NarrowFrames<Fs, ClauseTerms<C>> extends infer K
+            ? K extends []
+                ? Refused
+                : ['term', K, DecodeFrames<K>, unknown, Root]
+            : never
+      : H extends ['path', infer T, infer F]
+        ? NarrowPath<NonNullable<T>, F, C>
+        : Refused
+type NarrowPath<T, F, C> = [T] extends [readonly unknown[]]
+    ? Refused
+    : [T] extends [object]
+      ? IsUnion<T> extends true
+          ? unknown extends F
+              ? ['path', Narrowed<T, C>, unknown]
+              : ['path', Kept<F, C>['t'], Kept<F, C>]
+          : Refused
+      : Refused
+
+/** Nothing, or why `narrow` refuses the clause at the place. */
+type CheckNarrow<H, C> = H extends Wide
+    ? unknown
+    : H extends ['term', infer Fs, infer T, infer F, unknown]
+      ? HoldsFree<Fs> extends true
+          ? CheckNarrowPath<NonNullable<T>, F, C>
+          : ClauseOnFrames<NarrowFrames<Fs, ClauseTerms<C>>>
+      : H extends ['path', infer T, infer F]
+        ? CheckNarrowPath<NonNullable<T>, F, C>
+        : ErrorMessage<'[narrow] no codec stands at the path'>
+type CheckNarrowPath<T, F, C> = NarrowPath<T, F, C> extends Refused
+    ? ErrorMessage<'[narrow] the codec at the path is no union'>
+    : ClauseOn<T, F, C>
 
 // ── items ───────────────────────────────────────────────────────────
 
@@ -3555,6 +3812,8 @@ export type Dissected<
     Ks extends readonly string[],
     Specs extends readonly unknown[],
 > = {
+    /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
+    readonly [itemMark]: true
     /** Every attribute, or why one could not be written. */
     readonly encode: (this: Closed, item: T) => Result<AttributeMap>
     readonly unsafeEncode: (this: Closed, item: T) => AttributeMap
@@ -3728,6 +3987,8 @@ type SliceSpecs<C> = C extends DiscriminatedCodec<
         : SpecsOf<[C]>[number]
 
 export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
+    /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
+    readonly [itemMark]: true
     /** Every attribute, or why one could not be written. For `PutItem`. */
     readonly encode: (this: Closed, item: T) => Result<EncodedBy<Spec, Rest>>
     readonly unsafeEncode: (this: Closed, item: T) => EncodedBy<Spec, Rest>
@@ -3769,21 +4030,34 @@ export type LocatedCodec<
     T,
     A extends AttributeValue = AttributeValue,
     P = unknown,
+    R extends RootKind = RootKind,
 > = AttributeCodec<T, A> & {
-    readonly segments: readonly (string | number)[]
-    /** The node of the path where this codec sits, which {@link at} continues. Type-level only. */
-    readonly [locatedFrom]?: [P]
     /**
-     * **The condition under which a write at this path is safe**, as a conjunction of
-     * {@link Precondition}s: one group for each `narrow` on the path, empty where the path has no
-     * `narrow`. The narrowing drops options, and an item of a dropped option may still be stored.
-     * Put the preconditions in the `ConditionExpression` of the write, so the write refuses such
-     * an item.
-     *
-     * A refusal where a clause key stores a term that no exact precondition states.
+     * The place where this codec sits, which {@link at} and {@link narrow} continue, and the kind
+     * of the root that the walk started from, which {@link path} reads. Type-level only.
      */
-    readonly preconditions: Result<readonly Precondition[]>
+    readonly [locatedFrom]?: [P, R]
 }
+
+/**
+ * **The kind of the root of a walk**: an item, or any other codec. Only an item writes the
+ * top-level attributes of a row, so only a path from an item is a document path of the row.
+ */
+export type RootKind = 'item' | 'relative'
+
+/**
+ * The kind of the root that a walk from `C` starts at: a located codec keeps its own. Only an item
+ * reading carries {@link itemMark}, so the mark is the one test of an item. An object codec holds a
+ * `spec` as well, so `spec` is no test.
+ */
+type RootOf<C> = C extends {
+    readonly [locatedFrom]?: [unknown, infer R extends RootKind]
+}
+    ? RootKind extends R
+        ? KindOfRoot<C>
+        : R
+    : KindOfRoot<C>
+type KindOfRoot<C> = C extends Marked ? 'item' : 'relative'
 
 /**
  * The codec at a path, together with the path.
@@ -3795,7 +4069,7 @@ export type LocatedCodec<
  *
  * @example
  * ```ts
- * const delivered = at(item(Adoption), (p) => p.shipment.legs.at(i).deliveredAt)
+ * const delivered = at(Adoption.item, ['shipment', 'legs', i, 'deliveredAt'])
  * path(delivered)             // 'shipment.legs[1].deliveredAt'
  * delivered.encode(stamp)     // through the codec declared for it
  * ```
@@ -3810,36 +4084,13 @@ export type LocatedCodec<
  * and a function is typed only at a call. The parameter is {@link Closed}, so a codec that reads an
  * unbound name is refused at the call.
  */
-export function at<
-    T,
-    Spec,
-    Rest,
-    Tm,
-    X,
-    P,
-    A extends AttributeValue = AttributeValue,
->(
-    codec: Closed & ItemCodec<T, Spec, Rest, Tm>,
-    select: (
-        path: TermPath<
-            [[[Tm] extends [OfParts] ? ObjectTermOf<Spec, Rest> : Tm, []]],
-            T,
-            ItemFrontier<T, Spec, Rest>,
-            true
-        >,
-    ) => P & PathTerminal<X> & PathResolved & PathEncoded<A>,
-): LocatedCodec<X, A, P>
-export function at<From, X, P, A extends AttributeValue = AttributeValue>(
-    codec: Closed & {
-        readonly def: Term
-        readonly segments: readonly (string | number)[]
-        readonly [locatedFrom]?: [From]
-    },
-    select: (path: From) => P & PathTerminal<X> & PathResolved & PathEncoded<A>,
-): LocatedCodec<X, A, P>
+export function at<C, const S extends readonly Segment[] | string>(
+    codec: Closed & C & { readonly def: Term },
+    path: (S & CheckAt<StartOf<C>, S>) | NoInfer<CompleteAt<StartOf<C>, S>>,
+): FocusAt<WalkAt<StartOf<C>, SegmentsOf<S>>, RootOf<C>>
 export function at(
     codec: { readonly def: Term },
-    select: (path: never) => unknown,
+    path: readonly Segment[] | string,
 ): unknown {
     // a located codec continues its own path from its own root, so `at(at(c, p), q)` walks
     // `p ++ q` from the root of `c`: the segments join, and the preconditions conjoin
@@ -3848,14 +4099,75 @@ export function at(
     const prior = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
     // the walk reads the item codec as one codec among those it carries, which it is at run time
     const root = prior?.root ?? (codec as unknown as AnyCodec)
-    const steps = stepsOf(
-        select(
-            // the recorder is a proxy that answers every name, so no type names its shape. The
-            // overloads state the shape of the path at a call, and the signature takes `never`
-            recordPath(prior?.steps ?? []) as never,
-        ),
+    return locate(
+        root,
+        [
+            ...(prior?.steps ?? []),
+            ...(typeof path === 'string' ? parsePath(path) : path),
+        ],
+        prior,
     )
+}
+
+/**
+ * **Narrows a located codec to the options that a clause does not separate.** The clause is an
+ * object of codecs: each key is required at the term of its codec, and every other name is open.
+ * The path keeps its segments, and the clause adds its preconditions at the path.
+ *
+ * The test reads the stored views, so `number(1)` and `decimal('1')` meet, and `decimal` and
+ * `string` are apart. A kept option stays as the codec declares it: the narrowing refines no option.
+ */
+export function narrow<L, const C extends Readonly<Record<string, AnyCodec>>>(
+    located: Closed & L & { readonly def: Term },
+    clause: C & CheckNarrow<StartOf<L>, C>,
+): FocusAt<NarrowAt<StartOf<L>, C>, RootOf<L>>
+export function narrow(
+    located: { readonly def: Term },
+    clause: Readonly<Record<string, AnyCodec>>,
+): unknown {
+    // read through a cast, for the reason at {@link at}: a spread copy must keep its location
+    const prior = (located as { readonly [locatedSlot]?: Located })[locatedSlot]
+    const root = prior?.root ?? (located as unknown as AnyCodec)
+    return locate(root, [...(prior?.steps ?? []), clauseTerm(clause)], prior)
+}
+
+/**
+ * **The segments of a document path in DynamoDB syntax**: a name, or a position in brackets, each
+ * name after the first behind a `.`. A name holds no `.`, `[` or `]`: the tuple form carries such a
+ * name. A malformed path is a defect of the caller, and the type of {@link at} refuses it first.
+ */
+const parsePath = (path: string): readonly Segment[] => {
+    if (path === '') return []
+    const segments: Segment[] = []
+    for (const part of path.split('.')) {
+        const parsed = /^([^[\]]*)((?:\[\d+\])*)$/.exec(part)
+        if (parsed === null) {
+            throw new CodecError(
+                `'${path}' is no document path: a name holds no '[' or ']', and a position is digits in brackets`,
+            )
+        }
+        const [, name = '', positions = ''] = parsed
+        if (name !== '' || positions === '') segments.push(name)
+        for (const [, digits] of positions.matchAll(/\[(\d+)\]/g)) {
+            segments.push(Number(digits))
+        }
+    }
+    return segments
+}
+
+/** Whether a codec is a whole-item reading: an object's, a union's or a tagged union's `item`. */
+const isItemReading = (codec: object): boolean => itemMark in codec
+
+/** The codec at the steps of a path from a root, with its place. */
+const locate = (
+    root: AnyCodec,
+    steps: readonly Step[],
+    prior: Located | undefined,
+): unknown => {
     const itemDef = root.def
+    // a whole-item reading writes no map, and only such a reading carries the item mark. An object
+    // codec holds a `spec` as well, so `spec` is no test
+    const whole = isItemReading(root)
     const segments = segmentsIn(steps)
     const located = asPath(segments)
 
@@ -3868,18 +4180,26 @@ export function at(
      * carried along and reported only if it survives to the end, where using it would mean
      * encoding with a codec nobody declared.
      */
+    let reached: Reached | undefined
     const walk = (): AnyCodec => {
-        const open = openRefusal(itemDef)
-        if (open) return refusedAt(open)
-        let frontier: readonly AnyCodec[] = [root]
-        const flat = flatOf(itemDef)
-        if (flat.kind === 'refused')
-            return refusedAt(new CodecError(flat.reason))
-        for (const step of steps) {
+        // a prior place that the walk reached continues from its frontier, so a composition
+        // walks each step one time
+        const from: Reached | undefined = prior?.reached
+        let frontier: readonly AnyCodec[] = from?.frontier ?? [root]
+        let cycles = from?.cycles
+        if (cycles === undefined) {
+            const open = openRefusal(itemDef)
+            if (open) return refusedAt(open)
+            const flat = flatOf(itemDef)
+            if (flat.kind === 'refused')
+                return refusedAt(new CodecError(flat.reason))
+            cycles = flat.cycles
+        }
+        for (const step of from ? steps.slice(prior?.steps.length) : steps) {
             const next =
                 typeof step === 'object'
                     ? narrowAcross(frontier, step)
-                    : acrossVariants(frontier, step, flat.cycles)
+                    : acrossVariants(frontier, step, cycles)
             if (next instanceof CodecError) return refusedAt(next)
             // a frontier where no codec admits a value is a name that no codec declares
             if (next.every(admitsNothing)) {
@@ -3887,80 +4207,97 @@ export function at(
             }
             frontier = next
         }
+        reached = { frontier, cycles }
         // a clause at the root narrows the values, and the item codec writes each value
         // of a kept option as that option writes it
         if (segments.length === 0) return root
         const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
-        // the item root is no level, and each segment past the first crosses one L or M
+        // the item root is no level, and each segment past the first crosses one L or M. Any
+        // other root is an attribute at level 0, and each segment crosses one L or M. Only an
+        // item writes the top-level attributes of a row, and the 32-level limit counts from the
+        // row, so from any other root the bound counts one level early and stays conservative
+        const level = segments.length - (whole ? 1 : 0)
         return ambiguous.length === 0
-            ? segments.length <= 1
+            ? level === 0
                 ? first
-                : codecAtLevel(first.def, segments.length - 1)
+                : codecAtLevel(first.def, level)
             : unresolvedAt(String(located), frontier.some(admitsNothing))
     }
     const here = walk()
 
-    const made: Located = { root, steps, path: located }
-    return {
-        ...here,
-        segments,
-        preconditions: preconditionsOf(steps),
-        [locatedSlot]: made,
-    }
+    const made: Located = { root, steps, path: located, reached }
+    return { ...here, [locatedSlot]: made }
 }
 
 /**
  * **Where a located codec sits, at run time only**: the root that {@link at} walked, the steps of
- * the path, and the path. No type names the slot, so no codec type carries the root, and
- * {@link at} and {@link path} are the readers. The slot is a property, so a spread keeps it.
+ * the path, the path, and the frontier that the walk reached. No type names the slot, so no codec
+ * type carries the root. {@link at}, {@link narrow}, {@link path} and {@link preconditions} are the
+ * readers. The slot is a property, so a spread keeps it.
  */
 const locatedSlot = Symbol('located')
 type Located = {
     readonly root: AnyCodec
     readonly steps: readonly Step[]
     readonly path: string
+    /** The frontier at the end of the steps, where the walk reached the end. */
+    readonly reached: Reached | undefined
+}
+type Reached = {
+    readonly frontier: readonly AnyCodec[]
+    readonly cycles: Cycles
 }
 
 /** Type-level only, for the same reason as {@link optionalMarker}. */
 declare const locatedFrom: unique symbol
 
 /**
- * A builder for document paths into this item, or the document path of a located codec, as
- * DynamoDB expression syntax.
+ * **The document path of a located codec**, in DynamoDB expression syntax: the external form of
+ * the segments, so `path(at(c, 'a.b[1]'))` is `'a.b[1]'`. A codec that no `at` located stands at
+ * its own root, and its path is empty.
  *
- * One builder builds any number of independent paths: every hop returns a new builder carrying
- * its own segments, so nothing accumulates and nothing is consumed. Hoist it.
+ * From a root that is not an item, the path is relative to that root, and `path` gives the segments
+ * and no string. Only an item writes the top-level attributes of a row, so no other root knows the
+ * prefix of the row, and a relative string in an `UpdateExpression` writes at the wrong place.
  */
-export function path<T, Spec, Rest, Tm>(
-    codec: ItemCodec<T, Spec, Rest, Tm>,
-): PathOf<T, ItemFrontier<T, Spec, Rest>>
 export function path(codec: {
-    readonly segments: readonly (string | number)[]
+    readonly def: Term
+    readonly [locatedFrom]?: [unknown, 'item']
 }): string
-export function path(codec: object): unknown {
+export function path(codec: {
+    readonly def: Term
+    readonly [locatedFrom]?: [unknown, 'relative']
+}): readonly Segment[]
+export function path(codec: { readonly def: Term }): string | readonly Segment[]
+export function path(codec: {
+    readonly def: Term
+}): string | readonly Segment[] {
     // read through a cast, for the reason at {@link at}: a spread copy must keep its location
     const located = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
-    return located?.path ?? pathBuilder()
+    if (located === undefined) return ''
+    // only an item writes the top-level attributes of a row, so only a path from an item is a
+    // document path; any other root gives its segments, which no expression takes for a path
+    return isItemReading(located.root)
+        ? located.path
+        : segmentsIn(located.steps)
 }
 
 /**
- * One attribute's codec, for building `ExpressionAttributeValues` by hand.
+ * **The condition under which a write at the path of a located codec is safe**, as a conjunction
+ * of {@link Precondition}s: one group for each `narrow` on the path, empty where the path has no
+ * `narrow`. The narrowing drops options, and an item of a dropped option may still be stored. Put
+ * the preconditions in the `ConditionExpression` of the write, so the write refuses such an item.
  *
- * The codec the member declares, never the field that marks it: a field has no pair, and a
- * caller that asked for the attribute at a name asked for the thing that reads and writes it.
- *
- * This is not `at(codec, (p) => p[name])`. The type of `field` is the declared codec, callable and
- * with its `.constant`, and `at` gives a {@link LocatedCodec}, which carries a path and no marks.
+ * A refusal where a clause key stores a term that no exact precondition states.
  */
-export const field = <T, Spec, Rest, Tm, K extends keyof Spec>(
-    codec: ItemCodec<T, Spec, Rest, Tm>,
-    name: K,
-): Marks<Spec[K]> => {
-    const declared = (codec.spec as Readonly<Record<PropertyKey, ObjectSlot>>)[
-        name
-    ]
-    return (declared && codecOfTerm(fieldOf(declared).t)) as Marks<Spec[K]>
-}
+export const preconditions = (located: {
+    readonly def: Term
+}): Result<readonly Precondition[]> =>
+    // read through a cast, for the reason at {@link at}: a spread copy must keep its location
+    preconditionsOf(
+        (located as { readonly [locatedSlot]?: Located })[locatedSlot]?.steps ??
+            [],
+    )
 
 /**
  * One declared attribute, with the questions about its declaration already answered.
@@ -4069,7 +4406,7 @@ const objectFromMap = <
 
     type T = DerivedItem<Spec, Rest>
     // a term that reads a name that no scope binds refuses each use
-    const self: ItemCodec<T, Spec, Rest> & Marked = {
+    const self: ItemCodec<T, Spec, Rest> = {
         [itemMark]: true,
         encode: (item) =>
             openRefusal(itemDef) ??
@@ -4142,7 +4479,8 @@ const itemSlot = Symbol('item')
 /**
  * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
  * marker, and no other codec carries it: an object codec has a `spec` too, so `spec` does not tell
- * a reading from a codec. Test a root with `itemMark in root`.
+ * a reading from a codec. Test a root with `itemMark in root`. The reading types state the same
+ * fact as `readonly [itemMark]: true`, and the type of a root reads it from there.
  */
 export const itemMark = Symbol('item reading')
 
@@ -4192,7 +4530,7 @@ export function item<
     codec: ObjectCodec<Spec, Rest, T, Tm>,
 ): ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm> &
     Free<ObjectFree<Spec, Rest, Tm>>
-export function item<X>(codec: Itemable<X>): X
+export function item<C extends Itemable<unknown>>(codec: C): ReadingOf<C>
 export function item(codec: object): unknown {
     const reading = readingOf(codec)
     // the constructors of `object`, `union` and `mdunion` put the reading on each codec that they
@@ -4608,18 +4946,13 @@ export const product = <const Fs extends readonly unknown[]>(
 /**
  * A builder for document paths into `T`.
  *
- * The one implementation behind both `path(item(...))` and `tableEntry(...).path()`. They must
- * agree about what a path means — `at` resolves a codec by walking the same segments this records —
- * and the surest way for two implementations to agree is for there to be one.
+ * The builder behind `tableEntry(...).path()`. A table entry holds no codec to walk, so a path of
+ * the entry is recorded from a selector and `at` takes no selector. {@link recordPath} stays for
+ * this builder alone. The one cast reads the recorder, which takes any segment, as a type that
+ * offers only the attributes of an entity.
  */
-export const pathBuilder = <T, F = unknown>(): PathOf<T, F> => rootPath()
-
-/**
- * The recorder at the root, read as the path type `P` of its caller: {@link PathOf}, or the
- * selector of `at` that reads the term. One cast, at the one place where the recorder, which takes
- * any segment, meets a type that offers only the segments of a codec.
- */
-const rootPath = <P>(): P => recordPath([]) as P
+export const pathBuilder = <T, F = unknown>(): PathOf<T, F> =>
+    recordPath([]) as PathOf<T, F>
 
 /** A segment addressing a list position, as opposed to an attribute named in digits. */
 const asIndex = /^\d+$/
@@ -4649,9 +4982,6 @@ const clauseTerm = (spec: Readonly<Record<string, AnyCodec>>): Clause => {
 /** The segments of a path, without its clauses. */
 const segmentsIn = (steps: readonly Step[]): readonly (string | number)[] =>
     steps.flatMap((step) => (typeof step === 'object' ? [] : [step]))
-
-/** What each recorder recorded — read back by {@link stepsOf}. */
-const recorded = new WeakMap<object, readonly Step[]>()
 
 /** Nothing, shared: every `get` is trapped, so the target is only an identity to hang one on. */
 const nothing = {}
@@ -4690,31 +5020,7 @@ const recordPath = (steps: readonly Step[]): unknown => {
             ])
         },
     })
-    recorded.set(recorder, steps)
     return recorder
-}
-
-/**
- * The path a selector built.
- *
- * Read from a side table keyed on the recorder, because the two alternatives are both worse. A
- * property would have to be a key the `get` trap carves out of the entity's own namespace, which is
- * what a private symbol was for. A callable target — recovering the path by calling it — carves
- * nothing out, but it makes `typeof path` be `'function'`, and a recorder answers `.then` with
- * another recorder: a path whose target is callable *is a thenable*, so `await path` and
- * `Promise.resolve(path)` hang forever, silently. The target stays inert and the segments live
- * beside it.
- */
-const stepsOf = (path: unknown): readonly Step[] => {
-    // no `typeof` guard: `WeakMap.prototype.get` answers `undefined` for a key that cannot be held
-    // weakly, so a selector that returned a string or a number falls into the same branch
-    const steps = recorded.get(path as object)
-    if (!steps) {
-        throw new CodecError(
-            'a path selector must return a path — an attribute, `at(...)` or `narrow(...)`',
-        )
-    }
-    return steps
 }
 
 /**
@@ -4979,6 +5285,8 @@ export type TaggedSpec<T, D extends keyof T> = {
 }
 
 export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
+    /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
+    readonly [itemMark]: true
     /** Every attribute, or why one could not be written. */
     readonly encode: (this: Closed, item: T) => Result<AttributeMap>
     readonly unsafeEncode: (this: Closed, item: T) => AttributeMap
@@ -5349,6 +5657,8 @@ export type DerivedVariants<Specs extends readonly unknown[]> = {
 }[number]
 
 export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
+    /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
+    readonly [itemMark]: true
     /** Every attribute, or why one could not be written. */
     readonly encode: (this: Closed, item: T) => Result<AttributeMap>
     readonly unsafeEncode: (this: Closed, item: T) => AttributeMap
@@ -7528,7 +7838,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * not be reached here also cannot be selected here: `declares` is what selects, and only an
      * object option has it.
      */
-    const self: Untagged<T, SpecsOf<Options>> & Marked = {
+    const self: Untagged<T, SpecsOf<Options>> = {
         [itemMark]: true,
         encode: writeItem,
         decode: readItem,

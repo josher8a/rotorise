@@ -570,7 +570,7 @@ message names `narrow(...)`. A frontier of `never` alone throws at the call: no 
 the term of its codec, every other name open. The host keeps each option whose stored view the
 host's disjointness test does not separate from the stored view of the clause. The call adds no
 segment to the path. The path type narrows too, and the path type is coarser where the path type
-knows only the decoded types. `at(...).preconditions` is the conjunction of the preconditions of
+knows only the decoded types. `preconditions(at(...))` is the conjunction of the preconditions of
 each `narrow(...)` on the path, by the rules that `Closed.preconditionOfC` states, or a refusal value that
 names the path where no exact precondition exists. A path with no `narrow(...)` has the empty
 conjunction. The caller puts the preconditions in the condition expression of the write.
