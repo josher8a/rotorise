@@ -11,6 +11,7 @@ import {
     type AttributeCodec,
     CodecError,
     held,
+    item,
     object,
     optional,
     string,
@@ -91,11 +92,13 @@ const messageOf = (run: () => void) => {
 
 describe('shrinking', () => {
     it('reduces every attribute that is not the cause', () => {
-        const Broken = object({
-            a: string,
-            b: string,
-            c: optional(truncating),
-        }).item
+        const Broken = item(
+            object({
+                a: string,
+                b: string,
+                c: optional(truncating),
+            }),
+        )
 
         const message = messageOf(() =>
             checkRoundTrip(Broken, { count: 200, seed: 1 }),
@@ -112,10 +115,12 @@ describe('shrinking', () => {
 
     it('keeps the failing attribute rather than dropping it', () => {
         // `c` is optional, so dropping it would "fix" the failure — shrinking must not take that
-        const Broken = object({
-            a: string,
-            c: optional(truncating),
-        }).item
+        const Broken = item(
+            object({
+                a: string,
+                c: optional(truncating),
+            }),
+        )
         const message = messageOf(() =>
             checkRoundTrip(Broken, { count: 200, seed: 2 }),
         )
@@ -123,9 +128,11 @@ describe('shrinking', () => {
     })
 
     it('will not trade the failure it found for a different one', () => {
-        const Broken = object({
-            c: truncatingButEmptyThrows,
-        }).item
+        const Broken = item(
+            object({
+                c: truncatingButEmptyThrows,
+            }),
+        )
 
         const message = messageOf(() =>
             checkRoundTrip(Broken, { count: 200, seed: 3 }),
@@ -138,7 +145,7 @@ describe('shrinking', () => {
     })
 
     it('reports the seed, so a counterexample reproduces', () => {
-        const Broken = object({ c: truncating }).item
+        const Broken = item(object({ c: truncating }))
         expect(messageOf(() => checkRoundTrip(Broken, { seed: 4242 }))).toMatch(
             /with seed 4242/,
         )
@@ -154,13 +161,15 @@ describe('shrinking', () => {
      * shrinking.
      */
     it('says nothing about shrinking when the first case is already minimal', () => {
-        const Broken = object({
-            c: held(string, string, {
-                encode: (value: string) => value,
-                decode: (held) => held.slice(0, 3),
-                arbitrary: someTruncatable,
+        const Broken = item(
+            object({
+                c: held(string, string, {
+                    encode: (value: string) => value,
+                    decode: (held) => held.slice(0, 3),
+                    arbitrary: someTruncatable,
+                }),
             }),
-        }).item
+        )
         expect(
             messageOf(() => checkRoundTrip(Broken, { seed: 5 })),
         ).not.toMatch(/shrunk in/)

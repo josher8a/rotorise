@@ -13,6 +13,7 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    item as itemOf,
     list,
     number,
     object,
@@ -160,14 +161,16 @@ const FulfilmentCodec = discriminatedUnion('type', [
     }),
 ])
 
-const AdoptionCodec = object({
-    TAG: string('ADOPTION'),
-    adoptionId: string,
-    customerId: string,
-    displayPrice: decimal,
-    currentLegIndex: number,
-    fulfilment: FulfilmentCodec,
-}).item
+const AdoptionCodec = itemOf(
+    object({
+        TAG: string('ADOPTION'),
+        adoptionId: string,
+        customerId: string,
+        displayPrice: decimal,
+        currentLegIndex: number,
+        fulfilment: FulfilmentCodec,
+    }),
+)
 
 // ── fixtures ─────────────────────────────────────────────────────────
 

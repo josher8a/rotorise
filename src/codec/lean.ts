@@ -62,12 +62,21 @@ import {
 } from './attribute'
 import type {
     AnyCodec,
+    Itemable,
     LiteralValue,
     ObjectSlot,
     Precondition,
     Refinement,
 } from './codec'
-import { at, exclude, extract, object, optional, union } from './codec'
+import {
+    at,
+    exclude,
+    extract,
+    item as itemOf,
+    object,
+    optional,
+    union,
+} from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed, type Result } from './result'
 import { agrees, disjoint, flatOf, storedApart, viewsDisjoint } from './scoped'
@@ -2494,7 +2503,7 @@ const wrapped = 'r'
  * so the item is cast one time to the erased signature.
  */
 const wrapperOf = (codec: AnyCodec): Wrapper =>
-    object({ [wrapped]: optional(codec) }).item as unknown as Wrapper
+    itemOf(object({ [wrapped]: optional(codec) })) as unknown as Wrapper
 
 /** Every term that the walk can reach from a root, through each `ref` that has a target. */
 export const reachable = (root: Term): ReadonlySet<Term> => {
@@ -3402,11 +3411,10 @@ export const leanReadResolution = (one: ReadResolution): string =>
  * The index is the host's, and no term carries it. The model's `Term.union` of the members reads
  * `Attr.m` of the item, so the statement is the read resolution of that union.
  */
-export type Dissection = AnyCodec & {
-    readonly item: {
+export type Dissection = AnyCodec &
+    Itemable<{
         readonly decode: (item: StoredItem) => ReturnType<AnyCodec['decode']>
-    }
-}
+    }>
 
 /** One read through the index of a dissection, addressed by the item. */
 export type ItemRead = {
@@ -3418,7 +3426,7 @@ export type ItemRead = {
 /** One read through the index: what the index read from the item, or that it read nothing. */
 export const leanItemReadResolution = (one: ItemRead): string =>
     statedRead(one.name, one.dissection, carrying('M', one.item), () =>
-        one.dissection.item.decode(one.item),
+        itemOf(one.dissection).decode(one.item),
     )
 
 /** What the union read, or that it read nothing. */
@@ -3894,7 +3902,7 @@ export const resolutionRows = (
             ),
             ...items.map((one) =>
                 read(one.name, one.dissection, carrying('M', one.item), () =>
-                    one.dissection.item.decode(one.item),
+                    itemOf(one.dissection).decode(one.item),
                 ),
             ),
         ]

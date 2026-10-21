@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import { DynamoNumber, isNumeral } from '../../attribute'
-import type { AnyCodec } from '../../codec'
+import type { AnyCodec, Itemable } from '../../codec'
 import {
     array,
     boolean,
@@ -19,6 +19,7 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
+    item,
     list,
     mdunion,
     nullable,
@@ -42,11 +43,10 @@ import { RecursionRefused } from '../../term'
 type Erased = {
     readonly encode: (value: unknown) => unknown
     readonly decode: (attribute: AttributeValue) => unknown
-    readonly item: {
-        readonly encode: (value: unknown) => unknown
-        readonly decode: (item: unknown) => unknown
-    }
-}
+} & Itemable<{
+    readonly encode: (value: unknown) => unknown
+    readonly decode: (item: unknown) => unknown
+}>
 
 // declared through a cast, because the options come as an erased list of permutations
 const declare = union as unknown as (options: readonly AnyCodec[]) => Erased
@@ -162,8 +162,8 @@ describe('a union of compatible options gives one answer whatever the option ord
         const answers = sameUnderEveryOrder([first, second], (codec) => [
             ...values.map((v) => codec.encode(v)),
             ...items.map((i) => codec.decode({ M: i })),
-            ...values.map((v) => codec.item.encode(v)),
-            ...items.map((i) => codec.item.decode(i)),
+            ...values.map((v) => item(codec).encode(v)),
+            ...items.map((i) => item(codec).decode(i)),
             ...values.map((v) =>
                 extract(codec, object({ kind: string('y') })).encode(v),
             ),

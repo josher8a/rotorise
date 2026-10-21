@@ -34,6 +34,7 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
+    item,
     list,
     nullable,
     number,
@@ -95,7 +96,9 @@ const spec = {
  * writes, `Writes<PetItem>` is the row it puts in the table. Neither needs a type argument on the
  * constructor — the spec is what `item` is given, and everything else is checked against it.
  */
-const Pet = object(spec).item satisfies ItemCodec<Pet> satisfies Writes<PetItem>
+const Pet = item(
+    object(spec),
+) satisfies ItemCodec<Pet> satisfies Writes<PetItem>
 
 const pet: Pet = {
     TAG: 'PET',
@@ -212,7 +215,7 @@ describe('the pin refuses a codec that writes something else', () => {
     })
 
     it('is off unless a shape is given, so nothing existing has to change', () => {
-        const unpinned = object(spec).item
+        const unpinned = item(object(spec))
         expect(typeof unpinned.encode).toBe('function')
     })
 })
@@ -271,12 +274,14 @@ describe('an item codec types what it writes', () => {
      * which is what made the first attempt at this wrong.
      */
     it('admits the attributes a rest policy adds', () => {
-        const Open = object(
-            {
-                id: string,
-            },
-            [string, optional(opaque('lossy'))],
-        ).item
+        const Open = item(
+            object(
+                {
+                    id: string,
+                },
+                [string, optional(opaque('lossy'))],
+            ),
+        )
         const written = Open.unsafeEncode({ id: 'p', extra: 'x' })
         expect(written.id.S).toBe('p')
         expect(written.extra).toEqual({ S: 'x' })
@@ -367,8 +372,9 @@ describe('an open object and a tuple keep their shape', () => {
     }
 
     /** The pin. This does not compile if either constructor starts flattening again. */
-    const Crate = object(crateSpec)
-        .item satisfies ItemCodec<Crate> satisfies Writes<CrateItem>
+    const Crate = item(
+        object(crateSpec),
+    ) satisfies ItemCodec<Crate> satisfies Writes<CrateItem>
 
     it('writes the shape written by hand', () => {
         const written = Crate.unsafeEncode({
@@ -434,8 +440,9 @@ describe('a union pins the shape it writes', () => {
     })
 
     it('accepts a tagged codec that writes it', () => {
-        const Visit = discriminatedUnion('kind', [checkup, shot])
-            .item satisfies Writes<VisitItem>
+        const Visit = item(
+            discriminatedUnion('kind', [checkup, shot]),
+        ) satisfies Writes<VisitItem>
         expect(
             Visit.unsafeEncode({
                 TAG: 'VISIT',
@@ -449,7 +456,7 @@ describe('a union pins the shape it writes', () => {
     it('refuses one where a single variant has drifted', () => {
         const drifted = [
             checkup,
-            object({ ...shot.item.spec, dose: string }),
+            object({ ...item(shot).spec, dose: string }),
         ] as const
         const _wrong = () =>
             // @ts-expect-error `dose` writes S in the SHOT variant, where the shape pins N
@@ -460,10 +467,12 @@ describe('a union pins the shape it writes', () => {
     it('pins an untagged union by position', () => {
         type LineItem = { petId: S; price: N } | { petIds: L<S> }
 
-        const ok = union([
-            object({ petId: string, price: decimal }),
-            object({ petIds: array(string) }),
-        ]).item satisfies Writes<LineItem>
+        const ok = item(
+            union([
+                object({ petId: string, price: decimal }),
+                object({ petIds: array(string) }),
+            ]),
+        ) satisfies Writes<LineItem>
         expect(ok.unsafeEncode({ petId: 'p', price: '1' }).price).toEqual({
             N: '1',
         })

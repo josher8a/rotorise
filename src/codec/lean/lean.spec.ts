@@ -41,6 +41,7 @@ import {
     dynamoNumber,
     extract,
     held,
+    item as itemOf,
     list,
     mdunion,
     never,
@@ -217,7 +218,9 @@ describe('terms', () => {
             'Scoped.Term.literal GroundKind.string "𝔸"',
         )
         // an object's names and a tag go through the same writer
-        expect(entriesOf(erase(object({ π: string }).item))[0]).toContain('"π"')
+        expect(entriesOf(erase(itemOf(object({ π: string }))))[0]).toContain(
+            '"π"',
+        )
         // and the control range keeps an escape, zero-padded to the four digits Lean wants
         expect(rootOf(erase(string('\u0001')))).toBe(
             'Scoped.Term.literal GroundKind.string "\\u0001"',

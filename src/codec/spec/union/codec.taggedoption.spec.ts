@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest'
 import type { AttributeCodec } from '../../codec'
 import {
     discriminatedUnion,
+    item,
     object,
     optional,
     string,
@@ -68,11 +69,11 @@ describe('a union whose options are tagged', () => {
      *
      * A union of tagged options is still a union of objects, so it has one. `AllObjects` asks
      * whether every option is an `AnyObjectCodec`, and a tagged option's `spec` is its tag map
-     * rather than a record of attributes — so the type degraded `.item` to an `ErrorMessage` and
+     * rather than a record of attributes — so the type degraded `item` to an `ErrorMessage` and
      * the runtime had no `declares` to match names against.
      */
     it('reads and writes a whole item', () => {
-        const row = order.item.unsafeEncode({
+        const row = item(order).unsafeEncode({
             status: 'placed',
             petId: 'a',
             shipDate: 'd',
@@ -82,17 +83,17 @@ describe('a union whose options are tagged', () => {
             petId: { S: 'a' },
             shipDate: { S: 'd' },
         })
-        expect(order.item.unsafeDecode(row)).toEqual({
+        expect(item(order).unsafeDecode(row)).toEqual({
             status: 'placed',
             petId: 'a',
             shipDate: 'd',
         })
 
-        const other = order.item.unsafeEncode({
+        const other = item(order).unsafeEncode({
             status: 'delivered',
             petIds: 'b',
         })
-        expect(order.item.unsafeDecode(other)).toEqual({
+        expect(item(order).unsafeDecode(other)).toEqual({
             status: 'delivered',
             petIds: 'b',
         })

@@ -20,6 +20,7 @@ import type {
 import {
     andThen,
     constantOf,
+    item as itemOf,
     object,
     orThrow,
     pathBuilder,
@@ -1485,8 +1486,9 @@ export const tableEntry =
                         'the codec passed here is neither an item codec nor a tagged one. A union of maps only knows which attributes an item has once it knows which variant the item is, so it has to be able to say — which is what `tagged` adds and a bare union codec does not.',
                     )
                 }
-                return object(codecSpec as never)
-                    .item as unknown as ItemCodecRuntime
+                return itemOf(
+                    object(codecSpec as never),
+                ) as unknown as ItemCodecRuntime
             })()
 
         /**
@@ -1793,6 +1795,7 @@ export {
     failed,
     field,
     held,
+    item,
     list,
     mdunion,
     never,

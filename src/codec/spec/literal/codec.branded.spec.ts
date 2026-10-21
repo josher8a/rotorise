@@ -11,6 +11,7 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    item as itemOf,
     object,
     optional,
     refine,
@@ -129,10 +130,9 @@ const StaffAccount = object({
     ...balance,
 })
 
-const AccountCodec = discriminatedUnion('type', [
-    OwnerAccount,
-    StaffAccount,
-]).item
+const AccountCodec = itemOf(
+    discriminatedUnion('type', [OwnerAccount, StaffAccount]),
+)
 
 const HolderCodec = discriminatedUnion('type', [
     object({
@@ -215,8 +215,8 @@ describe('the laws, over branded entities', () => {
     })
 
     it('the encode paths agree, per variant', () => {
-        checkEncodePaths(OwnerAccount.item, { seed: 1 })
-        checkEncodePaths(StaffAccount.item, { seed: 2 })
+        checkEncodePaths(itemOf(OwnerAccount), { seed: 1 })
+        checkEncodePaths(itemOf(StaffAccount), { seed: 2 })
     })
 
     it('a read-modify-write leaves the amounts as N', () => {
@@ -257,7 +257,7 @@ describe('brands nested inside another entity', () => {
     })
 
     it('an optional branded attribute stays optional', () => {
-        const withFee = object({ fee: optional(Fee) }).item
+        const withFee = itemOf(object({ fee: optional(Fee) }))
         expect(withFee.unsafeEncode({})).toEqual({})
         expect(withFee.unsafeDecode({})).toEqual({})
     })

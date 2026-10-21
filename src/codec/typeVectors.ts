@@ -756,7 +756,7 @@ const pathRoot = (
     p.line(
         'wrapper',
         vectors.codec.def,
-        `export const ${p.full('w')} = object({ r: optional(${p.full('root')}) }).item`,
+        `export const ${p.full('w')} = item(object({ r: optional(${p.full('root')}) }))`,
     )
     const stepText = (s: PathStep): string =>
         typeof s === 'number'
@@ -889,7 +889,7 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, item, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     `import type { Result } from '${library}/result'`,

@@ -31,6 +31,7 @@ import {
     binary,
     decimal,
     failed,
+    item,
     number,
     object,
     opaque,
@@ -116,19 +117,21 @@ type Row = {
     note?: string
 }
 
-const Row = object({
-    pk: string,
-    amount: decimal,
-    count: number,
-    kind: string('A', 'B'),
-    tags: string.set(),
-    steps: array(string),
-    blob: binary,
-    // `unknown` includes `undefined`, so the spec requires the optional form.
-    // Numbers are opted into here, because this row stores them through the escape hatch.
-    extra: optional(opaque('lossy')),
-    note: optional(string),
-}).item satisfies ItemCodec<Row>
+const Row = item(
+    object({
+        pk: string,
+        amount: decimal,
+        count: number,
+        kind: string('A', 'B'),
+        tags: string.set(),
+        steps: array(string),
+        blob: binary,
+        // `unknown` includes `undefined`, so the spec requires the optional form.
+        // Numbers are opted into here, because this row stores them through the escape hatch.
+        extra: optional(opaque('lossy')),
+        note: optional(string),
+    }),
+) satisfies ItemCodec<Row>
 
 const TABLE = `rotorise_roundtrip_${Date.now()}`
 

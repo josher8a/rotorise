@@ -17,6 +17,7 @@ import {
     decimal,
     dynamoNumber,
     held,
+    item,
     object,
     optional,
     ref,
@@ -49,18 +50,20 @@ type Listing = {
     rate: string
 }
 
-const Listing = object({
-    id: string,
-    holding: withLegacyRead({
-        current: string('STORE_V1', 'STORE_V2'),
-        whenMissing: 'STORE_V1' as const,
+const Listing = item(
+    object({
+        id: string,
+        holding: withLegacyRead({
+            current: string('STORE_V1', 'STORE_V2'),
+            whenMissing: 'STORE_V1' as const,
+        }),
+        vendorId: withLegacyRead({
+            current: string('PICKUP', 'ACME'),
+            whenMissing: 'PICKUP' as const,
+        }),
+        rate: withLegacyRead({ current: decimal, older: string }),
     }),
-    vendorId: withLegacyRead({
-        current: string('PICKUP', 'ACME'),
-        whenMissing: 'PICKUP' as const,
-    }),
-    rate: withLegacyRead({ current: decimal, older: string }),
-}).item
+)
 
 /**
  * An older encoding whose *held* type is not the current one, and a table that has held three.
@@ -76,21 +79,23 @@ const Listing = object({
  */
 describe('an older encoding held as something else', () => {
     const decoder = new TextDecoder()
-    const Priced = object({
-        id: string,
-        price: withLegacyRead({
-            current: decimal,
-            older: withLegacyRead({
-                current: string,
-                older: {
-                    decode: (at: AttributeValue) =>
-                        andThen(binary.decode(at), (bytes) =>
-                            decoder.decode(bytes),
-                        ),
-                },
+    const Priced = item(
+        object({
+            id: string,
+            price: withLegacyRead({
+                current: decimal,
+                older: withLegacyRead({
+                    current: string,
+                    older: {
+                        decode: (at: AttributeValue) =>
+                            andThen(binary.decode(at), (bytes) =>
+                                decoder.decode(bytes),
+                            ),
+                    },
+                }),
             }),
         }),
-    }).item
+    )
 
     it('reads the current encoding', () => {
         expect(
@@ -201,13 +206,15 @@ describe('an attribute the row does not have', () => {
      * opposite behaviour and the two assertions below were `toEqual(['x'])` and `toBe(a.tags)`.
      */
     it('is a copy per read, not one shared value', () => {
-        const C = object({
-            id: string,
-            tags: withLegacyRead({
-                current: { ...listOfStrings },
-                whenMissing: [],
+        const C = item(
+            object({
+                id: string,
+                tags: withLegacyRead({
+                    current: { ...listOfStrings },
+                    whenMissing: [],
+                }),
             }),
-        }).item
+        )
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         a.tags.push('x')
@@ -217,10 +224,12 @@ describe('an attribute the row does not have', () => {
 
     /** A primitive is handed over as it is: there is nothing to copy and nothing to leak. */
     it('does not copy a primitive stand-in', () => {
-        const C = object({
-            id: string,
-            tier: withLegacyRead({ current: string, whenMissing: 'FREE' }),
-        }).item
+        const C = item(
+            object({
+                id: string,
+                tier: withLegacyRead({ current: string, whenMissing: 'FREE' }),
+            }),
+        )
         expect(C.unsafeDecode({ id: { S: 'a' } }).tier).toBe('FREE')
     })
 
@@ -266,10 +275,12 @@ describe('an attribute the row does not have', () => {
         const stand: Holder = { tag: 'x', run: () => 1 }
         expect(() => structuredClone(stand)).toThrow()
 
-        const C = object({
-            id: string,
-            h: withLegacyRead({ current: holding, whenMissing: stand }),
-        }).item
+        const C = item(
+            object({
+                id: string,
+                h: withLegacyRead({ current: holding, whenMissing: stand }),
+            }),
+        )
         const a = C.unsafeDecode({ id: { S: 'a' } })
         const b = C.unsafeDecode({ id: { S: 'b' } })
         expect(a.h).toBe(b.h)

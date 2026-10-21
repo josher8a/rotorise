@@ -16,6 +16,7 @@ import {
     array,
     CodecError,
     discriminatedUnion,
+    item,
     list,
     nullable,
     object,
@@ -31,21 +32,22 @@ import {
 
 type Pet = { TAG: 'PET'; id: string; name: string }
 
-const Pet = object({ TAG: string('PET'), id: string, name: string }).item
+const Pet = item(object({ TAG: string('PET'), id: string, name: string }))
 const pet: Pet = { TAG: 'PET', id: 'p1', name: 'Rex' }
 
 const { Tree } = scope({
     Tree: object({ name: string, children: optional(array(ref('Tree'))) }),
 })
 
-const Visits = discriminatedUnion('type', [
-    object({ type: string('CHECKUP'), petId: string }),
-]).item
+const Visits = item(
+    discriminatedUnion('type', [
+        object({ type: string('CHECKUP'), petId: string }),
+    ]),
+)
 
-const Lines = union([
-    object({ petId: string }),
-    object({ petIds: array(string) }),
-]).item
+const Lines = item(
+    union([object({ petId: string }), object({ petIds: array(string) })]),
+)
 
 /** What a consumer writes — the same narrowing `flow`'s `isError` does. */
 const isError = (value: unknown): value is CodecError => value instanceof Error
@@ -76,9 +78,11 @@ describe('the safe pair returns the failure', () => {
     // PINS A FACT NO LAW HAS, deliberately: that the safe pair reports the *same* assembled
     // message as the throwing one is the claim, so the string is the subject here too. It stays.
     it('carries the path through nesting, as the thrown one does', () => {
-        const Order = object({
-            lines: array(object({ note: string })),
-        }).item
+        const Order = item(
+            object({
+                lines: array(object({ note: string })),
+            }),
+        )
         const decoded = Order.decode({
             lines: { L: [{ M: { note: { N: '7' } } }] },
         })
@@ -104,9 +108,11 @@ describe('the unsafe pair throws, and is the one composition uses', () => {
      * forgotten. Here the nested codec's failure still arrives intact.
      */
     it('lets a nested failure reach the boundary unchanged', () => {
-        const Outer = object({
-            inner: object({ note: string }),
-        }).item
+        const Outer = item(
+            object({
+                inner: object({ note: string }),
+            }),
+        )
         const decoded = Outer.decode({ inner: { M: { note: { N: '1' } } } })
         if (!isError(decoded)) return expect.unreachable()
         expect(decoded.path).toEqual(['inner', 'note'])

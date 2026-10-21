@@ -25,6 +25,7 @@ import {
     discriminatedUnion,
     failed,
     held,
+    item,
     list,
     nullable,
     nullValue,
@@ -707,15 +708,17 @@ describe('the laws that do NOT hold', () => {
  * against code that is already correct.
  */
 describe('(C): what a codec reads, it can write', () => {
-    const Pet = object({
-        id: string,
-        price: decimal,
-        count: number,
-        tags: string.set(),
-        steps: array(string),
-        note: optional(string),
-        nick: withLegacyRead({ current: string, whenMissing: 'anon' }),
-    }).item
+    const Pet = item(
+        object({
+            id: string,
+            price: decimal,
+            count: number,
+            tags: string.set(),
+            steps: array(string),
+            note: optional(string),
+            nick: withLegacyRead({ current: string, whenMissing: 'anon' }),
+        }),
+    )
 
     it('holds for a wide entity, over every mutation of every attribute', () => {
         checkDecodesAreWritable(Pet, { count: 40, seed: 20260829 })
@@ -729,23 +732,25 @@ describe('(C): what a codec reads, it can write', () => {
                 s.endsWith('!') ? new CodecError('no shouting') : s,
             decode: (s: string) => `${s}!`,
         })
-        const Planted = object({ id: shouted }).item
+        const Planted = item(object({ id: shouted }))
         expect(() =>
             checkDecodesAreWritable(Planted, { count: 10, seed: 20260924 }),
         ).toThrow(/\(C\) fails/)
     })
 
     it('holds for the ground codecs, each in its own attribute', () => {
-        const Ground = object({
-            s: string,
-            d: decimal,
-            n: number,
-            b: boolean,
-            bin: binary,
-            lit: string('A', 'B'),
-            litN: number(0, 1),
-            nul: nullable(string),
-        }).item
+        const Ground = item(
+            object({
+                s: string,
+                d: decimal,
+                n: number,
+                b: boolean,
+                bin: binary,
+                lit: string('A', 'B'),
+                litN: number(0, 1),
+                nul: nullable(string),
+            }),
+        )
         checkDecodesAreWritable(Ground, { count: 40, seed: 20260829 })
     })
 
@@ -792,7 +797,7 @@ describe('(C): what a codec reads, it can write', () => {
      * there is no lossy numeral left to make the point with.
      */
     it('is stable where the stored form is not recovered exactly', () => {
-        const Stored = object({ tags: string.set() }).item
+        const Stored = item(object({ tags: string.set() }))
         const stored = { tags: { SS: ['c', 'a', 'b'] } }
 
         checkStable(Stored, [stored])
@@ -874,10 +879,10 @@ describe('`accepts`, and the direction of the law that is true', () => {
         ['list', list(string, number)],
         ['list(rest)', list(string, spread(number))],
         ['open object', object([string, optional(decimal)])],
-        ['attributes', object({ a: string, b: number }).item],
+        ['attributes', item(object({ a: string, b: number }))],
         [
             'attributes(open)',
-            object({ a: string }, [string, optional(decimal)]).item,
+            item(object({ a: string }, [string, optional(decimal)])),
         ],
         ['nullable', nullable(string)],
         ['withLegacyRead', withLegacyRead({ current: decimal, older: string })],

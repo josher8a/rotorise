@@ -19,6 +19,7 @@ import {
     extract,
     type FreeOf,
     held,
+    item,
     list,
     nullable,
     nullValue,
@@ -59,7 +60,7 @@ describe('a scope', () => {
     })
 
     it('reaches a path through two refs', () => {
-        const W = object({ r: optional(S.A) }).item
+        const W = item(object({ r: optional(S.A) }))
         expect(path(at(W, (p) => p.r.b.a.b.a.v))).toBe('r.b.a.b.a.v')
     })
 
@@ -201,12 +202,12 @@ describe('a ref as a union option', () => {
  */
 describe('an entry of a scope', () => {
     it('keeps the item of an object, with a path through the refs', () => {
-        const located = at(S.A.item, (p) => p.b.a.v)
+        const located = at(item(S.A), (p) => p.b.a.v)
         expect(path(located)).toBe('b.a.v')
         const v: Decoded<typeof located> = 'leaf'
         expect(located.encode(v)).toEqual({ S: 'leaf' })
         const row: TA = { v: 'x', b: { n: null } }
-        expect(S.A.item.decode(S.A.item.unsafeEncode(row))).toEqual(row)
+        expect(item(S.A).decode(item(S.A).unsafeEncode(row))).toEqual(row)
     })
 
     it('keeps the item and the slices of a union of objects', () => {
@@ -218,7 +219,7 @@ describe('an entry of a scope', () => {
         }).P
         type TP = { readonly k: 'a'; readonly next?: TP } | { readonly k: 'b' }
         const row: TP = { k: 'a', next: { k: 'b' } }
-        expect(P.item.decode(P.item.unsafeEncode(row))).toEqual(row)
+        expect(item(P).decode(item(P).unsafeEncode(row))).toEqual(row)
         const kept = extract(P, object({ k: string('a') }))
         const one: Decoded<typeof kept> = { k: 'a', next: { k: 'a' } }
         expect(kept.decode(kept.unsafeEncode(one))).toEqual(one)
@@ -244,14 +245,14 @@ describe('an entry of a scope', () => {
         })
         expect(() =>
             // @ts-expect-error the path reads a member across the entry `B` of a cycle
-            at(C.A.item, (p) => p.s.x),
+            at(item(C.A), (p) => p.s.x),
         ).toThrow(/a path cannot go into `refine` at 'x'/)
     })
 })
 
 describe('an open name of a path', () => {
     it('is selected by entry, as the codec of the open entry', () => {
-        const Open = object({ id: string }, [string, optional(number)]).item
+        const Open = item(object({ id: string }, [string, optional(number)]))
         const located = at(Open, (p) => p.entry('size'))
         expect(path(located)).toBe('size')
         expect(located.encode(3)).toEqual({ N: '3' })
@@ -361,9 +362,9 @@ describe('the free names of a codec', () => {
         // @ts-expect-error a use needs a closed codec
         expect(String(open.decode({ M: { v: { S: 'x' } } }))).toMatch(free)
         // @ts-expect-error a use needs a closed codec
-        expect(String(open.item.encode({ k: [], v: 'x' }))).toMatch(free)
+        expect(String(item(open).encode({ k: [], v: 'x' }))).toMatch(free)
         // @ts-expect-error a use needs a closed codec
-        const located = at(open.item, (p) => p.v)
+        const located = at(item(open), (p) => p.v)
         expect(String(located.encode('x'))).toMatch(free)
         const options = union([
             object({ t: string('a'), k: ref('k') }),
@@ -384,9 +385,9 @@ describe('the free names of a codec', () => {
         type Row = { id: string; next: unknown }
         const closed = object({ id: string, next: opaque })
         const open = object({ id: string, next: ref('Row') })
-        tableEntry<Row>()({ PK: ['id'] }, { codec: closed.item })
+        tableEntry<Row>()({ PK: ['id'] }, { codec: item(closed) })
         // @ts-expect-error a table entry needs a closed codec
-        tableEntry<Row>()({ PK: ['id'] }, { codec: open.item })
+        tableEntry<Row>()({ PK: ['id'] }, { codec: item(open) })
     })
 })
 

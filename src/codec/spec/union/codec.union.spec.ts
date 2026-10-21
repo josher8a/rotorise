@@ -14,6 +14,7 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
+    item,
     never,
     nullValue,
     number,
@@ -49,7 +50,7 @@ const LegCodec = union([
     }),
     object({ petIds: array(string) }),
 ])
-const Leg = LegCodec.item
+const Leg = item(LegCodec)
 
 const single: LineItem = {
     petId: 'o1',
@@ -81,15 +82,17 @@ describe('untagged', () => {
     })
 
     it('is order-independent: no declaration order is consulted', () => {
-        const reversed = union([
-            object({ petIds: array(string) }),
-            object({
-                gift: optional(boolean),
-                petId: string,
-                sellerId: string,
-                price: decimal,
-            }),
-        ]).item
+        const reversed = item(
+            union([
+                object({ petIds: array(string) }),
+                object({
+                    gift: optional(boolean),
+                    petId: string,
+                    sellerId: string,
+                    price: decimal,
+                }),
+            ]),
+        )
         expect(reversed.unsafeEncode(single)).toEqual(Leg.unsafeEncode(single))
         expect(reversed.unsafeDecode(reversed.unsafeEncode(many))).toEqual(many)
     })
@@ -212,7 +215,7 @@ describe('untagged', () => {
     })
 
     it('writes an attribute with the codec of the variant that the clause keeps', () => {
-        const Holder = object({ leg: LegCodec }).item
+        const Holder = item(object({ leg: LegCodec }))
         expect(
             atOf(
                 Holder,
@@ -265,10 +268,12 @@ describe('the NULL point', () => {
     })
 
     it('round-trips as an option, over generated values', () => {
-        const Pet = object({
-            id: string,
-            deletedAt: union([string, nullValue]),
-        }).item
+        const Pet = item(
+            object({
+                id: string,
+                deletedAt: union([string, nullValue]),
+            }),
+        )
         checkRoundTrip(Pet, { count: 100, seed: 20260829 })
     })
 
@@ -565,10 +570,12 @@ describe('an object option is admitted by attempt', () => {
 
     it('resolves two options with one name set whose required literals differ', () => {
         // no cast: the declaration itself now stands, which is half the rule
-        const Kinded = union([
-            object({ kind: string('a'), x: string }),
-            object({ kind: string('b'), x: number }),
-        ]).item
+        const Kinded = item(
+            union([
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), x: number }),
+            ]),
+        )
 
         expect(Kinded.unsafeEncode({ kind: 'a', x: '1' })).toEqual({
             kind: { S: 'a' },
@@ -604,10 +611,12 @@ describe('an object option is admitted by attempt', () => {
     })
 
     it('refuses a value that no option encodes, even where its names fit one option', () => {
-        const Sum = union([
-            object({ kind: string('a'), x: string }),
-            object({ petIds: array(string) }),
-        ]).item
+        const Sum = item(
+            union([
+                object({ kind: string('a'), x: string }),
+                object({ petIds: array(string) }),
+            ]),
+        )
 
         // the names fit the first option, and the names select nothing: the first option does not
         // encode `x: 1`, so no option admits the value
@@ -621,10 +630,12 @@ describe('an object option is admitted by attempt', () => {
     })
 
     it('admits no option where the literal itself is wrong, which is not that option error', () => {
-        const Sum = union([
-            object({ kind: string('a'), x: string }),
-            object({ petIds: array(string) }),
-        ]).item
+        const Sum = item(
+            union([
+                object({ kind: string('a'), x: string }),
+                object({ petIds: array(string) }),
+            ]),
+        )
 
         // `kind: 'b'` is outside the first option's literal, so the first option does not admit
         // the value

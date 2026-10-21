@@ -11,7 +11,7 @@
  * is erased, so every type these signatures name still lives where it was declared.
  *
  * **One item pair per term.** An object term builds its body pair once; `denote`'s map-writing row
- * wraps that pair, and the codec's `.item` hands out the same one. They were two objects before
+ * wraps that pair, and `item` of the codec hands out the same one. They were two objects before
  * `579ed89`, `item.encode === codec.encode` answered `false`, and nothing said which of the two a
  * caller was running. The memo is keyed on the frozen term for the reason `codecOfTerm`'s is: the
  * term is the datum, a pair built from it is a function of it, and the freeze is what makes the
@@ -380,9 +380,9 @@ export const carriedCodec = <Payload, Written, Read>(
  *
  * The model's `objectCodecCore`, and `objectCodecCore_eq` is the lemma. It is *not* a
  * {@link carriedCodec} instance on its own — it writes a bare map rather than an `M` — which is
- * exactly the distinction `.item` exposes: a codec writes the attributes of that codec, and
- * `object` writes the members of `object` like any other, offering `.item` for the one place that
- * writes no map. So `denote`'s row wraps this in the member and `.item` takes it as it is.
+ * exactly the distinction `item` exposes: a codec writes the attributes of that codec, and
+ * `object` writes the members of `object` like any other, offering `item` for the one place that
+ * writes no map. So `denote`'s row wraps this in the member and `item` takes it as it is.
  *
  * **A field's mark is read here and nowhere else.** `mkField` in the model is the function that
  * turns `SlotMode` into a presence rule; here it is the three-way `mark`, read once per field per
@@ -1037,7 +1037,7 @@ export type ItemTerm = Extract<Term, { readonly kind: 'object' }>
  * **One item pair per term, for the life of the term** — {@link codecOfTerm}'s counterpart.
  *
  * Every `object(...)` used to build **two** body pairs and keep both: one in the constructor for
- * `.item`, and a second inside `denote` when the codec was first used. They were separate objects,
+ * `item`, and a second inside `denote` when the codec was first used. They were separate objects,
  * `item.encode === codec.encode` answered `false`, and nothing said which of the two a caller was
  * running. Both come from here now, so a term has one item reading and the map-writing pair wraps
  * that one.
@@ -1241,7 +1241,7 @@ export const denote = (def: Term): Pair => {
         /**
          * The object: {@link bodySem} carried into an `M`. The row is the wrapper and the body is
          * the content, which is the split of the attributes — a codec writes the attributes of that codec,
-         * and `.item` is the one place that writes no map.
+         * and `item` is the one place that writes no map.
          */
         case 'object': {
             const body = itemSem(def)
@@ -2299,8 +2299,8 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  * optional are read from the term here. The names select no option: every option is attempted.
  * `declares` marks an object option, which the kind filter reads as a map, and a message names.
  *
- * The term decides, and every codec has one. The object a *constructor* returns carries `.item`
- * and a codec built from a term does not, so a test on `.item` would classify a term-built object
+ * The term decides, and every codec has one. The object a *constructor* returns carries the item reading
+ * and a codec built from a term does not, so a test on the reading would classify a term-built object
  * option as a ground option.
  */
 export const optionOfTerm = (def: Term): Option => {

@@ -11,19 +11,29 @@ import * as sdk from '@aws-sdk/util-dynamodb'
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import type { Encoded } from '../../codec'
-import { array, CodecError, decimal, number, object, string } from '../../codec'
+import {
+    array,
+    CodecError,
+    decimal,
+    item as itemOf,
+    number,
+    object,
+    string,
+} from '../../codec'
 import type { native } from '../../native'
 import type { Reference } from '../../testing'
 import { checkAgainst, firstDifference } from '../../testing'
 
 type Pet = { TAG: 'PET'; id: string; price: string; tags: ReadonlySet<string> }
 
-const Pet = object({
-    TAG: string('PET'),
-    id: string,
-    price: decimal,
-    tags: string.set(),
-}).item
+const Pet = itemOf(
+    object({
+        TAG: string('PET'),
+        id: string,
+        price: decimal,
+        tags: string.set(),
+    }),
+)
 
 /** A marshaller that agrees: money as `N`, tags as a set. */
 const agreeing: Reference<Pet> = {
@@ -349,12 +359,14 @@ describe('a codec against the SDK itself', () => {
         tags: ReadonlySet<string>
     }
 
-    const Row = object({
-        TAG: string('ROW'),
-        id: string,
-        note: string,
-        tags: string.set(),
-    }).item
+    const Row = itemOf(
+        object({
+            TAG: string('ROW'),
+            id: string,
+            note: string,
+            tags: string.set(),
+        }),
+    )
 
     const row: Row = {
         TAG: 'ROW',
@@ -433,10 +445,12 @@ describe('a codec against the SDK itself', () => {
      * rather than a risk in moving.
      */
     it('keeps digits the SDK refuses to store', () => {
-        const Priced = object({
-            id: string,
-            price: decimal,
-        }).item
+        const Priced = itemOf(
+            object({
+                id: string,
+                price: decimal,
+            }),
+        )
         const wide = '12345678901234567890'
 
         expect(Priced.unsafeEncode({ id: 'p', price: wide })).toEqual({

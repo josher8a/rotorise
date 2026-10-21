@@ -15,6 +15,7 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    item as itemOf,
     list,
     never,
     number,
@@ -70,12 +71,14 @@ type Adoption = {
     fulfilment: Fulfilment
 }
 
-const Adoption = object({
-    adoptionId: string,
-    currentLegIndex: number,
-    tags: array(string),
-    fulfilment: Fulfilment,
-}).item
+const Adoption = itemOf(
+    object({
+        adoptionId: string,
+        currentLegIndex: number,
+        tags: array(string),
+        fulfilment: Fulfilment,
+    }),
+)
 
 describe('a codec at a path', () => {
     const stepIndex: number = 1
@@ -181,13 +184,15 @@ describe('a codec at a path', () => {
  */
 describe('a path that crosses a whole-value adapter', () => {
     it('a path that crosses a refinement is refused, because a path write cannot keep the predicate', () => {
-        const Account = object({
-            a: refine(
-                object({ x: dynamoNumber }),
-                (v): v is { x: typeof v.x } => !v.x.digits.startsWith('-'),
-                { describe: 'a balance that is not negative' },
-            ),
-        }).item
+        const Account = itemOf(
+            object({
+                a: refine(
+                    object({ x: dynamoNumber }),
+                    (v): v is { x: typeof v.x } => !v.x.digits.startsWith('-'),
+                    { describe: 'a balance that is not negative' },
+                ),
+            }),
+        )
         // @ts-expect-error a path cannot go into `refine`, at the type as at run time
         expect(() => atOf(Account, (p) => p.a.x)).toThrow(CodecError)
         // @ts-expect-error a path cannot go into `refine`, at the type as at run time
@@ -199,12 +204,14 @@ describe('a path that crosses a whole-value adapter', () => {
     })
 
     it('a path that crosses an older reading is refused, because a path addresses the current shape only', () => {
-        const Migrated = object({
-            a: withLegacyRead({
-                current: object({ x: decimal }),
-                older: { decode: () => ({ x: '0' }) },
+        const Migrated = itemOf(
+            object({
+                a: withLegacyRead({
+                    current: object({ x: decimal }),
+                    older: { decode: () => ({ x: '0' }) },
+                }),
             }),
-        }).item
+        )
         // @ts-expect-error a path cannot go into `withLegacyRead`, at the type as at run time
         expect(() => atOf(Migrated, (p) => p.a.x)).toThrow(
             /a path cannot go into `withLegacyRead` at 'x'/,
@@ -226,7 +233,7 @@ describe('an option that the store keeps apart from the segment', () => {
                 { describe: 'a reading that is not negative' },
             ),
         ])
-        const Meter = object({ reading: Reading }).item
+        const Meter = itemOf(object({ reading: Reading }))
         const x = atOf(Meter, (p) => p.reading.x)
         expect(path(x)).toBe('reading.x')
         expect(x.unsafeEncode('high')).toEqual({ S: 'high' })
@@ -241,7 +248,7 @@ describe('an option that the store keeps apart from the segment', () => {
                 describe: 'a nest that is not empty',
             }),
         ])
-        const Drawing = object({ shape: Shape }).item
+        const Drawing = itemOf(object({ shape: Shape }))
         // @ts-expect-error a path cannot go into `refine`, at the type as at run time
         expect(() => atOf(Drawing, (p) => p.shape.x)).toThrow(
             /a path cannot go into `refine` at 'x'/,
@@ -256,7 +263,7 @@ describe('an option that the store keeps apart from the segment', () => {
  */
 describe('a path under opaque', () => {
     it('a path under opaque writes any value, because opaque admits every value at every depth', () => {
-        const Envelope = object({ payload: opaque }).item
+        const Envelope = itemOf(object({ payload: opaque }))
         // @ts-expect-error the type of a path offers no segment below `opaque`
         const deep = atOf(Envelope, (p) => p.payload.a.b.at(2).c)
         expect(path(deep)).toBe('payload.a.b[2].c')
@@ -272,7 +279,7 @@ describe('a path to a codec that admits no value', () => {
     const vacant = /no attribute is declared at /
 
     it('a path to a declared `never` is vacant, because the model reads it as a frame of `never`', () => {
-        const item = object({ a: string, b: optional(never) }).item
+        const item = itemOf(object({ a: string, b: optional(never) }))
         // @ts-expect-error a path to a declared `never` is vacant, at the type as at run time
         expect(() => atOf(item, (p) => p.b)).toThrow(vacant)
     })
@@ -284,7 +291,7 @@ describe('a path to a codec that admits no value', () => {
             [declares, lacks],
             [lacks, declares],
         ] as const) {
-            const item = object({ r: union(options) }).item
+            const item = itemOf(object({ r: union(options) }))
             // @ts-expect-error a list that holds no value offers no position, at the type as at run time
             expect(() => atOf(item, (p) => p.r.x.at(0))).toThrow(vacant)
         }
@@ -298,7 +305,7 @@ describe('a path to a codec that admits no value', () => {
             [full, empty],
         ] as const) {
             // @ts-expect-error a variant does not declare `x`, so the path refuses at the type as on use
-            const at = atOf(object({ r: union(options) }).item, (p) => p.r.x)
+            const at = atOf(itemOf(object({ r: union(options) })), (p) => p.r.x)
             expect(at.decode({ S: 'v' })).toMatchObject({
                 message: expect.stringMatching(
                     /declared by some variants only/,
@@ -322,16 +329,18 @@ describe('the attribute that the codec at a path writes', () => {
     const Tree = scope({
         Node: object({ v: string, next: optional(ref('Node')) }),
     })
-    const Shelf = object({
-        name: string,
-        count: number,
-        tags: string.set(),
-        notes: array(string),
-        address: object({ city: string }),
-        either: union([string, number]),
-        payload: opaque,
-        tree: Tree.Node,
-    }).item
+    const Shelf = itemOf(
+        object({
+            name: string,
+            count: number,
+            tags: string.set(),
+            notes: array(string),
+            address: object({ city: string }),
+            either: union([string, number]),
+            payload: opaque,
+            tree: Tree.Node,
+        }),
+    )
 
     it('a string field writes an S, because the category of the value is the member of its term', () => {
         const written = atOf(Shelf, (p) => p.name).unsafeEncode('a')
@@ -393,7 +402,7 @@ describe('the attribute that the codec at a path writes', () => {
     })
 
     it('the root of an item writes a row and no attribute, so the root keeps the wide type', () => {
-        const root = atOf(object({ name: string }).item, (p) => p)
+        const root = atOf(itemOf(object({ name: string })), (p) => p)
         expect(root.unsafeEncode({ name: 'a' })).toEqual({ name: { S: 'a' } })
         expectTypeOf(root.unsafeEncode).returns.toEqualTypeOf<AttributeValue>()
     })

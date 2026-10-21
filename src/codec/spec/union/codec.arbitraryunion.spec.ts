@@ -22,6 +22,7 @@ import {
     boolean,
     CodecError,
     decimal,
+    item,
     number,
     object,
     optional,
@@ -66,7 +67,7 @@ describe('a union of bare attributes', () => {
     })
 
     it('round-trips, held by an entity that generates both options', () => {
-        checkRoundTrip(object({ v: Scalar }).item, {
+        checkRoundTrip(item(object({ v: Scalar })), {
             count: 200,
             seed: 20260827,
         })
@@ -134,7 +135,7 @@ describe('mixed kinds', () => {
 
     it('has no whole-item reading, because an item is always a map', () => {
         // @ts-expect-error the union can hold an `S`, so there is no item to read
-        const _no = () => Note.item.unsafeEncode({ at: 'a', text: 't' })
+        const _no = () => item(Note).unsafeEncode({ at: 'a', text: 't' })
         expect(typeof _no).toBe('function')
     })
 
@@ -143,7 +144,7 @@ describe('mixed kinds', () => {
             object({ petId: string, price: decimal }),
             object({ petIds: array(string) }),
         ])
-        expect(Line.item.unsafeEncode({ petId: 'p', price: '1' })).toEqual({
+        expect(item(Line).unsafeEncode({ petId: 'p', price: '1' })).toEqual({
             petId: { S: 'p' },
             price: { N: '1' },
         })

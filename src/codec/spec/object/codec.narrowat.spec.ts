@@ -17,6 +17,7 @@ import {
     discriminatedUnion,
     dynamoNumber,
     held,
+    item as itemOf,
     number,
     object,
     path,
@@ -31,7 +32,7 @@ const OpCodec = discriminatedUnion('type', [
     object({ type: string('COUNTER'), amount: string, note: string }),
 ])
 
-const Entity = object({ op: OpCodec }).item
+const Entity = itemOf(object({ op: OpCodec }))
 
 describe('where the variants disagree', () => {
     it('is reported rather than guessed', () => {
@@ -109,12 +110,14 @@ describe('where they agree, or only one declares it', () => {
     })
 
     it('resolves an attribute only one variant has, under the clause that keeps that variant', () => {
-        const M = object({
-            m: discriminatedUnion('tag', [
-                object({ tag: string('A'), only: number }),
-                object({ tag: string('B'), shared: string }),
-            ]),
-        }).item
+        const M = itemOf(
+            object({
+                m: discriminatedUnion('tag', [
+                    object({ tag: string('A'), only: number }),
+                    object({ tag: string('B'), shared: string }),
+                ]),
+            }),
+        )
         expect(
             atOf(M, (p) => p.m.narrow({ tag: string('A') }).only).unsafeEncode(
                 7,
@@ -129,14 +132,16 @@ describe('where they agree, or only one declares it', () => {
  * under the clause `'A'`, because each admits a value that the clause admits.
  */
 describe('a clause narrows the frontier of `at`', () => {
-    const Pinned = object({
-        u: union([
-            object({ tag: string('A'), a: number }),
-            object({ tag: string('A', 'B'), ab: number }),
-            object({ tag: string('B'), b: string }),
-            object({ tag: string, free: number }),
-        ]),
-    }).item
+    const Pinned = itemOf(
+        object({
+            u: union([
+                object({ tag: string('A'), a: number }),
+                object({ tag: string('A', 'B'), ab: number }),
+                object({ tag: string('B'), b: string }),
+                object({ tag: string, free: number }),
+            ]),
+        }),
+    )
     const isA = { tag: string('A') }
 
     it('keeps an option whose pin the clause does not separate', () => {
@@ -161,12 +166,14 @@ describe('a clause narrows the frontier of `at`', () => {
     })
 
     it('narrows a union with no tag by the presence of a key', () => {
-        const Line = object({
-            leg: union([
-                object({ petId: string, price: string }),
-                object({ petIds: array(string), price: number }),
-            ]),
-        }).item
+        const Line = itemOf(
+            object({
+                leg: union([
+                    object({ petId: string, price: string }),
+                    object({ petIds: array(string), price: number }),
+                ]),
+            }),
+        )
         const bundle = atOf(
             Line,
             (p) => p.leg.narrow({ petIds: array(string) }).price,
@@ -202,54 +209,70 @@ describe('a clause narrows the frontier of `at`', () => {
 describe('the type and the walk of `at` agree on the stored side', () => {
     const nested = object({ nested: number })
     const z = object({ z: string })
-    const NumberOrString = object({
-        u: union([
-            object({ k: string('x'), n: string }),
-            object({ k: string('y'), n: number }),
-        ]),
-    }).item
-    const MapOrString = object({
-        u: union([
-            object({ tag: string('F'), data: string }),
-            object({ tag: string('D'), data: nested }),
-        ]),
-    }).item
-    const MapOrDecimal = object({
-        u: union([
-            object({ tag: string('F'), data: decimal }),
-            object({ tag: string('D'), data: nested }),
-        ]),
-    }).item
-    const NumberTags = object({
-        u: union([
-            object({ k: number(1), a: string }),
-            object({ k: number(2), a: number }),
-        ]),
-    }).item
-    const DecimalTags = object({
-        u: union([
-            object({ k: decimal('1'), a: string }),
-            object({ k: decimal('2'), a: number }),
-        ]),
-    }).item
-    const NativeOrString = object({
-        u: union([
-            object({ tag: string('A'), v: dynamoNumber }),
-            object({ tag: string('B'), v: string }),
-        ]),
-    }).item
-    const DecimalOrMap = object({
-        u: union([
-            object({ tag: string('A'), v: decimal }),
-            object({ tag: string('B'), v: z }),
-        ]),
-    }).item
-    const DecimalOrString = object({
-        u: union([
-            object({ tag: string('A'), v: decimal }),
-            object({ tag: string('B'), v: string }),
-        ]),
-    }).item
+    const NumberOrString = itemOf(
+        object({
+            u: union([
+                object({ k: string('x'), n: string }),
+                object({ k: string('y'), n: number }),
+            ]),
+        }),
+    )
+    const MapOrString = itemOf(
+        object({
+            u: union([
+                object({ tag: string('F'), data: string }),
+                object({ tag: string('D'), data: nested }),
+            ]),
+        }),
+    )
+    const MapOrDecimal = itemOf(
+        object({
+            u: union([
+                object({ tag: string('F'), data: decimal }),
+                object({ tag: string('D'), data: nested }),
+            ]),
+        }),
+    )
+    const NumberTags = itemOf(
+        object({
+            u: union([
+                object({ k: number(1), a: string }),
+                object({ k: number(2), a: number }),
+            ]),
+        }),
+    )
+    const DecimalTags = itemOf(
+        object({
+            u: union([
+                object({ k: decimal('1'), a: string }),
+                object({ k: decimal('2'), a: number }),
+            ]),
+        }),
+    )
+    const NativeOrString = itemOf(
+        object({
+            u: union([
+                object({ tag: string('A'), v: dynamoNumber }),
+                object({ tag: string('B'), v: string }),
+            ]),
+        }),
+    )
+    const DecimalOrMap = itemOf(
+        object({
+            u: union([
+                object({ tag: string('A'), v: decimal }),
+                object({ tag: string('B'), v: z }),
+            ]),
+        }),
+    )
+    const DecimalOrString = itemOf(
+        object({
+            u: union([
+                object({ tag: string('A'), v: decimal }),
+                object({ tag: string('B'), v: string }),
+            ]),
+        }),
+    )
 
     /**
      * The walk keeps both members, so `a` is declared by one kept member only, and the path refuses
@@ -265,23 +288,27 @@ describe('the type and the walk of `at` agree on the stored side', () => {
                     ? ('A' as const)
                     : new CodecError(`'${v}' is not 'A'`),
         })
-        const AdapterOrB = object({
-            u: union([
-                object({ k: tagA, a: string }),
-                object({ k: string('B'), b: string }),
-            ]),
-        }).item
+        const AdapterOrB = itemOf(
+            object({
+                u: union([
+                    object({ k: tagA, a: string }),
+                    object({ k: string('B'), b: string }),
+                ]),
+            }),
+        )
         // @ts-expect-error a kept member does not declare `a`, so the path refuses at the type as on use
         const a = atOf(AdapterOrB, (p) => p.u.narrow({ k: string('B') }).a)
         expect(() => a.unsafeEncode('x')).toThrow(
             /declared by some variants only/,
         )
-        const LiteralOrB = object({
-            u: union([
-                object({ k: string('A'), a: string }),
-                object({ k: string('B'), b: string }),
-            ]),
-        }).item
+        const LiteralOrB = itemOf(
+            object({
+                u: union([
+                    object({ k: string('A'), a: string }),
+                    object({ k: string('B'), b: string }),
+                ]),
+            }),
+        )
         expect(() =>
             // @ts-expect-error the clause separates the member that pins 'A', and no kept member has `a`
             atOf(LiteralOrB, (p) => p.u.narrow({ k: string('B') }).a),
@@ -291,12 +318,14 @@ describe('the type and the walk of `at` agree on the stored side', () => {
     it('a clause drops a member pinned through a refinement of a literal, as the walk drops it', () => {
         // the stored view of a refinement is the literal under the predicate, so 'B' separates it
         const onlyA = refine(string('A', 'C'), (v): v is 'A' => v === 'A')
-        const RefinedOrB = object({
-            u: union([
-                object({ k: onlyA, a: number }),
-                object({ k: string('B'), a: string }),
-            ]),
-        }).item
+        const RefinedOrB = itemOf(
+            object({
+                u: union([
+                    object({ k: onlyA, a: number }),
+                    object({ k: string('B'), a: string }),
+                ]),
+            }),
+        )
         const a = atOf(RefinedOrB, (p) => p.u.narrow({ k: string('B') }).a)
         expect(a.unsafeEncode('x')).toEqual({ S: 'x' })
         // @ts-expect-error the clause separates the member that stores a number at `a`
@@ -396,12 +425,14 @@ describe('the type and the walk of `at` agree on the stored side', () => {
  * frontier.
  */
 describe('a path keeps every item that the codec reads readable', () => {
-    const M = object({
-        m: discriminatedUnion('tag', [
-            object({ tag: string('A'), only: number }),
-            object({ tag: string('B'), shared: string }),
-        ]),
-    }).item
+    const M = itemOf(
+        object({
+            m: discriminatedUnion('tag', [
+                object({ tag: string('A'), only: number }),
+                object({ tag: string('B'), shared: string }),
+            ]),
+        }),
+    )
     const isA = { tag: string('A') }
 
     it('refuses on use a name that a closed option lacks, and names `narrow`', () => {
@@ -442,13 +473,13 @@ describe('a path keeps every item that the codec reads readable', () => {
     })
 
     it('drops an option whose stored member the segment cannot enter', () => {
-        const U = object({ u: union([string, object({ x: number })]) }).item
+        const U = itemOf(object({ u: union([string, object({ x: number })]) }))
         const x = atOf(U, (p) => p.u.x)
         expect(x.unsafeEncode(7)).toEqual({ N: '7' })
     })
 
     it('refuses at the call a name on a list, because the store refuses the name on a list', () => {
-        const L = object({ xs: array(string) }).item
+        const L = itemOf(object({ xs: array(string) }))
         // @ts-expect-error a list has positions, not names
         expect(() => atOf(L, (p) => p.xs.foo)).toThrow(
             /no attribute is declared at 'xs\.foo'/,

@@ -7,7 +7,7 @@
  * values instead — and reports when that thins a run enough to matter.
  */
 import { describe, expect, it } from 'vitest'
-import { CodecError, decimal, object, refine, string } from '../../codec'
+import { CodecError, decimal, item, object, refine, string } from '../../codec'
 import { checkRoundTrip, rngFrom } from '../../testing'
 
 declare const brand: unique symbol
@@ -26,7 +26,7 @@ describe('a predicate the inner codec rarely satisfies', () => {
             describe: 'a sequence',
             onThinSearch: (what, rate) => thin.push([what, rate]),
         })
-        const Entity = object({ sequence }).item
+        const Entity = item(object({ sequence }))
 
         checkRoundTrip(Entity, { count: 100, seed: 1 })
 
@@ -43,7 +43,7 @@ describe('a predicate the inner codec rarely satisfies', () => {
             describe: 'a sequence',
             onThinSearch: (what) => thin.push(what),
         })
-        checkRoundTrip(object({ sequence }).item, {
+        checkRoundTrip(item(object({ sequence })), {
             count: 300,
             seed: 2,
         })
@@ -60,7 +60,7 @@ describe('a predicate the inner codec rarely satisfies', () => {
                 onThinSearch: (what) => thin.push(what),
             },
         )
-        checkRoundTrip(object({ v: anything }).item, {
+        checkRoundTrip(item(object({ v: anything })), {
             count: 200,
             seed: 3,
         })
@@ -78,7 +78,7 @@ describe('a predicate the inner codec rarely satisfies', () => {
             arbitrary: pick,
             onThinSearch: (what) => thin.push(what),
         })
-        checkRoundTrip(object({ sequence }).item, {
+        checkRoundTrip(item(object({ sequence })), {
             count: 200,
             seed: 4,
         })
@@ -90,7 +90,7 @@ describe('a predicate the inner codec never satisfies', () => {
     it('still fails, because there is nothing to thin', () => {
         const uuid = refine(string, isUuid, { describe: 'a uuid' })
         expect(() =>
-            checkRoundTrip(object({ id: uuid }).item, {
+            checkRoundTrip(item(object({ id: uuid })), {
                 count: 10,
             }),
         ).toThrow(CodecError)
@@ -104,7 +104,7 @@ describe('the withLegacyRead is only reached from an arbitrary', () => {
             describe: 'a sequence',
             onThinSearch: (what) => thin.push(what),
         })
-        const Entity = object({ sequence }).item
+        const Entity = item(object({ sequence }))
 
         const value = { sequence: '7' as SequenceValue }
         for (let i = 0; i < 500; i++) {

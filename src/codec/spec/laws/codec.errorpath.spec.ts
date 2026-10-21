@@ -12,6 +12,7 @@ import {
     array,
     CodecError,
     decimal,
+    item,
     list,
     number,
     object,
@@ -31,17 +32,19 @@ const pathOf = (run: () => unknown): readonly (string | number)[] => {
 
 describe('a failure carries the path it took', () => {
     it('names the attribute, at the top level', () => {
-        const Pet = object({
-            id: string,
-            age: number,
-        }).item
+        const Pet = item(
+            object({
+                id: string,
+                age: number,
+            }),
+        )
         expect(
             pathOf(() => Pet.unsafeDecode({ id: { S: 'p' }, age: { S: '3' } })),
         ).toEqual(['age'])
     })
 
     it('names the index, inside a list', () => {
-        const Tags = object({ tags: array(string) }).item
+        const Tags = item(object({ tags: array(string) }))
         expect(
             pathOf(() =>
                 Tags.unsafeDecode({ tags: { L: [{ S: 'a' }, { N: '2' }] } }),
@@ -50,9 +53,11 @@ describe('a failure carries the path it took', () => {
     })
 
     it('names the key, inside an open block', () => {
-        const Prices = object({
-            prices: object([string, optional(decimal)]),
-        }).item
+        const Prices = item(
+            object({
+                prices: object([string, optional(decimal)]),
+            }),
+        )
         expect(
             pathOf(() =>
                 Prices.unsafeDecode({
@@ -63,9 +68,11 @@ describe('a failure carries the path it took', () => {
     })
 
     it('names the position, inside a tuple', () => {
-        const Pair = object({
-            pair: list(string, number),
-        }).item
+        const Pair = item(
+            object({
+                pair: list(string, number),
+            }),
+        )
         expect(
             pathOf(() =>
                 Pair.unsafeDecode({ pair: { L: [{ S: 'a' }, { S: 'b' }] } }),
@@ -74,9 +81,11 @@ describe('a failure carries the path it took', () => {
     })
 
     it('reads as a document path, which is what you paste into a query', () => {
-        const Order = object({
-            lines: array(object({ tender: object({ note: string }) })),
-        }).item
+        const Order = item(
+            object({
+                lines: array(object({ tender: object({ note: string }) })),
+            }),
+        )
         const broken: AttributeMap = {
             lines: {
                 L: [{ M: { tender: { M: { note: { N: '7' } } } } }],
@@ -102,17 +111,19 @@ describe('a failure carries the path it took', () => {
 
     /** Encoding fails too — `literal` checks on the way out, and says where. */
     it('says where on the way out, not only on the way in', () => {
-        const Row = object({
-            kind: string('A'),
-            id: string,
-        }).item
+        const Row = item(
+            object({
+                kind: string('A'),
+                id: string,
+            }),
+        )
         expect(
             pathOf(() => Row.unsafeEncode({ kind: 'B' as 'A', id: 'x' })),
         ).toEqual(['kind'])
     })
 
     it('is empty when the failure is the item itself', () => {
-        const Pet = object({ id: string }).item
+        const Pet = item(object({ id: string }))
         expect(pathOf(() => Pet.unsafeDecode({}))).toEqual([])
     })
 })

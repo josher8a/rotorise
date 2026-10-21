@@ -19,6 +19,7 @@ import {
     CodecError,
     decimal,
     field,
+    item as itemOf,
     number,
     object,
     opaque,
@@ -131,81 +132,83 @@ const statusLog = Object.fromEntries(
     [k in ListingStatusLog]: OptionalCodec<string, Attribute<'S'>, StringCodec>
 }
 
-const Listing = object({
-    id: string,
-    ownerId: string,
-    storeId: string,
-    handle: optional(string),
-    displayName: optional(string),
-    channel: optional(string),
-    description: string,
-    createdAt: string,
-    updatedAt: optional(string),
-    autoReply: optional(string),
-    basePrice: string,
-    availableCount: optional(string),
-    lastVisitAt: optional(string),
-    version: optional(string),
-    holding: string,
-    vendorId: string,
-    statusReason: optional(string),
-    feeAmount: optional(string),
-    feeRate: optional(string),
-    filterIxIdle: optional(string),
-    filterIxBreed: optional(string),
-    pausedReason: optional(string),
-    status_reason: optional(string),
-    visibility: string('PUBLIC', 'PRIVATE'),
+const Listing = itemOf(
+    object({
+        id: string,
+        ownerId: string,
+        storeId: string,
+        handle: optional(string),
+        displayName: optional(string),
+        channel: optional(string),
+        description: string,
+        createdAt: string,
+        updatedAt: optional(string),
+        autoReply: optional(string),
+        basePrice: string,
+        availableCount: optional(string),
+        lastVisitAt: optional(string),
+        version: optional(string),
+        holding: string,
+        vendorId: string,
+        statusReason: optional(string),
+        feeAmount: optional(string),
+        feeRate: optional(string),
+        filterIxIdle: optional(string),
+        filterIxBreed: optional(string),
+        pausedReason: optional(string),
+        status_reason: optional(string),
+        visibility: string('PUBLIC', 'PRIVATE'),
 
-    // stored as `N`, and the original's `{ N: value.toString() }` — a numeric literal,
-    // so the enum's members are checked on the way in *and* on the way out
-    type: number(ListingType.ADOPTION, ListingType.SALE),
-    status: number(
-        ListingStatus.DRAFT,
-        ListingStatus.LISTED,
-        ListingStatus.RESERVED,
-        ListingStatus.SOLD,
-        ListingStatus.DEPLETED,
-        ListingStatus.WITHDRAWN,
-    ),
-    // `string` in, `string` out, `N` in the table — no float ever touches it
-    localPriceRate: decimal,
+        // stored as `N`, and the original's `{ N: value.toString() }` — a numeric literal,
+        // so the enum's members are checked on the way in *and* on the way out
+        type: number(ListingType.ADOPTION, ListingType.SALE),
+        status: number(
+            ListingStatus.DRAFT,
+            ListingStatus.LISTED,
+            ListingStatus.RESERVED,
+            ListingStatus.SOLD,
+            ListingStatus.DEPLETED,
+            ListingStatus.WITHDRAWN,
+        ),
+        // `string` in, `string` out, `N` in the table — no float ever touches it
+        localPriceRate: decimal,
 
-    paused: boolean,
-    allowsAgentPickup: boolean,
+        paused: boolean,
+        allowsAgentPickup: boolean,
 
-    // a native set, not a list — the choice no generic marshaller can infer
-    acceptedTenders: string.set(),
-    tenderDetailIds: array(string),
+        // a native set, not a list — the choice no generic marshaller can infer
+        acceptedTenders: string.set(),
+        tenderDetailIds: array(string),
 
-    breed: object({
-        species: object({
-            id: string,
-            type: number,
-            coat: optional(string), // present only when the entity has it
+        breed: object({
+            species: object({
+                id: string,
+                type: number,
+                coat: optional(string), // present only when the entity has it
+            }),
+            registry: object({ id: string, type: number }),
         }),
-        registry: object({ id: string, type: number }),
-    }),
-    sizeLimits: object({
-        litterSize: string,
-        maxLimit: string,
-        minLimit: string,
-    }),
-    feeBreakdown: optional(
-        object({
-            gross: string,
-            amount: string,
-            fee: string,
-            rate: string,
+        sizeLimits: object({
+            litterSize: string,
+            maxLimit: string,
+            minLimit: string,
         }),
-    ),
+        feeBreakdown: optional(
+            object({
+                gross: string,
+                amount: string,
+                fee: string,
+                rate: string,
+            }),
+        ),
 
-    // genuinely unknown shapes: the escape hatch, visible and local
-    tenderDetails: optional(object([string, optional(opaque)])),
-    tenderFilter: optional(opaque),
+        // genuinely unknown shapes: the escape hatch, visible and local
+        tenderDetails: optional(object([string, optional(opaque)])),
+        tenderFilter: optional(opaque),
 
-    ...statusLog,
-}).item satisfies ItemCodec<ListingEntry>
+        ...statusLog,
+    }),
+) satisfies ItemCodec<ListingEntry>
 
 // ── the invariants attributes hold between each other ────────────────
 

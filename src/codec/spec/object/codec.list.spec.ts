@@ -15,6 +15,7 @@ import {
     boolean,
     CodecError,
     decimal,
+    item,
     list,
     never as nothing,
     object,
@@ -76,8 +77,8 @@ describe('a list with a fixed position after the spread', () => {
     })
 
     it('round-trips, the suffix included', () => {
-        checkRoundTrip(object({ framed }).item, { count: 200, seed: 20260918 })
-        checkEncodePaths(object({ framed }).item, {
+        checkRoundTrip(item(object({ framed })), { count: 200, seed: 20260918 })
+        checkEncodePaths(item(object({ framed })), {
             count: 100,
             seed: 20260918,
         })

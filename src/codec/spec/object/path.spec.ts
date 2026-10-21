@@ -8,7 +8,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { number, object, optional, path as pathOf, string } from '../../codec'
+import {
+    item,
+    number,
+    object,
+    optional,
+    path as pathOf,
+    string,
+} from '../../codec'
 
 type Leg = {
     readonly legType: string
@@ -113,15 +120,17 @@ describe('both entry points build the same paths', () => {
      * They have to agree: `at` resolves a codec by walking the segments the builder records, so a
      * second implementation that drifted would resolve a codec for one path and hand back another.
      */
-    const Codec = object({
-        TAG: string('ADOPTION'),
-        adoptionId: string,
-        userId: string,
-        status: string('DRAFT', 'PACKING'),
-        updatedAt: string,
-        currentLegIndex: number,
-        fulfilment: optional(string) as never,
-    }).item
+    const Codec = item(
+        object({
+            TAG: string('ADOPTION'),
+            adoptionId: string,
+            userId: string,
+            status: string('DRAFT', 'PACKING'),
+            updatedAt: string,
+            currentLegIndex: number,
+            fulfilment: optional(string) as never,
+        }),
+    )
 
     const fromEntry = AdoptionEntry().path()
     const fromCodec = pathOf(Codec)
@@ -209,10 +218,12 @@ describe('a map whose keys are not known ahead of time', () => {
  * error. The segments live in a side table for this reason.
  */
 describe('what a path is, to the runtime', () => {
-    const Pet = object({
-        id: string,
-        then: string,
-    }).item
+    const Pet = item(
+        object({
+            id: string,
+            then: string,
+        }),
+    )
 
     it('is an object, not a function', () => {
         expect(typeof pathOf(Pet).id).toBe('object')

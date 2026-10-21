@@ -195,6 +195,14 @@ type TermsOf<Cs> = { -readonly [I in keyof Cs]: TermOf<Cs[I]> }
  */
 declare const freeMarker: unique symbol
 type Free<F extends string> = { readonly [freeMarker]?: [F] }
+/*
+ * **What `item` returns for a union, in its type.** A union has no member for the reading: the
+ * reading sits at a slot at run time, and this tuple is the one place where the type names it.
+ * Required, so a codec that has no reading does not match, and wrapped in a tuple, so a reading
+ * that is a message stays a message.
+ */
+declare const itemMarker: unique symbol
+export type Itemable<X> = { readonly [itemMarker]: [X] }
 export type FreeOf<C> = C extends {
     readonly [freeMarker]?: [infer F extends string]
 }
@@ -348,7 +356,7 @@ type CodecShape<In, Out, A extends AttributeValue> = {
  * but exposed it as `.attribute`, so specs had to accept both shapes and every combinator had to
  * convert. The distinction was never about attributes. It was about the top-level map, and the top
  * level is the one place a map is not written — so it belongs to the *view*, not to the codec.
- * {@link object} writes its `M` like anything else, and offers `.item` for the one place that does
+ * {@link object} writes its `M` like anything else, and offers {@link item} for the one place that does
  * not: the top level.
  */
 export type Nestable<T> = AttributeCodec<T>
@@ -3100,10 +3108,8 @@ type MembersOf<C> = C extends UnionCodec<infer _T, infer Options>
             }
         }[keyof Table]
       : C extends {
-              readonly item: {
-                  readonly spec: infer Spec
-                  readonly rest: infer Rest
-              }
+              readonly spec: infer Spec
+              readonly rest: infer Rest
           }
         ? { readonly spec: Spec; readonly rest: Rest; readonly t: Decoded<C> }
         : unknown
@@ -3495,18 +3501,10 @@ export type ObjectCodec<
         attribute: AttributeValue,
     ) => ItemOf<T, Spec, Rest>
     readonly def: Term
-    /**
-     * The same declaration, read as a whole item: the same two directions without the top-level map,
-     * and the things only a top-level codec can offer — `encodePartial`, `field`, `at`, `path`.
-     *
-     * A DynamoDB item is a map that is never written as one; `PutItem` takes the attributes bare.
-     * That is the *only* thing that separated an item codec from a nested one, and it is a fact about
-     * where a codec is used rather than about what it declares — so it is a reading of one codec
-     * rather than a second constructor. The marshaller draws the same line, under
-     * `convertTopLevelContainer`.
-     */
-    readonly item: ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm> &
-        Free<ObjectFree<Spec, Rest, Tm>>
+    /** What this object declares. {@link item} reads the same declaration as a whole item. */
+    readonly spec: Spec
+    /** The codec of an attribute the spec does not declare, or `undefined` for a closed object. */
+    readonly rest: Rest
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesPin<Spec, Rest>
     /** The model's term of this codec. Type-level only. */
@@ -3535,7 +3533,8 @@ export type DiscriminatedCodec<
     readonly unsafeEncode: (this: Closed, value: T) => Attribute<'M'>
     readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => T
     readonly def: Term
-    readonly item: Tagged<T, D, Spec> & Free<F>
+    /** The reading of this union as a whole item, which {@link item} returns. Type-level only. */
+    readonly [itemMarker]: [Tagged<T, D, Spec> & Free<F>]
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
     /** The free names of this codec. Type-level only. */
@@ -3589,7 +3588,8 @@ export type DissectedCodec<
     readonly unsafeEncode: (this: Closed, value: T) => Attribute<'M'>
     readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => T
     readonly def: Term
-    readonly item: Dissected<T, Ks, Specs> & Free<F>
+    /** The reading of this dissection as a whole item, which {@link item} returns. Type-level only. */
+    readonly [itemMarker]: [Dissected<T, Ks, Specs> & Free<F>]
     /** The free names of this codec. Type-level only. */
     readonly [freeMarker]?: [F]
 }
@@ -3637,9 +3637,11 @@ export type UnionCodec<
      * message rather than with an absent property is what makes reaching for it report *why* instead
      * of "property does not exist".
      */
-    readonly item: AllObjects<Options> extends true
-        ? Untagged<T, SpecsOf<Options>> & Free<UnionFree<Options, Tm>>
-        : ErrorMessage<'[union] this union can hold an attribute that is not a map, so it has no whole-item reading — an item is always a map'>
+    readonly [itemMarker]: [
+        AllObjects<Options> extends true
+            ? Untagged<T, SpecsOf<Options>> & Free<UnionFree<Options, Tm>>
+            : ErrorMessage<'[union] this union can hold an attribute that is not a map, so it has no whole-item reading — an item is always a map'>,
+    ]
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
     /** The model's term of this codec. Type-level only. */
@@ -4051,12 +4053,12 @@ const objectFromMap = <
         M<EncodedBy<Spec, Rest>>
     >
     // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
-    // the same object, so `.item` and the codec run one body rather than two that agree
+    // the same object, so `item` and the codec run one body rather than two that agree
     /**
      * **The view, and this is where it starts.**
      *
      * The owner's ruling: the top-level map belongs to the view, not to the codec. An `object`
-     * codec writes an `M` like any other term, and `.item` is the one reading that writes no map —
+     * codec writes an `M` like any other term, and {@link item} is the one reading that writes no map —
      * the same pair, one level in.
      *
      * So the pair is not built here. `denote.ts` builds one item pair per term and this hands out
@@ -4067,7 +4069,8 @@ const objectFromMap = <
 
     type T = DerivedItem<Spec, Rest>
     // a term that reads a name that no scope binds refuses each use
-    const self: ItemCodec<T, Spec, Rest> = {
+    const self: ItemCodec<T, Spec, Rest> & Marked = {
+        [itemMark]: true,
         encode: (item) =>
             openRefusal(itemDef) ??
             (body.encode(item as Record<string, unknown>) as Result<
@@ -4111,7 +4114,7 @@ const objectFromMap = <
         def: itemDef,
     }
 
-    // the `M` is what this codec writes; `.item` is the same two directions with the wrapper taken
+    // the `M` is what this codec writes; `item` is the same two directions with the wrapper taken
     // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
     // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
     // object literal, which is what lets a bundler drop an unused one
@@ -4121,15 +4124,85 @@ const objectFromMap = <
         unsafeEncode: nested.unsafeEncode,
         unsafeDecode: nested.unsafeDecode,
         def: nested.def,
-        item: self as ItemCodec<DerivedItem<Spec, Rest>, Spec, Rest>,
+        spec,
+        rest,
+        [itemSlot]: self,
     }
     objectItems.set(nested.def, self)
     return made
 }
 
+/**
+ * **The whole-item reading of a codec, at run time only.** An object codec and a union each keep
+ * the reading here. No codec type names the slot, so no codec type carries the reading, and
+ * {@link item} is the one reader.
+ */
+const itemSlot = Symbol('item')
+
+/**
+ * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
+ * marker, and no other codec carries it: an object codec has a `spec` too, so `spec` does not tell
+ * a reading from a codec. Test a root with `itemMark in root`.
+ */
+export const itemMark = Symbol('item reading')
+
+type Marked = { readonly [itemMark]: true }
+
+/** A whole-item reading, as the run time holds it. */
+type Reading = Marked & { readonly spec: unknown }
+
+/** The reading that a codec keeps, or `undefined` where the codec was not built with one. */
+const readingOf = (codec: unknown): Reading | undefined =>
+    (codec as { readonly [itemSlot]?: Reading })[itemSlot]
+
 /** The whole-item reading of an object node: the declared spec, the open block, and the pair. */
-type ObjectItem = AnyObjectCodec['item'] & {
+type ObjectItem = {
+    readonly [itemMark]: true
+    readonly encode: (item: never) => unknown
+    readonly decode: (item: StoredItem) => unknown
+    readonly spec: Record<string, ObjectSlot>
     readonly rest: AnyCodec | undefined
+}
+
+/**
+ * The same declaration, read as a whole item: the same two directions without the top-level map,
+ * and the things only a top-level codec can offer: `encodePartial`, `field`, `at`, `path`.
+ *
+ * A DynamoDB item is a map that is never written as one; `PutItem` takes the attributes bare.
+ * That is the *only* thing that separated an item codec from a nested one, and it is a fact about
+ * where a codec is used rather than about what it declares, so it is a reading of one codec
+ * rather than a second constructor. The marshaller draws the same line, under
+ * `convertTopLevelContainer`.
+ *
+ * A free function and not a member: a member is typed on each codec type that carries the member,
+ * and a function is typed only at a call. The constructor builds the reading once, and puts the
+ * reading at {@link itemSlot}, so a call costs one property read, as the member did. An object
+ * codec carries no type for the reading. A union carries the type of the reading in one tuple.
+ *
+ * The union overload reads a union by the reading that its type carries: the reading of a union
+ * of objects, of a tagged union, or of a dissection. A union that can hold an attribute that is not
+ * a map has no reading, and the type is a message that says so.
+ */
+export function item<
+    Spec extends Record<string, ObjectSlot>,
+    Rest extends AnyCodec | undefined,
+    T,
+    Tm,
+>(
+    codec: ObjectCodec<Spec, Rest, T, Tm>,
+): ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm> &
+    Free<ObjectFree<Spec, Rest, Tm>>
+export function item<X>(codec: Itemable<X>): X
+export function item(codec: object): unknown {
+    const reading = readingOf(codec)
+    // the constructors of `object`, `union` and `mdunion` put the reading on each codec that they
+    // build, so a missing reading is a broken invariant
+    if (reading === undefined) {
+        throw new CodecError(
+            'this codec has no whole-item reading: `item` takes a codec that `object`, `union` or `mdunion` built',
+        )
+    }
+    return reading
 }
 
 /**
@@ -5054,6 +5127,7 @@ const dissect = <T extends Record<string, unknown>>(
 
     // a term that reads a name that no scope binds refuses each use
     const self = {
+        [itemMark]: true,
         encode: (item: T) =>
             openRefusal(unionDef) ??
             andThen(andThen(tagOf(item), pick), (variant) =>
@@ -5109,8 +5183,8 @@ const dissect = <T extends Record<string, unknown>>(
         unsafeEncode: nested.unsafeEncode,
         unsafeDecode: nested.unsafeDecode,
         def: nested.def,
-        item: self as unknown as Tagged<T, string, Record<string, unknown>>,
-    } as DiscriminatedCodec<T, string, Record<string, unknown>>
+        [itemSlot]: self,
+    } as unknown as DiscriminatedCodec<T, string, Record<string, unknown>>
 }
 
 /**
@@ -5195,18 +5269,17 @@ type UnnamedValues<V> = V extends Uint8Array
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
  *
- * Structural, and deliberately: it asks for the one member that says "I am an object codec and this
- * is what I declare". A bare spec record does not have it, so passing one where an option is expected
- * is refused rather than silently read as a codec.
+ * Structural, and deliberately: it asks for the members that say "I am an object codec and this is
+ * what I declare": a spec beside a decode of one attribute. A bare spec record has no decode, so
+ * passing one where an option is expected is refused rather than silently read as a codec. An item
+ * reading decodes a whole item and not an attribute, so an item reading is refused too.
  */
 export type AnyObjectCodec = {
-    readonly item: {
-        // `never` in and `unknown` out, the same erasure {@link AnyCodec} uses, so every object codec
-        // fits and none of them has to be named
-        readonly encode: (item: never) => unknown
-        readonly decode: (item: StoredItem) => unknown
-        readonly spec: Record<string, ObjectSlot>
-    }
+    // `never` in and `unknown` out, the same erasure {@link AnyCodec} uses, so every object codec
+    // fits and none of them has to be named
+    readonly encode: (value: never) => unknown
+    readonly decode: (attribute: AttributeValue) => unknown
+    readonly spec: Record<string, ObjectSlot>
 }
 
 /**
@@ -5231,13 +5304,11 @@ export type AllObjects<Options extends readonly unknown[]> =
  * `AnyObjectCodec` does not match it and a union holding one was told it had no whole-item
  * reading. `discriminator` is the member that says which of the two this is.
  */
-type AnyTaggedCodec = {
-    readonly item: {
-        readonly encode: (item: never) => unknown
-        readonly decode: (item: StoredItem) => unknown
-        readonly discriminator: string
-    }
-}
+type AnyTaggedCodec = Itemable<{
+    readonly encode: (item: never) => unknown
+    readonly decode: (item: StoredItem) => unknown
+    readonly discriminator: string
+}>
 
 /** The entity a list of options describes: whatever any one of them reads back. */
 export type DerivedUnion<Options extends readonly unknown[]> = {
@@ -5252,12 +5323,16 @@ export type WrittenBy<Options extends readonly unknown[]> = Extract<
 
 /** What each option declares, read off the options. */
 export type SpecsOf<Options extends readonly unknown[]> = {
-    [I in keyof Options]: Options[I] extends {
-        readonly item: { readonly spec: infer S }
-    }
-        ? S
-        : never
+    [I in keyof Options]: Options[I] extends Declares<infer S> ? S : never
 }
+
+/**
+ * A codec that declares a spec: an object declares its own, and a union declares the spec of its
+ * reading, which is a tag map or a list of the specs of its options.
+ */
+type Declares<Spec> =
+    | { readonly spec: Spec }
+    | Itemable<{ readonly spec: Spec }>
 
 /** The variants of an untagged union. There is no tag, so there is nothing to key them by. */
 export type UntaggedSpec<T> = readonly ItemSpec<T>[]
@@ -5311,10 +5386,10 @@ export type Option = {
 
 const optionOf = (codec: AnyCodec): Option => {
     /**
-     * Read from the definition, not from the presence of `.item`.
+     * Read from the definition, not from the presence of a reading.
      *
-     * A nested union has an `.item` too, and its `spec` is the *list* of its options rather than a
-     * record of attributes — so testing for the member classified a union as an object and then walked
+     * A nested union has a reading too, and its `spec` is the *list* of its options rather than a
+     * record of attributes — so testing for the reading classified a union as an object and then walked
      * that list as though `0` and `1` were attribute names. `attributes` is the definition of an
      * object codec and of nothing else.
      */
@@ -5322,11 +5397,11 @@ const optionOf = (codec: AnyCodec): Option => {
     // a tagged builder carries a whole-item reading of its own — its `Tagged` — over a term that
     // is now an ordinary union, so the test is the presence of that reading and not the kind
     const asObject =
-        codec.def?.kind === 'object' ||
-        (codec.def?.kind === 'union' &&
-            !!(codec as unknown as Partial<AnyObjectCodec>).item)
-            ? (codec as unknown as Partial<AnyObjectCodec>).item
-            : undefined
+        codec.def?.kind === 'object'
+            ? objectItems.get(codec.def)
+            : codec.def?.kind === 'union'
+              ? readingOf(codec)
+              : undefined
     return asObject
         ? {
               ...base,
@@ -5552,7 +5627,7 @@ type EveryOptionTagged<
 type PatternSpecs<P> = FieldSpecList<P>[number]
 
 /** The member specs of the codec at a field: each option of a union of objects, or the object itself. */
-type FieldSpecList<F> = F extends { readonly item: { readonly spec: infer Sp } }
+type FieldSpecList<F> = F extends Declares<infer Sp>
     ? Sp extends readonly unknown[]
         ? Sp
         : [Sp]
@@ -5740,7 +5815,7 @@ type SplitOptions<
     ...infer Rest extends readonly unknown[],
 ]
     ? [
-          ...(Head extends { readonly item: { readonly spec: infer Sp } }
+          ...(Head extends Declares<infer Sp>
               ? Sp extends readonly unknown[]
                   ? [Head]
                   : FitsCodec<Head, P> extends 't'
@@ -6338,7 +6413,7 @@ type KeptCompact<
     ...infer Rest extends readonly unknown[],
 ]
     ? [
-          ...(Head extends { readonly item: { readonly spec: infer Sp } }
+          ...(Head extends Declares<infer Sp>
               ? Sp extends readonly unknown[]
                   ? KeepsFit<Keep, FitsCodec<Head, P>> extends true
                       ? [Head]
@@ -7453,14 +7528,15 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * not be reached here also cannot be selected here: `declares` is what selects, and only an
      * object option has it.
      */
-    const self: Untagged<T, SpecsOf<Options>> = {
+    const self: Untagged<T, SpecsOf<Options>> & Marked = {
+        [itemMark]: true,
         encode: writeItem,
         decode: readItem,
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
+        // an object option declares its spec, and a tagged option declares its tag map
         spec: (options as readonly AnyCodec[]).map(
-            (option) =>
-                (option as unknown as Partial<AnyObjectCodec>).item?.spec,
+            (option) => readingOf(option)?.spec,
         ) as never,
         def: {
             kind: 'union',
@@ -7481,17 +7557,17 @@ export const union = <const Options extends readonly AnyCodec[]>(
         openRefusal(declared) ?? resolution().pair.decode(attribute)) as (
         attribute: AttributeValue,
     ) => Result<T>
-    const codec: UnionCodec<DerivedUnion<Options>, Options> = {
+    const codec = {
         encode,
         decode,
-        unsafeEncode: (value) => orThrow(encode(value)),
-        unsafeDecode: (attribute) => orThrow(decode(attribute)),
+        unsafeEncode: (value: T) => orThrow(encode(value)),
+        unsafeDecode: (attribute: AttributeValue) => orThrow(decode(attribute)),
         def: {
             kind: 'union',
             options: optionTerms,
         },
-        item: self as never,
-    }
+        [itemSlot]: self,
+    } as unknown as UnionCodec<DerivedUnion<Options>, Options>
     sums.set(codec.def, (pattern, keep) => {
         closed()
         return slicedUnion(options as readonly AnyCodec[], pattern, keep)

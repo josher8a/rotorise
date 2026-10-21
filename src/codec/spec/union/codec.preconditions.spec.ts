@@ -15,6 +15,7 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    item as itemOf,
     number,
     object,
     opaque,
@@ -29,28 +30,32 @@ import {
 
 describe('the preconditions of a path are the stored admission of each clause', () => {
     it('a path with no clause has no precondition', () => {
-        const Plain = object({ a: object({ b: string }) }).item
+        const Plain = itemOf(object({ a: object({ b: string }) }))
         expect(atOf(Plain, (p) => p.a.b).preconditions).toEqual([])
     })
 
     it('a string tag pins the stored text', () => {
-        const M = object({
-            m: discriminatedUnion('tag', [
-                object({ tag: string('A'), only: number }),
-                object({ tag: string('B'), shared: string }),
-            ]),
-        }).item
+        const M = itemOf(
+            object({
+                m: discriminatedUnion('tag', [
+                    object({ tag: string('A'), only: number }),
+                    object({ tag: string('B'), shared: string }),
+                ]),
+            }),
+        )
         expect(
             atOf(M, (p) => p.m.narrow({ tag: string('A') }).only).preconditions,
         ).toEqual([{ segments: ['m', 'tag'], in: [{ S: 'A' }] }])
     })
 
-    const Numeric = object({
-        u: union([
-            object({ k: number(1), a: string }),
-            object({ k: number(2), b: string }),
-        ]),
-    }).item
+    const Numeric = itemOf(
+        object({
+            u: union([
+                object({ k: number(1), a: string }),
+                object({ k: number(2), b: string }),
+            ]),
+        }),
+    )
 
     it('a numeric tag pins the stored numeral, not the number', () => {
         expect(
@@ -66,9 +71,11 @@ describe('the preconditions of a path are the stored admission of each clause', 
     })
 
     it('a presence clause states that the attribute exists', () => {
-        const Untagged = object({
-            u: union([object({ a: string }), object({ b: number })]),
-        }).item
+        const Untagged = itemOf(
+            object({
+                u: union([object({ a: string }), object({ b: number })]),
+            }),
+        )
         expect(
             atOf(Untagged, (p) => p.u.narrow({ a: opaque }).a).preconditions,
         ).toEqual([{ segments: ['u', 'a'], exists: true }])
@@ -80,9 +87,11 @@ describe('the preconditions of a path are the stored admission of each clause', 
      * the key is `opaque`. A refusal here states a rule that the model does not state.
      */
     it('a clause key over withLegacyRead states that the attribute exists, as an opaque key does', () => {
-        const Untagged = object({
-            u: union([object({ a: string }), object({ b: number })]),
-        }).item
+        const Untagged = itemOf(
+            object({
+                u: union([object({ a: string }), object({ b: number })]),
+            }),
+        )
         const older = withLegacyRead({ current: string, older: string })
         expect(
             atOf(Untagged, (p) => p.u.narrow({ a: older }).a).preconditions,
@@ -90,30 +99,34 @@ describe('the preconditions of a path are the stored admission of each clause', 
     })
 
     it('a base clause states the stored member', () => {
-        const ByMember = object({
-            u: union([
-                object({ tag: string('A'), v: decimal }),
-                object({ tag: string('B'), v: string }),
-            ]),
-        }).item
+        const ByMember = itemOf(
+            object({
+                u: union([
+                    object({ tag: string('A'), v: decimal }),
+                    object({ tag: string('B'), v: string }),
+                ]),
+            }),
+        )
         expect(
             atOf(ByMember, (p) => p.u.narrow({ v: number }).tag).preconditions,
         ).toEqual([{ segments: ['u', 'v'], type: 'N' }])
     })
 
     it('a clause on a nested union states its precondition at the path of that union', () => {
-        const Nested = object({
-            u: discriminatedUnion('tag', [
-                object({
-                    tag: string('OUTER'),
-                    inner: discriminatedUnion('kind', [
-                        object({ kind: string('x'), x: number }),
-                        object({ kind: string('y'), y: string }),
-                    ]),
-                }),
-                object({ tag: string('FLAT'), flat: string }),
-            ]),
-        }).item
+        const Nested = itemOf(
+            object({
+                u: discriminatedUnion('tag', [
+                    object({
+                        tag: string('OUTER'),
+                        inner: discriminatedUnion('kind', [
+                            object({ kind: string('x'), x: number }),
+                            object({ kind: string('y'), y: string }),
+                        ]),
+                    }),
+                    object({ tag: string('FLAT'), flat: string }),
+                ]),
+            }),
+        )
         expect(
             atOf(
                 Nested,
@@ -129,25 +142,27 @@ describe('the preconditions of a path are the stored admission of each clause', 
     })
 
     it('two clauses on one path are a conjunction of their preconditions', () => {
-        const Two = object({
-            u: union([
-                object({
-                    kind: string('pet'),
-                    size: string('large'),
-                    pen: number,
-                }),
-                object({
-                    kind: string('pet'),
-                    size: string('small'),
-                    cage: string,
-                }),
-                object({
-                    kind: string('food'),
-                    size: string('large'),
-                    bag: string,
-                }),
-            ]),
-        }).item
+        const Two = itemOf(
+            object({
+                u: union([
+                    object({
+                        kind: string('pet'),
+                        size: string('large'),
+                        pen: number,
+                    }),
+                    object({
+                        kind: string('pet'),
+                        size: string('small'),
+                        cage: string,
+                    }),
+                    object({
+                        kind: string('food'),
+                        size: string('large'),
+                        bag: string,
+                    }),
+                ]),
+            }),
+        )
         expect(
             atOf(
                 Two,
@@ -163,12 +178,14 @@ describe('the preconditions of a path are the stored admission of each clause', 
     })
 
     it('a closed-object clause is a refusal that names the key, because no condition is exact', () => {
-        const Closed = object({
-            u: union([
-                object({ data: object({ n: number }), tag: string }),
-                object({ data: string, tag: string }),
-            ]),
-        }).item
+        const Closed = itemOf(
+            object({
+                u: union([
+                    object({ data: object({ n: number }), tag: string }),
+                    object({ data: string, tag: string }),
+                ]),
+            }),
+        )
         const preconditions = atOf(
             Closed,
             (p) => p.u.narrow({ data: object({ n: number }) }).tag,
@@ -188,12 +205,14 @@ describe('the preconditions of a path are the stored admission of each clause', 
         type Nest = readonly Nest[]
         const { Nest } = scope({ Nest: array(ref('Nest')) })
         const Filled = refine(Nest, (v): v is Nest => v.length > 0)
-        const Drawing = object({
-            u: union([
-                object({ shape: Nest, tag: string }),
-                object({ shape: string, tag: string }),
-            ]),
-        }).item
+        const Drawing = itemOf(
+            object({
+                u: union([
+                    object({ shape: Nest, tag: string }),
+                    object({ shape: string, tag: string }),
+                ]),
+            }),
+        )
         const preconditions = atOf(
             Drawing,
             (p) => p.u.narrow({ shape: Filled }).tag,
@@ -239,12 +258,14 @@ const holds = (
     })
 
 describe('a write at a narrowed path is safe only under its preconditions', () => {
-    const M = object({
-        m: discriminatedUnion('tag', [
-            object({ tag: string('A'), only: number }),
-            object({ tag: string('B'), shared: string }),
-        ]),
-    }).item
+    const M = itemOf(
+        object({
+            m: discriminatedUnion('tag', [
+                object({ tag: string('A'), only: number }),
+                object({ tag: string('B'), shared: string }),
+            ]),
+        }),
+    )
     const itemA = M.unsafeEncode({ m: { tag: 'A', only: 1 } })
     const itemB = M.unsafeEncode({ m: { tag: 'B', shared: 's' } })
 

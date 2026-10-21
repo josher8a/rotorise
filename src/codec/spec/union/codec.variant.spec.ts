@@ -9,6 +9,7 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    item,
     number,
     object,
     optional,
@@ -49,7 +50,7 @@ const Staff = object({
 })
 
 const AccountCodec = discriminatedUnion('type', [Owner, Staff])
-const Account = AccountCodec.item
+const Account = item(AccountCodec)
 
 const plain: Account = {
     type: 'OWNER',
@@ -99,7 +100,7 @@ describe('tagged', () => {
     })
 
     it('writes an attribute with the codec of the variant that the clause keeps', () => {
-        const Holder = object({ account: AccountCodec }).item
+        const Holder = item(object({ account: AccountCodec }))
         expect(
             at(
                 Holder,
@@ -221,8 +222,8 @@ describe('the law, over generated values', () => {
     it('and the encode paths agree, per variant', () => {
         // a tagged codec has no `field`, so each variant is checked through the object codec
         // that declares the variant
-        checkEncodePaths(Owner.item, { seed: 20260826 })
-        checkEncodePaths(Staff.item, {
+        checkEncodePaths(item(Owner), { seed: 20260826 })
+        checkEncodePaths(item(Staff), {
             seed: 20260826,
         })
     })

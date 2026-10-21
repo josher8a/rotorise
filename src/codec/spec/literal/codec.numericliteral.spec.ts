@@ -14,6 +14,7 @@ import {
     at,
     CodecError,
     discriminatedUnion,
+    item,
     number,
     object,
     string,
@@ -76,7 +77,7 @@ describe('a numeric literal', () => {
     })
 
     it('round-trips', () => {
-        checkRoundTrip(object({ status }).item, { count: 100, seed: 20260828 })
+        checkRoundTrip(item(object({ status })), { count: 100, seed: 20260828 })
     })
 })
 
@@ -93,14 +94,14 @@ describe('a numeric tag', () => {
     ])
 
     it('chooses the variant', () => {
-        expect(Rows.item.unsafeEncode({ kind: 1, listedAt: 'now' })).toEqual({
+        expect(item(Rows).unsafeEncode({ kind: 1, listedAt: 'now' })).toEqual({
             kind: { N: '1' },
             listedAt: { S: 'now' },
         })
     })
 
     it('and reads it back, tag included, as a number', () => {
-        const back: Row = Rows.item.unsafeDecode({
+        const back: Row = item(Rows).unsafeDecode({
             kind: { N: '0' },
             draftedAt: { S: 'x' },
         })
@@ -108,7 +109,7 @@ describe('a numeric tag', () => {
     })
 
     it('reaches a variant by its numeric tag', () => {
-        const Holder = object({ row: Rows }).item
+        const Holder = item(object({ row: Rows }))
         expect(
             at(
                 Holder,
@@ -121,13 +122,19 @@ describe('a numeric tag', () => {
         // the two tags the declaration names do resolve, and nothing else does — which is the
         // lookup being a lookup rather than an attempt
         expect(
-            Rows.item.unsafeDecode({ kind: { N: '0' }, draftedAt: { S: 'x' } }),
+            item(Rows).unsafeDecode({
+                kind: { N: '0' },
+                draftedAt: { S: 'x' },
+            }),
         ).toEqual({ kind: 0, draftedAt: 'x' })
         expect(
-            Rows.item.unsafeDecode({ kind: { N: '1' }, listedAt: { S: 'x' } }),
+            item(Rows).unsafeDecode({ kind: { N: '1' }, listedAt: { S: 'x' } }),
         ).toEqual({ kind: 1, listedAt: 'x' })
         expect(() =>
-            Rows.item.unsafeDecode({ kind: { N: '9' }, draftedAt: { S: 'x' } }),
+            item(Rows).unsafeDecode({
+                kind: { N: '9' },
+                draftedAt: { S: 'x' },
+            }),
         ).toThrow(CodecError)
     })
 })
@@ -185,7 +192,7 @@ describe('a set of a literal', () => {
     })
 
     it('round-trips over generated values', () => {
-        checkRoundTrip(object({ tags, codes }).item, {
+        checkRoundTrip(item(object({ tags, codes })), {
             count: 100,
             seed: 20260828,
         })

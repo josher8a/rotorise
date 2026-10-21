@@ -11,6 +11,7 @@ import {
     boolean,
     CodecError,
     decimal,
+    item,
     list,
     never,
     nullable,
@@ -79,18 +80,18 @@ describe('the product of two closed objects', () => {
             price: '10',
             gift: true,
         } as const
-        expect(product(Pet, Price).item.unsafeEncode(entity)).toEqual(
-            merged.item.unsafeEncode(entity),
+        expect(item(product(Pet, Price)).unsafeEncode(entity)).toEqual(
+            item(merged).unsafeEncode(entity),
         )
         expect(
-            product(Pet, Price).item.unsafeDecode(
-                merged.item.unsafeEncode(entity),
+            item(product(Pet, Price)).unsafeDecode(
+                item(merged).unsafeEncode(entity),
             ),
         ).toEqual(entity)
     })
 
     it('round-trips over generated values', () => {
-        checkRoundTrip(product(Pet, Price).item, {
+        checkRoundTrip(item(product(Pet, Price)), {
             count: 200,
             seed: 20260914,
         })
@@ -279,18 +280,18 @@ describe('the factors a product refuses until the owner rules', () => {
      * alone: the field stays `req`, and the one value it holds is the null.
      */
     it('declares a name at never under a mark that admits absence', () => {
-        const Opt = object({ a: string, gone: optional(never) }).item
+        const Opt = item(object({ a: string, gone: optional(never) }))
         expect(Opt.unsafeEncode({ a: 'q' })).toEqual({ a: { S: 'q' } })
 
         // `undefinable` keeps the key in the entity and lets the value be `undefined`, so over
         // `never` the key is required and `undefined` is the only value it can take
-        const Und = object({ a: string, gone: undefinable(never) }).item
+        const Und = item(object({ a: string, gone: undefinable(never) }))
         expect(Und.unsafeEncode({ a: 'q', gone: undefined })).toEqual({
             a: { S: 'q' },
         })
 
         // `nullable` holds the null and nothing else, and the name stays required
-        const Nul = object({ a: string, gone: nullable(never) }).item
+        const Nul = item(object({ a: string, gone: nullable(never) }))
         expect(Nul.unsafeEncode({ a: 'q', gone: null })).toEqual({
             a: { S: 'q' },
             gone: { NULL: true },
@@ -314,8 +315,8 @@ describe('the factors a product refuses until the owner rules', () => {
             expect('gone' in und).toBe(true)
             expect(und.gone).toBeUndefined()
         }
-        checkRoundTrip(Opt.item)
-        checkRoundTrip(Und.item)
+        checkRoundTrip(item(Opt))
+        checkRoundTrip(item(Und))
     })
 
     /**
@@ -367,37 +368,49 @@ describe('a product of lawful factors is lawful', () => {
     // each factor is lawful, and the product's field tables are a disjoint union, so the product
     // reads back what it wrote and writes back what it read
     const products = [
-        ['two closed objects', product(Pet, Price)],
+        ['two closed objects', item(product(Pet, Price))],
         [
             'literals, sets and lists',
-            product(
-                object({ tag: string('a', 'b'), n: number }),
-                object({ tags: string.set(), steps: array(decimal) }),
+            item(
+                product(
+                    object({ tag: string('a', 'b'), n: number }),
+                    object({ tags: string.set(), steps: array(decimal) }),
+                ),
             ),
         ],
         [
             'nullable and optional fields',
-            product(
-                object({ note: nullable(string) }),
-                object({ gift: optional(boolean), count: optional(number) }),
+            item(
+                product(
+                    object({ note: nullable(string) }),
+                    object({
+                        gift: optional(boolean),
+                        count: optional(number),
+                    }),
+                ),
             ),
         ],
         [
             'three factors',
-            product(
-                object({ a: string }),
-                object({ b: decimal }),
-                object({ c: boolean }),
+            item(
+                product(
+                    object({ a: string }),
+                    object({ b: decimal }),
+                    object({ c: boolean }),
+                ),
             ),
         ],
     ] as const
 
     for (const [name, codec] of products) {
         it(`decodes what it encodes, for ${name}`, () => {
-            checkRoundTrip(codec.item as never, { count: 60, seed: 20260924 })
+            checkRoundTrip(codec as never, {
+                count: 60,
+                seed: 20260924,
+            })
         })
         it(`encodes what it decodes, for ${name}`, () => {
-            checkDecodesAreWritable(codec.item as never, {
+            checkDecodesAreWritable(codec as never, {
                 count: 40,
                 seed: 20260924,
             })

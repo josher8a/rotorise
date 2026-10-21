@@ -17,6 +17,7 @@ import {
     decimal,
     failed,
     held,
+    item,
     list,
     never,
     number,
@@ -72,7 +73,7 @@ const tags = held(string.set(), list(string, spread(string)), {
 })
 
 describe('an array held where the table holds a set', () => {
-    const Pet = object({ id: string, tags }).item
+    const Pet = item(object({ id: string, tags }))
 
     it('writes SS, because that is what the inner codec writes', () => {
         expect(Pet.unsafeEncode({ id: 'p', tags: ['b', 'a'] })).toEqual({
@@ -120,7 +121,7 @@ describe('a Date held where the table holds a string', () => {
         encode: (at: Date) => at.toISOString(),
         decode: (at) => new Date(at),
     })
-    const Visit = object({ id: string, at: when }).item
+    const Visit = item(object({ id: string, at: when }))
 
     it('stores the ISO string', () => {
         expect(
@@ -279,7 +280,7 @@ describe('a conversion that throws', () => {
 
 describe('composing with the rest', () => {
     it('is optional like anything else', () => {
-        const Pet = object({ id: string, tags: optional(tags) }).item
+        const Pet = item(object({ id: string, tags: optional(tags) }))
         expect(Pet.unsafeEncode({ id: 'p' })).toEqual({ id: { S: 'p' } })
         expect(Pet.unsafeDecode({ id: { S: 'p' } })).toEqual({ id: 'p' })
     })

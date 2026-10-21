@@ -10,6 +10,7 @@ import type { Encoded } from '../../codec'
 import {
     boolean,
     CodecError,
+    item,
     object,
     optional,
     string,
@@ -25,17 +26,21 @@ type Pet = {
     chipped: boolean | undefined
 }
 
-const Pet = object({
-    id: string,
-    nickname: undefinable(string),
-    chipped: undefinable(boolean),
-}).item
+const Pet = item(
+    object({
+        id: string,
+        nickname: undefinable(string),
+        chipped: undefinable(boolean),
+    }),
+)
 
 /** The same entity with the other mark, for the comparisons below. */
-const Loose = object({
-    id: string,
-    nickname: optional(string),
-}).item
+const Loose = item(
+    object({
+        id: string,
+        nickname: optional(string),
+    }),
+)
 
 describe('what it stores', () => {
     it('writes no attribute at all when the value is undefined', () => {

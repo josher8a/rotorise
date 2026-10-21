@@ -11,6 +11,7 @@ import type { AnyCodec } from '../../codec'
 import {
     CodecError,
     codecOfTerm,
+    item as itemOf,
     list,
     number,
     object,
@@ -59,10 +60,9 @@ const scalar = refine(
     },
 )
 
-const Meta = object({ vendorId: string('ACME', 'GLOBEX') }, [
-    string,
-    optional(scalar),
-]).item
+const Meta = itemOf(
+    object({ vendorId: string('ACME', 'GLOBEX') }, [string, optional(scalar)]),
+)
 
 describe('an open type', () => {
     const meta: VendorMeta = {
@@ -146,7 +146,7 @@ describe('an open object entry', () => {
     })
 
     it('allows a required literal key set', () => {
-        const Declared = object([string('current'), string]).item
+        const Declared = itemOf(object([string('current'), string]))
         expect(Declared.unsafeDecode({ current: { S: 'v1' } })).toEqual({
             current: 'v1',
         })
@@ -243,7 +243,7 @@ describe('an open object with an absent field nests in another codec', () => {
 })
 
 describe('a strict object', () => {
-    const Closed = object({ id: string }).item
+    const Closed = itemOf(object({ id: string }))
 
     it('refuses an undeclared attribute on the way in', () => {
         expect(() =>
@@ -275,7 +275,7 @@ describe('a strict object', () => {
 })
 
 describe("'refuse', for a service that owns its table", () => {
-    const Strict = object({ id: string }).item
+    const Strict = itemOf(object({ id: string }))
 
     /**
      * **Pins wording no law has, deliberately.** The refusal is asserted as a `CodecError` beside
@@ -365,26 +365,26 @@ describe('the rest policy a definition records', () => {
 
     it('agrees with the policy the item codec reports', () => {
         const closed = object({ id: string })
-        expect(closed.item.rest).toBe(undefined)
+        expect(itemOf(closed).rest).toBe(undefined)
         expect(closed.def.kind === 'object' && closed.def.body.rest).toBe(
             undefined,
         )
         const open = object({ id: string }, [string, optional(string)])
         expect(open.def.kind === 'object' && open.def.body.rest).toBe(
-            termOf(open.item.rest),
+            termOf(itemOf(open).rest),
         )
     })
 
     /**
      * The defect, as a consumer would have met it: two specs differing only in a *nested* policy.
      *
-     * A definition walk hands out a term, and a term has no `.item`, so the term alone must say
+     * A definition walk hands out a term, and a term has no item reading, so the term alone must say
      * whether the nested body is closed.
      *
      * The walk is one step shorter than it was: a field holds the child's *term*, so descending
      * into a nested object is a field lookup rather than a field lookup and then a `.def` read.
      */
-    it('survives a walk into a nested object, where `.item` is not offered', () => {
+    it('survives a walk into a nested object, where `item` is not offered', () => {
         const restOfNested = (codec: AnyCodec): unknown => {
             const def = codec.def
             if (def?.kind !== 'object') throw new Error('not an object')
@@ -418,10 +418,12 @@ describe('a built codec passed to tableEntry', () => {
     type MetaKeys = { TAG: 'META'; id: string }
     type Meta = MetaKeys & { [key: string]: unknown }
 
-    const Attributes = object({ TAG: string('META'), id: string }, [
-        string,
-        optional(opaque('lossy')),
-    ]).item
+    const Attributes = itemOf(
+        object({ TAG: string('META'), id: string }, [
+            string,
+            optional(opaque('lossy')),
+        ]),
+    )
     it('round-trips the attributes the spec does not name', () => {
         // generation reaches the rest policy now, so this exercises the open part and not only the
         // closed one — which is what the definition recording `rest` bought

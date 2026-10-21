@@ -7,7 +7,7 @@
  * below names one rule that index needs.
  */
 import { describe, expect, it } from 'vitest'
-import { at, boolean, mdunion, object, string } from '../../codec'
+import { at, boolean, item, mdunion, object, string } from '../../codec'
 import type { ItemPair } from '../../denote'
 import { assignmentOf } from '../../denote'
 import { failed } from '../../result'
@@ -30,7 +30,7 @@ const twoKey = mdunion(['kind', 'size'], [pet, dog, food])
 // the untyped item pair, which is what these tests are about: several of them feed a partial or a
 // mistyped entity on purpose, to assert the runtime refusal the tag index gives. The typed
 // `Dissected` reading refuses those at the call, where the rule under test is the run-time one
-const pair = twoKey.item as unknown as ItemPair
+const pair = item(twoKey) as unknown as ItemPair
 
 describe("a member's assignment is read off the member's own body", () => {
     /**
@@ -165,8 +165,9 @@ describe('neither the keys nor the members carry an order', () => {
      * made two terms for one dissection, and this is the test it could not pass.
      */
     it('reads the same dissection declared with the keys the other way round', () => {
-        const swapped = mdunion(['size', 'kind'], [pet, dog, food])
-            .item as unknown as ItemPair
+        const swapped = item(
+            mdunion(['size', 'kind'], [pet, dog, food]),
+        ) as unknown as ItemPair
         for (const entity of [
             { kind: 'pet', size: 'small', toy: 'ball' },
             { kind: 'pet', size: 'large', pen: 'p1' },
@@ -180,8 +181,9 @@ describe('neither the keys nor the members carry an order', () => {
 
     /** …and a *set* of members, so the order the caller listed them in reaches nothing. */
     it('reads the same dissection with the members declared in another order', () => {
-        const reordered = mdunion(['kind', 'size'], [food, dog, pet])
-            .item as unknown as ItemPair
+        const reordered = item(
+            mdunion(['kind', 'size'], [food, dog, pet]),
+        ) as unknown as ItemPair
         for (const entity of [
             { kind: 'pet', size: 'small', toy: 'ball' },
             { kind: 'pet', size: 'large', pen: 'p1' },
@@ -197,7 +199,7 @@ describe('neither the keys nor the members carry an order', () => {
 describe('a member is selected by its assignment', () => {
     /** An object literal, matched key by key: the clause is as unordered as the term's key. */
     it('reaches a member by the assignment it carries', () => {
-        const Holder = object({ x: twoKey }).item
+        const Holder = item(object({ x: twoKey }))
         const chosen = at(
             Holder,
             (p) =>
@@ -214,7 +216,7 @@ describe('a member is selected by its assignment', () => {
 
     /** The key set, and no `discriminator`: at several keys there is no single name to give. */
     it('carries the key set', () => {
-        expect(twoKey.item.keys).toEqual(['kind', 'size'])
+        expect(item(twoKey).keys).toEqual(['kind', 'size'])
     })
 })
 

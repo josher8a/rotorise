@@ -29,6 +29,7 @@ import {
     decimal,
     discriminatedUnion,
     failed,
+    item,
     number,
     object,
     string,
@@ -149,7 +150,7 @@ describe('a decimal literal', () => {
     })
 
     it('round-trips', () => {
-        checkRoundTrip(object({ price: decimal('1', '2.5', '100') }).item, {
+        checkRoundTrip(item(object({ price: decimal('1', '2.5', '100') })), {
             count: 100,
             seed: 20260901,
         })
@@ -227,7 +228,7 @@ describe('bases as union options', () => {
             object({ v: decimal('2'), b: string }),
         ])
         expect(
-            Rows.item.unsafeDecode({ v: { N: '2' }, b: { S: 'x' } }),
+            item(Rows).unsafeDecode({ v: { N: '2' }, b: { S: 'x' } }),
         ).toEqual({ v: '2', b: 'x' })
     })
 

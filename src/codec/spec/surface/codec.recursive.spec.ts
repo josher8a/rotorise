@@ -13,6 +13,7 @@ import {
     CodecError,
     discriminatedUnion,
     held,
+    item,
     list,
     mdunion,
     nullable,
@@ -174,7 +175,7 @@ describe('a union that names itself', () => {
      */
     it('returns the refusal of an open fragment that the walk of at reads, and does not throw', () => {
         const List = object({ v: string, next: nullable(ref('List')) })
-        const Doc = object({ head: List }).item
+        const Doc = item(object({ head: List }))
         // @ts-expect-error a use needs a closed codec
         const located = at(Doc, (p) => p.head.v)
         expect(path(located)).toBe('head.v')
@@ -247,7 +248,7 @@ describe('a union that names itself', () => {
         const { List } = scope({
             List: object({ v: string, next: nullable(ref('List')) }),
         })
-        const Doc = object({ head: List }).item
+        const Doc = item(object({ head: List }))
         const located = at(Doc, (p) => p.head.next.v)
         expect(path(located)).toBe('head.next.v')
         expect(located.encode('a')).toEqual({ S: 'a' })

@@ -31,6 +31,7 @@ import {
     CodecError,
     decimal,
     held,
+    item,
     number,
     object,
     refine,
@@ -143,10 +144,12 @@ describe('a set of a literal, spelled at the base', () => {
 
     it('round-trips over generated values', () => {
         checkRoundTrip(
-            object({
-                tags: string.set('a', 'b'),
-                codes: number.set(1, 2, 10),
-            }).item,
+            item(
+                object({
+                    tags: string.set('a', 'b'),
+                    codes: number.set(1, 2, 10),
+                }),
+            ),
             { count: 100, seed: 20260901 },
         )
     })
@@ -166,7 +169,7 @@ describe('a set of a literal, spelled at the base', () => {
  * unchecked one. Propagating the capability is what avoids that without a free function.
  */
 describe('branding survives, and it survives through the capability', () => {
-    const Pet = object({ id: string, amounts: amount.set() }).item
+    const Pet = item(object({ id: string, amounts: amount.set() }))
 
     it('decodes back as the brand, not as plain strings', () => {
         const back = Pet.unsafeDecode({

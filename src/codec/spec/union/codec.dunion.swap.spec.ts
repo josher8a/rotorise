@@ -11,9 +11,11 @@
  * the same `spec`, `discriminator` and patch, and the same *type* in both directions.
  */
 import { describe, expect, it } from 'vitest'
+import type { Itemable } from '../../codec'
 import {
     decimal,
     discriminatedUnion,
+    item,
     mdunion,
     number,
     object,
@@ -85,13 +87,12 @@ type Swappable = {
     readonly encode: (value: never) => unknown
     readonly decode: (attribute: never) => unknown
     readonly unsafeEncode: (value: never) => never
-    readonly item: {
-        readonly encode: (item: never) => unknown
-        readonly encodePartial: (patch: never) => unknown
-        readonly discriminator: string
-        readonly spec: Record<string, unknown>
-    }
-}
+} & Itemable<{
+    readonly encode: (item: never) => unknown
+    readonly encodePartial: (patch: never) => unknown
+    readonly discriminator: string
+    readonly spec: Record<string, unknown>
+}>
 
 describe.each(cases)('$name', ({ d, options, values }) => {
     const one = discriminatedUnion(
@@ -112,30 +113,32 @@ describe.each(cases)('$name', ({ d, options, values }) => {
             )
             const written = one.unsafeEncode(value as never)
             expect(many.decode(written)).toEqual(one.decode(written))
-            expect(many.item.encode(value as never)).toEqual(
-                one.item.encode(value as never),
+            expect(item(many).encode(value as never)).toEqual(
+                item(one).encode(value as never),
             )
         }
     })
 
     it('answers the same for a value no variant carries', () => {
         const stray = { [d]: 'nothing at all' }
-        expect(String(many.item.encode(stray as never))).toBe(
-            String(one.item.encode(stray as never)),
+        expect(String(item(many).encode(stray as never))).toBe(
+            String(item(one).encode(stray as never)),
         )
     })
 
     it('carries the same discriminator, and the same spec of each variant at each tag', () => {
-        expect(many.item.discriminator).toBe(one.item.discriminator)
-        expect(Object.keys(many.item.spec)).toEqual(Object.keys(one.item.spec))
-        expect(many.item.spec).toEqual(one.item.spec)
+        expect(item(many).discriminator).toBe(item(one).discriminator)
+        expect(Object.keys(item(many).spec)).toEqual(
+            Object.keys(item(one).spec),
+        )
+        expect(item(many).spec).toEqual(item(one).spec)
     })
 
     it('encodes a patch the same way', () => {
         for (const value of values) {
             const patch = { [d]: (value as Record<string, unknown>)[d] }
-            expect(many.item.encodePartial(patch as never)).toEqual(
-                one.item.encodePartial(patch as never),
+            expect(item(many).encodePartial(patch as never)).toEqual(
+                item(one).encodePartial(patch as never),
             )
         }
     })

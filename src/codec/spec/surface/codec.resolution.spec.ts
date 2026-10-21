@@ -14,6 +14,7 @@ import {
     discriminatedUnion,
     exclude,
     extract,
+    item,
     list,
     never,
     nullable,
@@ -92,7 +93,7 @@ describe('a product reads the node that each factor names', () => {
         const direct = product(object({ a: string }), object({ b: decimal }))
         const named = product(ObjectAt, object({ b: decimal }))
         expect(named.def).toEqual(direct.def)
-        expect(named.item.encode({ a: 'x', b: '1' })).toEqual({
+        expect(item(named).encode({ a: 'x', b: '1' })).toEqual({
             a: { S: 'x' },
             b: { N: '1' },
         })
@@ -118,7 +119,7 @@ describe('a product reads the node that each factor names', () => {
             readonly y: boolean
             readonly n: string
         } = { kind: 'b', y: true, n: '1' }
-        expect(merged.item.encode(written)).toEqual({
+        expect(item(merged).encode(written)).toEqual({
             kind: { S: 'b' },
             y: { BOOL: true },
             n: { N: '1' },
@@ -144,13 +145,13 @@ describe('an entry key and a variant read the node that a ref names', () => {
             OptionAt,
             object({ t: string('b'), y: boolean }),
         ])
-        expect(Visit.item.encode({ t: 'a', x: 'q' })).toEqual({
+        expect(item(Visit).encode({ t: 'a', x: 'q' })).toEqual({
             t: { S: 'a' },
             x: { S: 'q' },
         })
-        expect(Visit.item.decode({ t: { S: 'b' }, y: { BOOL: true } })).toEqual(
-            { t: 'b', y: true },
-        )
+        expect(
+            item(Visit).decode({ t: { S: 'b' }, y: { BOOL: true } }),
+        ).toEqual({ t: 'b', y: true })
     })
 })
 
@@ -483,7 +484,7 @@ describe('an entry carries the capabilities of the node that its ref chain names
         }).D
         const named = product(DissectionAt, object({ n: decimal }))
         expect(named.def).toEqual(product(direct, object({ n: decimal })).def)
-        expect(named.item.encode({ kind: 'a', x: 'q', n: '1' })).toEqual({
+        expect(item(named).encode({ kind: 'a', x: 'q', n: '1' })).toEqual({
             kind: { S: 'a' },
             x: { S: 'q' },
             n: { N: '1' },

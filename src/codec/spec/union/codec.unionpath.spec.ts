@@ -12,6 +12,7 @@ import {
     array,
     at,
     discriminatedUnion,
+    item,
     number,
     object,
     path,
@@ -40,12 +41,14 @@ type Adoption = {
     nested: { inner: Tender }
 }
 
-const Adoption = object({
-    adoptionId: string,
-    priceIn: AssetCodec,
-    priceOut: AssetCodec,
-    nested: object({ inner: AssetCodec }),
-}).item
+const Adoption = item(
+    object({
+        adoptionId: string,
+        priceIn: AssetCodec,
+        priceOut: AssetCodec,
+        nested: object({ inner: AssetCodec }),
+    }),
+)
 
 describe('a path into a union', () => {
     const p = path(Adoption)
@@ -94,7 +97,7 @@ describe('a codec at a path into a union', () => {
             object({ kind: string('PARCEL'), region: string('EU', 'US') }),
             object({ kind: string('PALLET'), region: string('EU', 'US') }),
         ])
-        const Order = object({ shipment: Shipment }).item
+        const Order = item(object({ shipment: Shipment }))
         const region = at(Order, (q) => q.shipment.region)
         expect(region.unsafeEncode('EU')).toEqual({ S: 'EU' })
     })
@@ -112,7 +115,7 @@ describe('a codec at a path into a union', () => {
                 label: refine(string, upper, { describe: 'a label' }),
             }),
         ])
-        const Order = object({ shipment: Shipment }).item
+        const Order = item(object({ shipment: Shipment }))
         const label = at(Order, (q) => q.shipment.label)
         expect(() => label.unsafeEncode('AB')).toThrow(
             /declared differently in different variants/,

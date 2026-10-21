@@ -178,14 +178,14 @@ Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs
 `at(...).preconditions` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
 
 ```ts
-import { at, discriminatedUnion, failed, number, object, path, string } from 'rotorise'
+import { at, discriminatedUnion, failed, item, number, object, path, string } from 'rotorise'
 
-const Order = object({
+const Order = item(object({
   pay: discriminatedUnion('tender', [
     object({ tender: string('CARD'), cardId: string }),
     object({ tender: string('CASH'), drawer: number }),
   ]),
-}).item
+}))
 
 const cardId = at(Order, (p) => p.pay.narrow({ tender: string('CARD') }).cardId)
 path(cardId)          // 'pay.cardId'

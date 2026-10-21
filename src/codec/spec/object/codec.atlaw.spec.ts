@@ -8,6 +8,7 @@ import {
     array,
     at,
     discriminatedUnion,
+    item,
     number,
     object,
     optional,
@@ -16,14 +17,16 @@ import {
 } from '../../codec'
 
 const Leg = object({ id: string, deliveredAt: optional(string) })
-const Adoption = object({
-    id: string,
-    shipment: object({ carrier: string, legs: array(Leg) }),
-    pay: discriminatedUnion('tender', [
-        object({ tender: string('CARD'), card: object({ last4: string }) }),
-        object({ tender: string('CASH'), drawer: number }),
-    ]),
-}).item
+const Adoption = item(
+    object({
+        id: string,
+        shipment: object({ carrier: string, legs: array(Leg) }),
+        pay: discriminatedUnion('tender', [
+            object({ tender: string('CARD'), card: object({ last4: string }) }),
+            object({ tender: string('CASH'), drawer: number }),
+        ]),
+    }),
+)
 
 /** The facts of a located codec that the law compares. */
 const factsOf = (codec: {
@@ -91,5 +94,16 @@ describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p +
         const direct = at(Adoption, (p) => p.shipment.carrier)
         expect(path(composed)).toBe('shipment.carrier')
         expect(factsOf(composed)).toEqual(factsOf(direct))
+    })
+
+    /**
+     * **A spread copy of an object codec keeps its item.** The reading sits at a symbol slot, and a
+     * spread copies own symbol keys, so `item` of the copy is the item of the original.
+     */
+    it('gives a spread copy of an object codec the item of the original', () => {
+        const Whole = object({ id: string })
+        const copy = { ...Whole }
+        expect(item(copy)).toBe(item(Whole))
+        expect(item(copy).unsafeEncode({ id: 'a' })).toEqual({ id: { S: 'a' } })
     })
 })

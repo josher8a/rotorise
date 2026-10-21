@@ -11,6 +11,7 @@ import { RotoriseError, tableEntry } from '../../../Rotorise'
 import {
     CodecError,
     discriminatedUnion,
+    item,
     number,
     object,
     string,
@@ -333,7 +334,7 @@ describe('a constant is only ever as good as the codec that claims it', () => {
      * value with no variants to ask.
      */
     it('refuses a codec that cannot name a variant', () => {
-        // read as one `M` value rather than through `.item`, which is the whole difference:
+        // read as one `M` value rather than through `item`, which is the whole difference:
         // an attribute codec has no variants to ask
         const asUnion = discriminatedUnion('TAG', [
             object({ TAG: string('A'), id: string, label: string }),
@@ -386,23 +387,25 @@ describe('a union entity, described by a tagged codec', () => {
             GSI3PK: ['type', 'orgId'],
         },
         {
-            codec: discriminatedUnion('type', [
-                object({
-                    TAG: string('INVOICE'),
-                    type: string('CARD'),
-                    orgId: string,
-                    invoiceId: string,
-                    status: string('NEW', 'DONE'),
-                    vendorInvoiceId: string,
-                }),
-                object({
-                    TAG: string('INVOICE'),
-                    type: string('PICKUP'),
-                    orgId: string,
-                    invoiceId: string,
-                    status: string('NEW', 'DONE'),
-                }),
-            ]).item,
+            codec: item(
+                discriminatedUnion('type', [
+                    object({
+                        TAG: string('INVOICE'),
+                        type: string('CARD'),
+                        orgId: string,
+                        invoiceId: string,
+                        status: string('NEW', 'DONE'),
+                        vendorInvoiceId: string,
+                    }),
+                    object({
+                        TAG: string('INVOICE'),
+                        type: string('PICKUP'),
+                        orgId: string,
+                        invoiceId: string,
+                        status: string('NEW', 'DONE'),
+                    }),
+                ]),
+            ),
         },
     )
 

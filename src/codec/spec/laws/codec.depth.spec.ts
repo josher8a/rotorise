@@ -23,6 +23,7 @@ import {
     CodecError,
     discriminatedUnion,
     held,
+    item as itemOf,
     list,
     nullable,
     object,
@@ -212,7 +213,7 @@ describe('the nesting bound around a typed container', () => {
 
     /** An item attribute sits inside no list and no map, so the item map adds no level. */
     it('counts an item attribute from zero, as the store does', () => {
-        const entity = object({ a: opaque }).item
+        const entity = itemOf(object({ a: opaque }))
         expect(
             entity.encode({ a: nestL(MAX_DOCUMENT_NESTING) }),
         ).not.toBeInstanceOf(CodecError)
@@ -291,22 +292,28 @@ describe('the nesting bound at a path', () => {
     type Node = { next?: Node }
     const { Node } = scope({ Node: object({ next: optional(ref('Node')) }) })
 
-    const anObject = object({ a: object({ b: opaque }) }).item
-    const aList = object({ xs: array(array(opaque)) }).item
-    const aRecursive = object({ root: Node }).item
-    const aUnion = object({
-        u: union([object({ x: opaque }), object({ w: string })]),
-    }).item
-    const aDiscriminated = object({
-        d: discriminatedUnion('t', [
-            object({ t: string('A'), x: opaque }),
-            object({ t: string('B'), x: opaque }),
-        ]),
-    }).item
-    const anOpenRest = object([string, optional(object({ y: opaque }))]).item
-    const aTuple = object({
-        tup: list(object({ w: string }), object({ z: opaque })),
-    }).item
+    const anObject = itemOf(object({ a: object({ b: opaque }) }))
+    const aList = itemOf(object({ xs: array(array(opaque)) }))
+    const aRecursive = itemOf(object({ root: Node }))
+    const aUnion = itemOf(
+        object({
+            u: union([object({ x: opaque }), object({ w: string })]),
+        }),
+    )
+    const aDiscriminated = itemOf(
+        object({
+            d: discriminatedUnion('t', [
+                object({ t: string('A'), x: opaque }),
+                object({ t: string('B'), x: opaque }),
+            ]),
+        }),
+    )
+    const anOpenRest = itemOf(object([string, optional(object({ y: opaque }))]))
+    const aTuple = itemOf(
+        object({
+            tup: list(object({ w: string }), object({ z: opaque })),
+        }),
+    )
 
     /** `n` levels of map, the innermost one empty. */
     const nestNode = (n: number): Node => {
@@ -419,7 +426,7 @@ describe('the nesting bound at a path', () => {
 
     /** A path of one segment names an item attribute, which sits inside no list and no map. */
     it('counts a path of one segment from zero, as the item does', () => {
-        const at = atOf(object({ a: opaque }).item, (p) => p.a)
+        const at = atOf(itemOf(object({ a: opaque })), (p) => p.a)
         expect(at.encode(nestL(MAX_DOCUMENT_NESTING))).not.toBeInstanceOf(
             CodecError,
         )
@@ -472,7 +479,7 @@ describe('the nesting bound on a read', () => {
         const { Tree } = scope({ Tree: array(ref('Tree')) })
         refusesPastTheStore(Tree.decode(storedTree(MAX_DOCUMENT_NESTING + 1)))
 
-        const item = object({ a: opaque }).item
+        const item = itemOf(object({ a: opaque }))
         const tooDeep = item.decode({ a: storedL(MAX_DOCUMENT_NESTING + 1) })
         refusesPastTheStore(tooDeep)
         expect((tooDeep as CodecError).path).toEqual([
@@ -482,7 +489,7 @@ describe('the nesting bound on a read', () => {
 
         const either = union([object({ a: opaque }), object({ b: string })])
         refusesPastTheStore(
-            either.item.decode({ a: storedL(MAX_DOCUMENT_NESTING + 1) }),
+            itemOf(either).decode({ a: storedL(MAX_DOCUMENT_NESTING + 1) }),
         )
 
         // at the bound, each read encodes back
@@ -498,7 +505,10 @@ describe('the nesting bound on a read', () => {
 
     /** A path of two segments reads an attribute that sits inside one map. */
     it('counts the level of a path on a read, as on a write', () => {
-        const at = atOf(object({ a: object({ b: opaque }) }).item, (p) => p.a.b)
+        const at = atOf(
+            itemOf(object({ a: object({ b: opaque }) })),
+            (p) => p.a.b,
+        )
         expect(at.decode(storedL(MAX_DOCUMENT_NESTING - 1))).not.toBeInstanceOf(
             CodecError,
         )

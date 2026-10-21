@@ -21,6 +21,7 @@ import {
     exclude,
     extract,
     held,
+    item,
     mdunion,
     number,
     object,
@@ -106,7 +107,7 @@ describe('the extraction keeps the members a clause describes', () => {
                 size: string('large'),
             }),
         )
-        expect(one.item.keys).toEqual(['kind', 'size'])
+        expect(item(one).keys).toEqual(['kind', 'size'])
         const written = one.unsafeEncode({
             kind: 'pet',
             size: 'large',
@@ -349,7 +350,7 @@ describe('a clause is a literal at a base', () => {
 describe('the exclusion is the complement of the same clause', () => {
     it('keeps exactly the members the extraction drops, over the same keys', () => {
         const kept = exclude(twoKey, object({ kind: string('pet') }))
-        expect(kept.item.keys).toEqual(['kind', 'size'])
+        expect(item(kept).keys).toEqual(['kind', 'size'])
         expect(
             kept.unsafeEncode({ kind: 'food', size: 'small', gram: true }),
         ).toEqual({
@@ -409,9 +410,11 @@ describe('the clause carries no order', () => {
      * error, where a slice that kept every member would answer with a path over `never`.
      */
     it('drops the member from the slice, so a clause that keeps only that member is a type error', () => {
-        const Holder = object({
-            x: extract(twoKey, object({ kind: string('pet') })),
-        }).item
+        const Holder = item(
+            object({
+                x: extract(twoKey, object({ kind: string('pet') })),
+            }),
+        )
         expect(
             at(
                 Holder,
@@ -660,7 +663,7 @@ describe('discriminatedUnion slices like the dissection it is', () => {
             type: 'CHECKUP',
             petId: 'p1',
         })
-        expect(only.item.discriminator).toBe('type')
+        expect(item(only).discriminator).toBe('type')
     })
 
     it('excludes it and leaves the other', () => {

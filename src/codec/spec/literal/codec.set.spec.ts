@@ -17,6 +17,7 @@ import {
     binary,
     CodecError,
     decimal,
+    item,
     nullable,
     number,
     object,
@@ -91,10 +92,12 @@ describe('the member follows from the element', () => {
 })
 
 describe('a set of a branded element', () => {
-    const Pet = object({
-        id: string,
-        amounts: amount.set(),
-    }).item
+    const Pet = item(
+        object({
+            id: string,
+            amounts: amount.set(),
+        }),
+    )
 
     it('stores the brand as N, because that is what the element writes', () => {
         expect(

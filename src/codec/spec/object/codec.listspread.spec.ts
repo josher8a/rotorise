@@ -15,6 +15,7 @@ import {
     array,
     CodecError,
     decimal,
+    item,
     list,
     number,
     object,
@@ -96,8 +97,8 @@ describe('a tuple with a tail', () => {
     })
 
     it('round-trips, tails included', () => {
-        checkRoundTrip(object({ path }).item, { count: 200, seed: 20260828 })
-        checkEncodePaths(object({ path }).item, { count: 100, seed: 20260828 })
+        checkRoundTrip(item(object({ path })), { count: 200, seed: 20260828 })
+        checkEncodePaths(item(object({ path })), { count: 100, seed: 20260828 })
     })
 })
 

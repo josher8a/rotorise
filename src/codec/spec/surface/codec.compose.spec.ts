@@ -11,6 +11,7 @@ import {
     array,
     at,
     discriminatedUnion,
+    item as itemOf,
     list,
     number,
     object,
@@ -33,18 +34,20 @@ type Adoption = {
 }
 
 /** Every piece built where it is used. */
-const Adoption = object({
-    id: string,
-    tender: discriminatedUnion('kind', [
-        object({ kind: string('CASH'), code: string }),
-        object({ kind: string('PET'), coat: string }),
-    ]),
-    items: array(object({ n: number })),
-    legs: list(object({ n: number }), object({ n: number })),
-    tags: object([string, optional(object({ n: number }))]),
-    maybe: optional(object({ m: string })),
-    untagged: union([object({ a: string }), object({ b: number })]),
-}).item
+const Adoption = itemOf(
+    object({
+        id: string,
+        tender: discriminatedUnion('kind', [
+            object({ kind: string('CASH'), code: string }),
+            object({ kind: string('PET'), coat: string }),
+        ]),
+        items: array(object({ n: number })),
+        legs: list(object({ n: number }), object({ n: number })),
+        tags: object([string, optional(object({ n: number }))]),
+        maybe: optional(object({ m: string })),
+        untagged: union([object({ a: string }), object({ b: number })]),
+    }),
+)
 
 const adoption: Adoption = {
     id: 'q1',
@@ -85,8 +88,8 @@ describe('a codec used where an attribute codec is expected', () => {
 
     it('still accepts the explicit form, which is the same codec', () => {
         const Leg = object({ n: number })
-        const A = object({ leg: Leg }).item
-        const B = object({ leg: Leg }).item
+        const A = itemOf(object({ leg: Leg }))
+        const B = itemOf(object({ leg: Leg }))
         expect(A.unsafeEncode({ leg: { n: 1 } })).toEqual(
             B.unsafeEncode({ leg: { n: 1 } }),
         )
