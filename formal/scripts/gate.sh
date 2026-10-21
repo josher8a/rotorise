@@ -37,21 +37,24 @@ fail=0
 first_failure=""
 
 # run <label> <command…> — the one place an exit code is read, so there is one
-# place to get it wrong.
+# place to get it wrong. A step writes its output to a file, and a failed step prints the file.
 run() {
   local label="$1"; shift
-  local start elapsed rc
+  local start elapsed rc log
+  log=$(mktemp)
   start=$SECONDS
-  "$@" >/dev/null 2>&1
+  "$@" >"$log" 2>&1
   rc=$?
   elapsed=$((SECONDS - start))
   if [ $rc -eq 0 ]; then
     printf 'PASS  %-28s (%ds)\n' "$label" "$elapsed"
   else
     printf 'FAIL  %-28s (%ds, exit %d)\n' "$label" "$elapsed" "$rc"
+    sed 's/^/      | /' "$log"
     fail=1
     [ -z "$first_failure" ] && first_failure="$label (exit $rc)"
   fi
+  rm -f "$log"
 }
 
 run 'guard_reach.py'        python3 scripts/guard_reach.py
@@ -126,5 +129,4 @@ if [ $fail -eq 0 ]; then
 fi
 
 echo "FIRST FAILURE: $first_failure"
-echo 'Re-run that check alone, without the output redirected, to see why.'
 exit 1
