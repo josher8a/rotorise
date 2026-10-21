@@ -1405,6 +1405,8 @@ describe('the published surface', () => {
             'boolean',
             'decimal',
             'discriminatedUnion',
+            'exclude',
+            'extract',
             'withLegacyRead',
             'held',
             'list',

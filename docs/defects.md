@@ -206,7 +206,7 @@ throwaway spec:
     a key pinned through `ref('Colour')`, where the scope binds `Colour: string('red', 'blue')`
       type checker: the pattern on that key is refused
       runtime:      the key is pinned, and the member is kept
-    u.extract(object({ k: refine(string('A', 'C'), (v): v is 'A' => v === 'A') }))
+    extract(u, object({ k: refine(string('A', 'C'), (v): v is 'A' => v === 'A') }))
       type checker: accepted
       runtime:      CodecError: the pattern at 'k' holds a refinement
 
@@ -266,8 +266,8 @@ owner rules that a binary literal stays coarse at the type level. So the type ke
 Measured 2026-10-13 at 3838e2f: the type bridge holds 25 exclude refuse ids, and the clause of each
 one is a binary literal. One example:
 
-    const r = union([object({ a: binary(new Uint8Array([1, 2])) }), object({ c: string })])
-      .exclude(object({ a: binary(new Uint8Array([1, 2])) }))
+    const r = exclude(union([object({ a: binary(new Uint8Array([1, 2])) }), object({ c: string })]),
+      object({ a: binary(new Uint8Array([1, 2])) }))
       runtime: member 0 dropped
       type: the decoded type of r still admits member 0
 

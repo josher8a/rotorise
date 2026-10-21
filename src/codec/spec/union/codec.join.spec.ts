@@ -31,6 +31,8 @@ import {
     scope,
     spread,
     string,
+    exclude as typedExclude,
+    extract as typedExtract,
     union,
     withLegacyRead,
 } from '../../codec'
@@ -44,12 +46,20 @@ type Erased = {
         readonly encode: (value: unknown) => unknown
         readonly decode: (item: unknown) => unknown
     }
-    readonly extract: (pattern: unknown) => Erased
-    readonly exclude: (pattern: unknown) => Erased
 }
 
 // declared through a cast, because the options come as an erased list of permutations
 const declare = union as unknown as (options: readonly AnyCodec[]) => Erased
+// the slices take the erased union that `declare` returns. The generic form needs member specs,
+// which the erased list of permutations does not carry, so the cast is the same as the one above
+const extract = typedExtract as unknown as (
+    codec: Erased,
+    pattern: AnyCodec,
+) => Erased
+const exclude = typedExclude as unknown as (
+    codec: Erased,
+    pattern: AnyCodec,
+) => Erased
 
 /** A result, with a failure read as the fact that it failed: the message names the options. */
 const answer = (result: unknown) => (failed(result) ? 'failed' : result)
@@ -155,10 +165,10 @@ describe('a union of compatible options gives one answer whatever the option ord
             ...values.map((v) => codec.item.encode(v)),
             ...items.map((i) => codec.item.decode(i)),
             ...values.map((v) =>
-                codec.extract(object({ kind: string('y') })).encode(v),
+                extract(codec, object({ kind: string('y') })).encode(v),
             ),
             ...values.map((v) =>
-                codec.exclude(object({ kind: string('x') })).encode(v),
+                exclude(codec, object({ kind: string('x') })).encode(v),
             ),
         ])
         expect(answers?.[1]).toEqual({
@@ -940,19 +950,11 @@ describe("an accepted union's options never write one value, or read one attribu
 })
 
 describe("extract and exclude partition a union's values and keep its answers", () => {
-    type Pair = {
-        readonly encode: (value: unknown) => unknown
-        readonly decode: (attribute: AttributeValue) => unknown
-    }
-    type Sliceable = Pair & {
-        readonly extract: (pattern: unknown) => Pair
-        readonly exclude: (pattern: unknown) => Pair
-    }
     const rows = union([
         object({ k: string('A', 'B'), a: string }),
         object({ k: string('C'), b: decimal }),
         object({ k: string('D', 'E'), c: boolean }),
-    ] as unknown as readonly AnyCodec[]) as unknown as Sliceable
+    ] as unknown as readonly AnyCodec[]) as unknown as Erased
     const clauses = [
         { k: string('A') },
         { k: string('C') },
@@ -981,21 +983,21 @@ describe("extract and exclude partition a union's values and keep its answers", 
     it('keeps a value its clause names, and drops it from the rest', () => {
         const clause = { k: string('A', 'B') }
         expect(
-            ok(rows.extract(object(clause)).encode({ k: 'A', a: 'x' })),
+            ok(extract(rows, object(clause)).encode({ k: 'A', a: 'x' })),
         ).toBe(true)
         expect(
-            ok(rows.exclude(object(clause)).encode({ k: 'A', a: 'x' })),
+            ok(exclude(rows, object(clause)).encode({ k: 'A', a: 'x' })),
         ).toBe(false)
         expect(
-            ok(rows.exclude(object(clause)).encode({ k: 'C', b: '1.5' })),
+            ok(exclude(rows, object(clause)).encode({ k: 'C', b: '1.5' })),
         ).toBe(true)
     })
 
     it("writes each value of the union through exactly one slice, with the union's answer", () => {
         const disagreements: string[] = []
         for (const clause of clauses) {
-            const kept = rows.extract(object(clause))
-            const rest = rows.exclude(object(clause))
+            const kept = extract(rows, object(clause))
+            const rest = exclude(rows, object(clause))
             for (const v of values) {
                 const whole = rows.encode(v)
                 const [x, y] = [kept.encode(v), rest.encode(v)]
@@ -1019,8 +1021,8 @@ describe("extract and exclude partition a union's values and keep its answers", 
             .filter(ok) as AttributeValue[]
         const disagreements: string[] = []
         for (const clause of clauses) {
-            const kept = rows.extract(object(clause))
-            const rest = rows.exclude(object(clause))
+            const kept = extract(rows, object(clause))
+            const rest = exclude(rows, object(clause))
             for (const attribute of attributes) {
                 const whole = rows.decode(attribute)
                 const [x, y] = [kept.decode(attribute), rest.decode(attribute)]

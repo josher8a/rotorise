@@ -522,8 +522,11 @@ read (`narrowC_reads`), and a dropped option reads nothing that the stored view 
 (`narrowC_drops`). The slice of a certified union (`AltClause.extractC`) keeps fewer options: the
 options that the clause describes.
 
-**The host takes the clause as a codec.** `extract(pattern)` keeps the options that fit the pattern,
-and `exclude(pattern)` keeps the rest. An option fits where every value that the option holds lies
+**The host takes the clause as a codec.** `extract(codec, pattern)` keeps the options of the codec
+that fit the pattern, and `exclude(codec, pattern)` keeps the rest. A field that may be absent,
+against a pattern that requires its key, splits the option into a present part and an absent part:
+the extraction keeps the present part with the key required, and the exclusion keeps the absent
+part. A dissection splits no member. An option fits where every value that the option holds lies
 inside what the pattern holds. The host decides this on a fragment. A literal fits a literal of one
 base and adapter, and a literal fits its base. A base fits itself. An option fits a union that holds
 a member of the option. An object fits an object pattern that names a subset of its keys. A list

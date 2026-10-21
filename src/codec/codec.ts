@@ -3536,32 +3536,6 @@ export type DiscriminatedCodec<
     readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => T
     readonly def: Term
     readonly item: Tagged<T, D, Spec> & Free<F>
-    /**
-     * **The members a clause keeps**, over the same keys — or `never` where it keeps none.
-     *
-     * `Spec` does not shrink with `T`. A member the clause dropped is still keyed in the table, and
-     * asking for it gives an `ItemCodec<never>`: the entity type is what the slice narrows, and the
-     * runtime is what refuses the assignment. Narrowing the table too would need the spec list
-     * filtered in step with the entity union, and the two are matched by their decoded types rather
-     * than positionally.
-     */
-    readonly extract: <const P extends AnyCodec>(
-        this: Closed,
-        pattern: P & ValidatePattern<Spec[keyof Spec], P>,
-    ) => DiscriminatedCodec<
-        VariantsOf<KeptByTag<Spec, P>>,
-        D,
-        KeptByTag<Spec, P>
-    >
-    /** …and the members it rejects, the complement of the same pattern. */
-    readonly exclude: <const P extends AnyCodec>(
-        this: Closed,
-        pattern: P & ValidatePattern<Spec[keyof Spec], P>,
-    ) => DiscriminatedCodec<
-        VariantsOf<KeptByTag<Spec, P, false>>,
-        D,
-        KeptByTag<Spec, P, false>
-    >
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<Spec>
     /** The free names of this codec. Type-level only. */
@@ -3618,24 +3592,6 @@ export type DissectedCodec<
     readonly item: Dissected<T, Ks, Specs> & Free<F>
     /** The free names of this codec. Type-level only. */
     readonly [freeMarker]?: [F]
-    /** **The members a pattern keeps**, over the same keys — or `never` where it keeps none. */
-    readonly extract: <const P extends AnyCodec>(
-        this: Closed,
-        pattern: P & ValidatePattern<Specs[number], P>,
-    ) => DissectedCodec<
-        DerivedVariants<Extracted<Specs, P>>,
-        Ks,
-        Extracted<Specs, P>
-    >
-    /** …and the members it rejects, the complement of the same pattern. */
-    readonly exclude: <const P extends AnyCodec>(
-        this: Closed,
-        pattern: P & ValidatePattern<Specs[number], P>,
-    ) => DissectedCodec<
-        DerivedVariants<Excluded<Specs, P>>,
-        Ks,
-        Excluded<Specs, P>
-    >
 }
 
 /**
@@ -3684,26 +3640,6 @@ export type UnionCodec<
     readonly item: AllObjects<Options> extends true
         ? Untagged<T, SpecsOf<Options>> & Free<UnionFree<Options, Tm>>
         : ErrorMessage<'[union] this union can hold an attribute that is not a map, so it has no whole-item reading — an item is always a map'>
-    /**
-     * **The options a pattern keeps**: the options whose values all lie inside what the pattern
-     * holds. The pattern is a codec, so the slice of a union takes what a codec takes, a union
-     * that holds a string beside objects included.
-     *
-     * An object pattern names the keys that it needs, and an option may declare more. The slice goes
-     * into a field that holds a union of objects, and the result stays compact, as the `Extract` of
-     * TypeScript reads it: `{ k, pet: U }` against `{ pet: P }` keeps `{ k, pet: Extract<U, P> }`. So
-     * the extraction has no option that the original lacks. The result is rebuilt through
-     * {@link union}, so a slice of a certified union is certified.
-     */
-    readonly extract: <const P extends AnyCodec>(
-        this: Closed,
-        pattern: P & ValidatePattern<SpecsOf<Options>[number], P>,
-    ) => UnionSlice<Tm, KeptOptions<Options, P>>
-    /** …and the options it rejects, the complement of the same pattern. */
-    readonly exclude: <const P extends AnyCodec>(
-        this: Closed,
-        pattern: P & ValidatePattern<SpecsOf<Options>[number], P>,
-    ) => UnionSlice<Tm, KeptOptions<Options, P, false>>
     /** The row this codec writes, pinnable with {@link Writes}. Type-level only. */
     readonly [writesMarker]?: WritesVariantsPin<SpecsOf<Options>>
     /** The model's term of this codec. Type-level only. */
@@ -3736,6 +3672,58 @@ type SliceTerm<D, Kept extends readonly unknown[]> = [
     } & { [sliceKey]: ['union', TermsOf<Kept>] },
     typeof sliceKey,
 ]
+
+/**
+ * **What a pattern keeps of a codec**: the slice of a sum, and the slice of a union of one option
+ * for any other codec. A sum keeps its form: a tagged union slices to a tagged union over the same
+ * keys, and a dissection to a dissection.
+ *
+ * The tag table of a tagged union does not shrink with the entity type. A member that the clause
+ * dropped is still keyed in the table, and asking for it gives an `ItemCodec<never>`: the entity
+ * type is what the slice narrows, and the runtime is what refuses the assignment.
+ */
+type Slice<C, P, Keep extends boolean> = C extends DiscriminatedCodec<
+    infer _T,
+    infer D,
+    infer Spec,
+    infer _F
+>
+    ? DiscriminatedCodec<
+          VariantsOf<KeptByTag<Spec, P, Keep>>,
+          D,
+          KeptByTag<Spec, P, Keep>
+      >
+    : C extends DissectedCodec<infer _T, infer Ks, infer Specs, infer _F>
+      ? DissectedCodec<
+            DerivedVariants<Extracted<Specs, P, Keep>>,
+            Ks,
+            Extracted<Specs, P, Keep>
+        >
+      : C extends UnionCodec<
+              infer _T,
+              infer Options extends readonly unknown[],
+              infer Tm
+          >
+        ? UnionSlice<Tm, KeptOptions<Options, P, Keep>>
+        : UnionSlice<OfParts, KeptOptions<[C], P, Keep>>
+
+/** The member specs that a pattern of a slice of `C` names its keys against. */
+type SliceSpecs<C> = C extends DiscriminatedCodec<
+    infer _T,
+    infer _D,
+    infer Spec,
+    infer _F
+>
+    ? Spec[keyof Spec]
+    : C extends DissectedCodec<infer _T, infer _Ks, infer Specs, infer _F>
+      ? Specs[number]
+      : C extends UnionCodec<
+              infer _T,
+              infer Options extends readonly unknown[],
+              infer _Tm
+          >
+        ? SpecsOf<Options>[number]
+        : SpecsOf<[C]>[number]
 
 export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     /** Every attribute, or why one could not be written. For `PutItem`. */
@@ -4091,6 +4079,13 @@ type ObjectItem = AnyObjectCodec['item'] & {
  * reaches the declared spec of the node. Each object node comes from {@link objectFromMap}.
  */
 const objectItems = new WeakMap<Term, ObjectItem>()
+
+/**
+ * **The slice of each sum node**, keyed by the term of the sum. The term of a dissection is a
+ * `union` term, and only the builder holds its key set. So {@link extract} cannot dispatch on
+ * `def.kind`, and reads the slice here.
+ */
+const sums = new WeakMap<Term, (pattern: unknown, keep: boolean) => unknown>()
 
 /** The whole-item reading of the node that a term names, or nothing where the node is no object. */
 const objectNamed = (t: Term): ObjectItem | undefined => {
@@ -5040,6 +5035,16 @@ const dissect = <T extends Record<string, unknown>>(
     }
 
     const nested = codecOfTerm<T, Attribute<'M'>>(unionDef)
+    // **The slice keeps every key**, at one member as at several. A key the clause pins to one
+    // tag is a constant key on the result, and no normalisation drops a constant key: the
+    // codec writes the tag out of the member's own field, so every item carries it whatever
+    // the key set says. So a one-member result is a one-member dissection that still reads its
+    // key, and `dissect` is handed the same `ks` it was built with.
+    sums.set(nested.def, (pattern, keep) => {
+        const open = openRefusal(unionDef)
+        if (open) throw open
+        return slicedDissection(ks, options, pattern, keep)
+    })
     return {
         encode: nested.encode,
         decode: nested.decode,
@@ -5047,21 +5052,6 @@ const dissect = <T extends Record<string, unknown>>(
         unsafeDecode: nested.unsafeDecode,
         def: nested.def,
         item: self as unknown as Tagged<T, string, Record<string, unknown>>,
-        // **The slice keeps every key**, at one member as at several. A key the clause pins to one
-        // tag is a constant key on the result, and no normalisation drops a constant key: the
-        // codec writes the tag out of the member's own field, so every item carries it whatever
-        // the key set says. So a one-member result is a one-member dissection that still reads its
-        // key, and `dissect` is handed the same `ks` it was built with.
-        extract: (pattern: unknown) => {
-            const open = openRefusal(unionDef)
-            if (open) throw open
-            return slicedDissection(ks, options, pattern, true)
-        },
-        exclude: (pattern: unknown) => {
-            const open = openRefusal(unionDef)
-            if (open) throw open
-            return slicedDissection(ks, options, pattern, false)
-        },
     } as DiscriminatedCodec<T, string, Record<string, unknown>>
 }
 
@@ -5485,7 +5475,7 @@ type EveryOptionTagged<
 /**
  * **A pattern**: a codec that says which options to keep.
  *
- * `extract(pattern)` keeps the options that fit the pattern, and `exclude(pattern)` keeps the rest.
+ * `extract(codec, pattern)` keeps the options that fit the pattern, and `exclude` keeps the rest.
  * An option fits where every value that it holds lies inside what the pattern holds. The host
  * decides that on a fragment: a literal inside a literal of the same base and adapter, a base
  * inside itself, an option inside a union that holds a member of it, and an object inside an object
@@ -5499,7 +5489,7 @@ type EveryOptionTagged<
  * product of its keys, and there the option splits and each part fits or not.
  *
  * The slice of a union and the slice of a field are one operation, and a pattern nests as a
- * codec nests: `pet: pet.extract(object({ status: string('AVAILABLE') }))`.
+ * codec nests: `pet: extract(pet, object({ status: string('AVAILABLE') }))`.
  */
 type PatternSpecs<P> = FieldSpecList<P>[number]
 
@@ -6343,13 +6333,6 @@ export type Extracted<
           ...Extracted<Tail, P, Keep>,
       ]
     : []
-
-/** …and the ones it rejects, the same walk at the complement. */
-export type Excluded<Specs extends readonly unknown[], P> = Extracted<
-    Specs,
-    P,
-    false
->
 
 /** The members of a tag table a pattern keeps, keyed as they were. */
 export type KeptByTag<Spec, P, Keep extends boolean = true> = {
@@ -7450,18 +7433,11 @@ export const union = <const Options extends readonly AnyCodec[]>(
             options: optionTerms,
         },
         item: self as never,
-        // built either way rather than branched, exactly as `item` is: an option that writes no map
-        // declares no name, so it survives no clause, and the type is what says the capability does
-        // not apply to such a union
-        extract: ((pattern: unknown) => {
-            closed()
-            return slicedUnion(options as readonly AnyCodec[], pattern, true)
-        }) as never,
-        exclude: ((pattern: unknown) => {
-            closed()
-            return slicedUnion(options as readonly AnyCodec[], pattern, false)
-        }) as never,
     }
+    sums.set(codec.def, (pattern, keep) => {
+        closed()
+        return slicedUnion(options as readonly AnyCodec[], pattern, keep)
+    })
     // the mark is phantom, so no value carries it and no check can produce it. A union of literal
     // codecs pins their literals at run time (`literalAlternatives`), so the type states the mark
     // where each option carries the mark
@@ -7484,6 +7460,49 @@ const slicedUnion = (
     const kept = picked(options, pattern, keep, true)
     return kept.length === 0 ? never : union(kept as never)
 }
+
+/**
+ * The slice of a sum, or of the union of one option that any other codec is.
+ *
+ * The result is `unknown`: the `sums` registry holds one erased slice function for every sum, and
+ * only {@link extract} and {@link exclude} know the codec type that a call gives. Each of the two
+ * casts the result once, to the `Slice` of the call.
+ */
+const sliced = (codec: AnyCodec, pattern: unknown, keep: boolean): unknown => {
+    const sum = sums.get(codec.def)
+    return sum ? sum(pattern, keep) : sliced(union([codec]), pattern, keep)
+}
+
+/**
+ * **The part of a codec that a pattern keeps**: TypeScript's `Extract`, on codecs. The pattern is a
+ * codec, and an option is kept where every value that it holds lies inside what the pattern holds.
+ *
+ * Every codec is a union of one option, so every codec takes a pattern. A union, a tagged union and
+ * a dissection keep the options that fit, and each keeps its form. Any other codec slices as
+ * `union([codec])`: one option stays whole or goes, and a pattern that splits the option gives
+ * several. The result is rebuilt through {@link union}, so a slice of a certified union is
+ * certified. An extraction that keeps nothing is `never`.
+ *
+ * An object pattern names the keys that it needs, and an option may declare more. The slice goes
+ * into a field that holds a union of objects, and the result stays compact, as the `Extract` of
+ * TypeScript reads it: `{ k, pet: U }` against `{ pet: P }` keeps `{ k, pet: Extract<U, P> }`. So
+ * the extraction has no option that the original lacks.
+ *
+ * @example
+ * ```ts
+ * extract(pet, object({ status: string('AVAILABLE') }))
+ * ```
+ */
+export const extract = <const C extends AnyCodec, const P extends AnyCodec>(
+    codec: C & Closed,
+    pattern: P & ValidatePattern<SliceSpecs<C>, P>,
+): Slice<C, P, true> => sliced(codec, pattern, true) as Slice<C, P, true>
+
+/** …and the part that it rejects, the complement of the same pattern: TypeScript's `Exclude`. */
+export const exclude = <const C extends AnyCodec, const P extends AnyCodec>(
+    codec: C & Closed,
+    pattern: P & ValidatePattern<SliceSpecs<C>, P>,
+): Slice<C, P, false> => sliced(codec, pattern, false) as Slice<C, P, false>
 
 /**
  * How a union of objects is declared: with a tag, or by the attributes each variant has.

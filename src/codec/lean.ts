@@ -67,7 +67,7 @@ import type {
     Precondition,
     Refinement,
 } from './codec'
-import { object, optional, union } from './codec'
+import { exclude, extract, object, optional, union } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed, type Result } from './result'
 import { agrees, disjoint, flatOf, storedApart, viewsDisjoint } from './scoped'
@@ -2201,6 +2201,13 @@ export type Sliceable = AnyCodec & {
     readonly extract: (pattern: AnyCodec) => AnyCodec
     readonly exclude: (pattern: AnyCodec) => AnyCodec
 }
+
+/** A codec, with the two slices of `src/` erased on it. */
+export const sliceableOf = (codec: AnyCodec): Sliceable => ({
+    ...codec,
+    extract: (pattern) => extract(codec, pattern),
+    exclude: (pattern) => exclude(codec, pattern),
+})
 
 /**
  * A union and the clauses put to it: `src/`'s `extract`, against the model's `AltClause.admitsC`.

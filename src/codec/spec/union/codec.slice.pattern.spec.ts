@@ -14,6 +14,8 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    exclude,
+    extract,
     number,
     object,
     optional,
@@ -109,10 +111,10 @@ const decodes = (
 
 describe('a slice goes into a field that holds a union and stays compact', () => {
     const dogs = object({
-        pet: pet.extract(object({ category: string('DOG') })),
+        pet: extract(pet, object({ category: string('DOG') })),
     })
-    const kept = order.extract(dogs)
-    const rest = order.exclude(dogs)
+    const kept = extract(order, dogs)
+    const rest = exclude(order, dogs)
 
     it('keeps each option in place with a narrower union, and each slice is a certified union', () => {
         expect(optionsOf(kept)).toHaveLength(2)
@@ -154,19 +156,19 @@ describe('a slice goes into a field that holds a union and stays compact', () =>
     })
 
     it('keeps an option whole where the option fits the pattern whole', () => {
-        const whole = order.extract(object({ pet }))
+        const whole = extract(order, object({ pet }))
         expect(optionsOf(whole)).toHaveLength(2)
-        expect(order.exclude(object({ pet })).def.kind).toBe('never')
+        expect(exclude(order, object({ pet })).def.kind).toBe('never')
     })
 })
 
 describe('a pattern that nests keeps the members of the field that it keeps', () => {
     const pattern = object({
         kind: string('ADOPT'),
-        pet: pet.extract(object({ status: string('AVAILABLE') })),
+        pet: extract(pet, object({ status: string('AVAILABLE') })),
     })
-    const kept = order.extract(pattern)
-    const rest = order.exclude(pattern)
+    const kept = extract(order, pattern)
+    const rest = exclude(order, pattern)
 
     it('keeps one option, and rejects the other members of its field and the option of another kind', () => {
         expect(optionsOf(kept)).toHaveLength(1)
@@ -196,9 +198,10 @@ describe('a pattern that nests keeps the members of the field that it keeps', ()
     })
 
     it('takes a pattern without a literal at the root', () => {
-        const dogs = order.extract(
+        const dogs = extract(
+            order,
             object({
-                pet: pet.extract(object({ category: string('DOG') })),
+                pet: extract(pet, object({ category: string('DOG') })),
             }),
         )
         expectTypeOf<
@@ -214,10 +217,11 @@ describe('a pattern that nests keeps the members of the field that it keeps', ()
             }),
             object({ kind: string('WALKIN'), id: string }),
         ])
-        const available = visit.extract(
+        const available = extract(
+            visit,
             object({
                 appointment: object({
-                    pet: pet.extract(object({ status: string('AVAILABLE') })),
+                    pet: extract(pet, object({ status: string('AVAILABLE') })),
                 }),
             }),
         )
@@ -231,10 +235,11 @@ describe('a pattern that nests keeps the members of the field that it keeps', ()
     })
 
     it('crosses the members of two nested keys', () => {
-        const swap = union([object({ give: pet, take: pet })]).extract(
+        const swap = extract(
+            union([object({ give: pet, take: pet })]),
             object({
-                give: pet.extract(object({ category: string('DOG') })),
-                take: pet.extract(object({ status: string('AVAILABLE') })),
+                give: extract(pet, object({ category: string('DOG') })),
+                take: extract(pet, object({ status: string('AVAILABLE') })),
             }),
         )
         expect(optionsOf(swap)).toHaveLength(1)
@@ -248,9 +253,9 @@ describe('the slice is the Extract of TypeScript, applied inside the field', () 
         | { readonly kind: 'ADOPT'; readonly pet: Dogs }
         | { readonly kind: 'RETURN'; readonly pet: Dogs; readonly note: string }
     const dogs = object({
-        pet: pet.extract(object({ category: string('DOG') })),
+        pet: extract(pet, object({ category: string('DOG') })),
     })
-    const kept = order.extract(dogs)
+    const kept = extract(order, dogs)
 
     it('types the extraction as the form that a model writes', () => {
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<Model>()
@@ -273,10 +278,11 @@ describe('the slice is the Extract of TypeScript, applied inside the field', () 
             object({ kind: string('ADOPT'), pet }),
             object({
                 kind: string('RETURN'),
-                pet: pet.extract(object({ status: string('SOLD') })),
+                pet: extract(pet, object({ status: string('SOLD') })),
             }),
             object({
-                pet: pet.extract(
+                pet: extract(
+                    pet,
                     object({
                         category: string('CAT'),
                         status: string('PENDING'),
@@ -285,7 +291,7 @@ describe('the slice is the Extract of TypeScript, applied inside the field', () 
             }),
         ]
         for (const pattern of patterns) {
-            const slice = order.extract(pattern)
+            const slice = extract(order, pattern)
             expect(optionsOf(slice).length).toBeLessThanOrEqual(
                 optionsOf(order).length,
             )
@@ -298,24 +304,24 @@ describe('the slice is the Extract of TypeScript, applied inside the field', () 
     it('rejects with one option for each split key, because the complement of a product is no product', () => {
         const swap = union([object({ give: pet, take: pet })])
         const both = object({
-            give: pet.extract(object({ category: string('DOG') })),
-            take: pet.extract(object({ status: string('AVAILABLE') })),
+            give: extract(pet, object({ category: string('DOG') })),
+            take: extract(pet, object({ status: string('AVAILABLE') })),
         })
-        expect(optionsOf(swap.extract(both))).toHaveLength(1)
-        expect(optionsOf(swap.exclude(both))).toHaveLength(2)
+        expect(optionsOf(extract(swap, both))).toHaveLength(1)
+        expect(optionsOf(exclude(swap, both))).toHaveLength(2)
         const single = object({
-            take: pet.extract(object({ status: string('AVAILABLE') })),
+            take: extract(pet, object({ status: string('AVAILABLE') })),
         })
-        expect(optionsOf(swap.exclude(single))).toHaveLength(1)
+        expect(optionsOf(exclude(swap, single))).toHaveLength(1)
     })
 
     it('splits an option at a union pattern, and the parts still partition the values', () => {
         const eitherPet = union([
-            object({ pet: pet.extract(object({ category: string('DOG') })) }),
-            object({ pet: pet.extract(object({ status: string('SOLD') })) }),
+            object({ pet: extract(pet, object({ category: string('DOG') })) }),
+            object({ pet: extract(pet, object({ status: string('SOLD') })) }),
         ])
-        const kept = order.extract(eitherPet)
-        const rest = order.exclude(eitherPet)
+        const kept = extract(order, eitherPet)
+        const rest = exclude(order, eitherPet)
         for (const row of valid) {
             const inKept = decodes(kept, row)
             const inRest = decodes(rest, row)
@@ -336,7 +342,7 @@ describe('a union that holds other kinds beside objects slices by any codec', ()
     ])
 
     it('keeps the members that fit a base', () => {
-        const strings = mixed.extract(string)
+        const strings = extract(mixed, string)
         expect(optionsOf(strings)).toHaveLength(1)
         expectTypeOf<Decoded<typeof strings>>().toEqualTypeOf<string>()
         expect(strings.decode({ S: 'x' })).toBe('x')
@@ -344,12 +350,12 @@ describe('a union that holds other kinds beside objects slices by any codec', ()
     })
 
     it('keeps the objects that fit an object pattern, and the rest in the exclusion', () => {
-        const dogs = mixed.extract(object({ kind: string('DOG') }))
+        const dogs = extract(mixed, object({ kind: string('DOG') }))
         expectTypeOf<Decoded<typeof dogs>>().toEqualTypeOf<{
             readonly kind: 'DOG'
             readonly age: Dec
         }>()
-        expect(optionsOf(mixed.exclude(string))).toHaveLength(3)
+        expect(optionsOf(exclude(mixed, string))).toHaveLength(3)
     })
 })
 
@@ -357,10 +363,10 @@ describe('a pattern that describes no member is refused', () => {
     it('refuses a key that no member declares, at a nested level too', () => {
         const atRoot = () =>
             // @ts-expect-error no member declares the key
-            order.extract(object({ nope: string('x') }))
+            extract(order, object({ nope: string('x') }))
         const nested = () =>
             // @ts-expect-error no member of the field declares the key
-            order.extract(object({ pet: object({ nope: string('x') }) }))
+            extract(order, object({ pet: object({ nope: string('x') }) }))
         expect(atRoot).toThrow(CodecError)
         expect(nested).toThrow(CodecError)
     })
@@ -368,7 +374,7 @@ describe('a pattern that describes no member is refused', () => {
     it('refuses a literal at a base that no member pins at the key', () => {
         const wrongBase = () =>
             // @ts-expect-error a decimal literal at a key that the members pin to a string
-            order.extract(object({ kind: decimal('1') }))
+            extract(order, object({ kind: decimal('1') }))
         expect(wrongBase).toThrow(CodecError)
     })
 
@@ -382,12 +388,12 @@ describe('a pattern that describes no member is refused', () => {
             string('ADOPT', 'RETURN'),
             (v): v is 'ADOPT' => v === 'ADOPT',
         )
-        const byPredicate = () => order.extract(object({ kind: refined }))
+        const byPredicate = () => extract(order, object({ kind: refined }))
         expect(byPredicate).toThrow(/holds a refinement/)
     })
 
     it('keeps no option for a literal at the right base that no member pins', () => {
-        const none = order.extract(object({ kind: string('UNKNOWN') }))
+        const none = extract(order, object({ kind: string('UNKNOWN') }))
         expect(none.def.kind).toBe('never')
     })
 
@@ -403,7 +409,7 @@ describe('a pattern that describes no member is refused', () => {
             object({ kind: string('UNLISTED'), tags: object({ id: string }) }),
         ])
         const split = () =>
-            open.extract(object({ tags: object({ id: string('tag-1') }) }))
+            extract(open, object({ tags: object({ id: string('tag-1') }) }))
         expect(split).toThrow(/open key entry/)
     })
 
@@ -413,12 +419,13 @@ describe('a pattern that describes no member is refused', () => {
             object({ kind: string('RETURN'), pet }),
         ])
         const split = () =>
-            byKind.extract(
+            extract(
+                byKind,
                 object({
-                    pet: pet.extract(object({ status: string('AVAILABLE') })),
+                    pet: extract(pet, object({ status: string('AVAILABLE') })),
                 }),
             )
         expect(split).toThrow(/keeps its members whole/)
-        expect(optionsOf(byKind.extract(object({ pet })))).toHaveLength(2)
+        expect(optionsOf(extract(byKind, object({ pet })))).toHaveLength(2)
     })
 })

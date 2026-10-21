@@ -706,7 +706,7 @@ const sliceRoot = (
                 const clause = { [name]: make() }
                 const spelled = p.clause(make())
                 const text = `${op}({ ${keyText(name)}: ${spelled} })`
-                const call = `${op}(object({ ${keyText(name)}: ${spelled} }))`
+                const pattern = `object({ ${keyText(name)}: ${spelled} })`
                 const kept = sliced(slice.codec[op], clause)
                 const callRow = rowId(
                     'call',
@@ -721,7 +721,7 @@ const sliceRoot = (
                         id: callRow,
                         expect: kept === undefined ? 'refuse' : 'accept',
                     },
-                    `const r = C.${p.full('root')}.${call}`,
+                    `const r = ${op}(C.${p.full('root')}, ${pattern})`,
                 )
                 if (kept !== undefined)
                     keptOptions(options, kept).forEach((keeps, i) => {
@@ -897,7 +897,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { binary, boolean, decimal, dynamoNumber, number, object, string } from '${library}/codec'`,
+    `import { binary, boolean, decimal, dynamoNumber, exclude, extract, number, object, string } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",

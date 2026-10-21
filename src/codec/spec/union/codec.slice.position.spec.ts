@@ -12,6 +12,8 @@ import {
     array,
     CodecError,
     decimal,
+    exclude,
+    extract,
     list,
     object,
     product,
@@ -91,8 +93,8 @@ describe('a pattern reaches a position of a fixed list as it reaches a key', () 
             object({ status: string('AVAILABLE') }),
         ),
     })
-    const kept = plan.extract(pattern)
-    const rest = plan.exclude(pattern)
+    const kept = extract(plan, pattern)
+    const rest = exclude(plan, pattern)
 
     it('keeps the option of that arity, with a narrower union at each position', () => {
         expect(optionsOf(kept)).toHaveLength(1)
@@ -160,14 +162,14 @@ describe('a pattern reaches a position of a fixed list as it reaches a key', () 
     })
 
     it('keeps an option whole where each position fits whole', () => {
-        const whole = plan.extract(object({ route: list(pet, pet) }))
+        const whole = extract(plan, object({ route: list(pet, pet) }))
         expect(optionsOf(whole)).toHaveLength(1)
         expect(optionsOf(whole)[0]).toBe(optionsOf(plan)[1])
     })
 
     it('takes a slice of the field as the pattern at a position', () => {
-        const dogs = pet.extract(object({ category: string('DOG') }))
-        const one = plan.extract(object({ route: list(dogs) }))
+        const dogs = extract(pet, object({ category: string('DOG') }))
+        const one = extract(plan, object({ route: list(dogs) }))
         expectTypeOf<Decoded<typeof one>>().toEqualTypeOf<{
             readonly type: 'ONE'
             readonly route: readonly [
@@ -182,7 +184,8 @@ describe('a list of free length has no positions to reach', () => {
 
     it('refuses a fixed pattern, because an array declares no position', () => {
         const fixed = () =>
-            many.extract(
+            extract(
+                many,
                 // @ts-expect-error an array declares no position for the pattern to reach
                 object({ route: list(object({ category: string('DOG') })) }),
             )
@@ -193,7 +196,8 @@ describe('a list of free length has no positions to reach', () => {
 describe('a pattern at a position answers to the refusals of a key', () => {
     it('refuses a key that no member of the position declares', () => {
         const typo = () =>
-            plan.extract(
+            extract(
+                plan,
                 // @ts-expect-error no member at the position declares the key
                 object({ route: list(object({ nope: string('x') })) }),
             )
@@ -202,7 +206,8 @@ describe('a pattern at a position answers to the refusals of a key', () => {
 
     it('refuses a literal that no member of the position pins at that base', () => {
         const wrongBase = () =>
-            plan.extract(
+            extract(
+                plan,
                 // @ts-expect-error a decimal literal where the members pin a string
                 object({ route: list(object({ category: decimal('1') })) }),
             )
@@ -223,13 +228,15 @@ describe('a pattern at a position answers to the refusals of a key', () => {
             }),
         ])
         const typo = () =>
-            held.extract(
+            extract(
+                held,
                 // @ts-expect-error no member at the nested position declares the key
                 object({ r: list(list(object({ nope: string('x') }))) }),
             )
         expect(typo).toThrow(/'nope' is not a key any member declares/)
         const wrongBase = () =>
-            held.extract(
+            extract(
+                held,
                 // @ts-expect-error a decimal literal where the members pin a string
                 object({ r: list(list(object({ category: decimal('1') }))) }),
             )
@@ -251,7 +258,8 @@ describe('a union pattern splits an option at a position as it splits one at a f
 
     it('keeps one option for each pattern member at a field', () => {
         const held = union([object({ x: union([Dog, Cat]) })])
-        const kept = held.extract(
+        const kept = extract(
+            held,
             union([object({ x: Dog }), object({ x: Cat })]),
         )
         expect(optionsOf(kept)).toHaveLength(2)
@@ -266,13 +274,13 @@ describe('a union pattern splits an option at a position as it splits one at a f
             object({ r: list(Dog) }),
             object({ r: list(Cat) }),
         ])
-        const kept = held.extract(pattern)
+        const kept = extract(held, pattern)
         expect(optionsOf(kept)).toHaveLength(2)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             { readonly r: readonly [Dog] } | { readonly r: readonly [Cat] }
         >()
         // the members cover the position, so nothing is rejected
-        expect(optionsOf(held.exclude(pattern))).toHaveLength(0)
+        expect(optionsOf(exclude(held, pattern))).toHaveLength(0)
         for (const row of [dog, cat]) {
             const value = { M: { r: { L: [row] } } } as AttributeValue
             expect(decodes(kept, value)).toEqual(decodes(held, value))
@@ -288,8 +296,8 @@ describe('a union pattern splits an option at a position as it splits one at a f
             object({ r: list(Dog) }),
             object({ r: list(Dog, Cat) }),
         ])
-        const kept = held.extract(pattern)
-        const rest = held.exclude(pattern)
+        const kept = extract(held, pattern)
+        const rest = exclude(held, pattern)
         expect(optionsOf(kept)).toHaveLength(2)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             { readonly r: readonly [Dog] } | { readonly r: readonly [Dog, Cat] }
@@ -324,8 +332,8 @@ describe('a union pattern splits an option at a position as it splits one at a f
             object({ x: Dog, r: list(Cat) }),
             object({ x: Cat, r: list(Dog) }),
         ])
-        const kept = held.extract(pattern)
-        const rest = held.exclude(pattern)
+        const kept = extract(held, pattern)
+        const rest = exclude(held, pattern)
         expect(optionsOf(kept)).toHaveLength(2)
         expect(optionsOf(rest)).toHaveLength(2)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
@@ -355,13 +363,13 @@ describe('a union pattern splits an option at a position as it splits one at a f
             object({ r: list(list(Dog)) }),
             object({ r: list(list(Cat)) }),
         ])
-        const kept = held.extract(pattern)
+        const kept = extract(held, pattern)
         expect(optionsOf(kept)).toHaveLength(2)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             | { readonly r: readonly [readonly [Dog]] }
             | { readonly r: readonly [readonly [Cat]] }
         >()
-        expect(optionsOf(held.exclude(pattern))).toHaveLength(0)
+        expect(optionsOf(exclude(held, pattern))).toHaveLength(0)
         for (const row of [dog, cat]) {
             const value = {
                 M: { r: { L: [{ L: [row] }] } },

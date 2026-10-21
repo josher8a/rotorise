@@ -1786,6 +1786,8 @@ export {
     discriminatedUnion,
     every,
     everyEntry,
+    exclude,
+    extract,
     failed,
     held,
     list,

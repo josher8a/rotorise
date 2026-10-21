@@ -32,6 +32,8 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    exclude,
+    extract,
     held,
     list,
     mdunion,
@@ -60,7 +62,6 @@ import type {
     PathVectors,
     Separation,
     Slice,
-    Sliceable,
 } from '../lean'
 import {
     hostAt,
@@ -78,6 +79,7 @@ import {
     leanSliceModule,
     pairGuardRefusal,
     reachable,
+    sliceableOf,
     unionAt,
 } from '../lean'
 import { orThrow } from '../result'
@@ -187,12 +189,6 @@ const declare = (
     const made = erase(make())
     unions.push({ codec: made, keys })
     return made
-}
-
-/** The two slices of a dissection, which `mdunion` returns. */
-type Slices = {
-    readonly extract: (pattern: unknown) => unknown
-    readonly exclude: (pattern: unknown) => unknown
 }
 
 /**
@@ -486,17 +482,23 @@ const draw = (depth: number): Entry => {
                         [small.codec, large.codec],
                     ),
                 ['k', 's'],
-            ) as AnyCodec & Slices
+            )
             const slice = rng()
+            // `whole` is erased, so its member specs are unknown and the type refuses every
+            // pattern on it. The cast on the pattern states that the pool chose a valid one.
             if (slice < 0.33)
                 return {
                     name: `extract(s=x,${name})`,
-                    codec: erase(whole.extract(object({ s: string('x') }))),
+                    codec: erase(
+                        extract(whole, object({ s: string('x') }) as AnyCodec),
+                    ),
                 }
             if (slice < 0.67)
                 return {
                     name: `exclude(s=x,${name})`,
-                    codec: erase(whole.exclude(object({ s: string('x') }))),
+                    codec: erase(
+                        exclude(whole, object({ s: string('x') }) as AnyCodec),
+                    ),
                 }
             return { name, codec: whole }
         }
@@ -781,8 +783,7 @@ const slicesOf = (declared: readonly Declared[], first: number): Slice[] => {
         const id = `${keys.join(',')}|${printed}`
         if (seen.has(id)) continue
         seen.add(id)
-        // a union and a dissection each carry `extract`, which the erased codec does not show
-        const sliceable = codec as Sliceable
+        const sliceable = sliceableOf(codec)
         const name = `slice_${first + slices.length}`
         const clauses: Readonly<Record<string, AnyCodec>>[] = []
         for (const key of new Set(fields.flat())) {

@@ -12,6 +12,8 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    exclude,
+    extract,
     list,
     never,
     nullable,
@@ -171,8 +173,8 @@ describe('a set element and a slice read the node that a ref names', () => {
             O: object({ m: string }),
             U: union([h, ref('O')]),
         })
-        expect(() => U.extract(object({ b: decimal('1') }))).not.toThrow()
-        expect(() => U.exclude(object({ b: decimal('2.5') }))).not.toThrow()
+        expect(() => extract(U, object({ b: decimal('1') }))).not.toThrow()
+        expect(() => exclude(U, object({ b: decimal('2.5') }))).not.toThrow()
     })
 })
 

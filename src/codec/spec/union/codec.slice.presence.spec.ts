@@ -12,6 +12,8 @@ import {
     type AnyCodec,
     type Decoded,
     discriminatedUnion,
+    exclude,
+    extract,
     object,
     optional,
     product,
@@ -65,8 +67,8 @@ const single = union([object({ k: string('A'), a: optional(string) })])
 const wantA = object({ a: string })
 
 describe('the extraction keeps the present part with the key required, and the exclusion keeps the absent part', () => {
-    const kept = single.extract(wantA)
-    const rejected = single.exclude(wantA)
+    const kept = extract(single, wantA)
+    const rejected = exclude(single, wantA)
     it('types each slice by what the run time keeps', () => {
         expectTypeOf<
             Equal<Decoded<typeof kept>, { readonly k: 'A'; readonly a: string }>
@@ -114,8 +116,8 @@ const mixed = union([
 ])
 
 describe('an option without the key, an option that requires it, and an option that may hold undefined', () => {
-    const kept = mixed.extract(wantA)
-    const rejected = mixed.exclude(wantA)
+    const kept = extract(mixed, wantA)
+    const rejected = exclude(mixed, wantA)
     it('types each slice by what the run time keeps', () => {
         expectTypeOf<
             Equal<
@@ -140,10 +142,10 @@ describe('an option without the key, an option that requires it, and an option t
         expect(got.inRejected).toBeGreaterThan(0)
     })
     it('refuses a key that no option declares', () => {
-        expect(() => mixed.extract(object({ zz: string }) as never)).toThrow(
+        expect(() => extract(mixed, object({ zz: string }) as never)).toThrow(
             /'zz' is not a key any member declares/,
         )
-        expect(() => single.extract(object({ zz: string }) as never)).toThrow(
+        expect(() => extract(single, object({ zz: string }) as never)).toThrow(
             /'zz' is not a key any member declares/,
         )
     })
@@ -161,8 +163,8 @@ const nest = union([
 
 describe('the present part is sliced again, and two keys that may be absent split', () => {
     const p = object({ pet: object({ kind: string('dog') }), b: string })
-    const kept = nest.extract(p)
-    const rejected = nest.exclude(p)
+    const kept = extract(nest, p)
+    const rejected = exclude(nest, p)
     it('types each slice by what the run time keeps', () => {
         expectTypeOf<
             Equal<
@@ -205,8 +207,8 @@ const offers = product(supplies, kinds)
 describe('a product of a supply family and a price family, where one supply option may omit a key', () => {
     const p = object({ supplyType: TOY, warrantyId: string })
     it('extract and exclude', () => {
-        const kept = offers.extract(p)
-        const rejected = offers.exclude(p)
+        const kept = extract(offers, p)
+        const rejected = exclude(offers, p)
         expectTypeOf<
             Equal<
                 Decoded<typeof kept>,
@@ -236,8 +238,8 @@ describe('a union pattern splits an option at a field that may be absent', () =>
         object({ supplyType: KIBBLE }),
         object({ supplyType: TOY, warrantyId: string }),
     ])
-    const kept = offers.extract(p)
-    const rejected = offers.exclude(p)
+    const kept = extract(offers, p)
+    const rejected = exclude(offers, p)
     it('types each slice by what the run time keeps', () => {
         type Committed =
             | {
@@ -314,14 +316,14 @@ describe('a dissection keeps its members whole, so no member splits at presence'
     const pattern = object({ supplyType: TOY, warrantyId: string })
 
     it('keeps in the extraction no member that does not fit whole', () => {
-        expect(decoded(supplies.extract(pattern))).toEqual([
+        expect(decoded(extract(supplies, pattern))).toEqual([
             false,
             false,
             false,
         ])
     })
     it('keeps in the exclusion each member whole', () => {
-        expect(decoded(supplies.exclude(pattern))).toEqual([true, true, true])
+        expect(decoded(exclude(supplies, pattern))).toEqual([true, true, true])
     })
 })
 
@@ -329,12 +331,12 @@ describe('a pattern key that no option declares is refused in the type', () => {
     it('refuses it at the top and at depth, and accepts a key that one option declares as optional', () => {
         expect(() =>
             // @ts-expect-error no option declares 'zz'
-            mixed.extract(object({ zz: string })),
+            extract(mixed, object({ zz: string })),
         ).toThrow()
         expect(() =>
             // @ts-expect-error no option declares 'zz', at depth
-            nest.extract(object({ pet: object({ zz: string }) })),
+            extract(nest, object({ pet: object({ zz: string }) })),
         ).toThrow()
-        expect(() => single.extract(object({ a: string }))).not.toThrow()
+        expect(() => extract(single, object({ a: string }))).not.toThrow()
     })
 })

@@ -39,6 +39,7 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    extract,
     held,
     list,
     mdunion,
@@ -108,6 +109,7 @@ import {
     readVerdictRows,
     resolutionRows,
     separationRows,
+    sliceableOf,
     vectorRows,
 } from '../lean'
 import { CodecError, orThrow } from '../result'
@@ -1787,11 +1789,14 @@ const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
     [
         'u_extracted',
         erase(
-            union([
-                object({ kind: string('a'), x: string }),
-                object({ kind: string('b'), x: boolean }),
-                object({ kind: string('c'), x: decimal }),
-            ]).extract(object({ kind: string('a', 'b') })),
+            extract(
+                union([
+                    object({ kind: string('a'), x: string }),
+                    object({ kind: string('b'), x: boolean }),
+                    object({ kind: string('c'), x: decimal }),
+                ]),
+                object({ kind: string('a', 'b') }),
+            ),
         ),
     ],
     [
@@ -2679,9 +2684,8 @@ describe('the committed sample', () => {
 })
 
 describe("the slice, against the model's `AltClause.admitsC`", () => {
-    /** A union of objects carries `extract`, which the erased codec does not show. */
     const sliceable = (options: readonly unknown[]): Sliceable =>
-        union(options as never) as unknown as Sliceable
+        sliceableOf(union(options as never))
     const one = (t: unknown, clause: Readonly<Record<string, unknown>>) =>
         refusal(() =>
             leanSlice({
@@ -2759,10 +2763,12 @@ describe("the slice, against the model's `AltClause.admitsC`", () => {
      * the host assigns, and the row keeps the options with that tag: the option itself included.
      */
     it('states that each option of a dissection answers to the tag the host assigns', () => {
-        const codec = discriminatedUnion('kind', [
-            object({ kind: string('a'), x: string }),
-            object({ kind: string('b'), y: string }),
-        ] as never) as unknown as Sliceable
+        const codec = sliceableOf(
+            discriminatedUnion('kind', [
+                object({ kind: string('a'), x: string }),
+                object({ kind: string('b'), y: string }),
+            ] as never),
+        )
         const text = leanSlice({
             name: 'tags',
             codec,
@@ -2858,10 +2864,12 @@ describe("the slice, against the model's `AltClause.admitsC`", () => {
 
     /** **A dissection tag behind `decimal` keys its member under the word of `decimal`.** */
     it('states the tag of a dissection behind `decimal` under the word of `decimal`', () => {
-        const codec = discriminatedUnion('kind', [
-            object({ kind: decimal('1'), x: string }),
-            object({ kind: decimal('2'), y: string }),
-        ] as never) as unknown as Sliceable
+        const codec = sliceableOf(
+            discriminatedUnion('kind', [
+                object({ kind: decimal('1'), x: string }),
+                object({ kind: decimal('2'), y: string }),
+            ] as never),
+        )
         const text = leanSlice({
             name: 'tags',
             codec,

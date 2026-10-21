@@ -13,7 +13,14 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import type { Decoded } from '../../codec'
-import { discriminatedUnion, object, string, union } from '../../codec'
+import {
+    discriminatedUnion,
+    exclude,
+    extract,
+    object,
+    string,
+    union,
+} from '../../codec'
 import { failed } from '../../result'
 
 const owner = union([
@@ -131,8 +138,8 @@ describe('every summand fits a member of the union pattern in part', () => {
             object({ owner: object({ type: string('SHELTER') }) }),
         ]),
     })
-    const kept = order.extract(both)
-    const rest = order.exclude(both)
+    const kept = extract(order, both)
+    const rest = exclude(order, both)
 
     it('keeps every class that the pattern describes, and the type admits each of them', () => {
         expect(keptBy(kept)).toEqual(all)
@@ -177,8 +184,8 @@ describe('one summand fits a member in part and another fits a member whole', ()
         RETURN_CAT_PERSON: false,
         RETURN_CAT_SHELTER: false,
     } as const
-    const kept = order.extract(mixed)
-    const rest = order.exclude(mixed)
+    const kept = extract(order, mixed)
+    const rest = exclude(order, mixed)
 
     it('keeps the part of the summand that fits, and the type admits it', () => {
         expect(keptBy(kept)).toEqual(keptClasses)
@@ -201,8 +208,8 @@ describe('a pattern that is a union of objects splits the option', () => {
         object({ pet: object({ owner: object({ type: string('PERSON') }) }) }),
         object({ pet: object({ owner: object({ type: string('SHELTER') }) }) }),
     ])
-    const kept = order.extract(eitherOwner)
-    const rest = order.exclude(eitherOwner)
+    const kept = extract(order, eitherOwner)
+    const rest = exclude(order, eitherOwner)
 
     it('keeps every class, and the type admits each of them', () => {
         expect(keptBy(kept)).toEqual(all)
@@ -366,7 +373,7 @@ describe('the partial fit sits two levels down', () => {
         RETURN_CAT_EMAIL: true,
         RETURN_CAT_SHELTER: true,
     } as const
-    const kept = adoption.extract(phoneOrCat)
+    const kept = extract(adoption, phoneOrCat)
 
     it('keeps the contact part that fits, and the type admits it', () => {
         expect(keptDeep(kept)).toEqual(keptClasses)
@@ -388,7 +395,7 @@ describe('a dissection keeps its members whole', () => {
                 object({ owner: object({ type: string('SHELTER') }) }),
             ]),
         })
-        const slice = () => byKind.extract(both)
+        const slice = () => extract(byKind, both)
         expect(slice).toThrow(/keeps its members whole/)
     })
 })
