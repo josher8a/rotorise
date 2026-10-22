@@ -192,28 +192,26 @@ repair is to route the remaining site through the same seam, not to write a rend
 
 ---
 
-## Partially mitigated: the type level reads a literal off a type, and the term is what the runtime reads
+## Partially mitigated: the type level reads a key pinned through a ref as unpinned
 
-**Observation.** A pattern pins a key at the term only where a literal constructor built the codec.
-The type reads that fact from the phantom mark literalMarker in `src/codec/codec.ts`: the literal
-overloads of `string`, `decimal`, `number` and `boolean` set the mark, `refine` over a marked codec
-keeps the mark, and `union` sets the mark where each option carries the mark. A caller's adapter
-and a `ref(...)` carry no mark. So `extract(...)`, `exclude(...)` and their result types read the same members
-as the runtime for a key pinned by a caller's adapter. Two cases remain. The first was measured
-2026-10-10 with `npx tsc --noEmit` and the pin below. The second was measured 2026-10-19 with a
-throwaway spec:
+**Observation.** A pattern pins a key at the term only where the term holds a literal. The type
+level reads the literal from the term of the codec, as the run time does: a literal, a union of
+literals, and a library adapter over a pin each pin the key, a caller's adapter pins nothing, and a
+refinement in a pattern is refused at the type and at run time. One case remains. The pattern
+readers take a field codec out of a member spec, and inside a scope entry the field is still the
+`ref`, with no scope to resolve the name. Measured 2026-10-22 with `npx tsc --noEmit` and the pin
+below:
 
     a key pinned through `ref('Colour')`, where the scope binds `Colour: string('red', 'blue')`
       type checker: the pattern on that key is refused
       runtime:      the key is pinned, and the member is kept
-    extract(u, object({ k: refine(string('A', 'C'), (v): v is 'A' => v === 'A') }))
-      type checker: accepted
-      runtime:      CodecError: the pattern at 'k' holds a refinement
 
-**Effect.** A `ref(...)` carries the term of a name and no literal mark, so a pattern cannot name a
-key pinned through a `ref(...)`. A refinement passes as a pattern at the type, and the runtime
-refuses the pattern at the call. Each case refuses: none gives a green typecheck and a wrong member
-set.
+**Effect.** A pattern cannot name a key pinned through a `ref(...)`. The case refuses: it gives no
+green typecheck and a wrong member set.
+
+**Open.** A field closed in its scope closes the case, on both sides. The run time binds a `ref`
+through a slot, and the key set of a dissection lives in a table beside the term, so a closed copy
+of a field loses its dissection.
 
 **Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the refusal of a key pinned through a
 `ref(...)`, the exclusion that keeps the adapter member, and the slice that keeps a member pinned

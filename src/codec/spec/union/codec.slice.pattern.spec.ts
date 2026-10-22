@@ -380,14 +380,15 @@ describe('a pattern that describes no member is refused', () => {
 
     /**
      * A refinement narrows a literal by a predicate, and no function decides whether a member lies
-     * inside a closure. The type passes the pattern, because the refinement keeps the literal mark,
-     * so the run time refuses at the call and no empty slice stands for an answer.
+     * inside a closure. The type and the run time each refuse the pattern at the call, so no empty
+     * slice stands for an answer.
      */
     it('refuses a pattern field that holds a refinement', () => {
         const refined = refine(
             string('ADOPT', 'RETURN'),
             (v): v is 'ADOPT' => v === 'ADOPT',
         )
+        // @ts-expect-error a pattern key that holds a refinement describes no member
         const byPredicate = () => extract(order, object({ kind: refined }))
         expect(byPredicate).toThrow(/holds a refinement/)
     })

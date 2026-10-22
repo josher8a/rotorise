@@ -44,6 +44,7 @@ import type {
     HoldsNoValue,
     KindOfFrames,
     NarrowFrames,
+    NodeOf,
     OffersAt,
     ScopeWallCycle,
     StepFrames,
@@ -123,23 +124,6 @@ declare const fallbackMarker: unique symbol
 
 /** Type-level only, for the same reason as {@link optionalMarker}. */
 declare const undefinableMarker: unique symbol
-
-/**
- * Marks a codec that a literal constructor built: `string('a')`, `number(1)`, `decimal('1')`,
- * `boolean(true)`, and each form with more than one value.
- *
- * Type-level only. A clause pins a key only where the term pins a literal, and only a literal
- * constructor builds such a term. The decoded type cannot say which constructor built a codec: a
- * caller's adapter can decode to a literal type over a term that pins nothing. So the readers that
- * ask whether a key is pinned read this mark, and no adapter sets the mark.
- */
-declare const literalMarker: unique symbol
-
-/** The mark of {@link literalMarker}, on a codec that a literal constructor built. */
-type LiteralMark = { readonly [literalMarker]: true }
-
-/** The mark where each codec of `C` carries the mark, and nothing otherwise. */
-type LiteralMarkOf<C> = [C] extends [LiteralMark] ? LiteralMark : unknown
 
 /*
  * **The model's term of a codec, in its type.** Optional, so no value carries it and no
@@ -1059,13 +1043,10 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
     TermMark<BaseT<'string'>> & {
         <const T extends string>(
             only: T,
-        ): ConstantCodec<T, Attribute<'S'>> &
-            LiteralMark &
-            TermMark<LitT<'string', T>>
+        ): ConstantCodec<T, Attribute<'S'>> & TermMark<LitT<'string', T>>
         <const L extends readonly string[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'S'>> &
-            LiteralMark &
             TermMark<LitsT<'string', L>>
         readonly set: {
             (): AttributeCodec<ReadonlySet<string>, SS> &
@@ -1116,14 +1097,12 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
         <const T extends DynamoNumber>(
             only: T,
         ): ConstantCodec<T, Attribute<'N'>> &
-            LiteralMark &
             TermMark<LitT<'number', NumText<T>>>
         // a tuple, because inference unions no two object candidates: `readonly T[]` reads `T` off
         // the first numeral, and refuses a second numeral with another text
         <const T extends readonly DynamoNumber[]>(
             ...allowed: T
         ): AttributeCodec<T[number], Attribute<'N'>> &
-            LiteralMark &
             TermMark<LitsT<'number', NumTexts<T>>>
         readonly set: {
             (): AttributeCodec<ReadonlySet<DynamoNumber>, NS> &
@@ -1223,12 +1202,10 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> &
         <const T extends string>(
             only: T,
         ): ConstantCodec<T, Attribute<'N'>> &
-            LiteralMark &
             TermMark<HeldT<LitT<'number', T>, LitT<'string', T>, 'decimalText'>>
         <const L extends readonly string[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'N'>> &
-            LiteralMark &
             TermMark<
                 HeldT<LitsT<'number', L>, LitsT<'string', L>, 'decimalText'>
             >
@@ -1351,12 +1328,10 @@ export const number: AttributeCodec<number, Attribute<'N'>> &
         <const T extends number>(
             only: T,
         ): ConstantCodec<T, Attribute<'N'>> &
-            LiteralMark &
             TermMark<FloatT<LitT<'number', `${T}`>>>
         <const L extends readonly number[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'N'>> &
-            LiteralMark &
             TermMark<FloatT<LitsT<'number', FloatTexts<L>>>>
         readonly set: {
             (): AttributeCodec<ReadonlySet<number>, NS> &
@@ -1402,13 +1377,10 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
     TermMark<BaseT<'boolean'>> & {
         <const T extends boolean>(
             only: T,
-        ): ConstantCodec<T, Attribute<'BOOL'>> &
-            LiteralMark &
-            TermMark<LitT<'boolean', T>>
+        ): ConstantCodec<T, Attribute<'BOOL'>> & TermMark<LitT<'boolean', T>>
         <const L extends readonly boolean[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'BOOL'>> &
-            LiteralMark &
             TermMark<LitsT<'boolean', L>>
     }
 
@@ -1458,12 +1430,10 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
         (
             only: Uint8Array,
         ): ConstantCodec<Uint8Array, Attribute<'B'>> &
-            LiteralMark &
             TermMark<LitT<'binary', string>>
         (
             ...allowed: readonly Uint8Array[]
         ): AttributeCodec<Uint8Array, Attribute<'B'>> &
-            LiteralMark &
             TermMark<['union', LitT<'binary', string>[]]>
         readonly set: {
             (): AttributeCodec<ReadonlySet<Uint8Array>, BS> &
@@ -1958,24 +1928,9 @@ type RefineOptions<Narrow> = {
 }
 
 /**
- * Two signatures, one codec. A refinement of a literal constructor keeps the mark of the literal
- * ({@link literalMarker}), because the term under the predicate pins the literal: the members of a
- * slice and the walk of `at` read through a refinement.
+ * A codec narrowed by a predicate. The term `['refine', Tm]` keeps the term under the predicate:
+ * the members of a slice and the walk of `at` read a literal through a refinement.
  */
-export function refine<
-    Wide,
-    Narrow extends Wide,
-    A extends AttributeValue,
-    Tm = FreeTerm,
-    F extends string = never,
->(
-    inner: AttributeCodec<Wide, A> & LiteralMark & TermMark<Tm> & Free<F>,
-    is: (value: Wide) => value is Narrow,
-    options?: RefineOptions<Narrow>,
-): Refined<Narrow, A, ['refine', Tm]> &
-    LiteralMark &
-    TermMark<['refine', Tm]> &
-    Free<F>
 export function refine<
     Wide,
     Narrow extends Wide,
@@ -2546,10 +2501,8 @@ type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
             DecodeTerm<Tm>,
             { [I in keyof Options]: DefOf<Defs, Options[I]> },
             Tm
-        > &
-            LiteralMarkOf<C>
+        >
       : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
-            LiteralMarkOf<C> &
             TermMark<Tm> &
             SetCapable<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue, Tm> &
             (C extends OptionsMark<infer Os extends readonly unknown[]>
@@ -3236,8 +3189,8 @@ type ClauseApart<X, C> = true extends {
  * **Two codecs whose stored attributes cannot meet**: the members of DynamoDB that the two write
  * share none, or each pins literals and the two pins share no stored value. The stored attribute
  * of an adapter is the attribute of its inner codec, so `number` and `decimal` each write `N`, and
- * `number(1)` and `decimal('1')` each store the text `1`. A codec pins literals only where a literal
- * constructor built it ({@link literalMarker}), so a caller's adapter pins nothing here.
+ * `number(1)` and `decimal('1')` each store the text `1`. The pins are read on the term, under each
+ * refinement and each adapter of the library.
  *
  * Two objects are apart where the clause separates the first, each object of the clause open. Coarser
  * than the walk of `at` in two places: two lists are never apart here, and a caller's adapter over a
@@ -3264,8 +3217,39 @@ type WrittenMembers<A> = A extends unknown
       }[keyof A]
     : never
 
-/** The stored text of a literal, or `never` where no literal constructor built the codec. */
-type StoredPin<C> = C extends LiteralMark ? StoredText<Decoded<C>> : never
+/** The stored texts that the term of a codec pins, or `never` where the term pins no literal. */
+type StoredPin<C> = StoredPinAt<NodeOf<TermOf<C>>>
+type StoredPinAt<N> = N extends ['prim', ['literal', unknown, infer V]]
+    ? StoredText<V>
+    : N extends ['union', infer Os extends unknown[]]
+      ? true extends {
+            [I in keyof Os]: [StoredPinAt<NodeOf<Os[I]>>] extends [never]
+                ? true
+                : false
+        }[number]
+          ? never
+          : { [I in keyof Os]: StoredPinAt<NodeOf<Os[I]>> }[number]
+      : N extends ['refine', infer I]
+        ? StoredPinAt<NodeOf<I>>
+        : [LibraryInner<N>] extends [never]
+          ? never
+          : StoredPinAt<NodeOf<LibraryInner<N>>>
+/**
+ * The inner term of an adapter of the library, as `decimal('1')` and `number(1)` build, or `never`.
+ * A caller's adapter (`['caller']`) pins nothing at the type: its decoded type is the caller's.
+ */
+type LibraryInner<N> = N extends [
+    'held',
+    unknown,
+    infer I,
+    unknown,
+    [infer G, unknown],
+    ...unknown[],
+]
+    ? [G] extends [['caller']]
+        ? never
+        : I
+    : never
 
 /** The stored text of a literal, or `never` where the decoded type is not a literal. */
 type StoredText<D> = D extends string | number | boolean
@@ -5571,16 +5555,41 @@ type RequiredKeysOf<Spec> = {
 }[keyof Spec]
 
 /**
- * **A codec that pins a literal**: a literal constructor built it, and it decodes to a literal type
- * rather than a base.
+ * **A member's codec that pins a literal**: its term pins a literal, and it decodes to a literal
+ * type rather than a base. The member's side reads through a refinement, as `pinnedForm` does.
  *
- * The type level's reading of "this name is pinned to a literal". The runtime reads the term, and
- * a term pins a literal only where a literal constructor built it, so this reads
- * {@link literalMarker} first. A caller's adapter that decodes to a literal type carries no mark,
- * and pins nothing here as it pins nothing at the term.
+ * A caller's adapter pins nothing ({@link LibraryInner}). `NodeOf` resolves the entry of a scope
+ * term, and a bare `ref` in the spec of an entry stays unresolved, so such a key pins nothing.
  */
-type PinsALiteral<C> = C extends LiteralMark
+type PinsALiteral<C> = TermPins<TermOf<C>, true> extends true
     ? PinsALiteralValue<Decoded<C>>
+    : false
+/** …and a pattern's codec, which reads through no refinement, as `clauseForm` does. */
+type PatternPins<C> = TermPins<TermOf<C>, false> extends true
+    ? PinsALiteralValue<Decoded<C>>
+    : false
+/** Whether a term pins a literal: a literal, a union of literals, or a library adapter over a pin. */
+type TermPins<T, R extends boolean> = NodeOf<T> extends infer N
+    ? N extends ['prim', ['literal', ...unknown[]]]
+        ? true
+        : N extends ['union', infer Os extends unknown[]]
+          ? false extends {
+                [I in keyof Os]: NodeOf<Os[I]> extends [
+                    'prim',
+                    ['literal', ...unknown[]],
+                ]
+                    ? true
+                    : false
+            }[number]
+              ? false
+              : true
+          : N extends ['refine', infer I]
+            ? R extends true
+                ? TermPins<I, R>
+                : false
+            : [LibraryInner<N>] extends [never]
+              ? false
+              : TermPins<LibraryInner<N>, R>
     : false
 
 /**
@@ -6203,7 +6212,7 @@ type MapObjects<Specs extends readonly unknown[]> = {
  * cannot name ({@link UnnamedValues}) is `'u'`.
  */
 type Fit = 't' | 'f' | 'u'
-type FitsCodec<A, P> = PinsALiteral<MarkedCodec<P>> extends true
+type FitsCodec<A, P> = PatternPins<MarkedCodec<P>> extends true
     ? PinsALiteral<MarkedCodec<A>> extends true
         ? [AttributeOf<A>] extends [AttributeOf<P>]
             ? [Decoded<A>] extends [Decoded<P>]
@@ -6863,22 +6872,25 @@ type TagsAtSpecs<S, K, A> = S extends unknown
  * clause that is not keyed (`Calculus.AltClause.keyedC`), read at a pattern. A key is bad where no
  * member declares it, and where it pins a literal that no member pins at that base. A key that
  * holds objects is read one level down. A literal whose alternatives meet no member's is keyed, and
- * keeps nothing: that is a fact about the values, and the run time answers it.
+ * keeps nothing: that is a fact about the values, and the run time answers it. A key that holds a
+ * refinement is bad, because no function decides whether a member lies inside a predicate.
  */
 type BadPatternKey<S, PSpec> = {
-    [K in keyof PSpec]: PinsALiteral<PSpec[K]> extends true
-        ? [TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>] extends [never]
-            ? K
-            : [CarrierOf<Decoded<PSpec[K]>>] extends [
-                    CarrierOf<TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>>,
-                ]
-              ? never
+    [K in keyof PSpec]: NodeOf<TermOf<PSpec[K]>> extends ['refine', unknown]
+        ? K
+        : PatternPins<PSpec[K]> extends true
+          ? [TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>] extends [never]
+              ? K
+              : [CarrierOf<Decoded<PSpec[K]>>] extends [
+                      CarrierOf<TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>>,
+                  ]
+                ? never
+                : K
+          : [FixedElements<PSpec[K]>] extends [never]
+            ? BadObjectKey<S, PSpec, K>
+            : [K] extends [KeysOfUnion<S>]
+              ? BadPosition<S, K, FixedElements<PSpec[K]>>
               : K
-        : [FixedElements<PSpec[K]>] extends [never]
-          ? BadObjectKey<S, PSpec, K>
-          : [K] extends [KeysOfUnion<S>]
-            ? BadPosition<S, K, FixedElements<PSpec[K]>>
-            : K
 }[keyof PSpec]
 /**
  * A position of a fixed list answers to the refusals of a key, and a position that holds a fixed
@@ -7804,8 +7816,7 @@ export const never: AttributeCodec<never, never> & {
  */
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
-): UnionCodec<DerivedUnion<Options>, Options> &
-    LiteralMarkOf<Options[number]> => {
+): UnionCodec<DerivedUnion<Options>, Options> => {
     // **The judgment decides the union's obligation**: each two options compatible, at the
     // declaration, or at the first scope that binds a name of an option. The resolution reads each
     // option through its `ref`s, so it runs at the first use, where every name is bound
@@ -7931,10 +7942,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         closed()
         return slicedUnion(options as readonly AnyCodec[], pattern, keep)
     })
-    // the mark is phantom, so no value carries it and no check can produce it. A union of literal
-    // codecs pins their literals at run time (`literalAlternatives`), so the type states the mark
-    // where each option carries the mark
-    return codec as typeof codec & LiteralMarkOf<Options[number]>
+    return codec
 }
 
 /**
