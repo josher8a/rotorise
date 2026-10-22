@@ -173,7 +173,7 @@ Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs
 
 `at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.
 
-`narrow(spec)` narrows a path through a union to the options that the clause does not separate. The clause is an object of codecs, and each key of the clause is required at its codec. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
+`narrow(pattern)` narrows a path through a union to the options that the pattern does not separate. The pattern is an object codec, read as `extract` reads an object pattern: each object of the pattern is open. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
 
 `preconditions(at(...))` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
 
@@ -187,7 +187,7 @@ const Order = item(object({
   ]),
 }))
 
-const cardId = at(narrow(at(Order, ['pay']), { tender: string('CARD') }), ['cardId'])
+const cardId = at(narrow(at(Order, ['pay']), object({ tender: string('CARD') })), ['cardId'])
 path(cardId)           // 'pay.cardId'
 preconditions(cardId)  // the Result of [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
 cardId.encode('c-1')   // { S: 'c-1' }

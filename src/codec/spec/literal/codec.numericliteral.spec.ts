@@ -112,7 +112,7 @@ describe('a numeric tag', () => {
     it('reaches a variant by its numeric tag', () => {
         const Holder = item(object({ row: Rows }))
         expect(
-            at(narrow(at(Holder, ['row']), { kind: number(0) }), [
+            at(narrow(at(Holder, ['row']), object({ kind: number(0) })), [
                 'draftedAt',
             ]).unsafeEncode('t'),
         ).toEqual({ S: 't' })

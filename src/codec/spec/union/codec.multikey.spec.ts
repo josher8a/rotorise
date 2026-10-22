@@ -201,17 +201,23 @@ describe('a member is selected by its assignment', () => {
     it('reaches a member by the assignment it carries', () => {
         const Holder = item(object({ x: twoKey }))
         const chosen = at(
-            narrow(at(Holder, ['x']), {
-                kind: string('pet'),
-                size: string('large'),
-            }),
+            narrow(
+                at(Holder, ['x']),
+                object({
+                    kind: string('pet'),
+                    size: string('large'),
+                }),
+            ),
             ['pen'],
         )
         const reordered = at(
-            narrow(at(Holder, ['x']), {
-                size: string('large'),
-                kind: string('pet'),
-            }),
+            narrow(
+                at(Holder, ['x']),
+                object({
+                    size: string('large'),
+                    kind: string('pet'),
+                }),
+            ),
             ['pen'],
         )
         expect(chosen.unsafeEncode('p1')).toEqual({ S: 'p1' })

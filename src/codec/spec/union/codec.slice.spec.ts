@@ -418,15 +418,18 @@ describe('the clause carries no order', () => {
         )
         expect(
             at(
-                narrow(at(Holder, ['x']), {
-                    kind: string('pet'),
-                    size: string('large'),
-                }),
+                narrow(
+                    at(Holder, ['x']),
+                    object({
+                        kind: string('pet'),
+                        size: string('large'),
+                    }),
+                ),
                 ['pen'],
             ).unsafeEncode('p1'),
         ).toEqual({ S: 'p1' })
         // @ts-expect-error `food` is not a member of the extraction
-        narrow(at(Holder, ['x']), { kind: string('food') })
+        narrow(at(Holder, ['x']), object({ kind: string('food') }))
     })
 
     it('gives the same members whichever order they were declared in', () => {

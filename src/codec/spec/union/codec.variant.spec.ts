@@ -103,16 +103,24 @@ describe('tagged', () => {
     it('writes an attribute with the codec of the variant that the clause keeps', () => {
         const Holder = item(object({ account: AccountCodec }))
         expect(
-            at(narrow(at(Holder, ['account']), { type: string('STAFF') }), [
-                'weight',
-            ]).unsafeEncode(7),
+            at(
+                narrow(
+                    at(Holder, ['account']),
+                    object({ type: string('STAFF') }),
+                ),
+                ['weight'],
+            ).unsafeEncode(7),
         ).toEqual({
             N: '7',
         })
         expect(
-            at(narrow(at(Holder, ['account']), { type: string('OWNER') }), [
-                'balance',
-            ]).unsafeEncode('1.5'),
+            at(
+                narrow(
+                    at(Holder, ['account']),
+                    object({ type: string('OWNER') }),
+                ),
+                ['balance'],
+            ).unsafeEncode('1.5'),
         ).toEqual({
             N: '1.5',
         })

@@ -101,11 +101,14 @@ describe('K1: at from an object is at from its item', () => {
             fromItem.unsafeEncode,
         )
         const narrowedObject = at(
-            narrow(at(Adoption, ['pay']), { tender: string('CARD') }),
+            narrow(at(Adoption, ['pay']), object({ tender: string('CARD') })),
             ['card'],
         )
         const narrowedItem = at(
-            narrow(at(itemOf(Adoption), ['pay']), { tender: string('CARD') }),
+            narrow(
+                at(itemOf(Adoption), ['pay']),
+                object({ tender: string('CARD') }),
+            ),
             ['card'],
         )
         expect(path(narrowedObject)).toEqual(['pay', 'card'])
@@ -137,12 +140,15 @@ describe('K1: at from an object is at from its item', () => {
 
 describe('K2: at from a union, a list, a tuple and a record reaches the codec of the longer path', () => {
     it('a union root', () => {
-        const short = at(narrow(Pay, { tender: string('CARD') }), [
+        const short = at(narrow(Pay, object({ tender: string('CARD') })), [
             'card',
             'last4',
         ])
         const long = at(
-            narrow(at(itemOf(Adoption), ['pay']), { tender: string('CARD') }),
+            narrow(
+                at(itemOf(Adoption), ['pay']),
+                object({ tender: string('CARD') }),
+            ),
             ['card', 'last4'],
         )
         expect(path(short)).toEqual(['card', 'last4'])
@@ -267,9 +273,10 @@ describe('the item of a union', () => {
         // @ts-expect-error the option `q` declares no `v`, so no one codec stands at the path
         const some = at(itemOf(Tagged), ['v'])
         expect(some.encode(1 as never)).toBeInstanceOf(CodecError)
-        const kept = at(narrow(at(itemOf(Tagged), []), { k: string('p') }), [
-            'v',
-        ])
+        const kept = at(
+            narrow(at(itemOf(Tagged), []), object({ k: string('p') })),
+            ['v'],
+        )
         expect(path(kept)).toBe('v')
     })
 })

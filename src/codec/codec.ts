@@ -893,8 +893,8 @@ const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
     refusedAt(
         new CodecError(
             partial
-                ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Call \`narrow({...})\` to keep the variants that declare it.`
-                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Call \`narrow({...})\` to keep the variants that agree, for example \`narrow({ type: string('A') })\` where \`type\` is the discriminator.`,
+                ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Call \`narrow(object({...}))\` to keep the variants that declare it.`
+                : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Call \`narrow(object({...}))\` to keep the variants that agree, for example \`narrow(object({ type: string('A') }))\` where \`type\` is the discriminator.`,
         ),
     )
 
@@ -3100,10 +3100,14 @@ type PathBody<T, F> = [T] extends [readonly unknown[]]
  * unknown. A list, an adapter and a `ref` carry no codec of a child in their types, so the
  * frontier below one is unknown.
  */
-type Member = {
+type Member = Spoken & {
+    readonly t: unknown
+}
+
+/** What an object holds: the declared fields, and the open entry. */
+type Spoken = {
     readonly spec: unknown
     readonly rest: unknown
-    readonly t: unknown
 }
 
 /** The members of a codec: each option of a union, each variant of a tagged union, or the object. */
@@ -3135,7 +3139,7 @@ type ItemFrontier<T, Spec, Rest> = {
 type MarkedCodec<C> = C extends { readonly codec: infer Marked } ? Marked : C
 
 /** The codec that a member holds at a key: the declared field, then the open entry. */
-type CodecAt<M, K> = M extends Member
+type CodecAt<M, K> = M extends Spoken
     ? K extends keyof M['spec']
         ? MarkedCodec<M['spec'][K]>
         : M['rest'] extends AnyCodec
@@ -3179,15 +3183,15 @@ type ValueAt<T, K extends PropertyKey> = T extends unknown
  *
  * @example
  * ```ts
- * p.priceIn.narrow({ tenderType: string('CASH') }).cardId   // → 'priceIn.cardId'
+ * p.priceIn.narrow(object({ tenderType: string('CASH') })).cardId   // → 'priceIn.cardId'
  * ```
  */
 type PathNarrowing<T, F> = IsUnion<T> extends true
     ? {
           /**
            * **Narrows the path at run time and in the type, to the members that the clause does not
-           * separate.** The clause is an object
-           * of codecs: each key is required at the term of its codec, and every other name is open.
+           * separate.** The pattern is an object
+           * codec, read as {@link extract} reads an object pattern: each object of the pattern is open.
            *
            * A member stays where the clause cannot tell it apart. A pin `'A' | 'B'` stays under the
            * clause `'A'`, and a member with no pin at the key stays too. The walk of `at` separates
@@ -3196,11 +3200,11 @@ type PathNarrowing<T, F> = IsUnion<T> extends true
            * attributes too ({@link Kept}). Below a list, an adapter or a `ref`, and in the path of a
            * `tableEntry`, the type knows only the decoded types and is coarser ({@link Narrowed}).
            */
-          narrow<const C extends Readonly<Record<string, AnyCodec>>>(
-              clause: C & ClauseOn<T, F, C>,
+          narrow<const P extends ClausePattern>(
+              pattern: P & ClauseOn<T, F, P['spec']>,
           ): unknown extends F
-              ? PathOf<Narrowed<T, C>>
-              : PathOf<Kept<F, C>['t'], Kept<F, C>>
+              ? PathOf<Narrowed<T, P['spec']>>
+              : PathOf<Kept<F, P['spec']>['t'], Kept<F, P['spec']>>
       }
     : unknown
 
@@ -3210,14 +3214,23 @@ type PathNarrowing<T, F> = IsUnion<T> extends true
  * or the codec of the member and the codec of the clause are apart ({@link StoredApart}).
  */
 type Kept<F, C> = F extends Member
-    ? true extends {
-          [K in keyof C]: [CodecAt<F, K>] extends [never]
-              ? true
-              : StoredApart<CodecAt<F, K>, C[K]>
-      }[keyof C]
+    ? ClauseApart<F, C> extends true
         ? never
         : F
     : never
+
+/**
+ * **Whether a clause separates an object**, with each object of the clause open: the object is
+ * apart where, at one key of the clause, it holds no codec, or its codec and the codec of the
+ * clause are apart ({@link StoredApart}).
+ */
+type ClauseApart<X, C> = true extends {
+    [K in keyof C]: [CodecAt<X, K>] extends [never]
+        ? true
+        : StoredApart<CodecAt<X, K>, C[K]>
+}[keyof C]
+    ? true
+    : false
 
 /**
  * **Two codecs whose stored attributes cannot meet**: the members of DynamoDB that the two write
@@ -3226,20 +3239,23 @@ type Kept<F, C> = F extends Member
  * `number(1)` and `decimal('1')` each store the text `1`. A codec pins literals only where a literal
  * constructor built it ({@link literalMarker}), so a caller's adapter pins nothing here.
  *
- * Coarser than the walk of `at` in two places: two maps or two lists are never apart here, and a
- * caller's adapter over a literal pins nothing here, where the walk reads the literal under it.
+ * Two objects are apart where the clause separates the first, each object of the clause open. Coarser
+ * than the walk of `at` in two places: two lists are never apart here, and a caller's adapter over a
+ * literal pins nothing here, where the walk reads the literal under it.
  */
 type StoredApart<X, Y> = [
     WrittenMembers<AttributeOf<X>> & WrittenMembers<AttributeOf<Y>>,
 ] extends [never]
     ? true
-    : [StoredPin<X>] extends [never]
-      ? false
-      : [StoredPin<Y>] extends [never]
+    : [X, Y] extends [Spoken, { readonly spec: infer Spec }]
+      ? ClauseApart<X, Spec>
+      : [StoredPin<X>] extends [never]
         ? false
-        : [StoredPin<X> & StoredPin<Y>] extends [never]
-          ? true
-          : false
+        : [StoredPin<Y>] extends [never]
+          ? false
+          : [StoredPin<X> & StoredPin<Y>] extends [never]
+            ? true
+            : false
 
 /** The members of DynamoDB that an attribute type writes: the keys that it requires. */
 type WrittenMembers<A> = A extends unknown
@@ -4110,25 +4126,25 @@ export function at(
 }
 
 /**
- * **Narrows a located codec to the options that a clause does not separate.** The clause is an
- * object of codecs: each key is required at the term of its codec, and every other name is open.
+ * **Narrows a located codec to the options that a pattern does not separate.** The pattern is an
+ * object codec, read as {@link extract} reads an object pattern: each object of the pattern is open.
  * The path keeps its segments, and the clause adds its preconditions at the path.
  *
  * The test reads the stored views, so `number(1)` and `decimal('1')` meet, and `decimal` and
  * `string` are apart. A kept option stays as the codec declares it: the narrowing refines no option.
  */
-export function narrow<L, const C extends Readonly<Record<string, AnyCodec>>>(
+export function narrow<L, const P extends ClausePattern>(
     located: Closed & L & { readonly def: Term },
-    clause: C & CheckNarrow<StartOf<L>, C>,
-): FocusAt<NarrowAt<StartOf<L>, C>, RootOf<L>>
+    pattern: P & CheckNarrow<StartOf<L>, P['spec']>,
+): FocusAt<NarrowAt<StartOf<L>, P['spec']>, RootOf<L>>
 export function narrow(
     located: { readonly def: Term },
-    clause: Readonly<Record<string, AnyCodec>>,
+    pattern: ClausePattern,
 ): unknown {
     // read through a cast, for the reason at {@link at}: a spread copy must keep its location
     const prior = (located as { readonly [locatedSlot]?: Located })[locatedSlot]
     const root = prior?.root ?? (located as unknown as AnyCodec)
-    return locate(root, [...(prior?.steps ?? []), clauseTerm(clause)], prior)
+    return locate(root, [...(prior?.steps ?? []), clauseOf(pattern)], prior)
 }
 
 /**
@@ -4964,19 +4980,52 @@ const asIndex = /^\d+$/
 type Step = string | number | Clause
 
 /**
- * **The clause of `narrow`**, the model's `clauseTerm`: an object term whose keys are each required
- * at the term of a codec, and whose open block is `opaque`.
+ * **The clause of `narrow`**, the `φ` of the model's `narrowC`: an object term whose keys are each
+ * required at the term of a codec, and whose open block is `opaque` at every depth.
  */
 type Clause = Extract<Term, { readonly kind: 'object' }>
 
-/** The term of a clause, built one time when the path records the clause. */
-const clauseTerm = (spec: Readonly<Record<string, AnyCodec>>): Clause => {
-    const fields: Record<string, Field> = {}
-    for (const name in spec) {
-        const one = spec[name]
-        if (one) fields[name] = { mark: 'req', t: one.def }
+/** **The pattern of `narrow`**: an object codec, each key at a codec that writes the key. */
+export type ClausePattern = {
+    readonly def: Term
+    readonly spec: Readonly<Record<string, AnyCodec>>
+}
+
+/**
+ * The term of a pattern, open at every object, as {@link fits} reads a pattern: `fits` reads no
+ * open block of the pattern, so every undeclared name of the pattern holds `opaque`.
+ */
+const opened = (t: Term): Term => {
+    switch (t.kind) {
+        case 'object': {
+            const fields: Record<string, Field> = {}
+            for (const [name, field] of Object.entries(t.body.fields))
+                fields[name] = { ...field, t: opened(field.t) }
+            return { kind: 'object', body: { fields, rest: { kind: 'opaq' } } }
+        }
+        case 'union':
+            return { kind: 'union', options: t.options.map(opened) }
+        case 'list':
+            return {
+                kind: 'list',
+                pre: t.pre.map(opened),
+                ...(t.spread === undefined ? {} : { spread: opened(t.spread) }),
+                suf: t.suf.map(opened),
+            }
+        case 'held':
+            return { ...t, inner: opened(t.inner) }
+        default:
+            return t
     }
-    return { kind: 'object', body: { fields, rest: { kind: 'opaq' } } }
+}
+
+/** The term of a clause, built one time when the path records the clause. */
+export const clauseOf = (pattern: ClausePattern): Clause => {
+    const t = opened(pattern.def)
+    // the type admits an object codec only, so the term of the pattern is an object
+    if (t.kind !== 'object')
+        throw new CodecError('a pattern of `narrow` is an object codec')
+    return t
 }
 
 /** The segments of a path, without its clauses. */
@@ -5009,8 +5058,8 @@ const recordPath = (steps: readonly Step[]): unknown => {
             }
             // a clause narrows the frontier of `at`; the document path is unchanged
             if (prop === 'narrow') {
-                return (spec: Readonly<Record<string, AnyCodec>>) =>
-                    recordPath([...steps, clauseTerm(spec)])
+                return (pattern: ClausePattern) =>
+                    recordPath([...steps, clauseOf(pattern)])
             }
             // digits all the way through, or it is an attribute name: `parseInt` accepted a
             // leading number and dropped the rest, so `'1abc'` recorded `[NaN]`

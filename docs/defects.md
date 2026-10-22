@@ -221,20 +221,16 @@ through an adapter. `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refu
 
 ---
 
-## Partially mitigated: a clause whose type nests a map has no precondition vector
+## Known: the refusal of an empty clause below the root has no test
 
-**Observation.** The model states the precondition of a closed clause as data
-(`Closed.preconditionOfC`), and `Closed.preconditionOfC_exact` proves the precondition exact or
-refuses it. The host states the same data as `preconditions(at(...))`. The emitter puts the host's
-preconditions to the model at each narrow path of the pool, as the rows `PreRowsC`, and one vector
-pins a clause key over an older reader. A clause whose type nests a map has no
-row.
+**Observation.** `Closed.preconditionOfC` refuses a clause with no name below the root: the clause
+admits each map there, and the empty conjunction admits each attribute. No test puts the same
+clause to `preconditions(at(...))`.
 
-**Effect.** A host precondition that drifts from `Closed.preconditionOfC` at a clause whose type
-nests a map passes the gate.
+**Effect.** A host that drifts from that refusal passes the suite.
 
-**Pin.** The rows `PreRowsC` in the path vectors, and `src/codec/spec/union/codec.preconditions.spec.ts`.
-The refusal of an empty clause below the root has no test.
+**Pin.** None.
+
 ---
 
 ## Known: a fragment that a refused scope bound refuses for a recursion in a second scope
@@ -321,19 +317,19 @@ accepts the union.
 
 ---
 
-## Known: the type of an entry that names an object through a ref accepts `item`, and the run time refuses
+## Known: the type of an entry that names an object through a ref accepts `item(...)`, and the run time refuses
 
 **Observation.** The type of an entry reads the definition at the end of its chain of `ref`s. So
 `scope({ A: ref('O'), O: object({ a: string }) }).A` has the type of an object codec, and
-`item(A)` typechecks. At run time the entry is the `ref` codec, and `item` reads no object there.
+`item(A)` typechecks. At run time the entry is the `ref` codec, and `item(...)` reads no object there.
 Measured 2026-10-22 at 7f31f6e with a throwaway spec:
 
     item(S.A).encode({ a: 'x' })
       type checker: accepted
       runtime:      CodecError: this codec has no whole-item reading
 
-`extract` on an entry that names a union through a `ref` resolves the `ref`, and agrees with its type.
+`extract(...)` on an entry that names a union through a `ref` resolves the `ref`, and agrees with its type.
 
-**Effect.** A call of `item` on such an entry typechecks and throws a CodecError.
+**Effect.** A call of `item(...)` on such an entry typechecks and throws a CodecError.
 
 **Pin.** None.

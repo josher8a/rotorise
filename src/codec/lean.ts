@@ -62,6 +62,7 @@ import {
 } from './attribute'
 import type {
     AnyCodec,
+    ClausePattern,
     Itemable,
     LiteralValue,
     ObjectSlot,
@@ -70,6 +71,7 @@ import type {
 } from './codec'
 import {
     at,
+    clauseOf,
     exclude,
     extract,
     item as itemOf,
@@ -2452,10 +2454,7 @@ export const leanSlice = (
 /* ── the path ──────────────────────────────────────────────────────────────────────────────── */
 
 /** One step of a path: a name, a position, or the clause of a `narrow`. */
-export type PathStep =
-    | string
-    | number
-    | { readonly narrow: Readonly<Record<string, AnyCodec>> }
+export type PathStep = string | number | { readonly narrow: ClausePattern }
 
 /**
  * **What `at` decides at one path**, read from outside the host.
@@ -2617,19 +2616,27 @@ const leanCond = (p: Precondition): string => {
 
 /**
  * **The claim of the host about the precondition of a clause**, as the model's
- * `Option (List Cond)`: a refusal is `none`. The model lists the keys of an object in the order of
- * `compare`, and a clause lists them as declared, so the claim sorts the conditions by the key.
- * A claim that holds a `type M` has a nested object, whose keys the sort does not reach, so the
- * row is not stated.
+ * `Option (List Cond)`: a refusal is `none`. The model lists the conditions in pre-order: the `M`
+ * of an object, then each name in the order of `compare`, each with its own conditions. A clause
+ * lists them as declared, so the claim sorts the conditions by the full path, where a prefix
+ * comes before its extensions.
  */
 const leanPreconditionClaim = (
     claim: Result<readonly Precondition[]>,
-): string | undefined => {
+): string => {
     if (failed(claim)) return 'none'
-    if (claim.some((p) => 'type' in p && p.type === 'M')) return undefined
-    const key = (p: Precondition) => String(p.segments.at(-1))
-    const sorted = [...claim].sort((a, b) => nameOrder(key(a), key(b)))
-    return `(some [${sorted.map(leanCond).join(', ')}])`
+    const preOrder = (a: Precondition, b: Precondition): number => {
+        for (
+            let i = 0;
+            i < Math.min(a.segments.length, b.segments.length);
+            i++
+        ) {
+            const d = nameOrder(String(a.segments[i]), String(b.segments[i]))
+            if (d !== 0) return d
+        }
+        return a.segments.length - b.segments.length
+    }
+    return `(some [${[...claim].sort(preOrder).map(leanCond).join(', ')}])`
 }
 
 /** The paths of one codec, each as its steps under {@link wrapped}. */
@@ -2659,16 +2666,6 @@ export const unionAt = (host: HostAt): boolean => {
 
 /** The term `never`, the frame of a name that an object neither declares nor leaves open. */
 const nothingAt: Term = { kind: 'never' }
-
-/** The term of a clause: each key required at its codec, and an open block of `opaque`. */
-const clauseOf = (clause: Readonly<Record<string, AnyCodec>>): Term => {
-    const fields: Record<string, TermField> = {}
-    for (const [key, one] of Object.entries(clause)) {
-        if ('mark' in one.def) continue
-        fields[key] = { mark: 'req', t: one.def }
-    }
-    return { kind: 'object', body: { fields, rest: { kind: 'opaq' } } }
-}
 
 /** The options of a union that a clause keeps: the host's narrowing, on the graph. */
 const narrowedBy = (phi: Term, options: readonly Term[]): Term[] =>
@@ -2969,9 +2966,8 @@ export const leanPath = (
             wrapped,
             ...(steps.slice(0, k) as readonly (string | number)[]),
         ]
-        const stated = claim && leanPreconditionClaim(claim)
-        if (stated !== undefined) {
-            const row = `([${prefix.map(leanSeg).join(', ')}], ${stated})`
+        if (claim) {
+            const row = `([${prefix.map(leanSeg).join(', ')}], ${leanPreconditionClaim(claim)})`
             const known = preconditions.get(phi) ?? new Set<string>()
             preconditions.set(phi, known.add(row))
         }

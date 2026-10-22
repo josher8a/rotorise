@@ -62,11 +62,11 @@ describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p +
 
     it('conjoins the preconditions of a narrow in the prefix with the path below it', () => {
         const composed = at(
-            narrow(at(Adoption, ['pay']), { tender: string('CARD') }),
+            narrow(at(Adoption, ['pay']), object({ tender: string('CARD') })),
             ['card', 'last4'],
         )
         const direct = at(
-            narrow(at(Adoption, ['pay']), { tender: string('CARD') }),
+            narrow(at(Adoption, ['pay']), object({ tender: string('CARD') })),
             ['card', 'last4'],
         )
         expect(path(composed)).toBe('pay.card.last4')

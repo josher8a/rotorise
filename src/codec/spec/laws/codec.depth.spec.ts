@@ -357,7 +357,7 @@ describe('the nesting bound at a path', () => {
         ],
         [
             'a union path',
-            atOf(narrow(atOf(aUnion, ['u']), { x: opaque }), ['x']),
+            atOf(narrow(atOf(aUnion, ['u']), object({ x: opaque })), ['x']),
             aUnion,
             1,
             nestL,

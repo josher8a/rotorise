@@ -776,10 +776,40 @@ type PrimsApartT<G, G2> = G extends ['base' | 'literal', infer K, ...unknown[]]
             : true
         : false
     : false
-/** The clause as a term: each key required at the term of its codec, and an opaque block. */
+/**
+ * A term of a pattern, open at every object, as `opened` reads a pattern at run time: the pattern
+ * has no open block, so every undeclared name of the pattern holds `opaque`.
+ */
+type OpenT<T> = T extends ['object', ['mk', infer F, unknown]]
+    ? [
+          'object',
+          [
+              'mk',
+              {
+                  [K in keyof F]: F[K] extends [infer M, infer S]
+                      ? [M, OpenT<S>]
+                      : F[K]
+              },
+              ['some', ['opaq']],
+          ],
+      ]
+    : T extends ['union', infer Os]
+      ? ['union', { [I in keyof Os]: OpenT<Os[I]> }]
+      : T extends ['list', infer Pre, infer Sp, infer Suf]
+        ? [
+              'list',
+              { [I in keyof Pre]: OpenT<Pre[I]> },
+              Sp extends ['some', infer S] ? ['some', OpenT<S>] : Sp,
+              { [I in keyof Suf]: OpenT<Suf[I]> },
+          ]
+        : T extends ['held', infer S, infer I, ...infer R]
+          ? ['held', S, OpenT<I>, ...R]
+          : T
+
+/** The clause as a term: each key required at the open term of its codec, and an opaque block. */
 type ClauseT<CT> = [
     'object',
-    ['mk', { [K in keyof CT]: ['req', CT[K]] }, ['some', ['opaq']]],
+    ['mk', { [K in keyof CT]: ['req', OpenT<CT[K]>] }, ['some', ['opaq']]],
 ]
 
 /** Whether the clause separates an option. `CT` holds the term of the codec at each key. */

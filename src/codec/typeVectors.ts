@@ -770,10 +770,10 @@ const pathRoot = (
                 run.push(typeof s === 'number' ? String(s) : quoted(s))
                 continue
             }
-            const clause = Object.entries(s.narrow)
+            const clause = Object.entries(s.narrow.spec)
                 .map(([k, c]) => `${keyText(k)}: ${p.clause(c)}`)
                 .join(', ')
-            call = `narrow(${run.length === 0 ? call : `at(${call}, [${run.join(', ')}])`}, { ${clause} })`
+            call = `narrow(${run.length === 0 ? call : `at(${call}, [${run.join(', ')}])`}, object({ ${clause} }))`
             run = []
         }
         return `at(${call}, [${run.join(', ')}])`

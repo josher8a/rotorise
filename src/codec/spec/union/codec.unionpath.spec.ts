@@ -80,7 +80,10 @@ describe('a codec at a path into a union', () => {
     it('resolves the variant that has the attribute, under the clause that keeps that variant', () => {
         // only CASH declares cardId, so the clause keeps one candidate
         const cardId = at(
-            narrow(at(Adoption, ['priceIn']), { tenderType: string('CASH') }),
+            narrow(
+                at(Adoption, ['priceIn']),
+                object({ tenderType: string('CASH') }),
+            ),
             ['cardId'],
         )
         expect(path(cardId)).toBe('priceIn.cardId')
@@ -155,55 +158,60 @@ describe('members that disagree about kind', () => {
 
     it('reaches it once a member is picked', () => {
         expect(
-            p.mixed.narrow({ tag: string('DEEP') }).data.nested.toString(),
+            p.mixed
+                .narrow(object({ tag: string('DEEP') }))
+                .data.nested.toString(),
         ).toBe('mixed.data.nested')
     })
 
     it('picks between a list and an object under one key', () => {
         expect(
             p.mixed
-                .narrow({ tag: string('FLAT') })
+                .narrow(object({ tag: string('FLAT') }))
                 .both.at(0)
                 .toString(),
         ).toBe('mixed.both[0]')
-        expect(p.mixed.narrow({ tag: string('DEEP') }).both.k.toString()).toBe(
-            'mixed.both.k',
-        )
+        expect(
+            p.mixed.narrow(object({ tag: string('DEEP') })).both.k.toString(),
+        ).toBe('mixed.both.k')
     })
 
     it('takes a clause on more than one key', () => {
         expect(
             p.mixed
-                .narrow({
-                    tag: string('DEEP'),
-                    data: object({ nested: number }),
-                })
+                .narrow(
+                    object({
+                        tag: string('DEEP'),
+                        data: object({ nested: number }),
+                    }),
+                )
                 .data.nested.toString(),
         ).toBe('mixed.data.nested')
     })
 
     it('adds nothing to the path', () => {
-        expect(p.mixed.narrow({ tag: string('FLAT') }).data.toString()).toBe(
-            'mixed.data',
-        )
+        expect(
+            p.mixed.narrow(object({ tag: string('FLAT') })).data.toString(),
+        ).toBe('mixed.data')
         expect(p.mixed.data.toString()).toBe('mixed.data')
     })
 
     it('refuses a clause that separates every member', () => {
-        // @ts-expect-error there is no such variant
-        const _noSuchTag = () => p.mixed.narrow({ tag: string('MIDDLE') })
+        const _noSuchTag = () =>
+            // @ts-expect-error there is no such variant
+            p.mixed.narrow(object({ tag: string('MIDDLE') }))
         expect(typeof _noSuchTag).toBe('function')
     })
 
     it('holds the narrowing while walking further', () => {
         const _stillFlat = () =>
             // @ts-expect-error FLAT's `data` is a string
-            p.mixed.narrow({ tag: string('FLAT') }).data.nested
+            p.mixed.narrow(object({ tag: string('FLAT') })).data.nested
         expect(typeof _stillFlat).toBe('function')
     })
 
     it('is absent where there is nothing to pick', () => {
-        const flat = { tag: string('FLAT') }
+        const flat = object({ tag: string('FLAT') })
         // @ts-expect-error a single-member attribute has no `narrow`
         const _notAUnion = () => p.mixed.narrow(flat).data.narrow(flat)
         expect(typeof _notAUnion).toBe('function')
@@ -237,21 +245,21 @@ describe('a union with nothing to switch on', () => {
     it('narrows by shape to reach a list member', () => {
         expect(
             p.leg
-                .narrow({ petIds: array(string) })
+                .narrow(object({ petIds: array(string) }))
                 .petIds.at(1)
                 .toString(),
         ).toBe('leg.petIds[1]')
     })
 
     it('narrows by shape to the other member', () => {
-        expect(p.leg.narrow({ petId: string }).sellerId.toString()).toBe(
-            'leg.sellerId',
-        )
+        expect(
+            p.leg.narrow(object({ petId: string })).sellerId.toString(),
+        ).toBe('leg.sellerId')
     })
 
     it('refuses a key neither member declares, at the call', () => {
         // @ts-expect-error neither member carries this
-        const _neither = () => p.leg.narrow({ notAnAttribute: string })
+        const _neither = () => p.leg.narrow(object({ notAnAttribute: string }))
         expect(typeof _neither).toBe('function')
     })
 })

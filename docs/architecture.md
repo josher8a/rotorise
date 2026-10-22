@@ -566,8 +566,10 @@ codec at the path agrees with each frame, which is the premise of `Closed.strong
 terms, or of one term beside `never`, gives a codec that returns a refusal value on use, and the
 message names `narrow(...)`. A frontier of `never` alone throws at the call: no codec declares the path.
 
-`p.u.narrow(spec)` is `narrowC`. The spec is the clause: an object of codecs, each key required at
-the term of its codec, every other name open. The host keeps each option whose stored view the
+`narrow(located, pattern)` is `narrowC`. The pattern is a codec, and the clause is its term with
+every object open at every depth, as `extract(...)` reads a pattern. Each declared key stays required at
+the term of its codec. The precondition of a nested object is `type M` at the object, then the
+precondition of each name. The host keeps each option whose stored view the
 host's disjointness test does not separate from the stored view of the clause. The call adds no
 segment to the path. The path type narrows too, and the path type is coarser where the path type
 knows only the decoded types. `preconditions(at(...))` is the conjunction of the preconditions of
@@ -600,7 +602,7 @@ to `pathKindC` (`pathKindC_reads_no_closure`). There the host decides by the ide
 and a row of two declarations has no certificate.
 
 A vector puts the host's preconditions to `Closed.preconditionOfC` at each narrow path of the pool
-(`PreRowsC`). A clause whose type nests a map has no row, and the emitter states the reason.
+(`PreRowsC`), the rows of a nested object included.
 
 ---
 

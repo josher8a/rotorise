@@ -891,7 +891,7 @@ const pathsOf = (codec: AnyCodec): (readonly PathStep[])[] => {
             for (const key of keys)
                 for (const make of clauseVocabulary)
                     grow(
-                        [...path, { narrow: { [key]: make() } }],
+                        [...path, { narrow: object({ [key]: make() }) }],
                         Math.min(left, NARROW_DEPTH),
                     )
         }
@@ -974,7 +974,7 @@ const decisionsOf = (
         leanGraphOf(codec, 'decision', bound())
     const stepKey = (step: PathStep): string =>
         typeof step === 'object'
-            ? `narrow{${Object.entries(step.narrow)
+            ? `narrow{${Object.entries(step.narrow.spec)
                   .map(([key, c]) => `${key}:${print(c)}`)
                   .join(',')}}`
             : String(step)
@@ -1156,8 +1156,14 @@ const recursiveNarrowing = (): PathVectors => {
         name: 'path_recursive_union',
         codec: erase(object({ n: Node })),
         paths: [
-            ['n', { narrow: { k: erase(string('leaf')) } }, 'v'],
-            ['n', { narrow: { k: erase(string('node')) } }, 'c', 0, 'k'],
+            ['n', { narrow: object({ k: erase(string('leaf')) }) }, 'v'],
+            [
+                'n',
+                { narrow: object({ k: erase(string('node')) }) },
+                'c',
+                0,
+                'k',
+            ],
         ],
     }
 }
@@ -1197,13 +1203,54 @@ const legacyClause = (): PathVectors => ({
         [
             'u',
             {
-                narrow: {
+                narrow: object({
                     a: erase(
                         withLegacyRead({ current: string, older: string }),
                     ),
-                },
+                }),
             },
             'a',
+        ],
+    ],
+})
+
+/**
+ * **A nested clause**, beside the pool: the vocabulary holds literals only. The clause is open at
+ * each object, so a clause with an object at a key gives the `M` of the object, then the name of
+ * each key, at the path of the object. The rows put the order of the claim to the model at one
+ * level and at two.
+ */
+const nestedClause = (): PathVectors => ({
+    name: 'path_clause_nested',
+    codec: erase(
+        object({
+            u: union([
+                object({
+                    data: object({ n: number, k: string }),
+                    tag: string,
+                }),
+                object({ data: string, tag: string }),
+            ]),
+            v: union([
+                object({
+                    a: object({ b: object({ n: number }) }),
+                    tag: string,
+                }),
+                object({ a: string, tag: string }),
+            ]),
+        }),
+    ),
+    paths: [
+        ['u', { narrow: object({ data: object({ n: number }) }) }, 'tag'],
+        ['u', { narrow: object({ data: object({ n: number }) }) }, 'data'],
+        [
+            'v',
+            {
+                narrow: object({
+                    a: object({ b: object({ n: number }) }),
+                }),
+            },
+            'tag',
         ],
     ],
 })
@@ -1234,6 +1281,7 @@ const poolModules = (
             recursiveNarrowing(),
             cycleMember(),
             legacyClause(),
+            nestedClause(),
         ],
         4,
     ).map((text, i) => [`.pool.paths${i}.lean`, text] as const),
@@ -1501,7 +1549,7 @@ describe('the generated pool, against the model', () => {
     it('emits the type vectors for the gate', () => {
         const files = typeVectorFiles({
             slices: perSeed.flatMap((one) => one.slices),
-            paths: perSeed.flatMap((one) => one.paths),
+            paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
             clauses: clauseVocabulary,
         })
         if (process.env.EMIT_LEAN_REFUSALS) {
