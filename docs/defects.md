@@ -237,23 +237,23 @@ nests a map passes the gate.
 The refusal of an empty clause below the root has no test.
 ---
 
-## Known: a fragment that a refused scope bound overflows the stack in a second scope
+## Known: a fragment that a refused scope bound refuses for a recursion in a second scope
 
 **Observation.** A scope that refuses keeps its definitions in the slot of each `ref`. A second
 scope that reads a fragment of the refused scope, and does not declare the name of the `ref`,
-overflows the stack. Measured 2026-10-11 at c2d6330 and at c2218a2 with a throwaway spec:
+refuses for a recursion. Measured 2026-10-22 at 7f31f6e with a throwaway spec:
 
     const fragment = union([string, ref('A')])
     scope({ A: fragment })                 // refuses: 'A' reaches a recursion with no list or object on its path
-    scope({ O: object({ x: fragment }) })  // RangeError: Maximum call stack size exceeded
+    scope({ O: object({ x: fragment }) })  // RecursionRefused: this `object` term reaches a recursive `ref`
 
 A fresh fragment, which no refused scope bound, refuses in the second scope with "a ref names
 'A', which this scope does not declare".
 
-**Effect.** The second scope throws a RangeError and not a CodecError. A caller that catches
-CodecError does not catch the throw, and the refusal names no cause.
+**Effect.** The refusal of the second scope depends on an earlier scope, and names the wrong cause.
+The refusal is a CodecError, so a caller that catches CodecError catches the refusal.
 
-**Pin.** No test pins the overflow. The nested-refusal tests of
+**Pin.** No test pins the cause. The nested-refusal tests of
 `src/codec/spec/surface/codec.scope.spec.ts` leave this case out.
 
 ---
@@ -321,14 +321,19 @@ accepts the union.
 
 ---
 
-## Known: the type of an entry that names an object or a union through a ref offers members that the run time lacks
+## Known: the type of an entry that names an object through a ref accepts `item`, and the run time refuses
 
 **Observation.** The type of an entry reads the definition at the end of its chain of `ref`s. So
-`scope({ A: ref('O'), O: object({ a: string }) }).A` has the type of an object codec, with an item reading.
-At run time the entry is the `ref` codec, which carries no item reading, no extract and no exclude.
-Measured 2026-10-14 with a throwaway spec: the item reading of A is undefined, and so is the extract
-of an entry U that names a union through a `ref`.
+`scope({ A: ref('O'), O: object({ a: string }) }).A` has the type of an object codec, and
+`item(A)` typechecks. At run time the entry is the `ref` codec, and `item` reads no object there.
+Measured 2026-10-22 at 7f31f6e with a throwaway spec:
 
-**Effect.** An encode through the item reading of A typechecks and throws a TypeError.
+    item(S.A).encode({ a: 'x' })
+      type checker: accepted
+      runtime:      CodecError: this codec has no whole-item reading
+
+`extract` on an entry that names a union through a `ref` resolves the `ref`, and agrees with its type.
+
+**Effect.** A call of `item` on such an entry typechecks and throws a CodecError.
 
 **Pin.** None.
