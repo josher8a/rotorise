@@ -22,11 +22,11 @@ import {
     item,
     list,
     mdunion,
+    meet,
     nullable,
     number,
     object,
     optional,
-    product,
     ref,
     refine,
     scope,
@@ -658,7 +658,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
                 'a product with a held field',
                 () =>
                     u([
-                        (product as (...x: unknown[]) => unknown)(
+                        (meet as (...x: unknown[]) => unknown)(
                             object({ a: h(unbound) }),
                             object({ b: string }),
                         ),

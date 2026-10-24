@@ -14,9 +14,9 @@ import {
     discriminatedUnion,
     exclude,
     extract,
+    meet,
     object,
     optional,
-    product,
     string,
     undefinable,
     union,
@@ -202,7 +202,7 @@ const kinds = discriminatedUnion('priceType', [
     object({ priceType: string('FIXED'), value: string }),
     object({ priceType: string('BID'), expected: string }),
 ])
-const offers = product(supplies, kinds)
+const offers = meet(supplies, kinds)
 
 describe('a product of a supply family and a price family, where one supply option may omit a key', () => {
     const p = object({ supplyType: TOY, warrantyId: string })

@@ -118,6 +118,7 @@ item
 keyComponents
 list
 mdunion
+meet
 memberOf
 narrow
 never
@@ -132,7 +133,6 @@ path
 pathBuilder
 pin
 preconditions
-product
 ref
 refine
 scope

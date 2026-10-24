@@ -15,8 +15,8 @@ import {
     exclude,
     extract,
     list,
+    meet,
     object,
-    product,
     string,
     union,
 } from '../../codec'
@@ -35,7 +35,7 @@ const statuses = union([
     object({ status: string('PENDING'), deposit: decimal }),
     object({ status: string('SOLD'), soldFor: decimal }),
 ])
-const pet = product(categories, statuses)
+const pet = meet(categories, statuses)
 type Pet = Decoded<typeof pet>
 const plan = union([
     object({ type: string('ONE'), route: list(pet) }),

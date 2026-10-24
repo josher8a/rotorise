@@ -687,7 +687,9 @@ and the product of two factors (`MapOf.prod`) holds each merge of an option of t
 with an option of the second, outer over the first. The product is associative on terms
 (`Scoped.Term.product_assoc`), so the two nestings of three factors give one term. The term of a
 product is the union of the merges, so the meaning of a product is the join of the meanings of
-the merges where the merges agree (`Scoped.Term.product_join`).
+the merges where the merges agree (`Scoped.Term.product_join`). The host operation is `meet`, as
+TypeScript reads `A & B`: two closed objects at disjoint names meet as this product, and at a shared
+name the host meets the two fields. The model has no term for the meet at a shared name.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the
@@ -1121,7 +1123,7 @@ the term graph, so each host rule that inspects an argument reads the node at th
 of references, at run time and in the type. A reference that no scope binds yet waits for the
 scope that binds the name. A rule that read the spelling of its argument gave a reference and its
 target two verdicts: a refusal escaped through a reference, and a valid codec was refused through
-one. A product and an entry key need the node at the declaration, so each of these refuses a
+one. A meet and an entry key need the node at the declaration, so each of these refuses a
 reference that no scope binds yet.
 
 **One judgment types the built graph.** The judgment reads the node that each child names. It
@@ -1141,7 +1143,7 @@ holds one case per host rule:
 emptiness.** So `never` holds no value, and so does a union whose every option holds no value. A
 refinement stays out, because no function decides that a closure admits nothing. A `held` over such
 a term holds no value in the model, and the host admits that `held` in a declared position. The
-product reads the same predicate for a factor, and `nullable` reads it for the null point.
+meet reads the same predicate for a factor and returns `never` where one factor holds no value, and `nullable` reads it for the null point.
 
 **The judgment runs where each name that it reads is bound.** Each former builds its codec through
 one function, which runs the judgment at the declaration. `union` runs the judgment on its own term.
@@ -1155,7 +1157,7 @@ pair of options.
 **An entry carries the capabilities of the node that its references name.** An entry whose node
 writes `S`, `N` or `B` offers `.set()`, in the type and at run time. A reference and a literal carry
 no `.set()` of their own, so the scope gives such an entry the set of itself. An entry that names a
-dissection keeps the options of the dissection in declared order, so a product distributes over them.
+dissection keeps the options of the dissection in declared order, so a meet distributes over them.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.

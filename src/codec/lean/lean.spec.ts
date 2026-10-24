@@ -44,6 +44,7 @@ import {
     item as itemOf,
     list,
     mdunion,
+    meet,
     never,
     nullable,
     nullValue,
@@ -51,7 +52,6 @@ import {
     object,
     opaque,
     optional,
-    product,
     ref,
     refine,
     scope,
@@ -1178,17 +1178,17 @@ export const sampleVectors: readonly Vector[] = [
         ),
         value: { kind: 'a', x: 'v' },
     },
-    // a product, so the bridge sees one: the merged body is an ordinary `object` term
+    // a meet at disjoint names, so the bridge sees a product: the merged body is an ordinary `object` term
     {
         name: 'product_two_objects',
-        codec: erase(product(object({ a: string }), object({ n: boolean }))),
+        codec: erase(meet(object({ a: string }), object({ n: boolean }))),
         value: { a: 'x', n: true },
     },
-    // the distribution: a product over a union of objects is a flat union of the merges
+    // the distribution: a meet over a union of objects is a flat union of the merges
     {
         name: 'product_union_object',
         codec: erase(
-            product(
+            meet(
                 union([object({ a: string }), object({ b: boolean })]),
                 object({ n: decimal }),
             ),
@@ -1199,7 +1199,7 @@ export const sampleVectors: readonly Vector[] = [
     {
         name: 'product_three',
         codec: erase(
-            product(
+            meet(
                 object({ p: string }),
                 object({ q: boolean }),
                 object({ r: decimal }),

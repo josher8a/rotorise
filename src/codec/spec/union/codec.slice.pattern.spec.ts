@@ -16,10 +16,10 @@ import {
     discriminatedUnion,
     exclude,
     extract,
+    meet,
     number,
     object,
     optional,
-    product,
     refine,
     string,
     union,
@@ -43,7 +43,7 @@ const statuses = union([
     object({ status: string('PENDING'), deposit: decimal }),
     object({ status: string('SOLD'), soldFor: decimal }),
 ])
-const pet = product(categories, statuses)
+const pet = meet(categories, statuses)
 const order = union([
     object({ kind: string('ADOPT'), pet }),
     object({ kind: string('RETURN'), pet, note: string }),

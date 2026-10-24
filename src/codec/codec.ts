@@ -4737,39 +4737,75 @@ type FactorOptions<F> = F extends UnionCodec<infer _T, infer Os>
       ? Os
       : readonly [F]
 
-/** Every name a factor can declare, across all of its options. */
-type DeclaredNames<F> = FactorOptions<F>[number] extends infer O
-    ? O extends ObjectCodec<infer S, infer _R, infer _T, infer _Tm>
-        ? keyof S & string
-        : never
-    : never
-
 /** Whether any option of a factor is left open by a rest codec. */
 type AnyOpen<F> = FactorOptions<F>[number] extends infer O
     ? O extends ObjectCodec<infer _S, infer R, infer _T, infer _Tm>
         ? [R] extends [undefined]
             ? never
             : true
-        : true
+        : never
     : never
 
 /**
- * One merge at the type level. The merge is closed, because a name neither factor declares is one
- * the product refuses.
+ * The members that the attribute of a codec carries: the required keys of `Attribute`, because an
+ * `Attribute` types each other member as an optional `never`.
  */
-type MergeTwo<X, Y> = X extends ObjectCodec<
+type StoredMembers<C> = AttributeOf<C> extends infer W
+    ? W extends unknown
+        ? {
+              [K in keyof W]-?: object extends Pick<W, K> ? never : K
+          }[keyof W]
+        : never
+    : never
+
+/**
+ * The meet of two slots at one name, at the type level. The slot that fits the other is the meet,
+ * as the run time reads it. Two slots that fit neither way and share no decoded value meet at
+ * `never`. Two slots whose stored attributes share no member meet at `never` too, whatever adapter sits
+ * over them. Two slots that overlap without one fitting the other, such as two literal sets that share
+ * one literal, keep the intersection of the two codecs: the type cannot build the codec of the
+ * common literals, so the decoded type is that of one side and holds the literals that the run time drops.
+ */
+type MeetSlot<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
+    ? never
+    : [FitsCodec<A, B>] extends ['t']
+      ? A
+      : [FitsCodec<B, A>] extends ['t']
+        ? B
+        : [Decoded<A> & Decoded<B>] extends [never]
+          ? never
+          : A & B
+
+/** One meet of two objects at the type level: the union of the names. */
+type MeetSpecs<A, B> = [keyof A & keyof B] extends [never]
+    ? A & B
+    : Omit<A, keyof B> &
+          Omit<B, keyof A> & {
+              readonly [K in keyof A & keyof B]: MeetSlot<A[K], B[K]>
+          }
+
+/** `never` where a name that the object requires meets at `never`, and the object holds no value. */
+type HoldsNone<S> = true extends {
+    [K in keyof S]: [S[K]] extends [never] ? true : false
+}[keyof S]
+    ? true
+    : false
+
+type MeetObjects<X, Y> = X extends ObjectCodec<
     infer A,
     infer _RA,
     infer _TA,
     infer _TmA
 >
     ? Y extends ObjectCodec<infer B, infer _RB, infer _TB, infer _TmB>
-        ? ObjectCodec<show<A & B>>
-        : never
-    : never
+        ? HoldsNone<MeetSpecs<A, B>> extends true
+            ? never
+            : ObjectCodec<show<MeetSpecs<A, B>>>
+        : MeetSlot<X, Y>
+    : MeetSlot<X, Y>
 
 type DistributeOne<X, Ys extends readonly unknown[]> = {
-    [I in keyof Ys]: MergeTwo<X, Ys[I]>
+    [I in keyof Ys]: MeetObjects<X, Ys[I]>
 }
 
 /** The `flatMap` order: outer first, inner second. */
@@ -4780,106 +4816,67 @@ type Distribute<
     ? [...DistributeOne<H, Ys>, ...Distribute<T, Ys>]
     : []
 
-/** One merge needs no union around it; several are one flat union. */
-type ProductOfTwo<X, Y> = Distribute<
-    FactorOptions<X>,
-    FactorOptions<Y>
-> extends infer Ms extends readonly unknown[]
-    ? Ms extends readonly [infer One]
-        ? One
-        : UnionCodec<DerivedUnion<Ms>, Ms>
-    : never
+/** One meet needs no union around it; several are one flat union. */
+type MeetOfTwo<X, Y> = [X] extends [
+    { readonly def: { readonly kind: 'never' } },
+]
+    ? X
+    : [Y] extends [{ readonly def: { readonly kind: 'never' } }]
+      ? Y
+      : Distribute<FactorOptions<X>, FactorOptions<Y>> extends infer Ms extends
+              readonly unknown[]
+        ? Ms extends readonly [infer One]
+            ? One
+            : UnionCodec<DerivedUnion<Ms>, Ms>
+        : never
 
 /** More than two factors fold left. */
-type FoldProduct<Fs extends readonly unknown[]> = Fs extends readonly [
+type FoldMeet<Fs extends readonly unknown[]> = Fs extends readonly [
     infer A,
     infer B,
     ...infer R extends readonly unknown[],
 ]
-    ? FoldProduct<[ProductOfTwo<A, B>, ...R]>
+    ? FoldMeet<[MeetOfTwo<A, B>, ...R]>
     : Fs extends readonly [infer A]
       ? A
       : never
 
-/** A name two factors both declare, which is the one thing a product cannot have. */
-type SharedAcross<Fs extends readonly unknown[]> = Fs extends readonly [
-    infer H,
-    ...infer T extends readonly unknown[],
-]
-    ? (DeclaredNames<H> & DeclaredNames<T[number]>) | SharedAcross<T>
-    : never
-
-/** Whether any factor holds no value, read at the node that the factor names. */
-type HasNeverFactor<Fs extends readonly unknown[]> = Fs extends readonly [
-    infer H,
-    ...infer T extends readonly unknown[],
-]
-    ? // `[H] extends [never]` is true only where `H` *is* `never`, which is how a spec casts a
-      // factor past the type. Without this guard that cast matches every shape below it
-      [H] extends [never]
-        ? HasNeverFactor<T>
-        : [H] extends [{ readonly def: { readonly kind: 'never' } }]
-          ? true
-          : HoldsNoValue<TermOf<H>> extends true
-            ? true
-            : HasNeverFactor<T>
-    : false
-
 /**
- * Nothing, or why these factors have no product.
- *
- * **Three rules, in the order that gives the advice a caller can act on.** A `never` factor comes
- * first: a product against a factor that holds nothing passes no check, because every merge
- * holds nothing and two empty held sets are comparable in both directions. Without this clause the
- * open-factor one fired on it and told the caller to close a rest policy `never` does not have.
- *
- * The shared name is next, because its message names the name. The open factor is last: a `rest`
- * codec holds an undeclared name through a codec of its own, and the product would have to hold it
- * through both.
- *
- * The never clause reads each form that holds no value at the node that a factor names, so a scope
- * entry that names `never`, and `union([])`, get the never reason. A factor can still hold no value
- * through a predicate, and no clause reads that.
+ * Nothing, or why these factors have no meet that the host computes. An open factor holds an
+ * undeclared name through a codec of its own, and the meet of two open key entries has no term here.
  */
-export type ValidateProduct<Fs extends readonly unknown[]> =
-    HasNeverFactor<Fs> extends true
-        ? ErrorMessage<'[product] one factor is `never`, which holds no value — so every product with it holds none either and no value could select between the results. Remove the factor'>
-        : [SharedAcross<Fs>] extends [never]
-          ? [AnyOpen<Fs[number]>] extends [never]
-              ? unknown
-              : ErrorMessage<'[product] a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor: give it no open key entry'>
-          : ErrorMessage<`[product] two factors both declare '${SharedAcross<Fs>}', and a product needs disjoint names. Rename it, or drop it from one factor`>
+export type ValidateMeet<Fs extends readonly unknown[]> = [
+    AnyOpen<Fs[number]>,
+] extends [never]
+    ? unknown
+    : ErrorMessage<'[meet] a factor holds undeclared names through a `rest` codec, and a meet declares no meet of two of them. Close every factor: give it no open key entry'>
 
 /**
- * **The options a factor offers**: the object node that the factor names, or each option of the
- * union node that the factor names. Each read goes through the `ref`s, so a factor and a `ref` to
- * the factor give one product. The merge is built at the declaration, so a factor that names a
- * `ref` that no scope binds yet is refused rather than waiting.
+ * **The options a slot offers to the slice**: the object node that the slot names, or each option of
+ * the union node that the slot names. Each read goes through the `ref`s, so a slot and a `ref` to the
+ * slot give one split. The caller reads a slot that {@link holdsObjects}, so each refusal below
+ * guards a broken invariant and no input.
  */
 const optionsOfFactor = (factor: AnyCodec): readonly ObjectItem[] => {
     const node = resolvedTerm(termOf(factor))
-    // a product against a factor that holds nothing passes no check: every merge would hold
-    // nothing too, and two empty held sets are comparable both ways, so no value tells the options
-    // apart. The rule reads each form whose emptiness the term decides. A factor can still hold
-    // nothing through a predicate that admits no value, and the product of such a factor builds
     if (holdsNoValue(termOf(factor))) {
         throw new CodecError(
-            '`never` holds no value, so every product with it holds none either and no value could select between the results — remove the factor',
+            '`never` holds no value, and a slot at `never` has no option to split',
         )
     }
     if (node?.kind === 'ref') {
         throw new CodecError(
-            `a factor of a product names ref('${node.slot.name}'), which no scope binds yet — a product merges the declared names at its declaration, so take the product where the scope binds the name`,
+            `a slot names ref('${node.slot.name}'), which no scope binds yet — the slice reads the declared names at its declaration, so slice where the scope binds the name`,
         )
     }
     if (node?.kind === 'union') {
-        // a dissection is a union of objects in the term, so its members distribute in declared
-        // order like the options of any union
+        // a dissection is a union of objects in the term, so its members split in declared order
+        // like the options of any union
         return node.options.map((option) => {
             const one = objectNamed(option)
             if (!one) {
                 throw new CodecError(
-                    'an option of a union factor is not an object codec — a product merges declared names, and only an object declares any',
+                    'an option of a union slot is not an object codec — the slice splits declared names, and only an object declares any',
                 )
             }
             return one
@@ -4888,71 +4885,264 @@ const optionsOfFactor = (factor: AnyCodec): readonly ObjectItem[] => {
     const one = node && objectNamed(node)
     if (one) return [one]
     throw new CodecError(
-        'a factor of a product is an object codec or a `union` of object codecs, and this is neither — a product merges declared names, and only an object declares any',
+        'a slot that the slice splits is an object codec or a `union` of object codecs, and this is neither — only an object declares names',
     )
 }
 
-/** The binary product, over the options each factor offers. */
-const productOfTwo = (first: unknown, second: unknown): unknown => {
-    const lefts = optionsOfFactor(first as AnyCodec)
-    const rights = optionsOfFactor(second as AnyCodec)
-    for (const option of [...lefts, ...rights]) {
-        if (option.rest !== undefined) {
-            throw new CodecError(
-                'a factor holds undeclared names through a `rest` codec, and a product declares no meet of two of them. Close every factor: give it no open key entry',
-            )
-        }
+/** The options of a factor: each option of the union node it names, or the factor itself. */
+const meetOptions = (factor: AnyCodec): readonly AnyCodec[] => {
+    const node = resolvedTerm(termOf(factor))
+    if (node?.kind === 'ref') {
+        throw new CodecError(
+            `a factor of a meet names ref('${node.slot.name}'), which no scope binds yet — a meet reads the declared names at its declaration, so take the meet where the scope binds the name`,
+        )
     }
-    const merges = lefts.flatMap((left) =>
-        rights.map((right) => {
-            for (const name in right.spec) {
-                if (Object.hasOwn(left.spec, name)) {
-                    throw new CodecError(
-                        `both factors declare '${name}', and a product needs disjoint names — rename it, or drop it from one factor`,
-                    )
-                }
-            }
-            return objectFromMap({ ...left.spec, ...right.spec }, undefined)
-        }),
+    if (node?.kind !== 'union') return [factor]
+    return node.options.map((option) =>
+        codecOfTerm<never, AttributeValue>(option),
     )
-    // one merge is an object and needs no union around it; several are one flat union, built
-    // through `union` itself so `agrees` runs over the products
-    return merges.length === 1
-        ? merges[0]
-        : union(merges as unknown as readonly AnyCodec[])
+}
+
+/** The common literals of two pinned terms of one form, or nothing where the form differs. */
+const commonLiterals = (a: Term, b: Term): readonly Term[] | undefined => {
+    const left = clauseForm(a)
+    const right = clauseForm(b)
+    if (left === undefined || right === undefined) return undefined
+    if (left.adapter !== undefined || right.adapter !== undefined) {
+        return undefined
+    }
+    if (left.alts.base !== right.alts.base) return []
+    const node = resolvedTerm(a)
+    const options = node?.kind === 'union' ? node.options : node ? [node] : []
+    return options.filter((one) => {
+        const value = clauseForm(one)?.alts.ls[0]
+        return (
+            value !== undefined &&
+            right.alts.ls.some((tag: unknown) => sameLiteral(value, tag))
+        )
+    })
+}
+
+/** The codec of a list of terms of one base: `never`, the one term, or their union. */
+const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
+    const [only] = terms
+    if (only === undefined) return never
+    return codecOfTerm(
+        terms.length === 1 ? only : { kind: 'union', options: terms },
+    )
 }
 
 /**
- * **The product of two objects, or of unions of objects: the object of their merged spec.**
+ * The meet of two codecs that are neither a union nor `never`. A part that the host cannot read,
+ * a refinement, an adapter, an older reading, or an open key entry, meets only a part it fits.
+ */
+const meetParts = (a: AnyCodec, b: AnyCodec): AnyCodec => {
+    const A = resolvedTerm(termOf(a))
+    const B = resolvedTerm(termOf(b))
+    if (A === undefined || B === undefined) {
+        throw new CodecError(
+            'a factor of a meet names a cycle of refs with no node',
+        )
+    }
+    if (A === B || fits(A, B)) return a
+    if (fits(B, A)) return b
+    if (A.kind === 'opaq') return b
+    if (B.kind === 'opaq') return a
+    const common = commonLiterals(A, B)
+    if (common !== undefined) return codecOfTerms(common)
+    if (A.kind === 'object' && B.kind === 'object') return meetObjects(a, b)
+    if (A.kind === 'list' && B.kind === 'list') return meetLists(A, B)
+    if (A.kind === 'set' && B.kind === 'set') {
+        const elem = meetOfTwo(codecOfTerm(A.elem), codecOfTerm(B.elem))
+        const node = resolvedTerm(termOf(elem))
+        return node?.kind === 'never'
+            ? never
+            : codecOfTerm({ kind: 'set', elem: termOf(elem) })
+    }
+    // two parts whose stored views share no attribute hold no common value, whatever adapter sits
+    // over them: the meet is the bottom. Only a pair that is not apart can need a closure to decide
+    if (storedApart(A, B)) return never
+    for (const one of [A, B]) {
+        if (
+            one.kind === 'refine' ||
+            one.kind === 'held' ||
+            one.kind === 'legacy'
+        ) {
+            throw new CodecError(
+                `[meet] a factor holds a \`${one.kind}\` part that fits neither side, and the host cannot read the values of a caller's closure — meet only a part that one side fits`,
+            )
+        }
+    }
+    const left = memberOf(A)
+    const right = memberOf(B)
+    if (left !== undefined && right !== undefined && left !== right) {
+        return never
+    }
+    if (A.kind !== B.kind) return never
+    throw new CodecError(
+        `[meet] no rule of the meet covers a \`${A.kind}\` against a \`${B.kind}\``,
+    )
+}
+
+/** Two lists meet position by position, where both have no spread and one arity. */
+const meetLists = (
+    A: Extract<Term, { kind: 'list' }>,
+    B: Extract<Term, { kind: 'list' }>,
+): AnyCodec => {
+    const fixed = (t: Extract<Term, { kind: 'list' }>) =>
+        t.spread === undefined && t.suf.length === 0
+    const homogeneous = (t: Extract<Term, { kind: 'list' }>) =>
+        t.pre.length === 0 && t.suf.length === 0 ? t.spread : undefined
+    const meetAt = (x: Term, y: Term): Term | undefined => {
+        const one = termOf(meetOfTwo(codecOfTerm(x), codecOfTerm(y)))
+        return resolvedTerm(one)?.kind === 'never' ? undefined : one
+    }
+    const left = homogeneous(A)
+    const right = homogeneous(B)
+    if (left !== undefined && right !== undefined) {
+        const elem = termOf(meetOfTwo(codecOfTerm(left), codecOfTerm(right)))
+        return codecOfTerm({ kind: 'list', pre: [], spread: elem, suf: [] })
+    }
+    const positions = (
+        list: Extract<Term, { kind: 'list' }>,
+        elem: Term,
+    ): readonly (Term | undefined)[] => list.pre.map((one) => meetAt(one, elem))
+    const build = (pre: readonly (Term | undefined)[]): AnyCodec => {
+        const held = pre.filter((one): one is Term => one !== undefined)
+        return held.length === pre.length
+            ? codecOfTerm({ kind: 'list', pre: held, suf: [] })
+            : never
+    }
+    if (fixed(A) && right !== undefined) return build(positions(A, right))
+    if (fixed(B) && left !== undefined) return build(positions(B, left))
+    if (fixed(A) && fixed(B)) {
+        if (A.pre.length !== B.pre.length) return never
+        return build(
+            A.pre.map((one, at) => {
+                const there = B.pre[at]
+                return there === undefined ? undefined : meetAt(one, there)
+            }),
+        )
+    }
+    throw new CodecError(
+        '[meet] a list with a suffix, or with positions and a spread, has no meet here: the positions of a value of free length do not align',
+    )
+}
+
+/**
+ * Two fields at one name meet at the meet of their codecs. A required field and an optional field
+ * meet as a required field. Two marks that differ otherwise have no meet here.
+ */
+const meetSlots = (
+    name: string,
+    left: ObjectSlot,
+    right: ObjectSlot,
+): ObjectSlot | undefined => {
+    if (left === right) return left
+    const one = fieldOf(left)
+    const other = fieldOf(right)
+    if (one.mark === 'fallback' || other.mark === 'fallback') {
+        throw new CodecError(
+            `[meet] both factors declare '${name}', and one reads it through \`withLegacyRead\`, whose older reading has no meet`,
+        )
+    }
+    const held = meetOfTwo(entryCodec(left), entryCodec(right))
+    const empty = resolvedTerm(termOf(held))?.kind === 'never'
+    const marks = new Set([one.mark, other.mark])
+    if (marks.has('req')) return empty ? undefined : held
+    if (marks.size === 2) {
+        throw new CodecError(
+            `[meet] both factors declare '${name}', one \`optional\` and one \`undefinable\`, and the two absences have no meet here`,
+        )
+    }
+    return one.mark === 'undefinable' ? undefinable(held) : optional(held)
+}
+
+/** Two objects meet at the union of their names, each shared name at the meet of its fields. */
+const meetObjects = (a: AnyCodec, b: AnyCodec): AnyCodec => {
+    const left = objectNamed(termOf(a))
+    const right = objectNamed(termOf(b))
+    if (left === undefined || right === undefined) {
+        throw new Error('meetObjects reads two object nodes')
+    }
+    if (left.rest !== undefined || right.rest !== undefined) {
+        throw new CodecError(
+            'a factor holds undeclared names through a `rest` codec, and a meet declares no meet of two of them. Close every factor: give it no open key entry',
+        )
+    }
+    const spec: Record<string, ObjectSlot> = { ...left.spec }
+    for (const name in right.spec) {
+        const there = right.spec[name]
+        if (there === undefined) continue
+        const mine = left.spec[name]
+        if (mine === undefined) {
+            spec[name] = there
+            continue
+        }
+        const slot = meetSlots(name, mine, there)
+        if (slot === undefined) return never
+        spec[name] = slot
+    }
+    return objectFromMap(spec, undefined)
+}
+
+/** The binary meet: `never` absorbs, a union distributes, and the parts meet otherwise. */
+const meetOfTwo = (first: AnyCodec, second: AnyCodec): AnyCodec => {
+    if (holdsNoValue(termOf(first)) || holdsNoValue(termOf(second))) {
+        return never
+    }
+    const lefts = meetOptions(first)
+    const rights = meetOptions(second)
+    if (lefts.length === 1 && rights.length === 1) {
+        const [left] = lefts
+        const [right] = rights
+        if (left !== undefined && right !== undefined) {
+            return meetParts(left, right)
+        }
+    }
+    const meets = lefts.flatMap((left) =>
+        rights.flatMap((right) => {
+            const one = meetOfTwo(left, right)
+            return resolvedTerm(termOf(one))?.kind === 'never' ? [] : [one]
+        }),
+    )
+    // one meet needs no union around it; several are one flat union, built through `union`
+    // itself so `agrees` runs over the meets
+    const [only] = meets
+    if (only === undefined) return never
+    return meets.length === 1 ? only : union(meets)
+}
+
+/**
+ * **The meet of codecs: the values that every factor holds**, as TypeScript reads `A & B`.
  *
- * The founding operation of the Cartesian product over codecs.
+ * Two objects meet at the union of their names, and a shared name holds the meet of its two
+ * fields. Two literal sets meet at their common literals, a base meets its own literal at the
+ * literal, and two bases of different members meet at `never`. A list and a set meet by element,
+ * and a fixed list meets position by position. A union distributes, outer over the first factor's
+ * options and inner over the second: the `flatMap` order. `never` absorbs.
  *
- * **A union factor distributes.** The result is one flat `union` of the `n·m` merges, outer over
- * the first factor's options and inner over the second: the `flatMap` order. It is built through {@link union}, so `agrees` runs
- * over the products and a pair of merges it cannot show compatible is refused there rather than here.
- *
- * **More than two factors fold left.** `product(a, b, c)` is `product(product(a, b), c)`. The other
- * nesting gives the same term: the model's merge of records is associative (`Term.product_assoc`).
+ * **More than two factors fold left.** `meet(a, b, c)` is `meet(meet(a, b), c)`.
  *
  * @example
  * ```ts
- * product(object({ petId: string }), object({ price: decimal }))
- * product(union([object({ a: string }), object({ b: string })]), object({ n: boolean }))
+ * meet(object({ petId: string }), object({ price: decimal }))
+ * meet(union([object({ a: string }), object({ b: string })]), object({ n: boolean }))
  * ```
  */
-export const product = <const Fs extends readonly unknown[]>(
-    ...factors: Fs & ValidateProduct<Fs>
-): FoldProduct<Fs> => {
-    const [head, ...rest] = factors as readonly unknown[]
+export const meet = <const Fs extends readonly AnyCodec[]>(
+    ...factors: Fs & ValidateMeet<Fs>
+): FoldMeet<Fs> => {
+    const [head, ...rest] = factors
     if (head === undefined || rest.length === 0) {
         throw new CodecError(
-            'a product is taken of two or more factors, and fewer were given',
+            'a meet is taken of two or more factors, and fewer were given',
         )
     }
-    return rest.reduce(
-        (carried, next) => productOfTwo(carried, next),
-        head,
-    ) as FoldProduct<Fs>
+    // one cast, where the run-time fold meets a type computed from the tuple of factors: the fold
+    // returns `AnyCodec`, and `FoldMeet` is the same fold on the types, which the host cannot prove
+    // equal. `tsc` refuses the line without the cast: `AnyCodec` is not assignable to `FoldMeet<Fs>`
+    return rest.reduce(meetOfTwo, head) as FoldMeet<Fs>
 }
 
 /**
@@ -7779,7 +7969,7 @@ export const discriminatedUnion = <
     mdunion<readonly [D], Options>([discriminator], options)
 
 /**
- * **The term that admits no value**, and the unit the product and the slice need.
+ * **The term that admits no value**, the bottom that the meet and the slice return.
  *
  * `Term.never` on both sides. The model types it — `TOp.rule` gives it the held set `HNever`,
  * which is `False` — and denotes it as `Codec.empty`, whose laws hold vacuously because both

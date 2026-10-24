@@ -244,6 +244,8 @@ HOST = {
     "decimal": "`src/codec/codec.ts`'s adapter: `number` under the text adapter, which the model "
                "states as `held` over `Term.number`. The model has no decimal base, so the name "
                "is the host's alone. `decimalCodec` is the model's codec for the stored numerals",
+    "meet": "`src/codec/codec.ts`'s combinator, as TypeScript reads `A & B`. `Term.product` is its "
+            "form at disjoint names, and the model has no term for the meet at a shared name",
 }
 
 # The specification's own notation, from the blueprint's `content.tex`. §1 names sets and §5 names

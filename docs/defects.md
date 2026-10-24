@@ -273,10 +273,32 @@ ids, measured 2026-10-14.
 
 ---
 
+## Known: the type of meet keeps one side at two overlapping literal sets, and states no refusal of a closure
+
+**Observation.** The run time meets two literal sets at their common literals. The type cannot build
+the codec of the common literals, so it keeps the intersection of the two codecs, and the decoded
+type is that of one side. Two parts whose stored members are apart meet at `never` in the type and
+at run time. The run time refuses a part that holds a closure, a refinement or a caller's adapter,
+where the two stored members are not apart and neither side fits the other, because the host cannot
+read a closure. The type states no such refusal. One example:
+
+    const both = meet(string('x', 'y'), string('y', 'z'))
+      runtime: the term holds 'y'
+      type: the decoded type is 'y' | 'z'
+
+**Effect.** The decoded type of such a meet admits a literal that the term drops. A write of that
+literal passes the type and fails at run time. A meet of a refinement with a part that it does not
+fit builds in the type and throws at run time.
+
+**Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the overlapping literal sets and the
+refinement refusal.
+
+---
+
 ## Partially mitigated: a term that holds no value escapes the never rules where the term does not decide it
 
 **Observation.** The predicate in `src/codec/term.ts` that decides that a term holds no value answers `true` for `never` and for a union
-whose every option holds no value. The list position rule, the field rule, the product factor rule
+whose every option holds no value. The list position rule, the field rule, the meet
 and `nullable` read it. Two forms hold no value in the model and answer `false`:
 
     list(string, refine(string, (_: string): _ is string => false))   // builds

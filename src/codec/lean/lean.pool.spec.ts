@@ -38,6 +38,7 @@ import {
     item,
     list,
     mdunion,
+    meet,
     never,
     nullable,
     nullValue,
@@ -45,7 +46,6 @@ import {
     object,
     opaque,
     optional,
-    product,
     ref,
     refine,
     scope,
@@ -434,11 +434,11 @@ const draw = (depth: number): Entry => {
         case 17: {
             const a = draw(depth - 1)
             const b = draw(depth - 1)
-            const merge = product as (...factors: unknown[]) => unknown
+            const merge = meet as (...factors: unknown[]) => unknown
             const right = erase(object({ b: b.codec }))
             if (rng() < 0.5)
                 return {
-                    name: `product({a:${a.name}},{b:${b.name}})`,
+                    name: `meet({a:${a.name}},{b:${b.name}})`,
                     codec: erase(merge(object({ a: a.codec }), right)),
                 }
             const left = {
@@ -453,7 +453,7 @@ const draw = (depth: number): Entry => {
                 union([left.codec, other.codec] as never),
             )
             return {
-                name: `product(union({a:${a.name}}|{c:string}),{b:${b.name}})`,
+                name: `meet(union({a:${a.name}}|{c:string}),{b:${b.name}})`,
                 codec: erase(merge(factor, right)),
             }
         }

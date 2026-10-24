@@ -11,9 +11,9 @@ import type { Option } from '../../codec'
 import {
     boolean,
     decimal,
+    meet,
     number,
     object,
-    product,
     string,
     union,
     withLegacyRead,
@@ -94,7 +94,7 @@ const statuses = union([
     object({ status: string('AVAILABLE') }),
     object({ status: string('ADOPTED'), adopterId: string }),
 ])
-const cross = product(categories, listings, statuses)
+const cross = meet(categories, listings, statuses)
 
 const cell = (a: number, k: number, s: number): Row => ({
     M: {

@@ -7,6 +7,7 @@
  * type and the run time each give the same verdict to both spellings.
  */
 import { describe, expect, it } from 'vitest'
+import type { AnyCodec } from '../../codec'
 import {
     boolean,
     CodecError,
@@ -16,13 +17,13 @@ import {
     extract,
     item,
     list,
+    meet,
     never,
     nullable,
     nullValue,
     object,
     opaque,
     optional,
-    product,
     ref,
     refine,
     scope,
@@ -30,6 +31,9 @@ import {
     union,
 } from '../../codec'
 import { RecursionRefused } from '../../term'
+
+/** The definition of a codec, read through `AnyCodec` because a meet at `never` has the type `never`. */
+const defOf = (codec: AnyCodec) => codec.def
 
 /** `It`, named through the `ref` of the entry `At`. */
 const NeverAt = scope({ At: ref('It'), It: never }).At
@@ -77,21 +81,15 @@ describe('a slot at never is refused through a ref', () => {
     })
 })
 
-describe('a product reads the node that each factor names', () => {
-    it('refuses a factor at never with the never reason, direct and through a ref', () => {
-        // @ts-expect-error the type refuses the factor
-        expect(() => product(never, object({ b: string }))).toThrow(
-            /holds no value/,
-        )
-        // @ts-expect-error the type gives the never reason through a ref
-        expect(() => product(NeverAt, object({ b: string }))).toThrow(
-            /holds no value/,
-        )
+describe('a meet reads the node that each factor names', () => {
+    it('meets at never a factor at never, direct and through a ref', () => {
+        expect(defOf(meet(never, object({ b: string })))).toEqual(never.def)
+        expect(defOf(meet(NeverAt, object({ b: string })))).toEqual(never.def)
     })
 
     it('merges an object that a ref names as the object itself', () => {
-        const direct = product(object({ a: string }), object({ b: decimal }))
-        const named = product(ObjectAt, object({ b: decimal }))
+        const direct = meet(object({ a: string }), object({ b: decimal }))
+        const named = meet(ObjectAt, object({ b: decimal }))
         expect(named.def).toEqual(direct.def)
         expect(item(named).encode({ a: 'x', b: '1' })).toEqual({
             a: { S: 'x' },
@@ -99,14 +97,14 @@ describe('a product reads the node that each factor names', () => {
         })
     })
 
-    /** A dissection is a union of objects in the term, so the product distributes over its variants. */
+    /** A dissection is a union of objects in the term, so the meet distributes over its variants. */
     it('merges each variant of a discriminatedUnion factor, in declared order', () => {
         const Tagged = discriminatedUnion('kind', [
             object({ kind: string('a'), x: string }),
             object({ kind: string('b'), y: boolean }),
         ])
-        const merged = product(Tagged, object({ n: decimal }))
-        const plain = product(
+        const merged = meet(Tagged, object({ n: decimal }))
+        const plain = meet(
             union([
                 object({ kind: string('a'), x: string }),
                 object({ kind: string('b'), y: boolean }),
@@ -128,7 +126,7 @@ describe('a product reads the node that each factor names', () => {
 
     it('refuses a factor that names a ref that no scope binds, because the merge is built at the declaration', () => {
         expect(() =>
-            product(ref('Free') as never, object({ b: decimal })),
+            meet(ref('Free') as never, object({ b: decimal })),
         ).toThrow(CodecError)
     })
 })
@@ -238,15 +236,9 @@ describe('a term that holds no value is refused where never is', () => {
         expect(() => object({ a: optional(EmptyAt) })).not.toThrow()
     })
 
-    it('refuses a product factor at union([]) with the never reason, direct and through a ref', () => {
-        // @ts-expect-error the type gives the never reason
-        expect(() => product(union([]), object({ b: string }))).toThrow(
-            /holds no value/,
-        )
-        // @ts-expect-error the type gives the never reason through a ref
-        expect(() => product(EmptyAt, object({ b: string }))).toThrow(
-            /holds no value/,
-        )
+    it('meets at never a factor at union([]), direct and through a ref', () => {
+        expect(defOf(meet(union([]), object({ b: string })))).toEqual(never.def)
+        expect(defOf(meet(EmptyAt, object({ b: string })))).toEqual(never.def)
     })
 
     /** No function decides that a closure admits nothing, so a refinement is not read as empty. */
@@ -482,8 +474,8 @@ describe('an entry carries the capabilities of the node that its ref chain names
                 object({ kind: string('b'), y: boolean }),
             ]),
         }).D
-        const named = product(DissectionAt, object({ n: decimal }))
-        expect(named.def).toEqual(product(direct, object({ n: decimal })).def)
+        const named = meet(DissectionAt, object({ n: decimal }))
+        expect(named.def).toEqual(meet(direct, object({ n: decimal })).def)
         expect(item(named).encode({ kind: 'a', x: 'q', n: '1' })).toEqual({
             kind: { S: 'a' },
             x: { S: 'q' },
