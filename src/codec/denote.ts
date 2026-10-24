@@ -2288,7 +2288,8 @@ const heldBase = (t: Term): LiteralBase | undefined =>
             : undefined
 
 /**
- * Everything about an option that the **term** decides, which is everything but `item`.
+ * Everything about an option but `item`, from the **term**. `codec.ts` adds `item`, which is a
+ * function of the term too.
  *
  * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
  * attribute pair, and that pair reads `codec`, `member`, `carries` and `declares` — it never reads
@@ -2299,9 +2300,8 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  * optional are read from the term here. The names select no option: every option is attempted.
  * `declares` marks an object option, which the kind filter reads as a map, and a message names.
  *
- * The term decides, and every codec has one. The object a *constructor* returns carries the item reading
- * and a codec built from a term does not, so a test on the reading would classify a term-built object
- * option as a ground option.
+ * The term decides, and every codec has one, so the former that built a codec classifies no
+ * option.
  */
 export const optionOfTerm = (def: Term): Option => {
     const codec = codecOfTerm(def)

@@ -17,7 +17,7 @@ import type {
 } from './attribute'
 import { DynamoNumber, isStoredNumeral } from './attribute'
 import { codec } from './build'
-import type { Pair } from './denote'
+import type { ItemTerm, Pair } from './denote'
 import {
     altSem,
     byTagSem,
@@ -25,7 +25,6 @@ import {
     codecOfTerm,
     guard,
     itemSem,
-    judged,
     literalCodec,
     literalShape,
     membersOf,
@@ -3966,7 +3965,25 @@ type Slice<C, P, Keep extends boolean> = C extends DiscriminatedCodec<
               infer Tm
           >
         ? UnionSlice<Tm, KeptOptions<Options, P, Keep>>
-        : UnionSlice<OfParts, KeptOptions<[C], P, Keep>>
+        : UnionSlice<OfParts, KeptOptions<LiteralOptions<C>, P, Keep>>
+
+/**
+ * **The options of a codec that no union former built**: one option for each literal where the term
+ * is a union of literals, as `string('A', 'B')` builds, because the run time slices that term by its
+ * options. Any other codec is one option.
+ */
+type LiteralOptions<C> = TermOf<C> extends [
+    'union',
+    infer Ts extends readonly ['prim', ['literal', string, unknown]][],
+]
+    ? {
+          -readonly [I in keyof Ts]: AttributeCodec<
+              DecodeTerm<Ts[I]>,
+              AttributeOf<C> & AttributeValue
+          > &
+              TermMark<Ts[I]>
+      }
+    : [C]
 
 /** The member specs that a pattern of a slice of `C` names its keys against. */
 type SliceSpecs<C> = C extends DiscriminatedCodec<
@@ -4389,8 +4406,30 @@ const objectFromMap = <
         DerivedItem<Spec, Rest>,
         M<EncodedBy<Spec, Rest>>
     >
-    // the term's item pair, not a second one built beside it — `denote`'s row asks `itemSem` for
-    // the same object, so `item` and the codec run one body rather than two that agree
+    // the `M` is what this codec writes; `item` is the same two directions with the wrapper taken
+    // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
+    // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
+    // object literal, which is what lets a bundler drop an unused one
+    return {
+        encode: nested.encode,
+        decode: nested.decode,
+        unsafeEncode: nested.unsafeEncode,
+        unsafeDecode: nested.unsafeDecode,
+        def: nested.def,
+        spec,
+        rest,
+    }
+}
+
+/**
+ * **The whole-item reading of an object node, a function of the node.** The spec holds the codec
+ * of each field term, and `rest` holds the codec of the open term. The memo is a cache only.
+ */
+const objectReadings = new WeakMap<ItemTerm, ObjectItem>()
+
+const objectItem = (itemDef: ItemTerm): ObjectItem => {
+    const built = objectReadings.get(itemDef)
+    if (built) return built
     /**
      * **The view, and this is where it starts.**
      *
@@ -4403,16 +4442,18 @@ const objectFromMap = <
      * were two objects before `579ed89`, and nothing said which of them a caller was running.
      */
     const body = itemSem(itemDef)
-
-    type T = DerivedItem<Spec, Rest>
+    const fields = itemDef.body.fields
+    const spec = Object.fromEntries(
+        Object.entries(fields).map(([name, f]) => {
+            const codec = codecOfTerm(f.t)
+            return [name, f.mark === 'req' ? codec : { codec, def: f }]
+        }),
+    )
+    const rest = itemDef.body.rest && codecOfTerm(itemDef.body.rest)
     // a term that reads a name that no scope binds refuses each use
-    const self: ItemCodec<T, Spec, Rest> = {
+    const self: ObjectItem = {
         [itemMark]: true,
-        encode: (item) =>
-            openRefusal(itemDef) ??
-            (body.encode(item as Record<string, unknown>) as Result<
-                EncodedBy<Spec, Rest>
-            >),
+        encode: (item) => openRefusal(itemDef) ?? (body.encode(item) as never),
 
         encodePartial: (patch) => {
             const open = openRefusal(itemDef)
@@ -4424,7 +4465,7 @@ const objectFromMap = <
                 if (value === undefined) continue
                 // a name the spec does not declare is written through the open entry, as `encode`
                 // writes it
-                const term = fields[name]?.t ?? declaredBody.rest
+                const term = fields[name]?.t ?? itemDef.body.rest
                 if (!term) {
                     return new CodecError(`'${name}' is not an attribute`)
                 }
@@ -4440,41 +4481,19 @@ const objectFromMap = <
             membersTooDeeply(item, 0) ??
             (body.decode(
                 item as Readonly<Record<string, AttributeValue>>,
-            ) as Result<T>),
+            ) as never),
 
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
         unsafeEncodePartial: (patch) => orThrow(self.encodePartial(patch)),
 
-        spec: spec as Spec,
+        spec,
         rest,
         def: itemDef,
     }
-
-    // the `M` is what this codec writes; `item` is the same two directions with the wrapper taken
-    // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
-    // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
-    // object literal, which is what lets a bundler drop an unused one
-    const made = {
-        encode: nested.encode,
-        decode: nested.decode,
-        unsafeEncode: nested.unsafeEncode,
-        unsafeDecode: nested.unsafeDecode,
-        def: nested.def,
-        spec,
-        rest,
-        [itemSlot]: self,
-    }
-    objectItems.set(nested.def, self)
-    return made
+    objectReadings.set(itemDef, self)
+    return self
 }
-
-/**
- * **The whole-item reading of a codec, at run time only.** An object codec and a union each keep
- * the reading here. No codec type names the slot, so no codec type carries the reading, and
- * {@link item} is the one reader.
- */
-const itemSlot = Symbol('item')
 
 /**
  * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
@@ -4489,18 +4508,20 @@ type Marked = { readonly [itemMark]: true }
 /** A whole-item reading, as the run time holds it. */
 type Reading = Marked & { readonly spec: unknown }
 
-/** The reading that a codec keeps, or `undefined` where the codec was not built with one. */
-const readingOf = (codec: unknown): Reading | undefined =>
-    (codec as { readonly [itemSlot]?: Reading })[itemSlot]
+/** The whole-item reading of a term: an object, a dissection, or a union. */
+const readingOf = (t: Term): Reading | undefined => {
+    if (t.kind === 'object') return objectItem(t)
+    if (t.kind !== 'union') return undefined
+    const ks = keySets.get(t)
+    return ks ? dissectionOf(t, ks).self : unionOf(t)
+}
 
 /** The whole-item reading of an object node: the declared spec, the open block, and the pair. */
-type ObjectItem = {
-    readonly [itemMark]: true
-    readonly encode: (item: never) => unknown
-    readonly decode: (item: StoredItem) => unknown
-    readonly spec: Record<string, ObjectSlot>
-    readonly rest: AnyCodec | undefined
-}
+type ObjectItem = ItemCodec<
+    Record<string, unknown>,
+    Record<string, ObjectSlot>,
+    AnyCodec | undefined
+>
 
 /**
  * The same declaration, read as a whole item: the same two directions without the top-level map,
@@ -4513,9 +4534,9 @@ type ObjectItem = {
  * `convertTopLevelContainer`.
  *
  * A free function and not a member: a member is typed on each codec type that carries the member,
- * and a function is typed only at a call. The constructor builds the reading once, and puts the
- * reading at {@link itemSlot}, so a call costs one property read, as the member did. An object
- * codec carries no type for the reading. A union carries the type of the reading in one tuple.
+ * and a function is typed only at a call. The reading is a function of the term, built once per
+ * term. An object codec carries no type for the reading. A union carries the type of the reading
+ * in one tuple.
  *
  * The union overload reads a union by the reading that its type carries: the reading of a union
  * of objects, of a tagged union, or of a dissection. A union that can hold an attribute that is not
@@ -4532,34 +4553,25 @@ export function item<
     Free<ObjectFree<Spec, Rest, Tm>>
 export function item<C extends Itemable<unknown>>(codec: C): ReadingOf<C>
 export function item(codec: object): unknown {
-    const reading = readingOf(codec)
-    // the constructors of `object`, `union` and `mdunion` put the reading on each codec that they
-    // build, so a missing reading is a broken invariant
+    const reading = readingOf((codec as AnyCodec).def)
     if (reading === undefined) {
         throw new CodecError(
-            'this codec has no whole-item reading: `item` takes a codec that `object`, `union` or `mdunion` built',
+            'this codec has no whole-item reading: `item` takes an object or a union',
         )
     }
     return reading
 }
 
 /**
- * **The whole-item reading of each object node**, so a former that reads the node a `ref` names
- * reaches the declared spec of the node. Each object node comes from {@link objectFromMap}.
+ * **The key set of each dissection**, keyed by the term. The term of a dissection is a `union`
+ * term, and only the builder holds the key set: the one fact of a reading that the term lacks.
  */
-const objectItems = new WeakMap<Term, ObjectItem>()
-
-/**
- * **The slice of each sum node**, keyed by the term of the sum. The term of a dissection is a
- * `union` term, and only the builder holds its key set. So {@link extract} cannot dispatch on
- * `def.kind`, and reads the slice here.
- */
-const sums = new WeakMap<Term, (pattern: unknown, keep: boolean) => unknown>()
+const keySets = new WeakMap<Term, readonly string[]>()
 
 /** The whole-item reading of the node that a term names, or nothing where the node is no object. */
 const objectNamed = (t: Term): ObjectItem | undefined => {
     const node = resolvedTerm(t)
-    return node === undefined ? undefined : objectItems.get(node)
+    return node?.kind === 'object' ? objectItem(node) : undefined
 }
 
 export type ObjectEntry<
@@ -5368,7 +5380,7 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
  */
 const dissect = <T extends Record<string, unknown>>(
     ks: readonly string[],
-    options: readonly AnyObjectCodec[],
+    options: readonly (AnyObjectCodec | AnyCodec)[],
 ): DiscriminatedCodec<T, string, Record<string, unknown>> => {
     // **the empty key set, refused where the type cannot refuse it.** Over no discriminator every
     // value carries the empty assignment, so the first member answers for all of them and the
@@ -5412,6 +5424,30 @@ const dissect = <T extends Record<string, unknown>>(
     )
     const unionDef = { kind: 'union', options: memberTerms } as const
 
+    keySets.set(unionDef, ks)
+    whenBound(memberTerms, dissectionOf(unionDef, ks).resolution)
+    const nested = codecOfTerm<T, Attribute<'M'>>(unionDef)
+    return {
+        encode: nested.encode,
+        decode: nested.decode,
+        unsafeEncode: nested.unsafeEncode,
+        unsafeDecode: nested.unsafeDecode,
+        def: nested.def,
+    } as unknown as DiscriminatedCodec<T, string, Record<string, unknown>>
+}
+
+/** The whole-item reading of a dissection, a function of the term and the key set. */
+type Dissecting = { readonly self: Reading; readonly resolution: () => unknown }
+const dissections = new WeakMap<Term, Dissecting>()
+
+const dissectionOf = (
+    unionDef: Extract<Term, { kind: 'union' }>,
+    ks: readonly string[],
+): Dissecting => {
+    const built = dissections.get(unionDef)
+    if (built) return built
+    type T = Record<string, unknown>
+    const memberTerms = unionDef.options
     // **every member's assignment, read off the member's own body, and no two alike.** Both rules
     // are the index's, not the union's: the one-key refusals `discriminatedUnion` used to spell
     // inline are these two at one key. The union's own gate does not replace them, because a
@@ -5454,7 +5490,6 @@ const dissect = <T extends Record<string, unknown>>(
         indexed ??= index()
         return indexed
     }
-    whenBound(memberTerms, resolution)
     const pick = (assignment: Readonly<Record<string, string>>) =>
         resolution().pick(assignment)
     const tagOf = (item: Partial<T>) => resolution().tagOf(item)
@@ -5468,7 +5503,7 @@ const dissect = <T extends Record<string, unknown>>(
 
     // a term that reads a name that no scope binds refuses each use
     const self = {
-        [itemMark]: true,
+        [itemMark]: true as const,
         encode: (item: T) =>
             openRefusal(unionDef) ??
             andThen(andThen(tagOf(item), pick), (variant) =>
@@ -5506,26 +5541,9 @@ const dissect = <T extends Record<string, unknown>>(
         },
         def: unionDef,
     }
-
-    const nested = codecOfTerm<T, Attribute<'M'>>(unionDef)
-    // **The slice keeps every key**, at one member as at several. A key the clause pins to one
-    // tag is a constant key on the result, and no normalisation drops a constant key: the
-    // codec writes the tag out of the member's own field, so every item carries it whatever
-    // the key set says. So a one-member result is a one-member dissection that still reads its
-    // key, and `dissect` is handed the same `ks` it was built with.
-    sums.set(nested.def, (pattern, keep) => {
-        const open = openRefusal(unionDef)
-        if (open) throw open
-        return slicedDissection(ks, options, pattern, keep)
-    })
-    return {
-        encode: nested.encode,
-        decode: nested.decode,
-        unsafeEncode: nested.unsafeEncode,
-        unsafeDecode: nested.unsafeDecode,
-        def: nested.def,
-        [itemSlot]: self,
-    } as unknown as DiscriminatedCodec<T, string, Record<string, unknown>>
+    const made = { self, resolution }
+    dissections.set(unionDef, made)
+    return made
 }
 
 /**
@@ -5538,7 +5556,7 @@ const dissect = <T extends Record<string, unknown>>(
  */
 const slicedDissection = (
     ks: readonly string[],
-    options: readonly AnyObjectCodec[],
+    options: readonly AnyCodec[],
     pattern: unknown,
     keep: boolean,
 ): unknown => {
@@ -5752,7 +5770,7 @@ export type Option = {
     readonly describe: string
 }
 
-const optionOf = (codec: AnyCodec): Option => {
+const optionOf = (t: Term): Option => {
     /**
      * Read from the definition, not from the presence of a reading.
      *
@@ -5761,15 +5779,8 @@ const optionOf = (codec: AnyCodec): Option => {
      * that list as though `0` and `1` were attribute names. `attributes` is the definition of an
      * object codec and of nothing else.
      */
-    const base = optionOfTerm(termOf(codec))
-    // a tagged builder carries a whole-item reading of its own — its `Tagged` — over a term that
-    // is now an ordinary union, so the test is the presence of that reading and not the kind
-    const asObject =
-        codec.def?.kind === 'object'
-            ? objectItems.get(codec.def)
-            : codec.def?.kind === 'union'
-              ? readingOf(codec)
-              : undefined
+    const base = optionOfTerm(t)
+    const asObject = readingOf(t)
     return asObject
         ? {
               ...base,
@@ -7817,13 +7828,25 @@ export const never: AttributeCodec<never, never> & {
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
+    const declared = { kind: 'union', options: options.map(termOf) } as const
+    // the judgment of the node runs here, and the item reading is a function of the term
+    return codecOfTerm(declared) as unknown as UnionCodec<
+        DerivedUnion<Options>,
+        Options
+    >
+}
+
+/** The whole-item reading of a union, a function of the term. The memo is a cache only. */
+const unions = new WeakMap<Term, Reading>()
+
+const unionOf = (declared: Extract<Term, { kind: 'union' }>): Reading => {
+    const built = unions.get(declared)
+    if (built) return built
     // **The judgment decides the union's obligation**: each two options compatible, at the
     // declaration, or at the first scope that binds a name of an option. The resolution reads each
     // option through its `ref`s, so it runs at the first use, where every name is bound
     const settle = () => {
-        const all: readonly Option[] = (options as readonly AnyCodec[]).map(
-            optionOf,
-        )
+        const all: readonly Option[] = declared.options.map(optionOf)
         return { all, ...altSem(all) }
     }
     let settled: ReturnType<typeof settle> | undefined
@@ -7831,16 +7854,7 @@ export const union = <const Options extends readonly AnyCodec[]>(
         settled ??= settle()
         return settled
     }
-    const optionTerms = options.map(termOf)
-    const declared: Term = { kind: 'union', options: optionTerms }
-    judged(declared)
-    // **A use needs every name bound.** Each use refuses while a `ref` of an option is unbound
-    const closed = (): void => {
-        const open = openRefusal(declared)
-        if (open) throw open
-    }
-
-    type T = DerivedUnion<Options>
+    type T = Record<string, unknown>
 
     /**
      * The item reading's own matcher: the value is always a record, so the shape filter has nothing
@@ -7898,51 +7912,19 @@ export const union = <const Options extends readonly AnyCodec[]>(
      * not be reached here also cannot be selected here: `declares` is what selects, and only an
      * object option has it.
      */
-    const self: Untagged<T, SpecsOf<Options>> = {
-        [itemMark]: true,
+    const self = {
+        [itemMark]: true as const,
         encode: writeItem,
         decode: readItem,
-        unsafeEncode: (item) => orThrow(self.encode(item)),
-        unsafeDecode: (item) => orThrow(self.decode(item)),
+        unsafeEncode: (item: T) => orThrow(self.encode(item)),
+        unsafeDecode: (item: StoredItem) => orThrow(self.decode(item)),
         // an object option declares its spec, and a tagged option declares its tag map
-        spec: (options as readonly AnyCodec[]).map(
-            (option) => readingOf(option)?.spec,
-        ) as never,
-        def: {
-            kind: 'union',
-            options: optionTerms,
-        },
+        spec: declared.options.map((option) => readingOf(option)?.spec),
+        def: declared,
     }
 
-    // the option chosen writes what it writes; `WrittenBy` is the union of those, which no single
-    // call can be narrowed to from inside
-    // the resolution is erased — a sum's rule is about options, not about the type they carry —
-    // so the two halves get their types back here, once, the way `codecOfTerm` does for a term
-    const encode = ((value: T) =>
-        openRefusal(declared) ??
-        resolution().pair.encode(value as never, 0)) as (
-        value: T,
-    ) => Result<WrittenBy<Options>>
-    const decode = ((attribute: AttributeValue) =>
-        openRefusal(declared) ?? resolution().pair.decode(attribute)) as (
-        attribute: AttributeValue,
-    ) => Result<T>
-    const codec = {
-        encode,
-        decode,
-        unsafeEncode: (value: T) => orThrow(encode(value)),
-        unsafeDecode: (attribute: AttributeValue) => orThrow(decode(attribute)),
-        def: {
-            kind: 'union',
-            options: optionTerms,
-        },
-        [itemSlot]: self,
-    } as unknown as UnionCodec<DerivedUnion<Options>, Options>
-    sums.set(codec.def, (pattern, keep) => {
-        closed()
-        return slicedUnion(options as readonly AnyCodec[], pattern, keep)
-    })
-    return codec
+    unions.set(declared, self)
+    return self
 }
 
 /**
@@ -7965,13 +7947,20 @@ const slicedUnion = (
 /**
  * The slice of a sum, or of the union of one option that any other codec is.
  *
- * The result is `unknown`: the `sums` registry holds one erased slice function for every sum, and
- * only {@link extract} and {@link exclude} know the codec type that a call gives. Each of the two
- * casts the result once, to the `Slice` of the call.
+ * The result is `unknown`: only {@link extract} and {@link exclude} know the codec type that a
+ * call gives. Each of the two casts the result once, to the `Slice` of the call. A dissection keeps
+ * every key in its slice, because each member still writes its tag.
  */
 const sliced = (codec: AnyCodec, pattern: unknown, keep: boolean): unknown => {
-    const sum = sums.get(codec.def)
-    return sum ? sum(pattern, keep) : sliced(union([codec]), pattern, keep)
+    const t = codec.def
+    if (t.kind !== 'union') return sliced(union([codec]), pattern, keep)
+    const open = openRefusal(t)
+    if (open) throw open
+    const options = t.options.map((option) => codecOfTerm(option))
+    const ks = keySets.get(t)
+    return ks
+        ? slicedDissection(ks, options, pattern, keep)
+        : slicedUnion(options, pattern, keep)
 }
 
 /**

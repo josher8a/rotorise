@@ -35,6 +35,7 @@ import {
     exclude,
     extract,
     held,
+    item,
     list,
     mdunion,
     never,
@@ -54,6 +55,7 @@ import {
     union,
     withLegacyRead,
 } from '../codec'
+import { codecOfTerm, termOf } from '../denote'
 import type {
     DisjointPair,
     FormerGuard,
@@ -82,10 +84,16 @@ import {
     sliceableOf,
     unionAt,
 } from '../lean'
-import { orThrow } from '../result'
+import { failed, orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
-import { openRefusal, RecursionRefused, recursionUse, targetOf } from '../term'
+import {
+    openRefusal,
+    RecursionRefused,
+    recursionUse,
+    sameTerm,
+    targetOf,
+} from '../term'
 import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
 import { typeVectorFiles } from '../typeVectors'
 
@@ -1294,6 +1302,125 @@ const poolModules = (
 describe('the generated pool, against the model', () => {
     const perSeed = buildPool()
     const pairs = perSeed.flatMap((one) => one.pairs)
+
+    /**
+     * **The item reading and the slice are functions of the term.** The codec that `codecOfTerm`
+     * builds from the term of a pool codec, and from a copy of the term, reads each drawn value as
+     * the pool codec reads it, and keeps the same term under each clause. A refusal must be the
+     * same refusal. The copy shares each `ref`, and a dissection keeps its key set in the builder,
+     * so the copy of a dissection is a plain union and the copy check skips it.
+     */
+    it('reads an item and slices from the term of the codec alone', () => {
+        const outcome = (run: () => unknown): unknown => {
+            try {
+                const out = run()
+                return failed(out) ? `refused: ${out.message}` : out
+            } catch (error) {
+                return `throws: ${error instanceof Error ? error.message : String(error)}`
+            }
+        }
+        const same = (a: unknown, b: unknown): boolean =>
+            typeof a === 'string' || typeof b === 'string'
+                ? a === b
+                : structuralEquals(a, b)
+        const copied = new Map<object, unknown>()
+        const copy = (t: unknown): unknown => {
+            if (typeof t !== 'object' || t === null) return t
+            if (
+                Object.getPrototypeOf(t) !== Object.prototype &&
+                !Array.isArray(t)
+            )
+                return t
+            if ((t as Term).kind === 'ref') return t
+            const known = copied.get(t)
+            if (known) return known
+            const out: Record<string, unknown> = Array.isArray(t)
+                ? ([] as unknown as Record<string, unknown>)
+                : {}
+            copied.set(t, out)
+            for (const [k, v] of Object.entries(t)) out[k] = copy(v)
+            return out
+        }
+        const codecs = new Set([
+            ...pairs.flatMap((p) => [p.left, p.right]),
+            ...perSeed.flatMap((one) => one.slices.map((s) => erase(s.codec))),
+        ])
+        const rng = rngFrom(20261022)
+        const counts = { codecs: 0, copies: 0, values: 0, clauses: 0 }
+        const differs: string[] = []
+        const compare = (c: AnyCodec, rebuilt: AnyCodec, label: string) => {
+            const def = c.def as Term
+            const mine = outcome(() => item(c as never))
+            const theirs = outcome(() => item(rebuilt as never))
+            if (typeof mine === 'string' || typeof theirs === 'string') {
+                if (mine !== theirs)
+                    differs.push(`${label} reading: ${mine} | ${theirs}`)
+                return
+            }
+            const [a, b] = [mine, theirs] as {
+                encode: (v: unknown) => unknown
+                decode: (i: unknown) => unknown
+            }[]
+            for (let k = 0; k < 4; k++) {
+                const value = outcome(() => arbitraryOf(c, rng, 2))
+                if (typeof value === 'string') continue
+                const wa = outcome(() => a?.encode(value))
+                const wb = outcome(() => b?.encode(value))
+                if (!same(wa, wb)) differs.push(`${label} encode`)
+                if (typeof wa === 'string') continue
+                if (
+                    !same(
+                        outcome(() => a?.decode(wa)),
+                        outcome(() => b?.decode(wa)),
+                    )
+                )
+                    differs.push(`${label} decode`)
+                counts.values++
+            }
+            const options = def.kind === 'union' ? def.options : [def]
+            const keys = new Set(
+                options.flatMap((t) =>
+                    t.kind === 'object' ? Object.keys(t.body.fields) : [],
+                ),
+            )
+            for (const key of keys) {
+                for (const make of clauseVocabulary) {
+                    const pattern = object({ [key]: make() })
+                    const x = outcome(() =>
+                        termOf(extract(c as never, pattern as never)),
+                    )
+                    const y = outcome(() =>
+                        termOf(extract(rebuilt as never, pattern as never)),
+                    )
+                    const agree =
+                        typeof x === 'string' || typeof y === 'string'
+                            ? x === y
+                            : sameTerm(x as Term, y as Term)
+                    if (!agree) differs.push(`${label} slice at ${key}`)
+                    counts.clauses++
+                }
+            }
+        }
+        for (const c of codecs) {
+            const def = c.def
+            if (def.kind !== 'object' && def.kind !== 'union') continue
+            counts.codecs++
+            compare(c, codecOfTerm(termOf(c)) as AnyCodec, 'term')
+            const reading = outcome(() => item(c as never))
+            if (
+                typeof reading === 'object' &&
+                reading !== null &&
+                'keys' in reading
+            )
+                continue
+            counts.copies++
+            compare(c, codecOfTerm(copy(def) as Term) as AnyCodec, 'copy')
+        }
+        expect(differs).toEqual([])
+        expect(counts.values).toBeGreaterThan(0)
+        expect(counts.clauses).toBeGreaterThan(0)
+        console.log(`term readings: ${JSON.stringify(counts)}`)
+    })
 
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count

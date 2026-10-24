@@ -357,6 +357,17 @@ describe('a union that holds other kinds beside objects slices by any codec', ()
         }>()
         expect(optionsOf(exclude(mixed, string))).toHaveLength(3)
     })
+
+    it('slices a union of literals that no union former built, as the Extract of its literals', () => {
+        const ab = string('A', 'B')
+        const a = extract(ab, string('A'))
+        expectTypeOf<Decoded<typeof a>>().toEqualTypeOf<'A'>()
+        expect(a.decode({ S: 'A' })).toBe('A')
+        expect(failed(a.decode({ S: 'B' }))).toBe(true)
+        const b = exclude(ab, string('A'))
+        expectTypeOf<Decoded<typeof b>>().toEqualTypeOf<'B'>()
+        expect(b.decode({ S: 'B' })).toBe('B')
+    })
 })
 
 describe('a pattern that describes no member is refused', () => {
