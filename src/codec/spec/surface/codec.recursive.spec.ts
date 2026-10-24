@@ -117,8 +117,8 @@ type Tree = string | readonly Tree[]
 
 describe('a union that names itself', () => {
     /**
-     * The union waits for the scope, and the scope binds the name before the union checks its
-     * options. The list on the path guards the recursion, and the declaration ends.
+     * The scope binds the name in its closed copy, then judges the union of the copy. The list on
+     * the path guards the recursion, and the declaration ends.
      */
     it(
         'declares a union that names itself through a ref, and round-trips a value',
@@ -189,7 +189,7 @@ describe('a union that names itself', () => {
 
     /**
      * **A `nullable` over a `ref` that names its own entry, with no container between, reads its own
-     * input.** The `nullable` waits for the scope, and the scope refuses the recursion.
+     * input.** The scope judges the closed copy of the `nullable`, and refuses the recursion.
      */
     it('refuses a nullable that names its own entry with no container between, at the scope', () => {
         const unguarded =
@@ -201,11 +201,11 @@ describe('a union that names itself', () => {
     })
 
     /**
-     * **The null point of a `ref` is known once the scope binds the name.** A `nullable` over a
-     * `ref` waits for the scope, and asks the question there, so a nullable recursive field needs
+     * **The null point of a `ref` is known once the scope binds the name.** The scope asks the
+     * question of a `nullable` over a `ref` on the closed copy, so a nullable recursive field needs
      * no other spelling.
      */
-    it('declares a nullable recursive field, because nullable waits for the scope', () => {
+    it('declares a nullable recursive field, because the scope judges the nullable on its closed copy', () => {
         type Node = { v: string; next: Node | null }
         const { List } = scope({
             List: object({ v: string, next: nullable(ref('List')) }),
@@ -245,7 +245,7 @@ describe('a union that names itself', () => {
      * **The walk of `at` crosses a `nullable` over a `ref`.** The walk forces the thunk that the
      * path crosses, and the scope already resolved it, so the located codec writes the leaf.
      */
-    it('walks at through a nullable ref, because nullable waits for the scope', () => {
+    it('walks at through a nullable ref, because the scope judges the nullable on its closed copy', () => {
         const { List } = scope({
             List: object({ v: string, next: nullable(ref('List')) }),
         })
@@ -296,8 +296,8 @@ describe('a recursion is refused or accepted where it is declared, as the model 
 
 /**
  * **A `ref` that closes no cycle is the codec of its entry.** Each former reads the `ref` as a free
- * variable, so the former builds an open fragment, and the scope runs the guard and each waiting
- * check with the name bound. So a former directly over a `ref` gives the verdict that the codec of
+ * variable, so the former builds an open fragment, and the scope runs the guard and each check on
+ * the closed copy, with the name bound. So a former directly over a `ref` gives the verdict that the codec of
  * the entry gives in its place, where the model's guard accepts the term.
  */
 describe('a former directly over a ref', () => {
@@ -343,7 +343,8 @@ describe('a former directly over a ref', () => {
 
     /**
      * **A tag that a `ref` names is read when the scope binds the name.** The index of the
-     * dissection reads the literal of each tag through the `ref`, so the index waits for the scope.
+     * dissection reads the literal of each tag through the `ref`, so the scope builds the index on
+     * the closed copy.
      * The type of a `ref` is its name alone, and carries no literal, so the type refuses the tag.
      */
     it('keys a variant by a tag that a ref names, once the scope binds the name', () => {

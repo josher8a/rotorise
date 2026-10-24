@@ -927,7 +927,7 @@ const mutualSample: Vector = {
  * The scope refuses the cycle at construction, so the term is built by hand, and the guard vector
  * states that the model refuses it too.
  */
-const selfSlot: RefSlot = { name: 'Self', waiting: [] }
+const selfSlot: RefSlot = { name: 'Self' }
 const selfTerm: Term = { kind: 'ref', slot: selfSlot }
 selfSlot.bound = { Self: selfTerm }
 const selfThunk: AnyCodec = erase(codecOfTerm(selfTerm))
@@ -2929,7 +2929,12 @@ describe('a closed codec', () => {
         expect(refused(selfThunk)).toContain('an unguarded cycle')
     })
 
-    it('refuses a cycle through a wall, which has no scoped form', () => {
+    /**
+     * **A cycle through a wall has no closed form.** The term of the refusal is the closed copy of
+     * the scope, where 'L' binds to itself through the wall. The codec of that term refuses the
+     * wall at its construction, so no closed codec of the cycle reaches the printer.
+     */
+    it('refuses a cycle through a wall, which has no closed form', () => {
         const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
         let term: Term | undefined
         try {
@@ -2940,8 +2945,9 @@ describe('a closed codec', () => {
             if (thrown instanceof RecursionRefused) term = thrown.term
         }
         if (term === undefined) throw new Error('expected the scope to refuse')
-        expect(refused(erase(codecOfTerm(term)))).toContain(
-            'a cycle through a wall',
+        const closed = term
+        expect(() => codecOfTerm(closed)).toThrow(
+            /`held` reads 'L', an entry on a cycle/,
         )
     })
 

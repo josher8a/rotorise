@@ -193,8 +193,18 @@ const declare = (
     make: () => unknown,
     keys: readonly string[] = [],
 ): AnyCodec => {
-    declared.push([a, b])
+    const pair: [Entry, Entry] = [a, b]
+    declared.push(pair)
     const made = erase(make())
+    // **A scope closes a copy**, so a fragment of the scope stays open, and the pair reads each
+    // option of the entry in place of the fragment
+    const t = made.def
+    if (t.kind === 'union')
+        for (const [at, option] of t.options.entries()) {
+            const was = pair[at]
+            if (was !== undefined && option !== was.codec.def)
+                pair[at] = { ...was, codec: erase(codecOfTerm(option)) }
+        }
     unions.push({ codec: made, keys })
     return made
 }
@@ -1425,6 +1435,11 @@ describe('the generated pool, against the model', () => {
     /**
      * **The counts pin the pool, deliberately.** The pool depends on the seed alone, so a count
      * moves only when the draw, a constructor, or the emitter changes. Look at the move.
+     *
+     * A scope binds no slot of a fragment, so a fragment of a refused scope stays an open term,
+     * and the pool drops each pair over such a fragment as an open fragment. At these seeds, three
+     * draws of a recursive union put an older reader beside a list that reads the union, and the
+     * scope refuses the two options as not shown compatible.
      */
     it('draws a pool that depends on the seed alone', () => {
         expect({
@@ -1454,21 +1469,20 @@ describe('the generated pool, against the model', () => {
             "dropped": {
               "a constructor refused the draw": 69,
               "path: a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form": 1,
-              "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 70,
-              "separation: the union reads a \`ref\` that no scope binds, so the host decides the pair at the scope": 3,
+              "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 73,
               "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 17,
               "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1566,
-              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 584,
+              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 587,
             },
             "seeds": [
               {
                 "assignments": 33,
                 "clauses": 4005,
-                "codecsPathed": 227,
-                "disjoints": 1072,
+                "codecsPathed": 226,
+                "disjoints": 1071,
                 "fills": 5,
                 "guards": 0,
-                "pairs": 1072,
+                "pairs": 1071,
                 "paths": 1999,
                 "seed": 20261004,
                 "separations": 1066,
@@ -1492,11 +1506,11 @@ describe('the generated pool, against the model', () => {
               {
                 "assignments": 39,
                 "clauses": 4455,
-                "codecsPathed": 177,
-                "disjoints": 1080,
+                "codecsPathed": 175,
+                "disjoints": 1078,
                 "fills": 11,
                 "guards": 0,
-                "pairs": 1080,
+                "pairs": 1078,
                 "paths": 2149,
                 "seed": 4,
                 "separations": 1067,
@@ -1620,8 +1634,8 @@ describe('the generated pool, against the model', () => {
     /**
      * **No column of a pair is checked by `#eval` alone.** A pair with a fill on each side has no
      * separation vector, so the kernel states its guard column in a row of its own. **A pair over
-     * an open fragment states no row**: the union waits for the scope that binds the free `ref`, so
-     * the host decides nothing on the pair. The scoped print refuses an open fragment, so no such
+     * an open fragment states no row**: a scope judges the closed copy of the union, so the host
+     * decides nothing on the pair. The scoped print refuses an open fragment, so no such
      * pair enters the pool, and the refusal is asserted on a pair that reads `ref('undeclared')`.
      */
     it('states the guard column of each pair of two fills in the kernel, and refuses a pair over an open fragment', () => {

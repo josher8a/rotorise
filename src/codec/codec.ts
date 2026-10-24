@@ -25,6 +25,7 @@ import {
     codecOfTerm,
     guard,
     itemSem,
+    judged,
     literalCodec,
     literalShape,
     membersOf,
@@ -61,20 +62,20 @@ import type { Body, Field, NameForm, NonEmpty, Term } from './term'
 import {
     alwaysWritten,
     clauseForm,
+    closedCopy,
     holdsNoValue,
     member as memberOf,
     openRefusal,
     ownsNullOf,
     pinnedForm,
-    refuseSlots,
     resolvedTerm,
     sameAdapter,
     sameTerm,
     targetOf,
+    throughRefs,
     unanimous,
     unboundRefs,
     usedTargetOf,
-    whenBound,
 } from './term'
 
 /**
@@ -2039,31 +2040,33 @@ const withMissing = <const C extends AnyCodec>(
     // on the next write instead of at the declaration that caused it. Decidable from the
     // declaration alone, which is why the stand-in is a value and not a thunk
     const standsFor = inner as unknown as AnyCodec
-    const check = (): void => {
-        let refusal: CodecError | undefined
-        try {
-            const written = standsFor.encode(value as never)
-            refusal = failed(written) ? written : undefined
-        } catch (thrown) {
-            // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
-            refusal = new CodecError(
-                thrown instanceof Error ? thrown.message : String(thrown),
-            )
-        }
-        if (refusal) {
-            throw new CodecError(
-                `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
-            )
-        }
-    }
-    // **A stand-in that the codec writes through an unbound `ref` waits for the scope** that binds
-    // the ref, because the write reads through the ref
-    whenBound([termOf(standsFor)], check)
+    // **A stand-in that the codec writes through an unbound `ref` is checked by the scope**, on the
+    // closed copy, because the write reads through the ref
+    if (unboundRefs([termOf(standsFor)]).size === 0) standIn(standsFor, value)
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
     return {
         codec: attribute,
         def: { mark: 'fallback', t: termOf(inner), v: value },
     } as unknown as MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
+}
+
+/** The refusal of a stand-in that the codec it stands in for cannot write. */
+const standIn = (standsFor: AnyCodec, value: unknown): void => {
+    let refusal: CodecError | undefined
+    try {
+        const written = standsFor.encode(value as never)
+        refusal = failed(written) ? written : undefined
+    } catch (thrown) {
+        // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
+        refusal = new CodecError(
+            thrown instanceof Error ? thrown.message : String(thrown),
+        )
+    }
+    if (refusal) {
+        throw new CodecError(
+            `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
+        )
+    }
 }
 
 /**
@@ -2531,7 +2534,7 @@ type ScopeWalls<Defs> = {
  */
 export function ref<const N extends string>(name: N): Ref<N>
 export function ref(name: string): unknown {
-    return codecOfTerm({ kind: 'ref', slot: { name, waiting: [] } })
+    return codecOfTerm({ kind: 'ref', slot: { name } })
 }
 
 /**
@@ -2541,13 +2544,16 @@ export function ref(name: string): unknown {
  *
  * Each former ran before the names were bound, so the guard runs here: a recursion with no
  * container on its path, or with an adapter on its path, is refused. A `ref` to a name that `defs`
- * does not declare is refused. Then each check that waits on a bound name runs: the check of a
- * `union` with a `ref` option, which a `nullable` over a `ref` builds, the index of a dissection
- * whose tag reads a `ref`, and the stand-in of a `withLegacyRead` that writes through a `ref`.
+ * does not declare is refused. Then each check that reads through a `ref` runs on the closed copy:
+ * the check of a `union` with a `ref` option, which a `nullable` over a `ref` builds, the index of
+ * a dissection whose tag reads a `ref`, and the stand-in of a `withLegacyRead` that writes through
+ * a `ref`.
  *
- * **A scope binds and closes.** Each entry has no free name, in the type and at run time, so each
- * entry is a codec to use. A scope that refuses binds no name, so each fragment that it held stays
- * open and refuses each use.
+ * **A scope closes a copy, by lexical scope.** Each entry is the codec of its closed term. A `ref`
+ * binds in the record of its own scope, and a cycle is a recursive binding of that record
+ * (`letrec`), not a slot written in place. Each entry has no free name, in the type and at run
+ * time, so each entry is a codec to use. A fragment stays an open term, so the fragment refuses
+ * each use, and the result of a scope depends on its own arguments only.
  *
  * @example
  * ```ts
@@ -2564,46 +2570,61 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
     const terms = Object.fromEntries(
         Object.entries(defs).map(([name, def]) => [name, termOf(def)]),
     )
-    const slots = unboundRefs(Object.values(terms))
-    for (const slot of slots)
+    for (const slot of unboundRefs(Object.values(terms)))
         if (!Object.hasOwn(defs, slot.name))
             throw new CodecError(
                 `[scope] a ref names '${slot.name}', which this scope does not declare`,
             )
-    for (const slot of slots) {
-        slot.bound = terms
-        slot.refused = false
+    // **A scope closes a copy.** Each `ref` of the copy is bound in `record`, and no slot that a
+    // caller holds changes. So a scope reads its own arguments only, and a fragment stays open.
+    // The key set of a dissection is the one fact that the term does not carry, so the copy of a
+    // dissection takes the key set of the node that it replaces
+    const record: Record<string, Term> = {}
+    const [close, copies] = closedCopy(record)
+    for (const [name, t] of Object.entries(terms)) record[name] = close(t)
+    for (const [was, copy] of copies) {
+        const ks = keySets.get(was)
+        if (ks !== undefined) keySets.set(copy, ks)
     }
-    // **A refused scope binds no name**, so each fragment it held stays open and refuses each use.
     // The refusal of the guard carries the term of the entry, so a checker states the model's
-    // guard on that term
-    try {
-        for (const [name, t] of Object.entries(terms)) {
-            const refused = guard(t, name)
-            if (refused) throw refused
-        }
-        for (const check of new Set([...slots].flatMap((slot) => slot.waiting)))
-            check()
-    } catch (thrown) {
-        refuseSlots(slots)
-        throw thrown
+    // guard on that term. Then each copy is judged one time, with each name bound
+    for (const [name, t] of Object.entries(record)) {
+        const refused = guard(t, name)
+        if (refused) throw refused
     }
-    // **An entry carries the `.set()` of the node that its chain of `ref`s names**, as its type
+    for (const copy of copies.values()) {
+        judged(copy, false)
+        if (copy.kind === 'object')
+            for (const f of Object.values(copy.body.fields))
+                if (f.mark === 'fallback') standIn(codecOfTerm(f.t), f.v)
+        const ks = keySets.get(copy)
+        if (ks !== undefined && copy.kind === 'union')
+            dissectionOf(copy, ks).resolution()
+    }
+    // **An entry is the codec of its closed term.** An entry that reaches no free name is the
+    // codec that the caller declared. An object entry reads its spec and its open block from the
+    // term. An entry carries the `.set()` of the node that its chain of `ref`s names, as its type
     // does. A `ref` and a literal carry no `.set()` of their own, so such an entry builds the set
     // of itself, and the judgment of the set refuses an element that writes no `S`, `N` or `B`. An
-    // object and a union write `M` or no single member, so their entries stay as declared
+    // object and a union write `M` or no single member, so their entries carry no `.set()`
     return Object.fromEntries(
         Object.entries(defs).map(([name, def]) => {
-            const kind = terms[name]?.kind
-            return [
-                name,
-                'set' in def || kind === 'object' || kind === 'union'
-                    ? def
-                    : { ...def, set: () => set(def) },
-            ]
+            const t = record[name]
+            if (t === undefined || t === terms[name])
+                return [name, entryOf(def, t?.kind)]
+            const codec: AnyCodec = codecOfTerm(t)
+            if (t.kind !== 'object') return [name, entryOf(codec, t.kind)]
+            const { spec, rest } = objectItem(t)
+            return [name, { ...codec, spec, rest }]
         }),
     )
 }
+
+/** The entry of a scope over its codec: a codec with no `.set()` builds the set of itself. */
+const entryOf = (codec: AnyCodec, kind: Term['kind'] | undefined): object =>
+    'set' in codec || kind === 'object' || kind === 'union'
+        ? codec
+        : { ...codec, set: () => set(codec) }
 
 // ── presence ────────────────────────────────────────────────────────
 
@@ -2699,8 +2720,8 @@ export const nullable = <
     const t = termOf(inner as unknown as AnyCodec)
     const owns = ownsNullOf(t)
     // **An unbound `ref` leaves the answer open**: the codec is the union with `NULL`, an open
-    // fragment, and the union's check waits for the scope that binds the names. A `ref` whose
-    // entry owns the null point fails that check, as a second option that writes `NULL`
+    // fragment, and the scope that binds the names checks the union on its closed copy. A `ref`
+    // whose entry owns the null point fails that check, as a second option that writes `NULL`
     if (owns === undefined && unboundRefs([t]).size > 0)
         return codecOfTerm<T | null, A | Attribute<'NULL'>>(
             union([inner, nullValue]).def,
@@ -4490,12 +4511,13 @@ type Marked = { readonly [itemMark]: true }
 /** A whole-item reading, as the run time holds it. */
 type Reading = Marked & { readonly spec: unknown }
 
-/** The whole-item reading of a term: an object, a dissection, or a union. */
+/** The whole-item reading of the node that a term names: an object, a dissection, or a union. */
 const readingOf = (t: Term): Reading | undefined => {
-    if (t.kind === 'object') return objectItem(t)
-    if (t.kind !== 'union') return undefined
-    const ks = keySets.get(t)
-    return ks ? dissectionOf(t, ks).self : unionOf(t)
+    const node = resolvedTerm(t)
+    if (node?.kind === 'object') return objectItem(node)
+    if (node?.kind !== 'union') return undefined
+    const ks = keySets.get(node)
+    return ks ? dissectionOf(node, ks).self : unionOf(node)
 }
 
 /** The whole-item reading of an object node: the declared spec, the open block, and the pair. */
@@ -4628,8 +4650,8 @@ type EntryRest<Entries extends readonly AnyObjectEntry[]> = [
 
 /**
  * The names an entry key declares, read from the node that the key names, through its `ref`s. The
- * names fix the body at the declaration, so a key that names a `ref` that no scope binds yet is
- * refused rather than waiting.
+ * names fix the body at the declaration, so a key that names a `ref` that no scope binds is
+ * refused at the declaration.
  */
 const entryNames = (key: AnyCodec): string[] => {
     const term = resolvedTerm(termOf(key))
@@ -5161,9 +5183,10 @@ export type ClausePattern = {
 
 /**
  * The term of a pattern, open at every object, as {@link fits} reads a pattern: `fits` reads no
- * open block of the pattern, so every undeclared name of the pattern holds `opaque`.
+ * open block of the pattern, so every undeclared name of the pattern holds `opaque`. The opening
+ * reads through each `ref`, and a cycle of the term is a cycle of the opening.
  */
-const opened = (t: Term): Term => {
+const opened = throughRefs((t, opened) => {
     switch (t.kind) {
         case 'object': {
             const fields: Record<string, Field> = {}
@@ -5185,7 +5208,7 @@ const opened = (t: Term): Term => {
         default:
             return t
     }
-}
+})
 
 /** The term of a clause, built one time when the path records the clause. */
 export const clauseOf = (pattern: ClausePattern): Clause => {
@@ -5573,7 +5596,7 @@ const dissect = <T extends Record<string, unknown>>(
         )
     }
     // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
-    // that no scope binds yet waits for the scope, where the index reads the node
+    // that no scope binds is read by the scope, where the index reads the node of the closed copy
     for (const option of options) {
         const node = resolvedTerm(termOf(option as unknown as AnyCodec))
         if (node?.kind !== 'ref' && !(node && objectNamed(node))) {
@@ -5597,7 +5620,10 @@ const dissect = <T extends Record<string, unknown>>(
     const unionDef = { kind: 'union', options: memberTerms } as const
 
     keySets.set(unionDef, ks)
-    whenBound(memberTerms, dissectionOf(unionDef, ks).resolution)
+    // **A tag that a member reads through an unbound `ref` is indexed by the scope**, on the closed
+    // copy, because the index reads the literal of each tag through the `ref`
+    if (unboundRefs(memberTerms).size === 0)
+        dissectionOf(unionDef, ks).resolution()
     const nested = codecOfTerm<T, Attribute<'M'>>(unionDef)
     return {
         encode: nested.encode,
@@ -5626,9 +5652,8 @@ const dissectionOf = (
     // duplicated index key is a different fact from two members that are not disjoint, and the index is
     // what needs it.
     //
-    // **A tag that a member reads through an unbound `ref` waits for the scope**, because the
-    // index reads the literal of each tag through the `ref`. The scope builds the index with every
-    // name bound, and each use builds it where no scope has
+    // **A tag that a member reads through an unbound `ref` is indexed by the scope**, on the closed
+    // copy, because the index reads the literal of each tag through the `ref`
     const index = () => {
         const members = membersOf(
             ks,
@@ -7085,12 +7110,38 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
  * The literal rule is `Calculus.altsSub`, and the object rule asks each key of the pattern: a
  * required key of the pattern is a required key of the option, and an absent key of the option fits
  * an optional key of the pattern only where the option has no open key entry.
+ *
+ * **A pair on the path of the walk fits.** The order on recursive terms is coinductive: `fits` is
+ * the greatest fixed point of the rules, so a pair that the walk already entered fits, and a walk
+ * through a recursive `ref` ends.
  */
-const fits = (a: Term, p: Term): boolean => {
+const fits = (
+    a: Term,
+    p: Term,
+    assumed: Map<Term, Set<Term>> = new Map(),
+): boolean => {
     const A = resolvedTerm(a)
     const P = resolvedTerm(p)
     if (A === undefined || P === undefined) return false
     if (A === P) return true
+    // **A pair on the path of the walk fits**, the greatest fixed point of the rules, so a walk
+    // through a recursive `ref` ends. The pair leaves the set where its walk ends
+    const pending = assumed.get(A) ?? new Set<Term>()
+    if (pending.has(P)) return true
+    assumed.set(A, pending.add(P))
+    try {
+        return fitsNode(A, P, (x, y) => fits(x, y, assumed))
+    } finally {
+        pending.delete(P)
+    }
+}
+
+/** The rules of {@link fits} at two nodes that are not `ref`s, with `fits` for each child pair. */
+const fitsNode = (
+    A: Term,
+    P: Term,
+    fits: (a: Term, p: Term) => boolean,
+): boolean => {
     if (A.kind === 'union') return A.options.every((one) => fits(one, P))
     if (P.kind === 'union') return P.options.some((one) => fits(A, one))
     const pinned = clauseForm(P)

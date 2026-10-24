@@ -422,8 +422,8 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     })
 
     /**
-     * **A `ref` that names a later entry is read with the entry bound.** The union waits for the
-     * scope, and the scope binds every name before the union reads its options. So the option reads
+     * **A `ref` that names a later entry is read with the entry bound.** The scope binds every
+     * name in its closed copy, then judges the union of the copy. So the option reads
      * the later entry, a list, and the union is accepted.
      */
     it('accepts a ref that names a later entry, because the scope binds the entry before the union reads it', () => {

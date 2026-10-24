@@ -428,7 +428,7 @@ describe('the verdict does not read the order of the operands', () => {
     })
 
     it('keeps a literal apart from a right recursive term whose stages it shares no member with', () => {
-        const toStages: RefSlot = { name: 'Stages', waiting: [] }
+        const toStages: RefSlot = { name: 'Stages' }
         const stages: Term = {
             kind: 'union',
             options: [

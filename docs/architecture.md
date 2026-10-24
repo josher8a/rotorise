@@ -1123,11 +1123,11 @@ selection refuses.
 
 **A former reads the node that a reference names.** A reference and its target are one node of
 the term graph, so each host rule that inspects an argument reads the node at the end of the chain
-of references, at run time and in the type. A reference that no scope binds yet waits for the
-scope that binds the name. A rule that read the spelling of its argument gave a reference and its
-target two verdicts: a refusal escaped through a reference, and a valid codec was refused through
-one. A meet and an entry key need the node at the declaration, so each of these refuses a
-reference that no scope binds yet.
+of references, at run time and in the type. A reference that no scope binds is a free name, and
+the scope that declares the name judges its own closed copy. A rule that read the spelling of its
+argument gave a reference and its target two verdicts: a refusal escaped through a reference, and a
+valid codec was refused through one. A meet and an entry key need the node at the declaration, so
+each of these refuses a reference that no scope binds yet.
 
 **One judgment types the built graph.** The judgment reads the node that each child names. It
 holds one case per host rule:
@@ -1150,9 +1150,11 @@ meet reads the same predicate for a factor and returns `never` where one factor 
 
 **The judgment runs where each name that it reads is bound.** Each former builds its codec through
 one function, which runs the judgment at the declaration. `union` runs the judgment on its own term.
-A judgment that reads a name that no scope binds yet runs again at each scope that binds the name.
-A union decides its pairs at the first scope that binds a name of an option. A scope runs the guard
-on each entry, then each waiting judgment. The type of a list reads a free name where the scope
+A judgment that reads a name that no scope binds passes at the declaration. A scope closes a copy
+of its entries by lexical scope: each `ref` of the copy binds in the record of the scope, and a
+cycle is a recursive binding of that record. A scope runs the guard on each entry of the copy, then
+the judgment of each copied node. A fragment stays open and refuses each use, so the result of a
+scope depends on its own arguments only. The type of a list reads a free name where the scope
 binds the name later, so the run time alone refuses a list position that the scope binds to a term
 that holds no value. Agreement reads the meaning of two options, so the run time alone refuses a
 pair of options.

@@ -62,7 +62,6 @@ import {
     member as termMember,
     unboundRefs,
     usedTargetOf,
-    whenBound,
     widensRead,
 } from './term'
 import {
@@ -1550,21 +1549,15 @@ export const guard = (
 /**
  * **The judgment of one node**: the refusal of the first host rule that the node breaks, or
  * nothing. Each rule reads the node that a child names (`resolvedTerm`), so a `ref` and its
- * target get one verdict. A child that names a `ref` that no scope binds yet goes to `waits`, and
- * {@link judged} runs the judgment again where the scope binds the name. `declaring` is true at
- * the declaration of the node, and false where a scope runs the judgment again.
+ * target get one verdict. A rule that reads a `ref` that no scope binds passes, and the scope
+ * judges the closed copy. `declaring` is false where a scope judges a copy.
  *
- * Each former builds its codec through {@link codecOfTerm}, and `union` judges its term itself, so
- * the judgment runs at each declaration. A scope runs the guard on each entry, then each waiting
- * judgment. Each case states its reason.
+ * Each former builds its codec through {@link codecOfTerm}, so the judgment runs at each
+ * declaration. A scope runs the guard on each entry, then the judgment of each copy. Each case
+ * states its reason.
  */
-const judge = (
-    t: Term,
-    waits: Term[],
-    declaring: boolean,
-): CodecError | undefined => {
-    const empty = (child: Term): boolean =>
-        holdsNoValue(child, (open) => waits.push(open))
+const judge = (t: Term, declaring: boolean): CodecError | undefined => {
+    const empty = (child: Term): boolean => holdsNoValue(child)
     switch (t.kind) {
         // **A declared position that nothing fills makes the whole list unconstructible.** The
         // model types such a list and gives it an empty held set, which is correct as a model. The
@@ -1610,14 +1603,14 @@ const judge = (
         // entry on a cycle makes the flat system non-contractive. With no such wall, the meaning of
         // a closed codec is one flat guarded system with a unique solution. A wall over an acyclic
         // entry stays legal, because the emitter prints an acyclic `ref` in place. A cycle anywhere
-        // below the wall counts, so the rule waits for every name below the wall. The scope runs its
-        // guard first, so a wall on a cycle that the guard refuses keeps the refusal of the guard
+        // below the wall counts, so the rule passes a wall that reads a `ref` that no scope binds,
+        // and the scope judges the closed copy. The scope runs its guard first, so a wall on a cycle
+        // that the guard refuses keeps the refusal of the guard
         case 'held':
         case 'legacy': {
             const args = t.kind === 'held' ? [t.inner, t.outer] : [t.inner]
-            const open = unboundRefs(args).size > 0
-            if (open) waits.push(...args)
-            const entry = open ? undefined : cycleEntryOf(args)
+            const entry =
+                unboundRefs(args).size > 0 ? undefined : cycleEntryOf(args)
             if (entry !== undefined)
                 return new CodecError(
                     `\`${t.kind === 'held' ? 'held' : 'withLegacyRead'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
@@ -1632,13 +1625,10 @@ const judge = (
         // compatible is refused, because there the order would choose an owner of the overlap that
         // nobody named. The test reads through each `ref` on the spine of an option, and a
         // recursive spine does not end, so the guard of each option runs first. The test runs where
-        // the options reach no unbound `ref`, or at the first scope that binds a name of an option.
-        // A `union` guards its options here, so the guard below skips the union itself
+        // the options reach no unbound `ref`, or on the closed copy that a scope judges. A `union`
+        // guards its options here, so the guard below skips the union itself
         case 'union': {
-            if (declaring && unboundRefs(t.options).size > 0) {
-                waits.push(...t.options)
-                return undefined
-            }
+            if (unboundRefs(t.options).size > 0) return undefined
             for (const [at, option] of t.options.entries()) {
                 const use = recursionUse(option)
                 if (use >= 2)
@@ -1666,28 +1656,14 @@ const judge = (
     // **A recursion that the model's guard refuses is refused where its term is declared.** A path
     // with no container reads the input of its own entry, and encode then overflows the stack. A
     // path with an adapter lets caller code make the input at any depth. A scope guards each entry
-    // where it binds the names, so a judgment that the scope runs again skips the guard
+    // of its closed copy first, so the judgment of a copy skips the guard
     return declaring ? guard(t) : undefined
 }
 
-/**
- * **The judgment, where each name that it reads is bound.** A refusal throws now. A judgment that
- * read a `ref` that no scope binds yet runs again at each scope that binds such a name, until the
- * judgment reads no such `ref`.
- */
-export const judged = (t: Term): void => {
-    let declaring = true
-    let decided = false
-    const check = (): void => {
-        if (decided) return
-        const waits: Term[] = []
-        const refusal = judge(t, waits, declaring)
-        declaring = false
-        if (refusal) throw refusal
-        if (waits.length > 0) whenBound(waits, check)
-        else decided = true
-    }
-    check()
+/** **The judgment of a node.** A refusal throws. */
+export const judged = (t: Term, declaring = true): void => {
+    const refusal = judge(t, declaring)
+    if (refusal) throw refusal
 }
 
 export const codecOfTerm = <T, A extends AttributeValue>(

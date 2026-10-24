@@ -1946,7 +1946,7 @@ export const separationRows = (
 
 /**
  * **A pair over an open fragment states no guard row.** A union over a `ref` that no scope binds
- * waits for the scope that binds the name, so the host decides no guard and no compatibility on
+ * is judged on the closed copy of a scope, so the host decides no guard and no compatibility on
  * the pair, and no caller observes a verdict on the open term. The term has no graph to print
  * either. The rule is the rule of {@link separationForm}. The answer is the reason, or nothing.
  */

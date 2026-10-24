@@ -213,9 +213,9 @@ one the type keeps a member that reads a `ref` and that the run time drops.
 **Effect.** The result type of extract keeps a member that the run time drops. Every value fits
 the type, and the type is wider than the value.
 
-**Open.** A field closed in its scope closes the case, on both sides. The run time binds a `ref`
-through a slot, and the key set of a dissection lives in a table beside the term, so a closed copy
-of a field loses its dissection.
+**Open.** A field closed in its scope at the type level closes the case. The run time closes each
+entry of a scope in the record of that scope, and the copy of a dissection carries the key set of
+the node that it replaces.
 
 **Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the type keeps a member pinned through a
 `ref(...)`, the exclusion that keeps the adapter member, and the slice that keeps a member pinned
@@ -234,27 +234,6 @@ clause to `preconditions(at(...))`.
 **Effect.** A host that drifts from that refusal passes the suite.
 
 **Pin.** None.
-
----
-
-## Known: a fragment that a refused scope bound refuses for a recursion in a second scope
-
-**Observation.** A scope that refuses keeps its definitions in the slot of each `ref`. A second
-scope that reads a fragment of the refused scope, and does not declare the name of the `ref`,
-refuses for a recursion. Measured 2026-10-22 at 7f31f6e with a throwaway spec:
-
-    const fragment = union([string, ref('A')])
-    scope({ A: fragment })                 // refuses: 'A' reaches a recursion with no list or object on its path
-    scope({ O: object({ x: fragment }) })  // RecursionRefused: this `object` term reaches a recursive `ref`
-
-A fresh fragment, which no refused scope bound, refuses in the second scope with "a ref names
-'A', which this scope does not declare".
-
-**Effect.** The refusal of the second scope depends on an earlier scope, and names the wrong cause.
-The refusal is a CodecError, so a caller that catches CodecError catches the refusal.
-
-**Pin.** No test pins the cause. The nested-refusal tests of
-`src/codec/spec/surface/codec.scope.spec.ts` leave this case out.
 
 ---
 
@@ -320,42 +299,3 @@ are refused where `never` is, in the type and at run time.
 **Pin.** `src/codec/spec/surface/codec.resolution.spec.ts` pins the refinement. The `held` is
 declared by the shared legacy read vector of `src/codec/lean/lean.spec.ts` and by the legacy read test of
 `src/codec/spec/laws/codec.held.spec.ts`.
-
----
-
-## Known: a union whose options read two scopes is refused at the first scope
-
-**Observation.** The judgment of a union decides the pairs at the first scope that binds a name of
-an option. A name of the other scope is free there, and no pair with a free `ref` is shown
-compatible. Measured 2026-10-14 with a throwaway spec:
-
-    const a = ref('A')
-    const b = ref('B')
-    const u = union([a, b])
-    scope({ A: string, Z: list(a) })   // refuses: ref and ref are not shown compatible
-    scope({ B: number, Y: list(b) })   // accepts
-
-**Effect.** The first scope refuses a union that it does not hold, and the refusal frees each name
-that the scope bound. A string and a number are compatible, so a judgment with both names bound
-accepts the union.
-
-**Pin.** None.
-
----
-
-## Known: the type of an entry that names an object through a ref accepts `item(...)`, and the run time refuses
-
-**Observation.** The type of an entry reads the definition at the end of its chain of `ref`s. So
-`scope({ A: ref('O'), O: object({ a: string }) }).A` has the type of an object codec, and
-`item(A)` typechecks. At run time the entry is the `ref` codec, and `item(...)` reads no object there.
-Measured 2026-10-22 at 7f31f6e with a throwaway spec:
-
-    item(S.A).encode({ a: 'x' })
-      type checker: accepted
-      runtime:      CodecError: this codec has no whole-item reading
-
-`extract(...)` on an entry that names a union through a `ref` resolves the `ref`, and agrees with its type.
-
-**Effect.** A call of `item(...)` on such an entry typechecks and throws a CodecError.
-
-**Pin.** None.

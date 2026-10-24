@@ -202,19 +202,25 @@ describe('the judgment decides the obligation of a union', () => {
 
 describe('one guard refuses a recursion with no container', () => {
     /**
-     * The scope guards each entry, and a term declared over the names of a refused scope reads the
-     * cycle that the scope refused. One guard gives both refusals, each with the model's term. The
-     * type reads no cycle of the guard, so the run time alone refuses.
+     * The scope guards each entry of its closed copy, and the refusal carries the model's term. The
+     * type reads no cycle of the guard, so the run time alone refuses the scope. **A fragment built
+     * after its scope is an open term**: the scope binds no slot of a fragment, so the fragment
+     * refuses at each use, and no use reads the cycle that the scope refused.
      */
-    it('refuses the entry at the scope, and a term over the refused names where it is declared', () => {
+    it('refuses the entry at the scope, and a fragment built after its scope refuses at each use', () => {
         const self = ref('A')
+        expect(() => scope({ A: self })).toThrow(RecursionRefused)
         expect(() => scope({ A: self })).toThrow(
             /\[scope\] 'A' reaches a recursion with no list or object on its path/,
         )
-        expect(() => list(self)).toThrow(RecursionRefused)
-        expect(() => list(self)).toThrow(
-            /this `list` term reaches a recursive `ref` with no list or object between/,
-        )
+        const fragment = list(self)
+        const free = /this codec reads 'A' through a `ref` that no scope binds/
+        // @ts-expect-error a use needs a closed codec
+        expect(String(fragment.encode(['x']))).toMatch(free)
+        // @ts-expect-error a use needs a closed codec
+        expect(String(fragment.encode(['x']))).toMatch(free)
+        // @ts-expect-error a use needs a closed codec
+        expect(String(fragment.decode({ L: [] }))).toMatch(free)
     })
 })
 

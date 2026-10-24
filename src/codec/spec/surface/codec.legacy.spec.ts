@@ -288,8 +288,8 @@ describe('an attribute the row does not have', () => {
 })
 
 /**
- * **A stand-in that the codec writes through a `ref`.** The check of the stand-in waits for the
- * scope that binds the `ref`, and runs there. So an unwritable stand-in still refuses, at the scope.
+ * **A stand-in that the codec writes through a `ref`.** The scope that binds the `ref` checks the
+ * stand-in on the closed copy. So an unwritable stand-in still refuses, at the scope.
  */
 describe('a stand-in for a recursive codec', () => {
     type Leaf = { end: string } | { name: string; next: Leaf }
@@ -344,10 +344,10 @@ describe('a stand-in for a recursive codec', () => {
 
 /**
  * **A stand-in across two entries.** `Branch` writes its stand-in through a `ref` to `Tree`, and
- * `Tree` reads `Branch` through a `ref`. The check waits for the scope, which binds both names
- * before the check runs.
+ * `Tree` reads `Branch` through a `ref`. The scope binds both names in its closed copy, then
+ * checks the stand-in.
  */
-describe('a stand-in check waits for the scope that binds every name it writes through', () => {
+describe('a stand-in check runs on the closed copy of the scope that binds every name it writes through', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
@@ -447,9 +447,9 @@ describe('a stand-in verdict does not depend on which recursive entry is used fi
 
 /**
  * **Every order of first use.** The scope runs the check before any use, so the order of first use
- * decides nothing. A scope that refuses binds no name, so each fragment that it held refuses each
- * use, and no read returns the stand-in. Each order runs in a fresh module instance, so no state
- * that an earlier use left in the module decides the verdict.
+ * decides nothing. A fragment stays open, whether its scope refuses or not, so each fragment
+ * refuses each use, and no read returns the stand-in. Each order runs in a fresh module instance,
+ * so no state that an earlier use left in the module decides the verdict.
  */
 describe('a writable stand-in is accepted and fills, and an unwritable one refuses each use, in every order of first use', () => {
     type Tree = { end: string } | Branch

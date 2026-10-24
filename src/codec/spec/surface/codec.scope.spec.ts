@@ -66,8 +66,8 @@ describe('a scope', () => {
     })
 
     it('builds a term graph whose cycle passes through a ref node at each ref', () => {
-        const toA: RefSlot = { name: 'A', waiting: [] }
-        const toB: RefSlot = { name: 'B', waiting: [] }
+        const toA: RefSlot = { name: 'A' }
+        const toB: RefSlot = { name: 'B' }
         const A: Term = {
             kind: 'object',
             body: {
@@ -116,8 +116,8 @@ describe('a scope', () => {
 
 /**
  * **A `ref` as a union option.** The union reads each option where the union is declared, and a
- * `ref` resolves only where its scope binds it. So the union waits for the scope, and decides with
- * every name bound.
+ * `ref` resolves only where its scope binds it. So the scope decides the union on its closed copy,
+ * with every name bound.
  */
 describe('a ref as a union option', () => {
     /**
@@ -230,6 +230,17 @@ describe('an entry of a scope', () => {
         ).toEqual({
             M: { k: { S: 'b' } },
         })
+    })
+
+    /**
+     * **An entry is the codec of its closed term.** An entry that names an object through a `ref`
+     * reads the object of its closed term, so the entry has the whole-item reading of the object,
+     * as its type states.
+     */
+    it('keeps the item of an object that the entry names through a ref', () => {
+        const { A } = scope({ A: ref('O'), O: object({ a: string }) })
+        expect(item(A).encode({ a: 'x' })).toEqual({ a: { S: 'x' } })
+        expect(item(A).decode({ a: { S: 'x' } })).toEqual({ a: 'x' })
     })
 
     it('refuses a member read across an entry on a cycle, in the type and at run time', () => {
@@ -396,9 +407,9 @@ describe('a refusal inside a nested scope', () => {
     const same = { encode: (v: unknown) => v, decode: (v: unknown) => v }
 
     /**
-     * A scope that refuses keeps its definitions in the slot of each `ref`, so a later scope that
-     * reads the fragment sees the cycle that the inner scope refused. The guard of the later scope
-     * reads that cycle, and refuses the whole codec.
+     * **A scope closes the fragment in its own record.** A later scope that declares the name binds
+     * the `ref` of the fragment in the record of the later scope. The guard of the later scope
+     * reads the cycle of its own closed copy, and refuses the whole codec.
      */
     it('is the refusal of the whole codec, for an unguarded cycle', () => {
         const fragment = union([string, ref('A')])
@@ -417,7 +428,11 @@ describe('a refusal inside a nested scope', () => {
         ).toThrow(/'O' reaches a recursion with no list or object on its path/)
     })
 
-    it('is the refusal of the whole codec, for a cycle through a wall', () => {
+    /**
+     * **A scope that does not declare a name refuses a `ref` to the name.** The fragment of the
+     * refused scope stays open, so the third scope reads a free `W`, and refuses the name.
+     */
+    it('is the refusal of the whole codec, for a cycle through a wall, and a scope that does not declare the name refuses the ref', () => {
         const fragment = held(ref('W') as never, string as never, same as never)
         expect(() => scope({ W: fragment as never })).toThrow(
             /'W' reaches a recursion with an adapter/,
@@ -430,7 +445,43 @@ describe('a refusal inside a nested scope', () => {
         ).toThrow(/'O' reaches a recursion with an adapter/)
         expect(() =>
             scope({ O: object({ x: array(fragment as never) }) as never }),
-        ).toThrow(/holds an adapter/)
+        ).toThrow(/a ref names 'W', which this scope does not declare/)
+    })
+
+    /**
+     * **A scope that does not declare a name refuses a `ref` to the name, in each order.** A scope
+     * binds no slot of a fragment, so the refusal of one scope does not reach the other scope. The
+     * result of a scope depends on its own arguments only.
+     */
+    it('refuses a ref to a name that the scope does not declare, before and after the scope that refuses the fragment', () => {
+        const undeclared = /a ref names 'A', which this scope does not declare/
+        const unguarded =
+            /'A' reaches a recursion with no list or object on its path/
+        const after = union([string, ref('A')])
+        expect(() => scope({ A: after })).toThrow(unguarded)
+        // @ts-expect-error the type refuses a ref that the scope does not declare
+        expect(() => scope({ O: object({ x: after }) })).toThrow(undeclared)
+        const before = union([string, ref('A')])
+        // @ts-expect-error the type refuses a ref that the scope does not declare
+        expect(() => scope({ O: object({ x: before }) })).toThrow(undeclared)
+        expect(() => scope({ A: before })).toThrow(unguarded)
+    })
+
+    /**
+     * **A scope judges its own closed copy.** A union over the names of two scopes stays an open
+     * term, and each scope closes only its own entries. So neither scope judges the union, and each
+     * scope accepts. The union refuses each use.
+     */
+    it('judges each scope on its own arguments, where a union reads the names of two scopes', () => {
+        const a = ref('A')
+        const b = ref('B')
+        const u = union([a, b])
+        expect(() => scope({ A: string, Z: list(a) })).not.toThrow()
+        expect(() => scope({ B: number, Y: list(b) })).not.toThrow()
+        // @ts-expect-error a use needs a closed codec
+        expect(String(u.encode('x'))).toMatch(
+            /through a `ref` that no scope binds/,
+        )
     })
 })
 

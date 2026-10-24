@@ -32,7 +32,7 @@ const str: Term = { kind: 'string' }
 /** A `ref` whose scope binds its name to the term. */
 const refTo = (target: Term): Term => ({
     kind: 'ref',
-    slot: { name: 'T', bound: { T: target }, waiting: [] },
+    slot: { name: 'T', bound: { T: target } },
 })
 const bool: Term = { kind: 'boolean' }
 
@@ -469,22 +469,19 @@ describe('the term `.set()` writes', () => {
 })
 
 /**
- * **A reader that runs before its scope closes reads the slot of each `ref` at the call.** A scope
- * binds a name after the fragments that name it are built, so a flat scope of the root cannot
- * stand in for the term: the root has no closed scope yet, and the answer of a later call differs.
- * Each test binds the slot after a first call, and the second call answers from the bound term.
+ * **A reader reads the slot of each `ref` at the call.** A scope binds no slot of a fragment: the
+ * scope binds a closed copy. So a read of an open root is not kept. Each test binds the slot by
+ * hand after a first call, and the second call answers from the bound term.
  */
 describe('a reader during construction reads the term, where a scope binds a name late', () => {
     const open = (): { readonly t: Term; readonly slot: RefSlot } => {
-        const slot: RefSlot = { name: 'T', waiting: [] }
+        const slot: RefSlot = { name: 'T' }
         return { t: { kind: 'ref', slot }, slot }
     }
 
-    it('holdsNoValue waits on a ref that no scope binds, and holds no value once the name is never', () => {
+    it('holdsNoValue holds a value at a ref that no scope binds, and holds no value once the name is never', () => {
         const { t, slot } = open()
-        const waited: Term[] = []
-        expect(holdsNoValue(t, (at) => waited.push(at))).toBe(false)
-        expect(waited).toEqual([t])
+        expect(holdsNoValue(t)).toBe(false)
         slot.bound = { T: { kind: 'never' } }
         expect(holdsNoValue(t)).toBe(true)
     })
@@ -547,7 +544,7 @@ describe('the flat scope of a root', () => {
      * for that child.
      */
     it('is read again for an open root, because a scope that binds a name adds the entries of the name', () => {
-        const slot: RefSlot = { name: 'T', waiting: [] }
+        const slot: RefSlot = { name: 'T' }
         const root = rootOver({ kind: 'ref', slot })
         const entries = (t: Term): number => {
             const flat = flatOf(t)

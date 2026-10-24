@@ -848,8 +848,8 @@ export const literalAlternatives = (t: Term): Alternatives | undefined => {
  *
  * The emitter prints a `ref` that closes no cycle as its target, so the model reads the node behind
  * a `ref` as the node. Each former that inspects an argument, and each reader of a literal or a tag,
- * reads the node here. A `ref` that no scope binds yet is its own node, so a caller reads a node of
- * kind `ref` as a name that waits for its scope. A chain that returns to a `ref` it already passed
+ * reads the node here. A `ref` that no scope binds is its own node, so a caller reads a node of
+ * kind `ref` as a free name. A chain that returns to a `ref` it already passed
  * names no node.
  */
 export const resolvedTerm = (t: Term): Term | undefined => {
@@ -879,7 +879,7 @@ export const resolvedTerm = (t: Term): Term | undefined => {
  * in a declared position: the vectors of a legacy read beside itself use that `held` as a position
  * that admits no value, so that only the write half refuses the pair.
  *
- * `waiting` receives each `ref` that no scope binds yet, because the answer reads its target later.
+ * A `ref` that no scope binds holds a value for this reader, and the scope reads the closed copy.
  * A node that the read already passed is a cycle with no container, which the guard refuses, so the
  * read answers `false` there.
  *
@@ -888,7 +888,6 @@ export const resolvedTerm = (t: Term): Term | undefined => {
  */
 export const holdsNoValue = (
     t: Term,
-    waiting?: (open: Term) => void,
     passed: ReadonlySet<Term> = new Set(),
 ): boolean => {
     const at = resolvedTerm(t)
@@ -898,10 +897,9 @@ export const holdsNoValue = (
         case 'never':
             return true
         case 'ref':
-            waiting?.(at)
             return false
         case 'union':
-            return at.options.every((one) => holdsNoValue(one, waiting, inside))
+            return at.options.every((one) => holdsNoValue(one, inside))
         default:
             return false
     }
@@ -1048,27 +1046,12 @@ export const usedTargetOf = (t: Term & { readonly kind: 'ref' }): Term => {
 }
 
 /**
- * **A check that reads through each `ref` of the terms runs where each name is bound.** The check
- * runs now where the terms reach no unbound `ref`, and otherwise waits for each scope that binds
- * a `ref` of the terms. The scope runs the check after its guard.
- */
-export const whenBound = (terms: readonly Term[], check: () => void): void => {
-    const waitsOn = unboundRefs(terms)
-    if (waitsOn.size === 0) check()
-    for (const slot of waitsOn) slot.waiting.push(check)
-}
-
-/**
- * The slot of a `ref`: the name, the terms of the definitions of the scope that binds the name,
- * and waiting checks. `scope` fills the slot one time. A scope that refuses keeps its definitions
- * in the slot, so a reader of the term sees the cycle that the scope refused, and marks the slot
- * \`refused\`, so the name stays free.
+ * The slot of a `ref`: the name, and the record of the scope that binds the name. `ref` builds a
+ * slot with no record. A scope binds a closed copy of each `ref`, and changes no slot of a caller.
  */
 export type RefSlot = {
     readonly name: string
     bound?: Readonly<Record<string, Term>>
-    refused?: boolean
-    readonly waiting: (() => void)[]
 }
 
 /**
@@ -1087,8 +1070,7 @@ export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
         switch (t.kind) {
             case 'ref': {
                 const { slot } = t
-                if (slot.bound === undefined || slot.refused === true)
-                    slots.add(slot)
+                if (slot.bound === undefined) slots.add(slot)
                 return
             }
             case 'list':
@@ -1117,46 +1099,32 @@ export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
     return slots
 }
 
-/**
- * Each term that {@link freeNamesOf} found closed, with the count of refused scopes at that time.
- * A scope that refuses frees each name that it bound, so the count makes each answer stale.
- */
-const closedTerms = new WeakMap<Term, number>()
-let refusals = 0
-
-/** Marks the slots of a refused scope: each name stays free. */
-export const refuseSlots = (slots: Iterable<RefSlot>): void => {
-    for (const slot of slots) slot.refused = true
-    refusals += 1
-}
+/** Each term that {@link freeNamesOf} found closed. No slot changes, so a closed term stays closed. */
+const closedTerms = new WeakSet<Term>()
 
 /**
  * **The free names of a term**: the names of the `ref`s that the term reaches and that no scope
  * binds. The run-time side of the free names that the type of a codec carries.
  */
 export const freeNamesOf = (t: Term): readonly string[] => {
-    if (closedTerms.get(t) === refusals) return []
+    if (closedTerms.has(t)) return []
     const names = [...new Set([...unboundRefs([t])].map((slot) => slot.name))]
-    if (names.length === 0) closedTerms.set(t, refusals)
+    if (names.length === 0) closedTerms.add(t)
     return names
 }
 
 /**
- * **A read of a closed term, kept for each root.** A closed term binds each name, and a scope binds
- * a name one time, so the read of a closed root changes only where a scope refuses. A read of an
- * open term is not kept, because a scope that binds a name later changes the read.
+ * **A read of a closed term, kept for each root.** A closed term stays closed, so the read of a
+ * closed root does not change. A read of an open term is not kept.
  */
 export const memoClosed = <V>(read: (root: Term) => V): ((root: Term) => V) => {
-    const known = new WeakMap<
-        Term,
-        { readonly stamp: number; readonly value: V }
-    >()
+    const known = new WeakMap<Term, { readonly value: V }>()
     return (root) => {
         if (freeNamesOf(root).length > 0) return read(root)
         const hit = known.get(root)
-        if (hit !== undefined && hit.stamp === refusals) return hit.value
+        if (hit !== undefined) return hit.value
         const value = read(root)
-        known.set(root, { stamp: refusals, value })
+        known.set(root, { value })
         return value
     }
 }
@@ -1251,6 +1219,37 @@ export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
 }
 
 /**
+ * **The closed copy of the terms of a scope.** The copy shares each closed subterm, and copies each
+ * node on a path to a free `ref`. Each `ref` copy is bound in `record`, so a cycle stays a `ref`.
+ * The map holds each copy, keyed by the node that the copy replaces.
+ *
+ * **Lexical scope.** `record` is the recursive binding of the scope (`letrec`): the record holds
+ * the copy of each entry, and each `ref` of a copy binds in that record. No slot of an input term
+ * changes, so a fragment stays open, and a cycle is a `ref` into the record.
+ */
+export const closedCopy = (
+    record: Readonly<Record<string, Term>>,
+): readonly [(t: Term) => Term, ReadonlyMap<Term, Term>] => {
+    const copies = new Map<Term, Term>()
+    const close = (t: Term): Term => {
+        const known = copies.get(t)
+        if (known !== undefined) return known
+        if (unboundRefs([t]).size === 0) return t
+        const made: Term =
+            t.kind === 'ref'
+                ? { kind: 'ref', slot: { name: t.slot.name, bound: record } }
+                : t.kind === 'held'
+                  ? { ...t, inner: close(t.inner), outer: close(t.outer) }
+                  : t.kind === 'refine' || t.kind === 'legacy'
+                    ? { ...t, inner: close(t.inner) }
+                    : mapChildren(t, close)
+        copies.set(t, made)
+        return made
+    }
+    return [close, copies]
+}
+
+/**
  * **A view that reads through a `ref`**, as the model's views read through `ref`: the view of a
  * `ref` is a `ref` whose slot binds the name to the view of the target. Each term object has one
  * view object, so a cycle of the term is a cycle of the view, closed at the view of the same term.
@@ -1258,8 +1257,7 @@ export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
  * `ref` of the view at the `ref`.
  *
  * The build ends: the view of a `ref` is in the table before the build reads the target, so a
- * cycle meets the view that it started. The view of a `ref` with no target has no target. A slot
- * changes only in `scope`, and no `scope` runs while a reader holds a view.
+ * cycle meets the view that it started. The view of a `ref` with no target has no target.
  */
 export const throughRefs =
     (row: (t: Term, view: (t: Term) => Term) => Term) =>
@@ -1273,7 +1271,7 @@ export const throughRefs =
                 views.set(t, made)
                 return made
             }
-            const slot: RefSlot = { name: t.slot.name, waiting: [] }
+            const slot: RefSlot = { name: t.slot.name }
             const made: Term = { kind: 'ref', slot }
             views.set(t, made)
             const target = targetOf(t)
@@ -1423,8 +1421,8 @@ export const leafKinds: ReadonlySet<Term['kind']> = new Set([
 /**
  * The terms that a term reads one step down, through a `ref` that has a target.
  *
- * A `ref` with no target holds no cycle. The refusal of a nested scope reaches the guard through
- * the definitions that the refused scope keeps in the slot of each `ref`.
+ * A `ref` with no target holds no cycle. A scope binds each `ref` of its closed copy, so the guard
+ * of the scope reads each cycle of the copy.
  */
 export const childrenOf = (t: Term): readonly Term[] => {
     switch (t.kind) {
