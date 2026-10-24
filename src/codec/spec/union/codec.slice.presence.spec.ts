@@ -141,13 +141,9 @@ describe('an option without the key, an option that requires it, and an option t
         expect(got.inKept).toBeGreaterThan(0)
         expect(got.inRejected).toBeGreaterThan(0)
     })
-    it('refuses a key that no option declares', () => {
-        expect(() => extract(mixed, object({ zz: string }) as never)).toThrow(
-            /'zz' is not a key any member declares/,
-        )
-        expect(() => extract(single, object({ zz: string }) as never)).toThrow(
-            /'zz' is not a key any member declares/,
-        )
+    it('extracts never for a key that no option declares', () => {
+        expect(extract(mixed, object({ zz: string })).def.kind).toBe('never')
+        expect(extract(single, object({ zz: string })).def.kind).toBe('never')
     })
 })
 
@@ -327,16 +323,16 @@ describe('a dissection keeps its members whole, so no member splits at presence'
     })
 })
 
-describe('a pattern key that no option declares is refused in the type', () => {
-    it('refuses it at the top and at depth, and accepts a key that one option declares as optional', () => {
-        expect(() =>
-            // @ts-expect-error no option declares 'zz'
-            extract(mixed, object({ zz: string })),
-        ).toThrow()
-        expect(() =>
-            // @ts-expect-error no option declares 'zz', at depth
-            extract(nest, object({ pet: object({ zz: string }) })),
-        ).toThrow()
-        expect(() => extract(single, object({ a: string }))).not.toThrow()
+describe('a pattern key that no option declares extracts never in the type', () => {
+    it('extracts never at the top and at depth, and keeps an option that declares the key as optional', () => {
+        const top = extract(mixed, object({ zz: string }))
+        const deep = extract(nest, object({ pet: object({ zz: string }) }))
+        expectTypeOf<Decoded<typeof top>>().toEqualTypeOf<never>()
+        expectTypeOf<Decoded<typeof deep>>().toEqualTypeOf<never>()
+        expect(top.def.kind).toBe('never')
+        expect(deep.def.kind).toBe('never')
+        expect(extract(single, object({ a: string })).def.kind).not.toBe(
+            'never',
+        )
     })
 })

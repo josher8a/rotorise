@@ -3985,24 +3985,6 @@ type LiteralOptions<C> = TermOf<C> extends [
       }
     : [C]
 
-/** The member specs that a pattern of a slice of `C` names its keys against. */
-type SliceSpecs<C> = C extends DiscriminatedCodec<
-    infer _T,
-    infer _D,
-    infer Spec,
-    infer _F
->
-    ? Spec[keyof Spec]
-    : C extends DissectedCodec<infer _T, infer _Ks, infer Specs, infer _F>
-      ? Specs[number]
-      : C extends UnionCodec<
-              infer _T,
-              infer Options extends readonly unknown[],
-              infer _Tm
-          >
-        ? SpecsOf<Options>[number]
-        : SpecsOf<[C]>[number]
-
 export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
     readonly [itemMark]: true
@@ -5756,12 +5738,6 @@ const slicedDissection = (
 
 // ── unions with no discriminator ────────────────────────────────────
 
-type RequiredKeysOf<Spec> = {
-    [K in keyof Spec]-?: Spec[K] extends { readonly [optionalMarker]: true }
-        ? never
-        : K
-}[keyof Spec]
-
 /**
  * **A member's codec that pins a literal**: its term pins a literal, and it decodes to a literal
  * type rather than a base. The member's side reads through a refinement, as `pinnedForm` does.
@@ -6202,12 +6178,6 @@ type FieldSpecList<F> = F extends Declares<infer Sp>
         : [Sp]
     : never
 
-type FieldSpecsAt<S, K> = S extends unknown
-    ? K extends keyof S
-        ? FieldSpecList<Marks<S[K]>>[number]
-        : never
-    : never
-
 type KeysOfUnion<U> = U extends unknown ? keyof U : never
 
 /**
@@ -6422,7 +6392,9 @@ type FitsCodec<A, P> = PatternPins<MarkedCodec<P>> extends true
                     : 't'
                 : 'f'
             : 'f'
-        : 'f'
+        : ReadsRef<TermOf<MarkedCodec<A>>> extends true
+          ? 'u'
+          : 'f'
     : ListFit<A, P> extends infer LF extends Fit
       ? LF
       : [FieldSpecList<P>] extends [never]
@@ -6434,6 +6406,23 @@ type FitsCodec<A, P> = PatternPins<MarkedCodec<P>> extends true
         : [FieldSpecList<A>] extends [never]
           ? 'f'
           : EveryFits<FieldSpecList<A>[number], FieldSpecList<P>[number]>
+/**
+ * Whether a member's term reads a `ref`, or a union that holds one. The type reads no literal mark
+ * through a `ref`, and the run time resolves the `ref`, so the type cannot decide the fit.
+ */
+type ReadsRef<T> = NodeOf<T> extends infer N
+    ? N extends ['ref', unknown]
+        ? true
+        : N extends ['union', infer Os extends unknown[]]
+          ? true extends {
+                [I in keyof Os]: NodeOf<Os[I]> extends ['ref', unknown]
+                    ? true
+                    : false
+            }[number]
+              ? true
+              : false
+          : false
+    : false
 /** The fit of two lists with fixed positions, or `'none'` where either has none. */
 type ListFit<A, P> = [FixedElements<P>] extends [never]
     ? 'none'
@@ -7043,126 +7032,39 @@ export type KeptByTag<Spec, P, Keep extends boolean = true> = {
         : never]: Spec[K]
 }
 
-/** The codec a spec declares at one name, or nothing where it declares none. */
-type FieldAt<Spec, K> = K extends keyof Spec ? Spec[K] : never
-
 /** The entity a tag table describes, which is what its members describe. */
 export type VariantsOf<Spec> = {
     [K in keyof Spec]: show<ObjectOf<Spec[K]>>
 }[keyof Spec]
 
 /**
- * The tags the members carry at one key, at one attribute — and only where the member pins a
- * literal there.
- *
- * The last clause is what stops a clause selecting on a plain field: `toy: string` writes an `S`
- * and admits every string, so a clause naming `'t'` would fit it and select nothing meaningful.
+ * A key of a pattern that holds a refinement, at any depth: no function decides whether a member
+ * lies inside a predicate. A pattern that no member fits is an answer, and the result keeps nothing.
  */
-type TagsAtSpecs<S, K, A> = S extends unknown
-    ? K extends RequiredKeysOf<S>
-        ? [AttributeOf<FieldAt<S, K>>] extends [A]
-            ? PinsALiteral<MarkedCodec<FieldAt<S, K>>> extends true
-                ? Decoded<FieldAt<S, K>>
-                : never
-            : never
-        : never
-    : never
-
-/**
- * A key of a pattern that describes no member, whatever the values turn out to be: the model's
- * clause that is not keyed (`Calculus.AltClause.keyedC`), read at a pattern. A key is bad where no
- * member declares it, and where it pins a literal that no member pins at that base. A key that
- * holds objects is read one level down. A literal whose alternatives meet no member's is keyed, and
- * keeps nothing: that is a fact about the values, and the run time answers it. A key that holds a
- * refinement is bad, because no function decides whether a member lies inside a predicate.
- */
-type BadPatternKey<S, PSpec> = {
-    [K in keyof PSpec]: NodeOf<TermOf<PSpec[K]>> extends ['refine', unknown]
-        ? K
-        : PatternPins<PSpec[K]> extends true
-          ? [TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>] extends [never]
-              ? K
-              : [CarrierOf<Decoded<PSpec[K]>>] extends [
-                      CarrierOf<TagsAtSpecs<S, K, AttributeOf<PSpec[K]>>>,
-                  ]
-                ? never
-                : K
-          : [FixedElements<PSpec[K]>] extends [never]
-            ? BadObjectKey<S, PSpec, K>
-            : [K] extends [KeysOfUnion<S>]
-              ? BadPosition<S, K, FixedElements<PSpec[K]>>
-              : K
+type BadPatternKey<PSpec> = {
+    [K in keyof PSpec]: RefinedSlot<PSpec[K]> extends true ? K : never
 }[keyof PSpec]
-/**
- * A position of a fixed list answers to the refusals of a key, and a position that holds a fixed
- * list is a slot again. A position that no member declares is a refusal at the key: an `array`
- * declares no position, because its length is a run-time fact, so `FixedElements` of an array is
- * `never` and a fixed pattern reaches nothing in it.
- */
-type BadPosition<
-    S,
-    K,
-    PE extends readonly unknown[],
-> = true extends BadPositions<PatternCodecsAt<S, K>, PE> ? K : never
-type BadPositions<MC, PE extends readonly unknown[]> = {
-    [I in keyof PE]: BadAtPosition<PositionCodecsAt<MC, I, number>, PE[I]>
-}[number]
-/** Whether the pattern codec `PC` at a slot describes nothing that the member codecs `MC` hold there. */
-type BadAtPosition<MC, PC> = [FixedElements<PC>] extends [never]
-    ? [FieldSpecList<PC>] extends [never]
-        ? never
-        : [FieldSpecList<MC>] extends [never]
-          ? true
-          : [
-                  BadPatternKey<
-                      FieldSpecList<MC>[number],
-                      FieldSpecList<PC>[number]
-                  >,
-              ] extends [never]
-            ? never
+/** Whether the pattern codec at a slot holds a refinement, at the slot or below it. */
+type RefinedSlot<PC> = NodeOf<TermOf<PC>> extends ['refine', unknown]
+    ? true
+    : [FixedElements<PC>] extends [never]
+      ? [FieldSpecList<PC>] extends [never]
+          ? false
+          : [BadPatternKey<FieldSpecList<PC>[number]>] extends [never]
+            ? false
             : true
-    : BadPositions<MC, FixedElements<PC>>
-type BadObjectKey<S, PSpec, K extends keyof PSpec> = [
-    FieldSpecList<PSpec[K]>,
-] extends [never]
-    ? [K] extends [KeysOfUnion<S>]
-        ? never
-        : K
-    : [FieldSpecsAt<S, K>] extends [never]
-      ? K
-      : [
-              BadPatternKey<
-                  FieldSpecsAt<S, K>,
-                  FieldSpecList<PSpec[K]>[number]
-              >,
-          ] extends [never]
-        ? never
-        : K
+      : true extends {
+              [I in keyof FixedElements<PC>]: RefinedSlot<FixedElements<PC>[I]>
+          }[number]
+        ? true
+        : false
 
-/**
- * Rejects a pattern that no member could answer, at the call rather than on the result. Each
- * failure is decidable from the declaration, which is the line that the run time refuses on too.
- */
-export type ValidatePattern<S, P> = [FieldSpecList<P>] extends [never]
+/** Rejects a pattern that holds a part no meet reads, at the call rather than on the result. */
+export type ValidatePattern<P> = [FieldSpecList<P>] extends [never]
     ? unknown
-    : [BadPatternKey<S, PatternSpecs<P>>] extends [never]
+    : [BadPatternKey<PatternSpecs<P>>] extends [never]
       ? unknown
-      : ErrorMessage<`[extract] the pattern at '${BadPatternKey<S, PatternSpecs<P>> & string}' describes no member — no member declares the key, or none pins it to that literal at that base, or it holds no objects where the pattern nests`>
-
-/**
- * **The carrier of a decoded literal**: the base type that the literal widens to. At one attribute
- * the carrier names the adapter word of the model's form (`Calculus.pinForm`): `number`, `decimal`
- * and `dynamoNumber` each write `N`, and decode a `number`, a `string` and a {@link DynamoNumber}.
- */
-type CarrierOf<V> = V extends string
-    ? string
-    : V extends number
-      ? number
-      : V extends boolean
-        ? boolean
-        : V extends DynamoNumber
-          ? DynamoNumber
-          : V
+      : ErrorMessage<`[extract] the pattern at '${BadPatternKey<PatternSpecs<P>> & string}' holds a refinement, and the host cannot decide whether a member lies inside a predicate`>
 
 /**
  * **Two literals of one form**: the same base, and the same adapter, or none on either. This is the
@@ -7425,92 +7327,30 @@ const splitBy = (
 }
 
 /**
- * Why a pattern describes no member, or nothing. A key that no member declares, a literal that no
- * member pins at that key, and a literal at a base that no member pins there are facts of the
- * declaration, decidable before any item exists, so a pattern that names one is a typo and not an
- * answer. An empty result stays a legitimate answer where the bases agree and the alternatives
- * simply do not meet, because that is a fact about values.
- *
- * The model states the same refusal (`AltClause.keyedC`): some option pins each key at the form of
- * the clause, or the clause describes no option (`AltClause.extractC_eq_nil_of_keyedC_false`).
+ * Why a pattern holds a part that no meet reads, or nothing. A refinement at a key of the pattern
+ * is refused, because no function decides whether a member lies inside a predicate. A pattern that
+ * no member fits is an answer: the extraction keeps nothing, and the exclusion keeps all.
  */
-const patternRefusal = (
-    members: readonly Term[],
-    pattern: Term,
-): string | undefined => {
-    const candidates = members.flatMap(objectMembersOf)
+const patternRefusal = (pattern: Term): string | undefined => {
     for (const wanted of objectMembersOf(pattern)) {
         for (const [name, field] of Object.entries(wanted.body.fields)) {
-            const here = candidates.flatMap((m) => {
-                const mine = m.body.fields[name]
-                return mine ? [mine] : []
-            })
-            if (here.length === 0) {
-                const known = [
-                    ...new Set(
-                        candidates.flatMap((m) => Object.keys(m.body.fields)),
-                    ),
-                ]
-                return `'${name}' is not a key any member declares; the keys available are ${known.map((one) => `'${one}'`).join(', ') || '(none)'}`
-            }
-            const form = clauseForm(field.t)
-            if (form) {
-                const pins = here.flatMap((mine) => {
-                    const one = pinnedForm(mine.t)
-                    return one ? [one] : []
-                })
-                if (pins.length === 0) {
-                    return `'${name}' is declared without a literal by every member, so a pattern cannot select on it`
-                }
-                const sameBase = pins.some(
-                    (one) =>
-                        one.form === form.form &&
-                        sameForm(
-                            { required: true, ...one },
-                            { required: true, ...form },
-                        ),
-                )
-                if (!sameBase) {
-                    return `the pattern at '${name}' is a \`${form.form}\` literal${form.adapter ? ' under an adapter' : ''} and no member pins '${name}' at that base and adapter, so it describes no member whatever its alternatives; the bases pinned at '${name}' are ${[...new Set(pins.map((one) => one.form))].map((one) => `\`${one}\``).join(', ')}`
-                }
-            } else if (resolvedTerm(field.t)?.kind === 'refine') {
-                return `the pattern at '${name}' holds a refinement, and the host cannot decide whether a member lies inside a predicate. Pin the key to a literal, or slice the field first`
-            } else {
-                const inner = slotRefusal(
-                    name,
-                    here.map((mine) => mine.t),
-                    field.t,
-                )
-                if (inner) return inner
-            }
+            const why = slotRefusal(name, field.t)
+            if (why) return why
         }
     }
     return undefined
 }
 
-/**
- * Why a pattern at one slot, a field or a position of a list, describes no member. A fixed list is a
- * product of its positions, so each position is a slot again, and a pattern there answers to the
- * same refusals as a key. An array declares no position, because its length is a run-time fact, so a
- * fixed pattern that holds objects reaches nothing in it, and the refusal names the position.
- */
-const slotRefusal = (
-    name: string,
-    mine: readonly Term[],
-    there: Term,
-): string | undefined => {
-    const list = resolvedTerm(there)
-    if (list?.kind !== 'list') return patternRefusal(mine, there)
-    for (const [at, position] of list.pre.entries()) {
-        const held = mine.flatMap((one) => {
-            const node = resolvedTerm(one)
-            return node?.kind === 'list' ? node.pre.slice(at, at + 1) : []
-        })
-        if (held.length === 0 && objectMembersOf(position).length > 0) {
-            return `the pattern at '${name}' reaches position ${at}, and no member holds a list with that position. An array declares no position, because its length is a run-time fact`
-        }
-        const inner = slotRefusal(name, held, position)
-        if (inner) return inner
+/** Why the pattern at one slot, a field or a position of a list, holds a refinement, or nothing. */
+const slotRefusal = (name: string, there: Term): string | undefined => {
+    const node = resolvedTerm(there)
+    if (node?.kind === 'refine') {
+        return `the pattern at '${name}' holds a refinement, and the host cannot decide whether a member lies inside a predicate. Pin the key to a literal, or slice the field first`
+    }
+    if (node?.kind !== 'list') return patternRefusal(there)
+    for (const position of node.pre) {
+        const why = slotRefusal(name, position)
+        if (why) return why
     }
     return undefined
 }
@@ -7844,10 +7684,7 @@ const picked = <O>(
     splits: boolean,
 ): readonly O[] => {
     const wanted = termOf(pattern as AnyCodec)
-    const why = patternRefusal(
-        options.map((option) => termOf(option as unknown as AnyCodec)),
-        wanted,
-    )
+    const why = patternRefusal(wanted)
     if (why) throw new CodecError(why)
     return options.flatMap((option) => {
         const term = termOf(option as unknown as AnyCodec)
@@ -7869,6 +7706,8 @@ const picked = <O>(
                 : undefined
         if (sliced === undefined)
             return splitParts(option, wanted, keep, splits)
+        // no part of a member fits, so the exclusion keeps the member whole and changes no key
+        if (!splits && !keep && sliced.keep.length === 0) return [option]
         return (keep ? sliced.keep : sliced.rest).map((one) => {
             if (one.spec === item?.spec) return option
             if (!splits) {
@@ -8143,6 +7982,8 @@ const slicedUnion = (
  */
 const sliced = (codec: AnyCodec, pattern: unknown, keep: boolean): unknown => {
     const t = codec.def
+    // a slice of `never` keeps nothing, and leaves nothing to exclude
+    if (t.kind === 'never') return codec
     if (t.kind !== 'union') return sliced(union([codec]), pattern, keep)
     const open = openRefusal(t)
     if (open) throw open
@@ -8175,13 +8016,13 @@ const sliced = (codec: AnyCodec, pattern: unknown, keep: boolean): unknown => {
  */
 export const extract = <const C extends AnyCodec, const P extends AnyCodec>(
     codec: C & Closed,
-    pattern: P & ValidatePattern<SliceSpecs<C>, P>,
+    pattern: P & ValidatePattern<P>,
 ): Slice<C, P, true> => sliced(codec, pattern, true) as Slice<C, P, true>
 
 /** …and the part that it rejects, the complement of the same pattern: TypeScript's `Exclude`. */
 export const exclude = <const C extends AnyCodec, const P extends AnyCodec>(
     codec: C & Closed,
-    pattern: P & ValidatePattern<SliceSpecs<C>, P>,
+    pattern: P & ValidatePattern<P>,
 ): Slice<C, P, false> => sliced(codec, pattern, false) as Slice<C, P, false>
 
 /**

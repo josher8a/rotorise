@@ -50,8 +50,7 @@ def altsSub : Option Pin → Pin → Bool
 /-- **A clause at union level**: the names it speaks about, and the pin it admits at each.
 
     No index: a union declares no key set, so the clause carries no proof that the options pin its
-    names. `AltClause.keyedC` decides that against the options, and a clause that it refuses keeps
-    nothing (`AltClause.extractC_eq_nil_of_keyedC_false`). -/
+    names. A clause that names a key no option pins admits no option, and extracts nothing. -/
 structure AltClause where
   keys : Finset Name
   pin : {k // k ∈ keys} → Pin

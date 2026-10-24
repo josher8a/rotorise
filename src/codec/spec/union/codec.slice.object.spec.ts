@@ -115,26 +115,30 @@ describe('the exclusion of a pattern that fits the whole object is never', () =>
     })
 })
 
-describe('a pattern is refused on an object as on its one-option union', () => {
-    it('refuses a key that no member declares, with the message of the union', () => {
-        const stray = object({ missing: string('X') }) as never
-        const onObject = refusal(() => extract(adoption, stray))
-        expect(onObject).not.toBe('')
-        expect(onObject).toBe(refusal(() => extract(wrapped, stray)))
-        expect(() =>
-            // @ts-expect-error no member declares 'missing'
-            extract(adoption, object({ missing: string('X') })),
-        ).toThrow()
+describe('a pattern that no member fits extracts never on an object, as on its one-option union', () => {
+    it('extracts never and excludes all for a key that no member declares', () => {
+        const stray = object({ missing: string('X') })
+        const kept = extract(adoption, stray)
+        const rest = exclude(adoption, stray)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof adoption>
+        >()
+        expect(kept.def.kind).toBe('never')
+        expect(extract(wrapped, stray).def.kind).toBe('never')
+        expect(rest.def).toEqual(exclude(wrapped, stray).def)
+        samePool(rest, adoption)
     })
 
-    it('refuses a fixed position of an array, with the message of the union', () => {
+    it('extracts never for a fixed position of an array, which declares no position', () => {
         const route = object({ route: array(owner) })
         const fixed = object({
             route: list(object({ type: string('PERSON') })),
-        }) as never
-        const onObject = refusal(() => extract(route, fixed))
-        expect(onObject).toMatch(/An array declares no position/)
-        expect(onObject).toBe(refusal(() => extract(union([route]), fixed)))
+        })
+        const kept = extract(route, fixed)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
+        expect(extract(union([route]), fixed).def.kind).toBe('never')
     })
 
     it('refuses a split of an open key entry, with the message of the union', () => {

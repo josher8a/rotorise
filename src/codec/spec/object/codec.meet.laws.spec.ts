@@ -7,10 +7,10 @@
  * came back and requires at least one.
  *
  * The laws that hold with `meet` are the meet laws (commute, associate, idempotent, covariant, bottom
- * is the disjoint pair, path), and the laws of `extract` that read `meet` (the meet of two patterns,
- * the order of fit). The laws that need a total `extract` are not here. `extract` refuses a key that
- * no current member declares, so a pair whose first route refuses is skipped: the law is open there,
- * and the other route may return a codec or `never`.
+ * is the disjoint pair, path), and the laws of `extract` and `exclude` that read the lattice (the meet
+ * of two patterns, commute, idempotent, the join of two exclusions, the order of fit). `extract` is
+ * total: a pattern that no member fits gives `never`, and `extract` of `never` is `never`. So no law
+ * skips a pair.
  */
 import { describe, expect, it } from 'vitest'
 import type { AnyCodec } from '../../codec'
@@ -18,6 +18,7 @@ import {
     array,
     at,
     boolean,
+    exclude,
     extract,
     list,
     meet,
@@ -39,6 +40,8 @@ import { sameTerm } from '../../term'
  */
 const meetOf = meet as unknown as (a: AnyCodec, b: AnyCodec) => AnyCodec
 const extractOf = extract as unknown as (t: AnyCodec, p: AnyCodec) => AnyCodec
+/** `exclude` takes an erased codec and an erased pattern, and gives an erased codec. */
+const excludeOf = (t: AnyCodec, p: AnyCodec): AnyCodec => exclude(t, p)
 const atOf = at as unknown as (c: AnyCodec, path: readonly string[]) => AnyCodec
 
 type Outcome = { readonly kind: 'codec'; readonly codec: AnyCodec } | 'refused'
@@ -62,18 +65,16 @@ const then = (o: Outcome, f: (c: AnyCodec) => AnyCodec): Outcome =>
 const isNever = (o: Outcome): boolean =>
     o !== 'refused' && (o.codec.def as Term).kind === 'never'
 
-/** The two extracts in a row, or nothing where a route refuses a key that no member declares. */
-const twiceOf = (
-    t: AnyCodec,
-    first: AnyCodec,
-    second: AnyCodec,
-): Outcome | undefined => {
-    const twice = then(
+/** The names that an object pattern declares. */
+const namesOf = (c: AnyCodec): readonly string[] =>
+    c.def.kind === 'object' ? Object.keys(c.def.body.fields) : []
+
+/** The two extracts in a row. */
+const twiceOf = (t: AnyCodec, first: AnyCodec, second: AnyCodec): Outcome =>
+    then(
         run(() => extractOf(t, first)),
         (e) => extractOf(e, second),
     )
-    return twice === 'refused' ? undefined : twice
-}
 
 /** The open reading of an object, which `meet` takes: an undeclared name may hold any value. */
 const open = (t: Term): Term =>
@@ -177,13 +178,30 @@ describe('the meet is a lattice operation over the pool', () => {
         for (const t of TAGGED) {
             for (const [a, b] of pairs(PATTERNS)) {
                 const twice = twiceOf(t, a, b)
-                if (twice === undefined) continue
                 const once = then(
                     run(() => meetOf(a, b)),
                     (m) => extractOf(t, m),
                 )
                 expect(same(twice, once)).toBe(true)
-                compared++
+                if (twice !== 'refused') compared++
+            }
+        }
+        expect(compared).toBeGreaterThan(0)
+    })
+
+    /** The same law on two patterns that name no common key, where the meet is the union of names. */
+    it('makes extract by two patterns on distinct keys the extract by their meet', () => {
+        let compared = 0
+        for (const t of TAGGED) {
+            for (const [a, b] of pairs(PATTERNS)) {
+                if (namesOf(a).some((k) => namesOf(b).includes(k))) continue
+                const twice = twiceOf(t, a, b)
+                const once = then(
+                    run(() => meetOf(a, b)),
+                    (m) => extractOf(t, m),
+                )
+                expect(same(twice, once)).toBe(true)
+                if (twice !== 'refused') compared++
             }
         }
         expect(compared).toBeGreaterThan(0)
@@ -195,9 +213,8 @@ describe('the meet is a lattice operation over the pool', () => {
             for (const [a, b] of pairs(PATTERNS)) {
                 const left = twiceOf(t, a, b)
                 const right = twiceOf(t, b, a)
-                if (left === undefined || right === undefined) continue
                 expect(same(left, right)).toBe(true)
-                compared++
+                if (left !== 'refused') compared++
             }
         }
         expect(compared).toBeGreaterThan(0)
@@ -209,9 +226,28 @@ describe('the meet is a lattice operation over the pool', () => {
             for (const a of PATTERNS) {
                 const once = run(() => extractOf(t, a))
                 const twice = twiceOf(t, a, a)
-                if (twice === undefined) continue
                 expect(same(twice, once)).toBe(true)
-                compared++
+                if (twice !== 'refused') compared++
+            }
+        }
+        expect(compared).toBeGreaterThan(0)
+    })
+
+    /** An option that each pattern rejects is an option that the union of the patterns rejects. */
+    it('makes exclude by two patterns the exclude by their union', () => {
+        let compared = 0
+        for (const t of TAGGED) {
+            for (const [a, b] of pairs(PATTERNS)) {
+                const twice = then(
+                    run(() => excludeOf(t, a)),
+                    (x) => excludeOf(x, b),
+                )
+                const once = then(
+                    run(() => union([a, b])),
+                    (p) => excludeOf(t, p),
+                )
+                expect(same(twice, once)).toBe(true)
+                if (twice !== 'refused') compared++
             }
         }
         expect(compared).toBeGreaterThan(0)

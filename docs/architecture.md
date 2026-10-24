@@ -531,8 +531,11 @@ inside what the pattern holds. The host decides this on a fragment. A literal fi
 base and adapter, and a literal fits its base. A base fits itself. An option fits a union that holds
 a member of the option. An object fits an object pattern that names a subset of its keys. A list
 with fixed positions fits a list pattern with the same positions where each position fits. An array
-declares no position, because its length is a run-time fact, so a fixed pattern against an array is
-a refusal. Any other pair fits only where the two terms are one term. An object with a union at a
+declares no position, because its length is a run-time fact, so an array fits no fixed pattern. Any
+other pair fits only where the two terms are one term. A pattern that no option fits is an answer:
+the extraction is `never`, and the exclusion is the whole codec. The extraction of `never` is
+`never`. A pattern that holds a refinement is a refusal, because no function decides whether an
+option lies inside a predicate. An object with a union at a
 field is the union of the objects (`Term.product_join`), and a fixed list is the same product over
 its positions. The slice goes into that field or position, and the result stays compact, as the
 Extract of TypeScript reads it. An option with a union at a field keeps the part of the union that

@@ -11,12 +11,12 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import type { Decoded } from '../../codec'
 import {
-    CodecError,
     decimal,
     discriminatedUnion,
     exclude,
     extract,
     meet,
+    never,
     number,
     object,
     optional,
@@ -370,25 +370,77 @@ describe('a union that holds other kinds beside objects slices by any codec', ()
     })
 })
 
-describe('a pattern that describes no member is refused', () => {
-    it('refuses a key that no member declares, at a nested level too', () => {
-        const atRoot = () =>
-            // @ts-expect-error no member declares the key
-            extract(order, object({ nope: string('x') }))
-        const nested = () =>
-            // @ts-expect-error no member of the field declares the key
-            extract(order, object({ pet: object({ nope: string('x') }) }))
-        expect(atRoot).toThrow(CodecError)
-        expect(nested).toThrow(CodecError)
+describe('a pattern that no member fits extracts never and excludes all', () => {
+    it('extracts never for a key that no member declares, at a nested level too', () => {
+        const atRoot = extract(order, object({ nope: string('x') }))
+        const nested = extract(
+            order,
+            object({ pet: object({ nope: string('x') }) }),
+        )
+        expectTypeOf<Decoded<typeof atRoot>>().toEqualTypeOf<never>()
+        expectTypeOf<Decoded<typeof nested>>().toEqualTypeOf<never>()
+        expect(atRoot.def.kind).toBe('never')
+        expect(nested.def.kind).toBe('never')
     })
 
-    it('refuses a literal at a base that no member pins at the key', () => {
-        const wrongBase = () =>
-            // @ts-expect-error a decimal literal at a key that the members pin to a string
-            extract(order, object({ kind: decimal('1') }))
-        expect(wrongBase).toThrow(CodecError)
+    it('excludes all for a key that no member declares, at a nested level too', () => {
+        const atRoot = exclude(order, object({ nope: string('x') }))
+        const nested = exclude(
+            order,
+            object({ pet: object({ nope: string('x') }) }),
+        )
+        expectTypeOf<Decoded<typeof atRoot>>().toEqualTypeOf<
+            Decoded<typeof order>
+        >()
+        expectTypeOf<Decoded<typeof nested>>().toEqualTypeOf<
+            Decoded<typeof order>
+        >()
+        expect(atRoot.def).toEqual(order.def)
+        expect(nested.def).toEqual(order.def)
     })
 
+    it('extracts never for a literal at a base that no member pins at the key', () => {
+        const wrongBase = extract(order, object({ kind: decimal('1') }))
+        expectTypeOf<Decoded<typeof wrongBase>>().toEqualTypeOf<never>()
+        expect(wrongBase.def.kind).toBe('never')
+    })
+
+    it('keeps no option for a literal at the right base that no member pins', () => {
+        const none = extract(order, object({ kind: string('UNKNOWN') }))
+        expect(none.def.kind).toBe('never')
+    })
+
+    it('extracts never from never, and excludes never from never', () => {
+        const kept = extract(never, object({ kind: string('ADOPT') }))
+        const rest = exclude(never, object({ kind: string('ADOPT') }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
+        expect(rest.def.kind).toBe('never')
+    })
+
+    /**
+     * A pattern that no part of a member fits changes no member, so the dissection keeps each
+     * member whole in the exclusion and keeps nothing in the extraction.
+     */
+    it('excludes each member of a dissection whole for a pattern that no member fits', () => {
+        const byKind = discriminatedUnion('kind', [
+            object({ kind: string('ADOPT'), pet }),
+            object({ kind: string('RETURN'), pet }),
+        ])
+        const unfit = object({ pet: object({ category: decimal('1') }) })
+        const rest = exclude(byKind, unfit)
+        const kept = extract(byKind, unfit)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof byKind>
+        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(optionsOf(rest)).toEqual(optionsOf(byKind))
+        expect(kept.def.kind).toBe('never')
+    })
+})
+
+describe('a pattern that the host cannot read is refused', () => {
     /**
      * A refinement narrows a literal by a predicate, and no function decides whether a member lies
      * inside a closure. The type and the run time each refuse the pattern at the call, so no empty
@@ -399,14 +451,9 @@ describe('a pattern that describes no member is refused', () => {
             string('ADOPT', 'RETURN'),
             (v): v is 'ADOPT' => v === 'ADOPT',
         )
-        // @ts-expect-error a pattern key that holds a refinement describes no member
+        // @ts-expect-error a pattern key that holds a refinement is refused
         const byPredicate = () => extract(order, object({ kind: refined }))
         expect(byPredicate).toThrow(/holds a refinement/)
-    })
-
-    it('keeps no option for a literal at the right base that no member pins', () => {
-        const none = extract(order, object({ kind: string('UNKNOWN') }))
-        expect(none.def.kind).toBe('never')
     })
 
     it('refuses a split of an object that has an open key entry', () => {

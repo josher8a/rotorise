@@ -12,6 +12,11 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
+#
+# An `extract|refuse` id is a member that reads a `ref` in a scope entry. The type level reads the
+# field of a scope entry as a bare `ref`, with no environment to resolve the name, so the type keeps
+# the member, and the run time resolves the `ref` and drops the member. Every value fits the type.
+# A field closed in its scope closes the case. `docs/defects.md` holds the entry.
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|22507207dc|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|280579ecc4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -35,3 +40,394 @@ exclude|refuse|e2198121e1|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|ea30057fc2|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|f45cbe8e82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|feb1120b66|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|00760a2ad7|extract({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|00760a2ad7|extract({ y: boolean(false) }) member 1
+extract|refuse|00760a2ad7|extract({ y: boolean(true) }) member 1
+extract|refuse|00760a2ad7|extract({ y: decimal("1") }) member 1
+extract|refuse|00760a2ad7|extract({ y: decimal("2.5") }) member 1
+extract|refuse|00760a2ad7|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|00760a2ad7|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|00760a2ad7|extract({ y: number(1) }) member 1
+extract|refuse|00760a2ad7|extract({ y: number(2.5) }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("A") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("a") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("a", "b") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("b") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("p") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("q") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("x") }) member 1
+extract|refuse|00760a2ad7|extract({ y: string("y") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: boolean(false) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: boolean(false) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: boolean(true) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: boolean(true) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: decimal("1") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: decimal("1") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: decimal("2.5") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: decimal("2.5") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: number(1) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: number(1) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: number(2.5) }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: number(2.5) }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("A") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("A") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("a") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("a") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("a", "b") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("a", "b") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("b") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("b") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("p") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("p") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("q") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("q") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("x") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("x") }) member 1
+extract|refuse|02d7e3cbd3|extract({ a: string("y") }) member 0
+extract|refuse|02d7e3cbd3|extract({ a: string("y") }) member 1
+extract|refuse|065d6fc16c|extract({ m: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|065d6fc16c|extract({ m: boolean(false) }) member 1
+extract|refuse|065d6fc16c|extract({ m: boolean(true) }) member 1
+extract|refuse|065d6fc16c|extract({ m: decimal("1") }) member 1
+extract|refuse|065d6fc16c|extract({ m: decimal("2.5") }) member 1
+extract|refuse|065d6fc16c|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|065d6fc16c|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|065d6fc16c|extract({ m: number(1) }) member 1
+extract|refuse|065d6fc16c|extract({ m: number(2.5) }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("A") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("a") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("a", "b") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("b") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("p") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("q") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("x") }) member 1
+extract|refuse|065d6fc16c|extract({ m: string("y") }) member 1
+extract|refuse|0c1bedd572|extract({ m: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|0c1bedd572|extract({ m: boolean(false) }) member 1
+extract|refuse|0c1bedd572|extract({ m: boolean(true) }) member 1
+extract|refuse|0c1bedd572|extract({ m: decimal("1") }) member 1
+extract|refuse|0c1bedd572|extract({ m: decimal("2.5") }) member 1
+extract|refuse|0c1bedd572|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|0c1bedd572|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|0c1bedd572|extract({ m: number(1) }) member 1
+extract|refuse|0c1bedd572|extract({ m: number(2.5) }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("A") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("a") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("a", "b") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("b") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("p") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("q") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("x") }) member 1
+extract|refuse|0c1bedd572|extract({ m: string("y") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: boolean(false) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: boolean(true) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: decimal("1") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: decimal("2.5") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: number(1) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: number(2.5) }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("A") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("a") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("a", "b") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("b") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("p") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("q") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("x") }) member 1
+extract|refuse|1b7dd08ed3|extract({ a: string("y") }) member 1
+extract|refuse|1e7da16304|extract({ x: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|1e7da16304|extract({ x: boolean(false) }) member 0
+extract|refuse|1e7da16304|extract({ x: boolean(true) }) member 0
+extract|refuse|1e7da16304|extract({ x: decimal("1") }) member 0
+extract|refuse|1e7da16304|extract({ x: decimal("2.5") }) member 0
+extract|refuse|1e7da16304|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|1e7da16304|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|1e7da16304|extract({ x: number(1) }) member 0
+extract|refuse|1e7da16304|extract({ x: number(2.5) }) member 0
+extract|refuse|1e7da16304|extract({ x: string("A") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("a") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("a", "b") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("b") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("p") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("q") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("x") }) member 0
+extract|refuse|1e7da16304|extract({ x: string("y") }) member 0
+extract|refuse|3a44071f4a|extract({ x: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|3a44071f4a|extract({ x: boolean(false) }) member 0
+extract|refuse|3a44071f4a|extract({ x: boolean(true) }) member 0
+extract|refuse|3a44071f4a|extract({ x: decimal("1") }) member 0
+extract|refuse|3a44071f4a|extract({ x: decimal("2.5") }) member 0
+extract|refuse|3a44071f4a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|3a44071f4a|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|3a44071f4a|extract({ x: number(1) }) member 0
+extract|refuse|3a44071f4a|extract({ x: number(2.5) }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("A") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("a") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("a", "b") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("b") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("p") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("q") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("x") }) member 0
+extract|refuse|3a44071f4a|extract({ x: string("y") }) member 0
+extract|refuse|3b99225d8b|extract({ a: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|3b99225d8b|extract({ a: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|3b99225d8b|extract({ a: boolean(false) }) member 0
+extract|refuse|3b99225d8b|extract({ a: boolean(false) }) member 1
+extract|refuse|3b99225d8b|extract({ a: boolean(true) }) member 0
+extract|refuse|3b99225d8b|extract({ a: boolean(true) }) member 1
+extract|refuse|3b99225d8b|extract({ a: decimal("1") }) member 0
+extract|refuse|3b99225d8b|extract({ a: decimal("1") }) member 1
+extract|refuse|3b99225d8b|extract({ a: decimal("2.5") }) member 0
+extract|refuse|3b99225d8b|extract({ a: decimal("2.5") }) member 1
+extract|refuse|3b99225d8b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|3b99225d8b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|3b99225d8b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|3b99225d8b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|3b99225d8b|extract({ a: number(1) }) member 0
+extract|refuse|3b99225d8b|extract({ a: number(1) }) member 1
+extract|refuse|3b99225d8b|extract({ a: number(2.5) }) member 0
+extract|refuse|3b99225d8b|extract({ a: number(2.5) }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("A") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("A") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("a") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("a") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("a", "b") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("a", "b") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("b") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("b") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("p") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("p") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("q") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("q") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("x") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("x") }) member 1
+extract|refuse|3b99225d8b|extract({ a: string("y") }) member 0
+extract|refuse|3b99225d8b|extract({ a: string("y") }) member 1
+extract|refuse|41064254f2|extract({ x: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|41064254f2|extract({ x: boolean(false) }) member 0
+extract|refuse|41064254f2|extract({ x: boolean(true) }) member 0
+extract|refuse|41064254f2|extract({ x: decimal("1") }) member 0
+extract|refuse|41064254f2|extract({ x: decimal("2.5") }) member 0
+extract|refuse|41064254f2|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|41064254f2|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|41064254f2|extract({ x: number(1) }) member 0
+extract|refuse|41064254f2|extract({ x: number(2.5) }) member 0
+extract|refuse|41064254f2|extract({ x: string("A") }) member 0
+extract|refuse|41064254f2|extract({ x: string("a") }) member 0
+extract|refuse|41064254f2|extract({ x: string("a", "b") }) member 0
+extract|refuse|41064254f2|extract({ x: string("b") }) member 0
+extract|refuse|41064254f2|extract({ x: string("p") }) member 0
+extract|refuse|41064254f2|extract({ x: string("q") }) member 0
+extract|refuse|41064254f2|extract({ x: string("x") }) member 0
+extract|refuse|41064254f2|extract({ x: string("y") }) member 0
+extract|refuse|5321997a33|extract({ x: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|5321997a33|extract({ x: boolean(false) }) member 0
+extract|refuse|5321997a33|extract({ x: boolean(true) }) member 0
+extract|refuse|5321997a33|extract({ x: decimal("1") }) member 0
+extract|refuse|5321997a33|extract({ x: decimal("2.5") }) member 0
+extract|refuse|5321997a33|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|5321997a33|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|5321997a33|extract({ x: number(1) }) member 0
+extract|refuse|5321997a33|extract({ x: number(2.5) }) member 0
+extract|refuse|5321997a33|extract({ x: string("A") }) member 0
+extract|refuse|5321997a33|extract({ x: string("a") }) member 0
+extract|refuse|5321997a33|extract({ x: string("a", "b") }) member 0
+extract|refuse|5321997a33|extract({ x: string("b") }) member 0
+extract|refuse|5321997a33|extract({ x: string("p") }) member 0
+extract|refuse|5321997a33|extract({ x: string("q") }) member 0
+extract|refuse|5321997a33|extract({ x: string("x") }) member 0
+extract|refuse|5321997a33|extract({ x: string("y") }) member 0
+extract|refuse|60a594ba55|extract({ m: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|60a594ba55|extract({ m: boolean(false) }) member 1
+extract|refuse|60a594ba55|extract({ m: boolean(true) }) member 1
+extract|refuse|60a594ba55|extract({ m: decimal("1") }) member 1
+extract|refuse|60a594ba55|extract({ m: decimal("2.5") }) member 1
+extract|refuse|60a594ba55|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|60a594ba55|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|60a594ba55|extract({ m: number(1) }) member 1
+extract|refuse|60a594ba55|extract({ m: number(2.5) }) member 1
+extract|refuse|60a594ba55|extract({ m: string("A") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("a") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("a", "b") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("b") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("p") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("q") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("x") }) member 1
+extract|refuse|60a594ba55|extract({ m: string("y") }) member 1
+extract|refuse|661cc35f52|extract({ x: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|661cc35f52|extract({ x: boolean(false) }) member 0
+extract|refuse|661cc35f52|extract({ x: boolean(true) }) member 0
+extract|refuse|661cc35f52|extract({ x: decimal("1") }) member 0
+extract|refuse|661cc35f52|extract({ x: decimal("2.5") }) member 0
+extract|refuse|661cc35f52|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|661cc35f52|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|661cc35f52|extract({ x: number(1) }) member 0
+extract|refuse|661cc35f52|extract({ x: number(2.5) }) member 0
+extract|refuse|661cc35f52|extract({ x: string("A") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("a") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("a", "b") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("b") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("p") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("q") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("x") }) member 0
+extract|refuse|661cc35f52|extract({ x: string("y") }) member 0
+extract|refuse|72ec0ef433|extract({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|72ec0ef433|extract({ y: boolean(false) }) member 1
+extract|refuse|72ec0ef433|extract({ y: boolean(true) }) member 1
+extract|refuse|72ec0ef433|extract({ y: decimal("1") }) member 1
+extract|refuse|72ec0ef433|extract({ y: decimal("2.5") }) member 1
+extract|refuse|72ec0ef433|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|72ec0ef433|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|72ec0ef433|extract({ y: number(1) }) member 1
+extract|refuse|72ec0ef433|extract({ y: number(2.5) }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("A") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("a") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("a", "b") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("b") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("p") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("q") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("x") }) member 1
+extract|refuse|72ec0ef433|extract({ y: string("y") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: boolean(false) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: boolean(true) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: decimal("1") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: decimal("2.5") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: number(1) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: number(2.5) }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("A") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("a") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("a", "b") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("b") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("p") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("q") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("x") }) member 1
+extract|refuse|bdaa3fef71|extract({ y: string("y") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: boolean(false) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: boolean(false) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: boolean(true) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: boolean(true) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: decimal("1") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: decimal("1") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: decimal("2.5") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: decimal("2.5") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: number(1) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: number(1) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: number(2.5) }) member 0
+extract|refuse|ca3044bf4b|extract({ a: number(2.5) }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("A") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("A") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("a") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("a") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("a", "b") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("a", "b") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("b") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("b") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("p") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("p") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("q") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("q") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("x") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("x") }) member 1
+extract|refuse|ca3044bf4b|extract({ a: string("y") }) member 0
+extract|refuse|ca3044bf4b|extract({ a: string("y") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: boolean(false) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: boolean(true) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: decimal("1") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: decimal("2.5") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: number(1) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: number(2.5) }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("A") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("a") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("a", "b") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("b") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("p") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("q") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("x") }) member 1
+extract|refuse|d8cfeb3f9f|extract({ m: string("y") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: boolean(false) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: boolean(true) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: decimal("1") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: decimal("2.5") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: number(1) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: number(2.5) }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("A") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("a") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("a", "b") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("b") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("p") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("q") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("x") }) member 1
+extract|refuse|e451ae9dc3|extract({ y: string("y") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: boolean(false) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: boolean(true) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: decimal("1") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: decimal("2.5") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: number(1) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: number(2.5) }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("A") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("a") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("a", "b") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("b") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("p") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("q") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("x") }) member 1
+extract|refuse|f391cb9ba8|extract({ y: string("y") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: boolean(false) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: boolean(true) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: decimal("1") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: decimal("2.5") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: number(1) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: number(2.5) }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("A") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("a") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("a", "b") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("b") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("p") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("q") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("x") }) member 1
+extract|refuse|f45cbe8e82|extract({ y: string("y") }) member 1
+extract|refuse|feb1120b66|extract({ x: binary(new Uint8Array([1, 2])) }) member 0
+extract|refuse|feb1120b66|extract({ x: boolean(false) }) member 0
+extract|refuse|feb1120b66|extract({ x: boolean(true) }) member 0
+extract|refuse|feb1120b66|extract({ x: decimal("1") }) member 0
+extract|refuse|feb1120b66|extract({ x: decimal("2.5") }) member 0
+extract|refuse|feb1120b66|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 0
+extract|refuse|feb1120b66|extract({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 0
+extract|refuse|feb1120b66|extract({ x: number(1) }) member 0
+extract|refuse|feb1120b66|extract({ x: number(2.5) }) member 0
+extract|refuse|feb1120b66|extract({ x: string("A") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("a") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("a", "b") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("b") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("p") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("q") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("x") }) member 0
+extract|refuse|feb1120b66|extract({ x: string("y") }) member 0

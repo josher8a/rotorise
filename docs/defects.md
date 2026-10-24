@@ -198,24 +198,30 @@ repair is to route the remaining site through the same seam, not to write a rend
 level reads the literal from the term of the codec, as the run time does: a literal, a union of
 literals, and a library adapter over a pin each pin the key, a caller's adapter pins nothing, and a
 refinement in a pattern is refused at the type and at run time. One case remains. The pattern
-readers take a field codec out of a member spec, and inside a scope entry the field is still the
-`ref`, with no scope to resolve the name. Measured 2026-10-22 with `npx tsc --noEmit` and the pin
-below:
+readers take a field codec out of a member spec, and inside a scope entry the field is a bare `ref`,
+with no environment at the type level to resolve the name. The type cannot decide whether the member
+fits, so the type keeps the member. Measured 2026-10-24 with `npx tsc --noEmit` and the pin below:
 
     a key pinned through `ref('Colour')`, where the scope binds `Colour: string('red', 'blue')`
-      type checker: the pattern on that key is refused
+      type checker: the member is kept
       runtime:      the key is pinned, and the member is kept
 
-**Effect.** A pattern cannot name a key pinned through a `ref(...)`. The case refuses: it gives no
-green typecheck and a wrong member set.
+The run time resolves the `ref`, and drops a member that the pattern does not fit. Measured
+2026-10-24 with `formal/scripts/gate.sh`: the type bridge holds 391 extract refuse ids, and in each
+one the type keeps a member that reads a `ref` and that the run time drops.
+
+**Effect.** The result type of extract keeps a member that the run time drops. Every value fits
+the type, and the type is wider than the value.
 
 **Open.** A field closed in its scope closes the case, on both sides. The run time binds a `ref`
 through a slot, and the key set of a dissection lives in a table beside the term, so a closed copy
 of a field loses its dissection.
 
-**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the refusal of a key pinned through a
+**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the type keeps a member pinned through a
 `ref(...)`, the exclusion that keeps the adapter member, and the slice that keeps a member pinned
 through an adapter. `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
+The baseline of the type bridge, `formal/scripts/type_bridge_baseline.txt`, holds the 391 extract
+refuse ids.
 
 ---
 

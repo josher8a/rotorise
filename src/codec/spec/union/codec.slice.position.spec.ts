@@ -10,7 +10,6 @@ import type { AttributeValue } from '../../attribute'
 import type { Decoded } from '../../codec'
 import {
     array,
-    CodecError,
     decimal,
     exclude,
     extract,
@@ -182,39 +181,36 @@ describe('a pattern reaches a position of a fixed list as it reaches a key', () 
 describe('a list of free length has no positions to reach', () => {
     const many = union([object({ route: array(pet) })])
 
-    it('refuses a fixed pattern, because an array declares no position', () => {
-        const fixed = () =>
-            extract(
-                many,
-                // @ts-expect-error an array declares no position for the pattern to reach
-                object({ route: list(object({ category: string('DOG') })) }),
-            )
-        expect(fixed).toThrow(/An array declares no position/)
+    it('extracts never for a fixed pattern, because an array declares no position', () => {
+        const fixed = extract(
+            many,
+            object({ route: list(object({ category: string('DOG') })) }),
+        )
+        expectTypeOf<Decoded<typeof fixed>>().toEqualTypeOf<never>()
+        expect(fixed.def.kind).toBe('never')
     })
 })
 
-describe('a pattern at a position answers to the refusals of a key', () => {
-    it('refuses a key that no member of the position declares', () => {
-        const typo = () =>
-            extract(
-                plan,
-                // @ts-expect-error no member at the position declares the key
-                object({ route: list(object({ nope: string('x') })) }),
-            )
-        expect(typo).toThrow(CodecError)
+describe('a pattern at a position that no member fits extracts never, as at a key', () => {
+    it('extracts never for a key that no member of the position declares', () => {
+        const typo = extract(
+            plan,
+            object({ route: list(object({ nope: string('x') })) }),
+        )
+        expectTypeOf<Decoded<typeof typo>>().toEqualTypeOf<never>()
+        expect(typo.def.kind).toBe('never')
     })
 
-    it('refuses a literal that no member of the position pins at that base', () => {
-        const wrongBase = () =>
-            extract(
-                plan,
-                // @ts-expect-error a decimal literal where the members pin a string
-                object({ route: list(object({ category: decimal('1') })) }),
-            )
-        expect(wrongBase).toThrow(CodecError)
+    it('extracts never for a literal that no member of the position pins at that base', () => {
+        const wrongBase = extract(
+            plan,
+            object({ route: list(object({ category: decimal('1') })) }),
+        )
+        expectTypeOf<Decoded<typeof wrongBase>>().toEqualTypeOf<never>()
+        expect(wrongBase.def.kind).toBe('never')
     })
 
-    it('refuses a key that no member declares at a position of a list held at a position', () => {
+    it('extracts never for a key that no member declares at a position of a list held at a position', () => {
         const held = union([
             object({
                 r: list(
@@ -227,20 +223,18 @@ describe('a pattern at a position answers to the refusals of a key', () => {
                 ),
             }),
         ])
-        const typo = () =>
-            extract(
-                held,
-                // @ts-expect-error no member at the nested position declares the key
-                object({ r: list(list(object({ nope: string('x') }))) }),
-            )
-        expect(typo).toThrow(/'nope' is not a key any member declares/)
-        const wrongBase = () =>
-            extract(
-                held,
-                // @ts-expect-error a decimal literal where the members pin a string
-                object({ r: list(list(object({ category: decimal('1') }))) }),
-            )
-        expect(wrongBase).toThrow(CodecError)
+        const typo = extract(
+            held,
+            object({ r: list(list(object({ nope: string('x') }))) }),
+        )
+        expectTypeOf<Decoded<typeof typo>>().toEqualTypeOf<never>()
+        expect(typo.def.kind).toBe('never')
+        const wrongBase = extract(
+            held,
+            object({ r: list(list(object({ category: decimal('1') }))) }),
+        )
+        expectTypeOf<Decoded<typeof wrongBase>>().toEqualTypeOf<never>()
+        expect(wrongBase.def.kind).toBe('never')
     })
 })
 

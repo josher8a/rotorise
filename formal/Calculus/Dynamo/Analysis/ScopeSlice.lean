@@ -68,16 +68,6 @@ def AltClause.admitsC (c : AltClause) (x : Closed) : Bool :=
   | some s => decide (∀ k : {k // k ∈ c.keys}, litSubAt s c k = true)
   | none => false
 
-/-- The form that a closed option pins at a name. -/
-def Closed.formAt (x : Closed) (k : Name) : Option (Word × GroundKind) :=
-  ((x.spec.bind (·.at k)).bind (·.pin)).map pinForm
-
-/-- **A clause that the closed options can answer**: some option pins each clause key, at the form
-    of the pin of the clause. -/
-def AltClause.keyedC (c : AltClause) (os : List Closed) : Bool :=
-  decide (∀ k : {k // k ∈ c.keys},
-    os.any (fun x => decide (x.formAt k.1 = some (pinForm (c.pin k)))) = true)
-
 /-- **The extraction** of closed options: the options that the clause describes, in their order. -/
 def AltClause.extractC (c : AltClause) (os : List Closed) : List Closed :=
   os.filter c.admitsC
@@ -162,31 +152,6 @@ theorem AltClause.admitsC_at {c : AltClause} {x : Closed} (h : c.admitsC x = tru
       exact ⟨s, ns, hs, hns, hk⟩
     · cases hk
   · cases h
-
-/-- **A clause that describes a closed option is a clause that the options can answer.** -/
-theorem AltClause.keyedC_of_admitsC {c : AltClause} {os : List Closed} {x : Closed} (hx : x ∈ os)
-    (h : c.admitsC x = true) : c.keyedC os = true := by
-  refine decide_eq_true fun k => List.any_eq_true.mpr ⟨x, hx, decide_eq_true ?_⟩
-  obtain ⟨s, ns, hs, hns, _, hsub⟩ := c.admitsC_at h k
-  obtain ⟨r, hr, hform⟩ := altsSub_form hsub
-  simp only [Closed.formAt, hs, Option.bind_some, hns, hr, Option.map_some, hform]
-
-/-- **A clause that the closed options cannot answer describes no option.** -/
-theorem AltClause.admitsC_eq_false_of_keyedC_false {c : AltClause} {os : List Closed}
-    (hk : c.keyedC os = false) {x : Closed} (hx : x ∈ os) : c.admitsC x = false :=
-  Bool.eq_false_iff.mpr fun h => Bool.false_ne_true (hk.symm.trans (c.keyedC_of_admitsC hx h))
-
-/-- **The refusal of a clause hides no answer**: a clause that the closed options cannot answer
-    extracts nothing. -/
-theorem AltClause.extractC_eq_nil_of_keyedC_false {c : AltClause} {os : List Closed}
-    (hk : c.keyedC os = false) : c.extractC os = [] :=
-  (List.filter_congr fun _ hx => c.admitsC_eq_false_of_keyedC_false hk hx).trans
-    (List.filter_false os)
-
-/-- ...and excludes no option. -/
-theorem AltClause.excludeC_eq_self_of_keyedC_false {c : AltClause} {os : List Closed}
-    (hk : c.keyedC os = false) : c.excludeC os = os :=
-  List.filter_eq_self.mpr fun _ hx => by rw [c.admitsC_eq_false_of_keyedC_false hk hx]; rfl
 
 /-! ## The slice partitions the union -/
 

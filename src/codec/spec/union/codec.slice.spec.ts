@@ -10,6 +10,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
+import type { Decoded } from '../../codec'
 import {
     at,
     binary,
@@ -197,32 +198,22 @@ describe('a clause is a literal at a base', () => {
     })
 
     /**
-     * A base no member carries at the key is the same class of fact as a key no member pins: it
-     * describes no member whatever the alternatives are, and it is decidable from the declaration.
-     * So it is refused where the foreign key is refused, rather than answered with the empty
-     * extraction — which stays the answer where the bases agree and the alternatives do not meet.
+     * A base no member carries at the key describes no member whatever the alternatives are. The
+     * extraction keeps nothing, as it keeps nothing where the bases agree and the alternatives do
+     * not meet.
      */
-    it('refuses a base no member carries at that key', () => {
-        // the type catches this one too — `number(1)` decodes to `1` and the members carry `'1'` —
-        // so the cast is a caller reaching past it, which is who the runtime refusal is for. What
-        // the type cannot catch is `string('1')` against `decimal('1')`: both decode to `'1'`, and
-        // the base is exactly what an entity type does not carry
-        expect(() =>
-            extract(byBase, object({ k: number(1) }) as never),
-        ).toThrow(CodecError)
-        expect(() =>
-            extract(byBase, object({ k: number(1) }) as never),
-        ).toThrow(
-            /`number` literal under an adapter and no member pins 'k' at that base and adapter/,
-        )
+    it('extracts never for a base no member carries at that key', () => {
+        const kept = extract(byBase, object({ k: number(1) }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
     })
 
     /**
      * The adapter is part of the form, as the base is: a plain literal and a literal under an
-     * adapter never match. So a key that the members pin under an adapter alone refuses a plain
-     * clause, as the model refuses a clause that is not keyed (`Calculus.AltClause.keyedC`).
+     * adapter never match. So a plain clause at a key that the members pin under an adapter alone
+     * keeps nothing, as `Calculus.AltClause.admitsC` admits no option there.
      */
-    it('refuses a plain clause at a key that the members pin under an adapter alone', () => {
+    it('extracts never for a plain clause at a key that the members pin under an adapter alone', () => {
         const toX = held(string('a'), string, {
             encode: (v: string) =>
                 v === 'x' ? 'a' : new CodecError(`'${v}' is not 'x'`),
@@ -232,11 +223,9 @@ describe('a clause is a literal at a base', () => {
             object({ t: toX, k: string('h') }),
             object({ k: string('p') }),
         ])
-        expect(() =>
-            extract(viaX, object({ t: string('a') }) as never),
-        ).toThrow(
-            /`string` literal and no member pins 't' at that base and adapter/,
-        )
+        const kept = extract(viaX, object({ t: string('a') }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
     })
 
     /**
@@ -450,35 +439,33 @@ describe('the clause carries no order', () => {
     })
 })
 
-describe('a clause key no member pins is refused', () => {
-    /**
-     * The model cannot have this failure: its clause keys are a subset of the dissection's by the
-     * type. Here a clause is an object literal a caller writes, and an empty result is a legitimate
-     * answer, so a typo would read as "no member matched" rather than as the typo it is.
-     */
-    it('names the keys a clause may use', () => {
-        expect(() =>
-            extract(twoKey, object({ colour: string('red') }) as never),
-        ).toThrow(CodecError)
-        expect(() =>
-            extract(twoKey, object({ colour: string('red') }) as never),
-        ).toThrow(/'kind', 'size'/)
+describe('a clause key no member pins extracts never', () => {
+    /** A clause key that no member declares describes no member, so the extraction keeps nothing. */
+    it('extracts never and excludes all for a key that no member declares', () => {
+        const kept = extract(twoKey, object({ colour: string('red') }))
+        const rest = exclude(twoKey, object({ colour: string('red') }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof twoKey>
+        >()
+        expect(kept.def.kind).toBe('never')
+        expect(rest.def).toEqual(twoKey.def)
     })
 
-    it('refuses a key declared without a literal, which pins nothing', () => {
-        // `toy` is declared by one member and is a plain `string`, so no clause can select on it
-        expect(() =>
-            extract(twoKey, object({ toy: string('t') }) as never),
-        ).toThrow(CodecError)
+    it('extracts never for a key declared without a literal, which pins nothing', () => {
+        // `toy` is declared by one member and is a plain `string`, which no literal holds whole
+        const kept = extract(twoKey, object({ toy: string('t') }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
     })
 
     /**
      * **A `ref` pins no key at the type.** A `ref` carries the term of a name and no literal mark,
      * and the decoded type cannot say whether a literal constructor built the codec: a caller's
-     * adapter decodes to a literal type over a term that pins nothing. So the type refuses the key,
-     * and the runtime, which resolves the `ref`, still pins it.
+     * adapter decodes to a literal type over a term that pins nothing. So the type cannot decide the
+     * fit and keeps the member, and the runtime, which resolves the `ref`, keeps the member too.
      */
-    it('refuses at the type a key pinned through a ref, and the runtime pins the key', () => {
+    it('keeps at the type a member pinned through a ref, and the runtime keeps the member', () => {
         const { Large } = scope({
             Large: object({
                 kind: string('pet'),
@@ -488,12 +475,9 @@ describe('a clause key no member pins is refused', () => {
             Colour: string('red', 'blue'),
         })
         const viaRef = mdunion(['kind', 'size'], [pet, Large])
-        const kept = extract(
-            viaRef,
-            // @ts-expect-error the type reads no literal mark through a ref
-            object({ colour: string('red', 'blue') }),
-        )
-        // the runtime answers for a caller who reaches past the type
+        const kept = extract(viaRef, object({ colour: string('red', 'blue') }))
+        // the type keeps the member `Large` alone: `pet` declares no `colour`
+        expectTypeOf<Decoded<typeof kept>['size']>().toEqualTypeOf<'large'>()
         expect(
             kept.unsafeEncode({
                 kind: 'pet',
@@ -512,7 +496,8 @@ describe('a clause key no member pins is refused', () => {
     /**
      * **A union option that a `ref` names pins its literal once the scope binds the name.** The
      * union reads the literals of each option through the `ref`, so the clause keeps the member.
-     * The type reads no literal mark through a `ref`, so the type refuses the key.
+     * The type reads no literal mark through a `ref`, so the type cannot decide the fit, and keeps the
+     * member.
      */
     it('reads a key whose union option is a ref, because the union then pins its literals', () => {
         const { Large } = scope({
@@ -526,9 +511,10 @@ describe('a clause key no member pins is refused', () => {
         const viaOption = mdunion(['kind', 'size'], [pet, Large])
         const kept = extract(
             viaOption,
-            // @ts-expect-error the type reads no literal mark through a ref
             object({ colour: string('red', 'blue') }),
         )
+        // the type keeps the member `Large` alone: `pet` declares no `colour`
+        expectTypeOf<Decoded<typeof kept>['size']>().toEqualTypeOf<'large'>()
         expect(
             kept.unsafeEncode({
                 kind: 'pet',
@@ -628,8 +614,7 @@ describe('a union of objects has the same slice', () => {
     /**
      * **A tag no option carries is answered at the type as at run time.** The base matches and the
      * alternatives do not meet: that is a fact about the values, and its answer is the empty
-     * extraction (`Calculus.AltClause.extractC`). The model refuses only a clause that it cannot
-     * answer (`Calculus.AltClause.keyedC`).
+     * extraction (`Calculus.AltClause.extractC`).
      */
     it('answers a tag no option carries with no member, at the type as at run time', () => {
         const none = extract(plain, object({ kind: string('z') }))
@@ -680,8 +665,8 @@ describe('discriminatedUnion slices like the dissection it is', () => {
 })
 
 /**
- * **A clause at a carrier literal is answered.** The model answers such a clause
- * (`Calculus.AltClause.keyedC` holds), so the type answers it too. A `dynamoNumber` literal decodes
+ * **A clause at a carrier literal is answered.** The model answers such a clause, so the type
+ * answers it too. A `dynamoNumber` literal decodes
  * a `DynamoNumber` whose type holds the stored text, so the type compares the numerals as the run
  * time does. A `binary` literal decodes a `Uint8Array`, which has no literal type, and a numeral
  * from text that is no literal holds `string`. Where only such values decide a member, the
