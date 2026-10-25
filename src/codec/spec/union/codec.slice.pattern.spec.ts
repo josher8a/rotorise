@@ -11,6 +11,8 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import type { Decoded } from '../../codec'
 import {
+    binary,
+    boolean,
     decimal,
     discriminatedUnion,
     exclude,
@@ -19,6 +21,7 @@ import {
     never,
     number,
     object,
+    opaque,
     optional,
     refine,
     string,
@@ -486,5 +489,52 @@ describe('a pattern that the host cannot read is refused', () => {
             )
         expect(split).toThrow(/keeps its members whole/)
         expect(optionsOf(extract(byKind, object({ pet })))).toHaveLength(2)
+    })
+})
+
+/**
+ * **The order of the slice is the order of the meet.** `opaque` holds every value, so every member
+ * fits it. A set fits a set whose element holds its element. The type of the slice states the same
+ * order.
+ */
+describe('fits is the order of the meet, at the top and at a set', () => {
+    it('extracts every member by opaque, the top of the order, and excludes none', () => {
+        const members = union([object({ a: string }), object({ b: string })])
+        const kept = extract(members, opaque)
+        const rest = exclude(members, opaque)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            { readonly a: string } | { readonly b: string }
+        >()
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<never>()
+        expect(optionsOf(kept)).toEqual(optionsOf(members))
+        expect(rest.def.kind).toBe('never')
+    })
+
+    it('extracts a set by a set pattern whose element holds the element of the set', () => {
+        const mixed = union([binary.set(), string])
+        const kept = extract(mixed, binary.set())
+        const rest = exclude(mixed, binary.set())
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<ReturnType<typeof binary.set>>
+        >()
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<string>()
+        expect(optionsOf(kept).map((one) => one.kind)).toEqual(['set'])
+        expect(optionsOf(rest).map((one) => one.kind)).toEqual(['string'])
+    })
+})
+
+/**
+ * **The literal grain stays coarse.** `fits` reads a union pattern one option at a time, so a base
+ * that a union of all its literals covers fits no option, and the extraction keeps nothing. The meet
+ * holds the whole base. A canonical normal form closes the case.
+ */
+describe('fits reads a union pattern one option at a time', () => {
+    it('keeps no member whose base a union of every literal of the base covers', () => {
+        const members = union([object({ k: boolean }), object({ n: number })])
+        const kept = extract(
+            members,
+            object({ k: union([boolean(true), boolean(false)]) }),
+        )
+        expect(kept.def.kind).toBe('never')
     })
 })

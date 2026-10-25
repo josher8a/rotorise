@@ -526,13 +526,18 @@ options that the clause describes.
 that fit the pattern, and `exclude(codec, pattern)` keeps the rest. A field that may be absent,
 against a pattern that requires its key, splits the option into a present part and an absent part:
 the extraction keeps the present part with the key required, and the exclusion keeps the absent
-part. A dissection splits no member. An option fits where every value that the option holds lies
-inside what the pattern holds. The host decides this on a fragment. A literal fits a literal of one
-base and adapter, and a literal fits its base. A base fits itself. An option fits a union that holds
-a member of the option. An object fits an object pattern that names a subset of its keys. A list
-with fixed positions fits a list pattern with the same positions where each position fits. An array
-declares no position, because its length is a run-time fact, so an array fits no fixed pattern. Any
-other pair fits only where the two terms are one term. A pattern that no option fits is an answer:
+part. A dissection splits no member. An option fits where every value that the option holds, as
+written, lies inside what the opening of the pattern holds. The opening holds every undeclared name
+of an object pattern at `opaque`. The host decides this on a fragment, and the order is the order of
+the meet. `opaque` is the top, and a term that holds no value is the bottom. A literal fits a
+literal of one base and adapter, and a literal fits its base. A base fits itself. A set fits a set
+where its element fits. An option fits a union that holds a member of the option. Two objects compare
+on the alignment of their names: each slot of the option fits the slot of the pattern, and the open
+block of the option fits the open block of the pattern. A closed option holds no undeclared name. A
+list with fixed positions fits a list pattern with the same positions where each position fits. A
+list fits a list of one element where each position fits that element. An array declares no
+position, because its length is a run-time fact, so an array fits no fixed pattern. Any other pair
+fits only where the two terms are one term. A pattern that no option fits is an answer:
 the extraction is `never`, and the exclusion is the whole codec. The extraction of `never` is
 `never`. A pattern that holds a refinement is a refusal, because no function decides whether an
 option lies inside a predicate. An object with a union at a
@@ -692,7 +697,9 @@ with an option of the second, outer over the first. The product is associative o
 product is the union of the merges, so the meaning of a product is the join of the meanings of
 the merges where the merges agree (`Scoped.Term.product_join`). The host operation is `meet`, as
 TypeScript reads `A & B`: two closed objects at disjoint names meet as this product, and at a shared
-name the host meets the two fields. The model has no term for the meet at a shared name.
+name the host meets the two fields. An open object meets on the alignment of the names: a name that
+one factor declares meets the open block of the other factor, and the two open blocks meet. The
+model has no term for the meet at a shared name.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

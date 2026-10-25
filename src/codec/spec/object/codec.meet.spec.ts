@@ -26,6 +26,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
+import { failed } from '../../result'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
@@ -169,17 +170,47 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * An open factor holds an undeclared name through a codec of its own, so the meet would
-     * have to hold it through both. This is that refusal.
+     * **An open factor meets on the alignment.** A name that one factor declares meets the open
+     * block of the other factor, and the two open blocks meet. The type of `meet` still refuses an
+     * open factor, because the type reads no open block.
      */
-    it('refuses a factor left open by a rest codec', () => {
-        expect(() =>
-            meet(
-                // @ts-expect-error the type refuses an open factor too
-                object({ a: string }, [string, optional(string)]),
-                object({ b: string }),
+    it('meets a declared name against the open block of the other factor', () => {
+        const both: AnyCodec = meet(
+            // @ts-expect-error the type refuses an open factor
+            object({ a: string }, [string, optional(string)]),
+            object({ b: string }),
+        )
+        expect(
+            failed(
+                both.decode({
+                    M: { a: { S: 'x' }, b: { S: 'y' }, c: { S: 'z' } },
+                }),
             ),
-        ).toThrow(CodecError)
+        ).toBe(false)
+        expect(
+            failed(both.decode({ M: { a: { S: 'x' }, b: { N: '1' } } })),
+        ).toBe(true)
+        expect(
+            failed(
+                both.decode({
+                    M: { a: { S: 'x' }, b: { S: 'y' }, c: { N: '1' } },
+                }),
+            ),
+        ).toBe(true)
+    })
+
+    /**
+     * **A required name that the open block of the other factor refuses empties the meet.** The
+     * meet held such a name before as the other factor declared it, and the open factor refused the
+     * result.
+     */
+    it('meets at never where a required name meets the open block of the other factor at never', () => {
+        const kept: AnyCodec = meet(
+            // @ts-expect-error the type refuses an open factor
+            object({}, [string, optional(object({ k: string('p') }))]),
+            object({ b: string('a') }),
+        )
+        expect(defOf(kept)).toEqual(never.def)
     })
 
     /**

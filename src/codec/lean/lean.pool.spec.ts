@@ -22,6 +22,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { AttributeValue } from '../attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
 import type { AnyCodec } from '../codec'
 import {
@@ -34,6 +35,7 @@ import {
     dynamoNumber,
     exclude,
     extract,
+    fits,
     held,
     item,
     list,
@@ -45,6 +47,7 @@ import {
     number,
     object,
     opaque,
+    opened,
     optional,
     ref,
     refine,
@@ -88,13 +91,19 @@ import { failed, orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
 import {
+    holdsNoValue,
     openRefusal,
     RecursionRefused,
     recursionUse,
     sameTerm,
     targetOf,
 } from '../term'
-import { arbitraryOf, rngFrom, structuralEquals } from '../testing'
+import {
+    arbitraryOf,
+    checkEquivalent,
+    rngFrom,
+    structuralEquals,
+} from '../testing'
 import { typeVectorFiles } from '../typeVectors'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -1719,6 +1728,85 @@ describe('the generated pool, against the model', () => {
             'tsconfig.paths0.json',
             'tsconfig.paths1.json',
             'tsconfig.paths2.json',
+        ])
+    })
+})
+
+/**
+ * **Fits is the order of the meet.** Over the pool pairs in both orders, `fits(o, P)` holds exactly
+ * where the meet of `o` and `P` holds what `o` holds, each read open. The open reading is the one
+ * that the meet takes: an undeclared name of a closed object holds any value. A pair whose meet
+ * refuses, or whose equivalence the sample cannot decide, decides nothing.
+ */
+describe('fits is the order of the meet', () => {
+    /**
+     * Whether two terms hold one set of values: one term, or two codecs that write and read each
+     * sampled value alike. `undefined` where the check cannot decide, as at a value that no side
+     * writes.
+     */
+    const equivalent = (a: Term, b: Term): boolean | undefined => {
+        if (sameTerm(a, b)) return true
+        if (holdsNoValue(a) !== holdsNoValue(b)) return false
+        const x = codecOfTerm<unknown, AttributeValue>(a)
+        const y = codecOfTerm<unknown, AttributeValue>(b)
+        for (const [one, other] of [
+            [x, y],
+            [y, x],
+        ]) {
+            if (one === undefined || other === undefined) return undefined
+            try {
+                checkEquivalent(one, other, { count: 20 })
+            } catch (error) {
+                return error instanceof Error &&
+                    error.message.startsWith('these codecs')
+                    ? false
+                    : undefined
+            }
+        }
+        return true
+    }
+
+    /**
+     * **The stated limits.** Four pairs disagree, and no rule of `fits` decides them.
+     *
+     * - `20261004.482 lr` and `20261004.592 lr`: a closed option against a union pattern whose
+     *   members declare optional names that the option lacks. `fits` reads the option as written,
+     *   so the option holds no such name and fits. The meet reads the option open and distributes
+     *   over the members, so a member adds the names, and the open meet holds less than the open
+     *   option. The check sees the difference where the opaque block of the option refuses to write
+     *   a value that the typed field writes.
+     * - `1.473 rl`: `opaque` against a refinement of `opaque`. The host cannot read the predicate,
+     *   so `fits` answers no, and the sample finds no value that the predicate refuses.
+     * - `1.950 lr`: an open option whose block refuses the value of an optional pattern name. The
+     *   meet holds the name at `never`, and the open option holds it at the block. The two readings
+     *   differ only at that name, and the sample draws no value at that name.
+     */
+    it('holds fits exactly where the meet holds what the option holds', () => {
+        const rows = buildPool().flatMap((one) =>
+            one.pairs.flatMap((pair, at) => [
+                { key: `${one.seed}.${at} lr`, o: pair.left, p: pair.right },
+                { key: `${one.seed}.${at} rl`, o: pair.right, p: pair.left },
+            ]),
+        )
+        const disagree: string[] = []
+        let decided = 0
+        for (const { key, o, p } of rows) {
+            let kept: boolean | undefined
+            try {
+                kept = equivalent(opened(termOf(meet(o, p))), opened(termOf(o)))
+            } catch {
+                continue
+            }
+            if (kept === undefined) continue
+            decided++
+            if (fits(termOf(o), termOf(p)) !== kept) disagree.push(key)
+        }
+        expect(decided).toBeGreaterThan(rows.length / 2)
+        expect(disagree).toEqual([
+            '20261004.482 lr',
+            '20261004.592 lr',
+            '1.473 rl',
+            '1.950 lr',
         ])
     })
 })
