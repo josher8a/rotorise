@@ -715,13 +715,18 @@ declares meets the open block of the other factor, which is `opaque` where that 
 and the two open blocks meet. The result closes again where both factors are closed. The meet of two
 recursive factors is recursive: a pair of nodes that the walk meets again below itself is a
 reference to the meet of the pair. The meet is the intersection of the two relations between stored
-rows and decoded values. At a shared name, a required or a `withLegacyRead(...)` side makes the slot
-required, because a stand-in and an absence share no absent row, and `optional` with
-`undefinable(...)` is `undefinable(...)`. A factor that lies below the other is the meet, and a
-union distributes only where neither lies below the other. Two lists meet on their aligned rows. A
-refinement meets as the refinement of the meet of its inner term, except against an adapter, which
-the meet refuses. A `held` or an older reading meets only a part that it lies below. The model has
-no term for the meet at a shared name.
+rows and decoded values, each side read open. The model states the meet of two codecs as the
+intersection of the two graphs at each orientation (`Codec.meet`): the greatest lower bound of
+`Sub`, and lawful where both sides are lawful. The model holds no codec at the open block of a
+closed factor: a codec is a partial map, so no codec lies above two codecs that send one input to
+two outputs, and the model's `opaque` is the identity. So the model states the product of two closed
+objects as the pairing of two payload maps (`objAt_union`), and not as `Codec.meet`. At a shared
+name, a required or a `withLegacyRead(...)` side makes the slot required, because a stand-in and an
+absence share no absent row, and `optional` with `undefinable(...)` is `undefinable(...)`. A factor
+that lies below the other is the meet, and a union distributes only where neither lies below the
+other. Two lists meet on their aligned rows. A refinement meets as the refinement of the meet of its
+inner term, except against an adapter, which the meet refuses. A `held` or an older reading meets
+only a part that it lies below. The model has no term for the meet at a shared name.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

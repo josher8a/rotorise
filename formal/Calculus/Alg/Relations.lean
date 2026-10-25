@@ -37,17 +37,6 @@ theorem sub_refine2_self (c : Codec V M) (qV : V → Bool) (qA : V → Bool) :
 theorem sub_restrict_self (c : Codec V M) (q : V → Bool) : Sub (c.restrict q) c :=
   sub_refine2_self c q _
 
-/-- **Below one bound, the read domains decide the reads.** Three codecs below `u`, where the
-    third reads exactly where both others read: there the three read the value of `u`. -/
-theorem readAgree_of_sub {x y z u : Codec V M} (hx : Sub x u) (hy : Sub y u) (hz : Sub z u)
-    (h1 : ∀ a, (z.p a).isSome = ((x.p a).isSome && (y.p a).isSome)) {a : V}
-    (ha : (x.p a).isSome = true) (hb : (y.p a).isSome = true) :
-    z.p a = x.p a ∧ z.p a = y.p a := by
-  have hc : (z.p a).isSome = true := by rw [h1, ha, hb]; rfl
-  have ez := (Option.some_get hc).symm.trans (hz .dual _ _ (Option.some_get hc).symm).symm
-  exact ⟨ez.trans ((hx .dual _ _ (Option.some_get ha).symm).trans (Option.some_get ha)),
-    ez.trans ((hy .dual _ _ (Option.some_get hb).symm).trans (Option.some_get hb))⟩
-
 /-! ### The information order
 
 `Sub` is the information order: the minimal requirement that any ccpo on codecs meets. The map
@@ -60,6 +49,55 @@ theorem sub_empty {u : Codec V M} : Sub Codec.empty u :=
 
 /-- The growing option, before unfolding: undefined everywhere. -/
 def optBot : Codec V M := Codec.empty
+
+/-! ### The meet
+
+The meet of the information order is the intersection of the two graphs at each orientation.
+The map `f` holds a graph as a partial map, so the intersection compares the two outputs at one
+input, and the meet reads a decision of equality on the carrier. -/
+
+/-- **The meet of two codecs**: at each orientation, `x ↦ y` where both codecs send `x` to `y`.
+    A pair that the meet writes is a pair of each side, so the held set is the intersection of
+    the two held sets, and the member is the member that a side names, the left side first. Where
+    the two sides name two members, no stored datum carries both, so two lawful sides write no
+    common pair, and either member is lawful. -/
+def Codec.meet [DecidableEq V] (c d : Codec V M) : Codec V M where
+  T v := c.T v ∧ d.T v
+  μ := c.μ.or d.μ
+  f o x := (c.f o x).filter fun y => decide (d.f o x = some y)
+
+section Meet
+variable [DecidableEq V] {c d : Codec V M}
+
+/-- **The meet sends what both sides send**, at each orientation. -/
+theorem Codec.meet_f {o : Orient} {x y : V} :
+    (c.meet d).f o x = some y ↔ c.f o x = some y ∧ d.f o x = some y := by
+  simp only [Codec.meet, Option.filter_eq_some_iff, decide_eq_true_eq]
+
+/-- The meet is below its left side. -/
+theorem sub_meet_left : Sub (c.meet d) c := fun _ _ _ h => (Codec.meet_f.mp h).1
+
+/-- The meet is below its right side. -/
+theorem sub_meet_right : Sub (c.meet d) d := fun _ _ _ h => (Codec.meet_f.mp h).2
+
+/-- **The meet is the greatest lower bound of `Sub`**: a codec below both sides is below the
+    meet. -/
+theorem sub_meet {x : Codec V M} (hc : Sub x c) (hd : Sub x d) : Sub x (c.meet d) :=
+  fun o a b h => Codec.meet_f.mpr ⟨hc o a b h, hd o a b h⟩
+
+/-- **The meet of two lawful codecs is lawful.** The meet sends a pair of each side, and each
+    side inverts the pair. A write of the meet is a write of each side, so the member that a
+    side names is the member of the write. -/
+theorem lawful_meet (hc : Lawful member c) (hd : Lawful member d) : Lawful member (c.meet d) where
+  inv h :=
+    let ⟨h1, h2⟩ := Codec.meet_f.mp h
+    Codec.meet_f.mpr ⟨hc.inv h1, hd.inv h2⟩
+  writes hμ _ _ he :=
+    let ⟨h1, h2⟩ := Codec.meet_f.mp he
+    (Option.or_eq_some_iff.mp (hμ : c.μ.or d.μ = some _)).elim (hc.writes · h1)
+      fun h => hd.writes h.2 h2
+
+end Meet
 
 /-! ### First-match resolution under the obligation
 
