@@ -531,32 +531,36 @@ values: an option fits where every value that the option decodes, as written, is
 opening of the pattern. The opening holds every undeclared name of an object pattern at `opaque`.
 The host decides this on a fragment, and the order is the value order of the meet: an option fits
 exactly where the meet that reads the option as written and the pattern open is the option. `opaque`
-is the top, and a term that holds no value is the bottom. A literal fits a literal of one base and
-adapter, and a literal fits its base. A base fits itself. A set fits a set where its element fits.
-An option fits a union that holds a member of the option. A refinement fits where its inner term
-fits, and an option fits an older reading where it fits the current form. Two objects compare on the
-alignment of their names: each slot of the option fits the slot of the pattern, and the open block
-of the option fits the open block of the pattern. At the absent row, a required slot fits every
-slot, an `undefinable` slot fits an `optional` slot, an `optional` slot and an undeclared name of a
-closed option fit only an `optional` slot. A `withLegacyRead` slot always gives a value, so the slot
-fits as a required slot, as the model's `AltClause.admitsC` reads a fill. A name that the pattern
-leaves to an `opaque` block fits every slot. A list with fixed positions fits a list pattern with
-the same positions where each position fits. A list fits a list of one element where each position
-fits that element. An array declares no position, because its length is a run-time fact, so an array
-fits no fixed pattern. Any other pair fits only where the two terms are one term. The meet of two
-codecs reads the same walk at the relation order, which counts the absent row of a stand-in, so a
-`withLegacyRead` slot lies below only a slot of the same stand-in. `narrow`, `disjoint` and the
-stored apartness read the stored rows, through the walk of the separation. A pattern that no option
-fits is an answer: the extraction is `never`, and the exclusion is the whole codec. The extraction
-of `never` is `never`. A pattern that holds a refinement is a refusal, because no function decides
-whether an option lies inside a predicate. An object with a union at a field is the union of the
-objects (`Term.product_join`), and a fixed list is the same product over its positions. The slice
-goes into that field or position, and the result stays compact, as the Extract of TypeScript reads
-it. An option with a union at a field keeps the part of the union that fits the pattern, in place.
-So the extraction has no option that the original lacks. The rejection has one option for each field
-or position that the pattern names, because the complement of a product is no product. A union
-pattern is no product of its keys, so it splits the option, and the parts that fit stay. A
-dissection changes no member, because its tag table is keyed by literals.
+is the top, and a term that holds no value is the bottom. The value side reads a key that holds
+undefined as an absent key, because DynamoDB stores no undefined: `undefinable(...)` decodes the
+absent row to that key, and `opaque` refuses that key on a write. An open block that admitted the
+key would relate the absent row to two values, and decode would be no function. So `opaque` is the
+top of the values only up to that reading. A literal fits a literal of one base and adapter, and a
+literal fits its base. A base fits itself. A set fits a set where its element fits. An option fits a
+union that holds a member of the option. A refinement fits where its inner term fits, and an option
+fits an older reading where it fits the current form. Two objects compare on the alignment of their
+names: each slot of the option fits the slot of the pattern, and the open block of the option fits
+the open block of the pattern. At the absent row, a required slot fits every slot, an
+`undefinable(...)` slot fits an `optional` slot, an `optional` slot and an undeclared name of a
+closed option fit only an `optional` slot. A `withLegacyRead(...)` slot always gives a value, so the
+slot fits as a required slot, as the model's `AltClause.admitsC` reads a fill. A name that the
+pattern leaves to an `opaque` block fits every slot. A list with fixed positions fits a list pattern
+with the same positions where each position fits. A list fits a list of one element where each
+position fits that element. An array declares no position, because its length is a run-time fact, so
+an array fits no fixed pattern. Any other pair fits only where the two terms are one term. The meet
+of two codecs reads the same walk at the relation order, which counts the absent row of a stand-in,
+so a `withLegacyRead(...)` slot lies below only a slot of the same stand-in. `narrow(...)`,
+`disjoint` and the stored apartness read the stored rows, through the walk of the separation. A
+pattern that no option fits is an answer: the extraction is `never`, and the exclusion is the whole
+codec. The extraction of `never` is `never`. A pattern that holds a refinement is a refusal, because
+no function decides whether an option lies inside a predicate. An object with a union at a field is
+the union of the objects (`Term.product_join`), and a fixed list is the same product over its
+positions. The slice goes into that field or position, and the result stays compact, as the Extract
+of TypeScript reads it. An option with a union at a field keeps the part of the union that fits the
+pattern, in place. So the extraction has no option that the original lacks. The rejection has one
+option for each field or position that the pattern names, because the complement of a product is no
+product. A union pattern is no product of its keys, so it splits the option, and the parts that fit
+stay. A dissection changes no member, because its tag table is keyed by literals.
 
 **The strong law after narrowing needs a condition on the update, and the port states the condition
 as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to
@@ -711,13 +715,13 @@ declares meets the open block of the other factor, which is `opaque` where that 
 and the two open blocks meet. The result closes again where both factors are closed. The meet of two
 recursive factors is recursive: a pair of nodes that the walk meets again below itself is a
 reference to the meet of the pair. The meet is the intersection of the two relations between stored
-rows and decoded values. At a shared name, a required or a `withLegacyRead` side makes the slot
-required, because a stand-in and an absence share no absent row, and `optional` with `undefinable`
-is `undefinable`. A factor that lies below the other is the meet, and a union distributes only where
-neither lies below the other. Two lists meet on their aligned rows. A refinement meets as the
-refinement of the meet of its inner term, except against an adapter, which the meet refuses. A
-`held` or an older reading meets only a part that it lies below. The model has no term for the meet
-at a shared name.
+rows and decoded values. At a shared name, a required or a `withLegacyRead(...)` side makes the slot
+required, because a stand-in and an absence share no absent row, and `optional` with
+`undefinable(...)` is `undefinable(...)`. A factor that lies below the other is the meet, and a
+union distributes only where neither lies below the other. Two lists meet on their aligned rows. A
+refinement meets as the refinement of the meet of its inner term, except against an adapter, which
+the meet refuses. A `held` or an older reading meets only a part that it lies below. The model has
+no term for the meet at a shared name.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

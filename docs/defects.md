@@ -304,17 +304,17 @@ declared by the shared legacy read vector of `src/codec/lean/lean.spec.ts` and b
 
 ## Known: fits reads a union pattern one option at a time, so a base that the union covers fits no option
 
-**Observation.** `fits` asks whether an option fits some option of a union pattern. A base that a
-union of every literal of the base covers fits no single literal, so `fits` answers no, while the
-meet of the two holds what the base holds. Measured 2026-10-24 with the pin below:
+**Observation.** `fits(...)` asks whether an option fits some option of a union pattern. A base that
+a union of every literal of the base covers fits no single literal, so `fits(...)` answers no, while
+the meet of the two holds what the base holds. Measured 2026-10-24 with the pin below:
 
     fits(termOf(boolean), termOf(union([boolean(true), boolean(false)])))   // false
     meet(boolean, union([boolean(true), boolean(false)]))                   // true | false
     extract(union([object({ k: boolean }), object({ n: number })]),
       object({ k: union([boolean(true), boolean(false)]) }))                // never
 
-**Effect.** The extraction keeps nothing where every value of the member fits the pattern. The
-order of `fits` is coarser than the order of the meet at the literal grain. A canonical normal form
+**Effect.** The extraction keeps nothing where every value of the member fits the pattern. The order
+of `fits(...)` is coarser than the order of the meet at the literal grain. A canonical normal form
 of a term closes the case, because the two readings then compare one normal form.
 
 **Pin.** `src/codec/spec/union/codec.slice.pattern.spec.ts` pins the extraction.
