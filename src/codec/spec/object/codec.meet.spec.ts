@@ -18,6 +18,7 @@ import {
     nullable,
     number,
     object,
+    opaque,
     optional,
     ref,
     refine,
@@ -140,24 +141,95 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * Two absences differ in the entity, `optional` leaves the key out and `undefinable` keeps it at
-     * `undefined`, and no field states both. The refusal names the name, which the caller has to change.
-     * An object that fits the other is the meet itself, so the fields here fit neither way.
+     * **`optional` and `undefinable` share the absent row.** `optional` reads `{}` and
+     * `{ a: undefined }` as one value, and `undefinable` reads the absent row to `{ a: undefined }`,
+     * so the meet keeps the key at `undefined`, as TypeScript reads `{ a?: X } & { a: X | undefined }`.
      */
-    it('refuses an optional field against an undefinable field of one name', () => {
-        expect(() =>
+    it('meets an optional field and an undefinable field of one name at undefinable', () => {
+        const expected = object({ a: undefinable(string('y')) }).def
+        expect(
             meet(
                 object({ a: optional(string('x', 'y')) }),
                 object({ a: undefinable(string('y', 'z')) }),
-            ),
-        ).toThrow(/'a'.*`optional`.*`undefinable`/)
+            ).def,
+        ).toEqual(expected)
+        expect(
+            meet(
+                object({ a: undefinable(string('y', 'z')) }),
+                object({ a: optional(string('x', 'y')) }),
+            ).def,
+        ).toEqual(expected)
+        const both = meet(
+            object({ a: optional(string) }),
+            object({ a: undefinable(string) }),
+        )
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<{
+            readonly a: string | undefined
+        }>()
+        const other = meet(
+            object({ a: undefinable(string) }),
+            object({ a: optional(string) }),
+        )
+        expectTypeOf<Decoded<typeof other>>().toEqualTypeOf<{
+            readonly a: string | undefined
+        }>()
+        expect(both.decode({ M: {} })).toEqual({ a: undefined })
     })
 
     /**
-     * A fallback reads an older stored shape, and no meet states the older shape of two readings.
-     * An object that fits the other is the meet itself, so the fields here fit neither way.
+     * **A `withLegacyRead` side shares no absent row with a side that admits absence.** The stand-in
+     * side decodes the absent row to the stand-in, and the other side to no value, so the meet drops
+     * the row and the name is required. A required side holds no absent row either.
      */
-    it('refuses a shared name that one factor reads through withLegacyRead', () => {
+    it('requires a name that one factor reads through withLegacyRead', () => {
+        const fill = object({
+            a: withLegacyRead({ current: string('x', 'y'), whenMissing: 'x' }),
+        })
+        const expected = object({ a: string('y') }).def
+        for (const other of [
+            object({ a: optional(string('y', 'z')) }),
+            object({ a: undefinable(string('y', 'z')) }),
+            object({ a: string('y', 'z') }),
+        ]) {
+            expect(meet(fill, other).def).toEqual(expected)
+            expect(meet(other, fill).def).toEqual(expected)
+        }
+        const plain = object({
+            a: withLegacyRead({ current: string, whenMissing: 'x' }),
+        })
+        const required = meet(plain, object({ a: optional(string) }))
+        expectTypeOf<Decoded<typeof required>>().toEqualTypeOf<{
+            readonly a: string
+        }>()
+        const reversed = meet(object({ a: optional(string) }), plain)
+        expectTypeOf<Decoded<typeof reversed>>().toEqualTypeOf<{
+            readonly a: string
+        }>()
+        expect(failed(required.decode({ M: {} }))).toBe(true)
+    })
+
+    /**
+     * **An open block that narrows a `withLegacyRead` field makes the field required**: the open key
+     * entry is an optional slot at the block, and the absent row has no pair on both sides.
+     */
+    it('requires a withLegacyRead name that the open block of the other factor narrows', () => {
+        const both: AnyCodec = meet(
+            // @ts-expect-error the type refuses an open factor
+            object({}, [string, optional(string('x', 'y'))]),
+            object({
+                a: withLegacyRead({ current: string, whenMissing: 'x' }),
+            }),
+        )
+        expect(failed(both.decode({ M: { a: { S: 'y' } } }))).toBe(false)
+        expect(failed(both.decode({ M: { a: { S: 'z' } } }))).toBe(true)
+        expect(failed(both.decode({ M: {} }))).toBe(true)
+    })
+
+    /**
+     * Two stand-ins share the absent row only where they are one value, and the host compares no
+     * two stand-ins, as the model compares no two fills. The refusal names the name.
+     */
+    it('refuses a shared name that both factors read through withLegacyRead', () => {
         expect(() =>
             meet(
                 object({
@@ -166,9 +238,14 @@ describe('the meet of two objects at a shared name', () => {
                         whenMissing: 'x',
                     }),
                 }),
-                object({ a: string('y', 'z') }),
+                object({
+                    a: withLegacyRead({
+                        current: string('x', 'z'),
+                        whenMissing: 'x',
+                    }),
+                }),
             ),
-        ).toThrow(/'a'.*withLegacyRead/)
+        ).toThrow(/'a'.*withLegacyRead.*stand-ins/)
     })
 
     /**
@@ -308,6 +385,53 @@ describe('the meet distributes over a union', () => {
                 expect(() => meet(left, right)).not.toThrow()
             }
         }
+    })
+})
+
+describe('a factor that lies below the other is the meet', () => {
+    /**
+     * **The walk distributes a union only where neither factor lies below the other.** Each option
+     * here meets the object at the object itself, read open, and no union holds two overlapping
+     * options, so a distribution refused the pair.
+     */
+    it('meets an object below a union of objects at the object, with no distribution', () => {
+        const all = object({ a: string, b: string, c: string })
+        const either = union([object({ a: string }), object({ c: string })])
+        expect(defOf(meet(all, either))).toEqual(all.def)
+        expect(defOf(meet(either, all))).toEqual(all.def)
+    })
+})
+
+describe('two lists meet on their aligned rows', () => {
+    /**
+     * **Below the tail, each common length is one fixed row. From the tail up, the ends meet and the
+     * spreads meet.** Here the tail starts at two positions, so the one-position row meets alone.
+     */
+    it('meets a prefix against a suffix at the fixed rows and the tail', () => {
+        const both: AnyCodec = meet(
+            list(string('a', 'b'), spread(string)),
+            list(spread(string), string('b', 'c')),
+        )
+        const decodes = (...xs: string[]) =>
+            !failed(both.decode({ L: xs.map((x) => ({ S: x })) }))
+        expect(decodes('b')).toBe(true)
+        expect(decodes('a')).toBe(false)
+        expect(decodes('a', 'c')).toBe(true)
+        expect(decodes('a', 'x', 'c')).toBe(true)
+        expect(decodes('c', 'c')).toBe(false)
+        expect(decodes('a', 'x')).toBe(false)
+    })
+
+    /** A row with a position at `never` holds no value, and a meet with no row is `never`. */
+    it('drops a row with a position at never, and meets at never with no row', () => {
+        expect(
+            defOf(
+                meet(
+                    list(string('a'), spread(string)),
+                    list(string('b'), spread(string)),
+                ),
+            ),
+        ).toEqual(never.def)
     })
 })
 
@@ -633,14 +757,40 @@ describe('the type of a meet reads the values that the run time keeps', () => {
     })
 
     /**
-     * A refinement is a caller's closure, and the host cannot read what a closure admits. Two parts
-     * that are not apart in storage and fit neither side therefore have no meet that the host computes.
-     * The type states no refusal: the two codecs share the decoded type and the stored member.
+     * **A refinement reads through**: the meet refines the meet of the inner term by the same
+     * predicate, and each pair of that meet is a pair of the inner term.
      */
-    it('refuses at the run time a refinement that fits neither side', () => {
+    it('refines the meet of the inner term by the predicate of the refinement', () => {
         const isA = (value: string): value is string => value.startsWith('a')
-        expect(() => meet(refine(string, isA), string('b', 'c'))).toThrow(
-            /`refine` part that fits neither side/,
+        const both: AnyCodec = meet(refine(string, isA), string('a1', 'b'))
+        expect(failed(both.decode({ S: 'a1' }))).toBe(false)
+        expect(failed(both.decode({ S: 'b' }))).toBe(true)
+        expect(failed(both.decode({ S: 'a2' }))).toBe(true)
+        const reversed: AnyCodec = meet(string('a1', 'b'), refine(string, isA))
+        expect(failed(reversed.decode({ S: 'a1' }))).toBe(false)
+        expect(failed(reversed.decode({ S: 'b' }))).toBe(true)
+        expect(defOf(meet(refine(string, isA), boolean))).toEqual(never.def)
+    })
+
+    /**
+     * **A refinement that meets an adapter is refused.** `opaque` is the unit of the meet, so the
+     * meet of the inner term can hand out the value of the adapter, and the predicate reads the
+     * value of the inner term. No term states the predicate over the adapter's value.
+     */
+    it('refuses a refinement against a side that holds an adapter', () => {
+        const any = (value: unknown): value is unknown => value !== 'no'
+        expect(() => meet(refine(opaque, any), decimal)).toThrow(
+            /`refine` part meets a side that holds an adapter/,
         )
+    })
+
+    /**
+     * **An older reading holds each pair of its current form**, so a side below the current form is
+     * the meet.
+     */
+    it('meets a side below the current form of an older reading at that side', () => {
+        const widened = withLegacyRead({ current: string, older: decimal })
+        expect(meet(widened, string('q')).def).toEqual(string('q').def)
+        expect(meet(string('q'), widened).def).toEqual(string('q').def)
     })
 })

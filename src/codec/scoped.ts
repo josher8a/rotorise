@@ -574,7 +574,7 @@ const rightRows = (
  * `hi` is `max p1 p2 + max s1 s2`, and each longer row re-spreads the row at `hi + 1`. So the
  * lengths from the first bound to `hi + 1` reach every pair of positions.
  */
-const alignedRows = <L, R>(
+export const alignedRows = <L, R>(
     lpre: readonly L[],
     lsp: L | undefined,
     lsuf: readonly L[],

@@ -1769,10 +1769,17 @@ describe('fits is the order of the meet', () => {
     }
 
     /**
-     * **The stated limits.** Two pairs disagree, and each has a named cause.
+     * **The stated limits.** Twelve pairs disagree, and each has a named cause.
      *
-     * - `1.473 rl`, a refinement: `opaque` against a refinement of `opaque`. The host cannot read the
+     * - The refinement limit: `1.224 lr`, `1.394 lr`, `1.470 rl`, `1.471 rl`, `1.472 rl`,
+     *   `1.473 rl`, `1.544 lr` and `4.928 rl`. The pattern holds a refinement, of `opaque` or of
+     *   a decimal. The meet refines the option by the predicate, and the host cannot read the
      *   predicate, so `fits` answers no, and the sample finds no value that the predicate refuses.
+     * - The closure limit: `20261004.648 lr`, `4.604 lr` and `4.605 lr`. The option is an older
+     *   reading of the pattern, and the meet is the pattern. The older reader of the pool returns a
+     *   value that the current form cannot write, so the older reading holds the pairs of the
+     *   pattern and no other pair. An opaque function decides that, and the order cannot read it,
+     *   so `fits` answers no.
      * - `1.950 lr`, a sampler miss: an open option whose block holds a number, against a pattern
      *   that holds the optional name `m` at an object. The meet holds `m` at `never`, and the
      *   option holds `m` at its block. The sample draws no value at `m`, so a decode shows the
@@ -1799,7 +1806,20 @@ describe('fits is the order of the meet', () => {
             if (fits(termOf(o), termOf(p)) !== kept) disagree.push(key)
         }
         expect(decided).toBeGreaterThan(rows.length / 2)
-        expect(disagree).toEqual(['1.473 rl', '1.950 lr'])
+        expect(disagree).toEqual([
+            '20261004.648 lr',
+            '1.224 lr',
+            '1.394 lr',
+            '1.470 rl',
+            '1.471 rl',
+            '1.472 rl',
+            '1.473 rl',
+            '1.544 lr',
+            '1.950 lr',
+            '4.604 lr',
+            '4.605 lr',
+            '4.928 rl',
+        ])
         const missed = rows.find((row) => row.key === '1.950 lr')
         expect(missed).toBeDefined()
         if (missed === undefined) return

@@ -57,17 +57,23 @@ import {
     orThrow,
     type Result,
 } from './result'
-import { childAt, flatOf, guardAt, sideOf, storedApart } from './scoped'
+import {
+    alignedRows,
+    childAt,
+    flatOf,
+    guardAt,
+    sideOf,
+    storedApart,
+} from './scoped'
 import type { Body, Field, NameForm, NonEmpty, RefSlot, Term } from './term'
 import {
-    alwaysWritten,
     clauseForm,
     closedCopy,
+    holdsAdapter,
     holdsNoValue,
     member as memberOf,
     openRefusal,
     ownsNullOf,
-    pinnedForm,
     resolvedTerm,
     sameAdapter,
     sameTerm,
@@ -4763,7 +4769,34 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
     : never
 
 /**
- * The meet of two slots at one name, at the type level. Two object slots meet on the union of
+ * **The meet of two slots at one name, at the type level**: the meet of the two absences, as the
+ * run time reads them, over the meet of the two codecs. A side that admits no absence, required or
+ * `withLegacyRead`, makes the slot the meet of the two codecs. An `optional` side and an
+ * `undefinable` side meet at `undefinable`. Two sides of one absence keep that absence.
+ */
+type MeetSlot<A, B> = [A] extends [{ readonly [optionalMarker]: true }]
+    ? [B] extends [{ readonly [optionalMarker]: true }]
+        ? SameAbsence<A, B> extends true
+            ? MeetCodecs<A, B>
+            : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>> extends infer M
+              ? UndefinableCodec<Decoded<M>, AttributeOf<M> & AttributeValue, M>
+              : never
+        : MeetCodecs<MarkedCodec<A>, B>
+    : [B] extends [{ readonly [optionalMarker]: true }]
+      ? MeetCodecs<A, MarkedCodec<B>>
+      : MeetCodecs<A, B>
+
+/** Whether two slots that admit absence are both `undefinable`, or both `optional`. */
+type SameAbsence<A, B> = [A] extends [{ readonly [undefinableMarker]: true }]
+    ? [B] extends [{ readonly [undefinableMarker]: true }]
+        ? true
+        : false
+    : [B] extends [{ readonly [undefinableMarker]: true }]
+      ? false
+      : true
+
+/**
+ * The meet of two codecs at one name, at the type level. Two object slots meet on the union of
  * their names, as the run time reads both open. Of two other slots, the slot that fits the other is
  * the meet. Two slots that fit neither way and share no decoded value meet at
  * `never`. Two slots whose stored attributes share no member meet at `never` too, whatever adapter sits
@@ -4771,7 +4804,7 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
  * one literal, keep the intersection of the two codecs: the type cannot build the codec of the
  * common literals, so the decoded type is that of one side and holds the literals that the run time drops.
  */
-type MeetSlot<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
+type MeetCodecs<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
     ? never
     : [A, B] extends [AnyObjectCodec, AnyObjectCodec]
       ? MeetObjects<A, B>
@@ -4941,12 +4974,20 @@ const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
 }
 
 /**
- * The meet of two codecs that are neither a union nor `never`, at the reading of each side. Two
- * sides that hold one set of values at their readings meet at the left side. Two objects meet on
- * their alignment, and no order decides them, so {@link fits} is a consequence of the meet and no
- * premise of it. Any other pair meets by the order at the two readings first: where one side lies
- * below the other, the meet is that side. Two lists then meet position by position, and two sets
- * by element. A refinement, an adapter or an older reading meets only a part that it lies below.
+ * **The meet of two codecs that are neither a union nor `never`**, at the reading of each side: the
+ * intersection of the two relations between stored rows and decoded values. Two sides that hold
+ * one set of values at their readings meet at the left side. Two objects meet on their alignment,
+ * and no order decides them, so {@link fits} is a consequence of the meet and no premise of it. Any
+ * other pair meets by the order of the walk first: where one side lies below the other, the meet
+ * is that side. Two lists then meet on their aligned rows, and two sets by element.
+ *
+ * **A refinement reads through**, as the model's `rowSpecC` reads `refine`: the meet refines the
+ * meet of its inner term with the other side by the same predicate. Each pair of the inner meet is
+ * a pair of the inner term, so the predicate reads the value that it reads on the refinement. An
+ * adapter on the other side breaks that: `opaque` is the unit of the meet, so the inner meet can
+ * hand out the value of the adapter where the predicate reads the value of the inner term. That
+ * pair is refused. A `held` or an older reading meets only a part that it lies below, because a
+ * closure that no term states decides which pairs the two sides share.
  */
 const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     const A = resolvedTerm(termOf(a))
@@ -4958,8 +4999,8 @@ const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     }
     const readA = readAs(A, walk.readings[0])
     const readB = readAs(B, walk.readings[1])
-    const aBelow = below(readA, readB)
-    const bBelow = below(readB, readA)
+    const aBelow = below(readA, readB, walk.order)
+    const bBelow = below(readB, readA, walk.order)
     // two sides that hold one set of values at their readings meet at either side, so the meet of
     // one term with itself ends, and the walk of a recursive term ends where the two sides agree
     if (aBelow && bBelow) return a
@@ -4981,12 +5022,14 @@ const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     // two parts whose stored views share no attribute hold no common value, whatever adapter sits
     // over them: the meet is the bottom. Only a pair that is not apart can need a closure to decide
     if (storedApart(A, B)) return never
+    if (A.kind === 'refine') {
+        return refined(A, B, () => meetOfTwo(codecOfTerm(A.inner), b, walk))
+    }
+    if (B.kind === 'refine') {
+        return refined(B, A, () => meetOfTwo(a, codecOfTerm(B.inner), walk))
+    }
     for (const one of [A, B]) {
-        if (
-            one.kind === 'refine' ||
-            one.kind === 'held' ||
-            one.kind === 'legacy'
-        ) {
+        if (one.kind === 'held' || one.kind === 'legacy') {
             throw new CodecError(
                 `[meet] a factor holds a \`${one.kind}\` part that fits neither side, and the host cannot read the values of a caller's closure — meet only a part that one side fits`,
             )
@@ -5003,56 +5046,85 @@ const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     )
 }
 
+/**
+ * The refinement `r` over the meet of its inner term with the other side `other`, by the predicate
+ * of `r`. `never` where the inner meet holds no value.
+ */
+const refined = (
+    r: Extract<Term, { kind: 'refine' }>,
+    other: Term,
+    inner: () => AnyCodec,
+): AnyCodec => {
+    if (holdsAdapter(other)) {
+        throw new CodecError(
+            "[meet] a `refine` part meets a side that holds an adapter, and the predicate reads the value of the refinement's inner term, which the adapter can replace: the host cannot carry the predicate across a caller's closure — meet only a part that one side fits",
+        )
+    }
+    const met = inner()
+    return holdsNoValue(termOf(met))
+        ? never
+        : codecOfTerm({ kind: 'refine', inner: termOf(met), q: r.q })
+}
+
 /** A term at a reading: as declared, or its opening. */
 const readAs = (t: Term, reading: MeetReading): Term =>
     reading === 'open' ? opened(t) : t
 
-/** Two lists meet position by position, where both have no spread and one arity. */
+/**
+ * **Two lists meet on their aligned rows**, the model's `alignedRows`. A side with no spread fixes
+ * one length, and the meet is the row of each side at that length, met position by position. Two
+ * spreading sides share each length from the longer declared part up. Below `hi`, the sum of the
+ * longer prefix and the longer suffix, each common length is one fixed row. From `hi` up, each row
+ * holds the meets of the row at `hi` at its ends and the meet of the two spreads between them: one
+ * list term, the tail. A row with a position at `never` holds no value and drops. The meet is the
+ * union of the rows that stay, and `never` where none stays.
+ */
 const meetLists = (
     A: Extract<Term, { kind: 'list' }>,
     B: Extract<Term, { kind: 'list' }>,
     walk: MeetWalk,
 ): AnyCodec => {
-    const fixed = (t: Extract<Term, { kind: 'list' }>) =>
-        t.spread === undefined && t.suf.length === 0
-    const homogeneous = (t: Extract<Term, { kind: 'list' }>) =>
-        t.pre.length === 0 && t.suf.length === 0 ? t.spread : undefined
-    const meetAt = (x: Term, y: Term): Term | undefined => {
-        const one = termOf(meetOfTwo(codecOfTerm(x), codecOfTerm(y), walk))
-        return resolvedTerm(one)?.kind === 'never' ? undefined : one
-    }
-    const left = homogeneous(A)
-    const right = homogeneous(B)
-    if (left !== undefined && right !== undefined) {
-        const elem = termOf(
-            meetOfTwo(codecOfTerm(left), codecOfTerm(right), walk),
-        )
-        return codecOfTerm({ kind: 'list', pre: [], spread: elem, suf: [] })
-    }
+    const meetAt = (x: Term, y: Term): Term =>
+        termOf(meetOfTwo(codecOfTerm(x), codecOfTerm(y), walk))
     const positions = (
-        list: Extract<Term, { kind: 'list' }>,
-        elem: Term,
-    ): readonly (Term | undefined)[] => list.pre.map((one) => meetAt(one, elem))
-    const build = (pre: readonly (Term | undefined)[]): AnyCodec => {
-        const held = pre.filter((one): one is Term => one !== undefined)
-        return held.length === pre.length
-            ? codecOfTerm({ kind: 'list', pre: held, suf: [] })
-            : never
+        ls: readonly Term[],
+        rs: readonly Term[],
+    ): readonly Term[] | undefined => {
+        const met = ls.flatMap((one, at) => {
+            const there = rs[at]
+            return there === undefined ? [] : [meetAt(one, there)]
+        })
+        return met.some((one) => holdsNoValue(one)) ? undefined : met
     }
-    if (fixed(A) && right !== undefined) return build(positions(A, right))
-    if (fixed(B) && left !== undefined) return build(positions(B, left))
-    if (fixed(A) && fixed(B)) {
-        if (A.pre.length !== B.pre.length) return never
-        return build(
-            A.pre.map((one, at) => {
-                const there = B.pre[at]
-                return there === undefined ? undefined : meetAt(one, there)
-            }),
-        )
+    const rows = alignedRows(A.pre, A.spread, A.suf, B.pre, B.spread, B.suf)
+    const hi =
+        A.spread === undefined || B.spread === undefined
+            ? Number.POSITIVE_INFINITY
+            : Math.max(A.pre.length, B.pre.length) +
+              Math.max(A.suf.length, B.suf.length)
+    const terms: Term[] = rows.flatMap(([ls, rs]): Term[] => {
+        if (ls.length >= hi) return []
+        const pre = positions(ls, rs)
+        return pre === undefined ? [] : [{ kind: 'list', pre, suf: [] }]
+    })
+    if (A.spread !== undefined && B.spread !== undefined) {
+        const at = rows.find(([ls]) => ls.length === hi)
+        const ends = at && positions(at[0], at[1])
+        const split = Math.max(A.pre.length, B.pre.length)
+        if (ends !== undefined) {
+            terms.push({
+                kind: 'list',
+                pre: ends.slice(0, split),
+                spread: meetAt(A.spread, B.spread),
+                suf: ends.slice(split),
+            })
+        }
     }
-    throw new CodecError(
-        '[meet] a list with a suffix, or with positions and a spread, has no meet here: the positions of a value of free length do not align',
-    )
+    const [only] = terms
+    if (only === undefined) return never
+    return terms.length === 1
+        ? codecOfTerm(only)
+        : union(terms.map((one) => codecOfTerm(one)))
 }
 
 /**
@@ -5069,7 +5141,7 @@ type MeetReadings = readonly [MeetReading, MeetReading]
 /** Both sides as declared: the reading of {@link below}, whose pattern side is an opened term. */
 const asWritten: MeetReadings = ['written', 'written']
 
-/** The reading of the composition: both sides open. */
+/** The reading of the composition: both sides open, at the `relation` order. */
 const asComposed: MeetReadings = ['open', 'open']
 
 /** The reading of the order and of the overlap: the option as written, the pattern open. */
@@ -5081,12 +5153,14 @@ const asOrdered: MeetReadings = ['written', 'open']
  */
 type MeetWalk = {
     readonly readings: MeetReadings
+    readonly order: Order
     readonly entered: Map<Term, Map<Term, RefSlot>>
 }
 
-/** A fresh walk at a reading. */
-const walkAt = (readings: MeetReadings): MeetWalk => ({
+/** A fresh walk at a reading and an order. */
+const walkAt = (readings: MeetReadings, order: Order): MeetWalk => ({
     readings,
+    order,
     entered: new Map(),
 })
 
@@ -5123,9 +5197,24 @@ const aligned = (
 }
 
 /**
- * Two slots at one name meet at the meet of their codecs. A slot that one side leaves undeclared is
- * the open key entry of that side, and keeps the presence of the declared slot. A required field
- * and an optional field meet as a required field. Two marks that differ otherwise have no meet here.
+ * **Two slots at one name meet** at the meet of their codecs, and at the meet of their absences: the
+ * pairs of a row that lacks the name, which each side decodes to its own value. A slot that one side
+ * leaves undeclared is the open key entry of that side, an optional slot at the block. An `opaque`
+ * block is the unit of the meet, so it keeps the declared slot as it is.
+ *
+ * - A required slot holds no absent row, so a required side makes the slot required.
+ * - A `withLegacyRead` side decodes the absent row to its stand-in, and an `optional` or an
+ *   `undefinable` side decodes it to no value. The two share no pair at the absent row, so the
+ *   slot is required.
+ * - `optional` reads `{}` and `{ k: undefined }` as one value, and `undefinable` reads the absent
+ *   row to `{ k: undefined }`. The two share that pair, so the slot is `undefinable`, as
+ *   TypeScript reads `{ k?: X } & { k: X | undefined }`.
+ * - A name that a closed side does not declare pairs the absent row with a value without the key,
+ *   which an `undefinable` side refuses, so the slot is required.
+ * - Two `withLegacyRead` sides share the absent row where the two stand-ins are one value. The
+ *   host compares no two stand-ins, as the model's `absentAgreeG` compares no two fills, so the
+ *   pair is refused.
+ *
  * `undefined` where a required slot meets at `never`, and the object holds no value.
  */
 const meetSlots = (
@@ -5136,36 +5225,36 @@ const meetSlots = (
     walk: MeetWalk,
 ): ObjectSlot | undefined => {
     if (left === right) return left
-    const held = meetOfTwo(entryCodec(left), entryCodec(right), walk)
-    const empty = holdsNoValue(termOf(held))
     const [mine, theirs] = declared
-    if (!mine || !theirs) {
-        const slot = mine ? left : right
-        const field = fieldOf(slot)
-        if (termOf(held) === field.t) return slot
-        if (field.mark === 'fallback') {
-            throw new CodecError(
-                `[meet] '${name}' is read through \`withLegacyRead\`, and the open key entry of the other factor narrows it: the older reading has no meet`,
-            )
-        }
-        if (field.mark === 'req') return empty ? undefined : held
-        return field.mark === 'undefinable' ? undefinable(held) : optional(held)
+    // an `opaque` open block is the unit of the meet, at the absent row too
+    if (!mine && resolvedTerm(termOf(entryCodec(left)))?.kind === 'opaq') {
+        return right
     }
-    const one = fieldOf(left)
-    const other = fieldOf(right)
-    if (one.mark === 'fallback' || other.mark === 'fallback') {
+    if (!theirs && resolvedTerm(termOf(entryCodec(right)))?.kind === 'opaq') {
+        return left
+    }
+    const held = meetOfTwo(entryCodec(left), entryCodec(right), walk)
+    // a name that a closed side does not declare pairs the absent row with a value without the key
+    const absence = (slot: ObjectSlot | AnyCodec, here: boolean) =>
+        here
+            ? fieldOf(slot).mark
+            : holdsNoValue(termOf(entryCodec(slot)))
+              ? 'absent'
+              : 'optional'
+    const marks = new Set([absence(left, mine), absence(right, theirs)])
+    if (marks.size === 1 && marks.has('fallback')) {
         throw new CodecError(
-            `[meet] both factors declare '${name}', and one reads it through \`withLegacyRead\`, whose older reading has no meet`,
+            `[meet] both factors read '${name}' through \`withLegacyRead\`, and the host compares no two stand-ins: the absent row has a meet only where the two stand-ins are one value`,
         )
     }
-    const marks = new Set([one.mark, other.mark])
-    if (marks.has('req')) return empty ? undefined : held
-    if (marks.size === 2) {
-        throw new CodecError(
-            `[meet] both factors declare '${name}', one \`optional\` and one \`undefinable\`, and the two absences have no meet here`,
-        )
+    if (
+        marks.has('req') ||
+        marks.has('fallback') ||
+        (marks.has('absent') && marks.has('undefinable'))
+    ) {
+        return holdsNoValue(termOf(held)) ? undefined : held
     }
-    return one.mark === 'undefinable' ? undefinable(held) : optional(held)
+    return marks.has('undefinable') ? undefinable(held) : optional(held)
 }
 
 /**
@@ -5249,7 +5338,12 @@ const meetOfTwo = (
     }
 }
 
-/** A union distributes, outer over the options of the first factor, and two parts meet. */
+/**
+ * A union distributes, outer over the options of the first factor, and two parts meet. **A factor
+ * that lies below the other is the meet**, at the readings of the walk, so the walk distributes a
+ * union only where neither factor lies below the other. Two options of the distribution can
+ * otherwise meet the other factor at two codecs that overlap, which no union holds.
+ */
 const meetFactors = (
     first: AnyCodec,
     second: AnyCodec,
@@ -5264,6 +5358,10 @@ const meetFactors = (
             return meetParts(left, right, walk)
         }
     }
+    const readFirst = readAs(termOf(first), walk.readings[0])
+    const readSecond = readAs(termOf(second), walk.readings[1])
+    if (below(readFirst, readSecond, walk.order)) return first
+    if (below(readSecond, readFirst, walk.order)) return second
     const meets = lefts.flatMap((left) =>
         rights.flatMap((right) => {
             const one = meetOfTwo(left, right, walk)
@@ -5280,10 +5378,10 @@ const meetFactors = (
 /**
  * **The meet that reads the option as written and the pattern open.** The option `o` lies below the
  * pattern `p` ({@link fits}) exactly where this meet is `o`, and `o` overlaps `p` exactly where this
- * meet holds a value.
+ * meet holds a value. A pattern has no decode of its own, so the walk reads the `value` order.
  */
 export const meetOrdered = (option: AnyCodec, pattern: AnyCodec): AnyCodec =>
-    meetOfTwo(option, pattern, walkAt(asOrdered))
+    meetOfTwo(option, pattern, walkAt(asOrdered, 'value'))
 
 /**
  * **The meet of codecs: the values that every factor holds**, as TypeScript reads `A & B`.
@@ -5319,7 +5417,7 @@ export const meet = <const Fs extends readonly AnyCodec[]>(
     // returns `AnyCodec`, and `FoldMeet` is the same fold on the types, which the host cannot prove
     // equal. `tsc` refuses the line without the cast: `AnyCodec` is not assignable to `FoldMeet<Fs>`
     return rest.reduce(
-        (met, factor) => meetOfTwo(met, factor, walkAt(asComposed)),
+        (met, factor) => meetOfTwo(met, factor, walkAt(asComposed, 'relation')),
         head,
     ) as FoldMeet<Fs>
 }
@@ -7285,25 +7383,85 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
         : sameAdapter(a.adapter, b.adapter))
 
 /**
- * **The order of the meet**: whether every value that the term `a` holds, as written, lies inside
- * what the opening of the pattern `p` holds. `fits(a, p)` holds exactly where the meet that reads
- * `a` as written and `p` open ({@link meetOrdered}) is `a`, up to a refinement, whose predicate the
- * host cannot read. The order itself is {@link below}, and the opening is {@link opened}.
+ * **What the order compares at the absent row of a slot.** `relation` compares pairs of a stored
+ * row and a decoded value, so a `withLegacyRead` slot counts the absent row that its stand-in
+ * reads. The meet of two codecs reads it. `value` compares decoded values alone, because a pattern
+ * has no decode of its own: a `withLegacyRead` slot always gives a value, so the slot equals a
+ * required slot, as the model's `AltClause.admitsC` reads a fill through `slotReq`. `fits`, the
+ * slice and the pattern side of {@link meetOrdered} read it. The presence marks give one answer in
+ * both orders.
  */
-export const fits = (a: Term, p: Term): boolean => below(a, opened(p))
+type Order = 'relation' | 'value'
 
 /**
- * **The order on terms as they are written**, on the fragment that the host decides. `opaque` is
- * the top, and a term that holds no value is the bottom. A set is below a set where its element is
- * below the element. A list is below a list of one element where each position and the spread are
- * below that element. A literal is read through a refinement on the side of the option, because a
- * refinement narrows a literal and the literal stays an upper bound. A pair that no rule here covers
- * is below only where the two terms are one term, so the answer errs towards no fit.
+ * **The order of the slice**: whether every value that the term `a` decodes, as written, is a
+ * value of the opening of the pattern `p`. `fits(a, p)` holds exactly where the meet that reads `a`
+ * as written and `p` open ({@link meetOrdered}) is `a`, up to a refinement, whose predicate the
+ * host cannot read. The order itself is {@link below} at the `value` order, and the opening is
+ * {@link opened}.
+ */
+export const fits = (a: Term, p: Term): boolean => below(a, opened(p), 'value')
+
+/**
+ * **Whether the slot `mine` lies below the slot `wanted` at the absent row**, at the name `name`
+ * of the pattern body `pattern`. A name that the pattern leaves to an `opaque` block is the top, as
+ * `opaque` is the unit of the meet. Any other slot compares by {@link absentBelow}.
+ */
+const slotBelow = (
+    name: string,
+    pattern: Body,
+    mine: Field,
+    wanted: Field,
+    order: Order,
+): boolean =>
+    (!(name in pattern.fields) && wanted.t.kind === 'opaq') ||
+    absentBelow(mine, wanted, order)
+
+/**
+ * **Whether the pairs of the absent row that the slot `mine` holds are pairs of the slot
+ * `wanted`.** A required slot holds no absent row. At the `relation` order, a `withLegacyRead` slot
+ * pairs the absent row with its stand-in, so it is below only a slot of the same stand-in. At the
+ * `value` order, a `withLegacyRead` slot is a required slot. `undefinable` pairs it with
+ * `{ k: undefined }`, which `optional` reads as `{}`. `optional`, and a name that a closed object
+ * does not declare, pair it with a value without the key, which `undefinable` refuses.
+ */
+const absentBelow = (mine: Field, wanted: Field, order: Order): boolean => {
+    // at the `value` order a stand-in counts no absent row, so the slot reads as a required slot
+    const read = (f: Field): Field =>
+        order === 'value' && f.mark === 'fallback' ? { mark: 'req', t: f.t } : f
+    const [m, w] = [read(mine), read(wanted)]
+    switch (w.mark) {
+        case 'req':
+            return m.mark === 'req'
+        case 'fallback':
+            return (
+                m.mark === 'req' ||
+                (m.mark === 'fallback' && Object.is(m.v, w.v))
+            )
+        case 'undefinable':
+            return m.mark === 'req' || m.mark === 'undefinable'
+        case 'optional':
+            return m.mark !== 'fallback'
+    }
+}
+
+/**
+ * **The order of the meet**, on terms as they are written, on the fragment that the host decides.
+ * At the `relation` order it compares pairs of a stored row and a decoded value, and at the `value`
+ * order it compares decoded values ({@link Order}). The two orders differ only at the absent row of
+ * a `withLegacyRead` slot. `narrow`, `disjoint` and {@link storedApart} read stored rows through their own walk, and
+ * not this one. `opaque` is the top, and a term that holds no value is the bottom. A set is below a
+ * set where its element is below the element. A list is below a list of one element where each
+ * position and the spread are below that element. A refinement on the side of the option reads
+ * through, because a refinement holds a part of the pairs of its inner term, as the model's
+ * `rowSpecC` reads it. An older reading on the side of the pattern reads through, because it holds
+ * each pair of its current form. A pair that no rule here covers is below only where the two terms
+ * are one term, so the answer errs towards no fit.
  *
  * The literal rule is `Calculus.altsSub`. Two objects compare on their {@link aligned} slots: each
- * slot of the option is below the slot of the pattern, a required slot of the pattern is a required
- * slot of the option, and the open block of the option is below the open block of the pattern. A
- * closed object holds no undeclared name, as its open block is the bottom.
+ * slot of the option is below the slot of the pattern at the absent row ({@link slotBelow}) and at
+ * its term, and the open block of the option is below the open block of the pattern. A closed
+ * object holds no undeclared name, as its open block is the bottom.
  *
  * **A pair on the path of the walk is below.** The order on recursive terms is coinductive: the
  * order is the greatest fixed point of the rules, so a pair that the walk already entered is below,
@@ -7312,6 +7470,7 @@ export const fits = (a: Term, p: Term): boolean => below(a, opened(p))
 const below = (
     a: Term,
     p: Term,
+    order: Order,
     assumed: Map<Term, Set<Term>> = new Map(),
 ): boolean => {
     const A = resolvedTerm(a)
@@ -7324,7 +7483,7 @@ const below = (
     if (pending.has(P)) return true
     assumed.set(A, pending.add(P))
     try {
-        return fitsNode(A, P, (x, y) => below(x, y, assumed))
+        return fitsNode(A, P, order, (x, y) => below(x, y, order, assumed))
     } finally {
         pending.delete(P)
     }
@@ -7334,14 +7493,19 @@ const below = (
 const fitsNode = (
     A: Term,
     P: Term,
+    order: Order,
     fits: (a: Term, p: Term) => boolean,
 ): boolean => {
     if (holdsNoValue(A) || P.kind === 'opaq') return true
     if (A.kind === 'union') return A.options.every((one) => fits(one, P))
     if (P.kind === 'union') return P.options.some((one) => fits(A, one))
+    // a refinement holds a part of the pairs of its inner term, and an older reading holds each
+    // pair of its current form
+    if (A.kind === 'refine') return fits(A.inner, P)
+    if (P.kind === 'legacy') return fits(A, P.inner)
     const pinned = clauseForm(P)
     if (pinned) {
-        const mine = pinnedForm(A)
+        const mine = clauseForm(A)
         return (
             mine !== undefined &&
             mine.form === pinned.form &&
@@ -7360,8 +7524,8 @@ const fitsNode = (
         if (A.kind !== 'object') return false
         return (
             aligned(A.body, P.body, asWritten).every(
-                ([, mine, wanted]) =>
-                    (!alwaysWritten(wanted) || alwaysWritten(mine)) &&
+                ([name, mine, wanted]) =>
+                    slotBelow(name, P.body, mine, wanted, order) &&
                     fits(mine.t, wanted.t),
             ) && fits(blockOf(A.body, 'written'), blockOf(P.body, 'written'))
         )
@@ -7399,7 +7563,7 @@ const fitsNode = (
     }
     if (A.kind === 'set' && P.kind === 'set') return fits(A.elem, P.elem)
     // a literal fits the base that it is a literal of
-    const literal = pinnedForm(A)
+    const literal = clauseForm(A)
     if (
         literal &&
         literal.adapter === undefined &&
@@ -7542,16 +7706,20 @@ const splitBy = (
                 return field ? [field.t] : []
             }),
         }
-        const required = members.some((m) => {
-            const field = m.body.fields[name]
-            return field !== undefined && alwaysWritten(field)
-        })
+
         states = states.flatMap((state) => {
             const slot = state[name]
             if (slot === undefined) return [state]
             // a field that may be absent is the union of a present part and an absent part
             const declared = fieldOf(slot)
-            if (presence && required && !alwaysWritten(declared)) {
+            const refused = members.some((m) => {
+                const field = m.body.fields[name]
+                return (
+                    field !== undefined &&
+                    !absentBelow(declared, field, 'value')
+                )
+            })
+            if (presence && refused) {
                 const absent =
                     declared.mark === 'undefinable'
                         ? undefinable(never)
@@ -7697,7 +7865,7 @@ const sliceSpec = (
                 rest: one.rest,
             }
             original.push(here)
-            if (below(summand, wanted)) keep.push(here)
+            if (below(summand, wanted, 'value')) keep.push(here)
             else if (
                 wantedNode?.kind === 'object' &&
                 summand.kind === 'object'
@@ -7725,6 +7893,7 @@ const sliceSpec = (
         !below(
             blockOf(node.body, 'written'),
             blockOf(wantedObject.body, 'written'),
+            'value',
         )
     )
         leafFits = false
@@ -7736,20 +7905,23 @@ const sliceSpec = (
         // a name that one side holds at its open block splits nowhere: it fits whole or not
         if (!(name in node.body.fields && name in wantedObject.body.fields)) {
             if (
-                (alwaysWritten(wanted) && !alwaysWritten(mine)) ||
-                !below(mine.t, wanted.t)
+                !slotBelow(name, wantedObject.body, mine, wanted, 'value') ||
+                !below(mine.t, wanted.t, 'value')
             ) {
                 leafFits = false
             }
             continue
         }
-        if (alwaysWritten(wanted) && !alwaysWritten(mine)) {
+        // a slot whose absent row the pattern refuses splits into a present part and an absent
+        // part, where the absent part has a codec: `optional` or `undefinable` at `never`. At the
+        // `value` order a `withLegacyRead` slot is required, so the pattern refuses no absent row
+        if (!slotBelow(name, wantedObject.body, mine, wanted, 'value')) {
             const declared = piece.spec[name]
             if (!presence || declared === undefined || !('codec' in declared)) {
                 leafFits = false
                 continue
             }
-            if (below(mine.t, wanted.t)) {
+            if (below(mine.t, wanted.t, 'value')) {
                 nested.push({
                     name,
                     at: undefined,
@@ -7774,7 +7946,7 @@ const sliceSpec = (
             })
             continue
         }
-        if (below(mine.t, wanted.t)) continue
+        if (below(mine.t, wanted.t, 'value')) continue
         const slot = piece.spec[name]
         if (slot === undefined || 'codec' in slot) {
             leafFits = false
@@ -7801,7 +7973,8 @@ const sliceSpec = (
             }
             for (const [at, position] of mineList.pre.entries()) {
                 const there = wantedList.pre[at]
-                if (there === undefined || below(position, there)) continue
+                if (there === undefined || below(position, there, 'value'))
+                    continue
                 const one = sliceSlot(position, there)
                 if (one === 'split') return undefined
                 if (one === 'leaf') {
@@ -7927,7 +8100,9 @@ const splitParts = <O>(
           })(splitBy(item.spec as Record<string, ObjectSlot>, wanted, splits))
         : [option]
     return parts.filter(
-        (part) => below(termOf(part as unknown as AnyCodec), wanted) === keep,
+        (part) =>
+            below(termOf(part as unknown as AnyCodec), wanted, 'value') ===
+            keep,
     )
 }
 
@@ -7954,7 +8129,7 @@ const picked = <O>(
     return options.flatMap((option) => {
         const term = termOf(option as unknown as AnyCodec)
         // an option that fits whole has parts that all fit, so it stays whole and no part remains
-        if (below(term, wanted)) return keep ? [option] : []
+        if (below(term, wanted, 'value')) return keep ? [option] : []
         const item = objectNamed(term)
         const node = resolvedTerm(term)
         const sliced =

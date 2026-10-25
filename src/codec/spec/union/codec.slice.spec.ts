@@ -32,6 +32,7 @@ import {
     scope,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import { failed, orThrow } from '../../result'
 
@@ -226,6 +227,32 @@ describe('a clause is a literal at a base', () => {
         const kept = extract(viaX, object({ t: string('a') }))
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
         expect(kept.def.kind).toBe('never')
+    })
+
+    /**
+     * **A pattern is a set of values.** A `withLegacyRead` field always gives a value, because a row
+     * without the attribute reads back as the stand-in. So the slice reads the field as required,
+     * as `Calculus.AltClause.admitsC` reads a fill through `slotReq`, and the clause keeps the
+     * member. The meet of two codecs counts the absent row, and there the field is not required.
+     */
+    it('keeps a member whose key reads through withLegacyRead, because the caller always receives the value', () => {
+        const filled = union([
+            object({
+                t: withLegacyRead({ current: string('a'), whenMissing: 'a' }),
+                k: string('h'),
+            }),
+            object({ t: string('z'), k: string('p') }),
+        ])
+        const kept = extract(filled, object({ t: string('a') }))
+        expect(kept.decode({ M: { k: { S: 'h' } } })).toEqual({
+            t: 'a',
+            k: 'h',
+        })
+        expect(
+            failed(kept.decode({ M: { t: { S: 'z' }, k: { S: 'p' } } })),
+        ).toBe(true)
+        const rest = exclude(filled, object({ t: string('a') }))
+        expect(failed(rest.decode({ M: { k: { S: 'h' } } }))).toBe(true)
     })
 
     /**
