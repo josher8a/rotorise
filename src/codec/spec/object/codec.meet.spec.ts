@@ -19,7 +19,9 @@ import {
     number,
     object,
     optional,
+    ref,
     refine,
+    scope,
     spread,
     string,
     undefinable,
@@ -486,6 +488,67 @@ describe('a meet of lawful factors is lawful', () => {
             })
         })
     }
+})
+
+describe('the composition reads each factor open', () => {
+    /**
+     * **The composition reads both factors open**, as `A & B` reads it. A closed factor holds each
+     * undeclared name at `opaque`, so a name that only the other factor declares keeps the slot that
+     * the other factor declares. The result closes again where both factors are closed. The type
+     * reads two object slots on the union of their names, as the run time does.
+     */
+    it('keeps an optional name that only the other factor declares, at every depth', () => {
+        const met = meet(
+            object({ c: string }),
+            object({ c: string, v: optional(number) }),
+        )
+        expect(met.def).toEqual(object({ c: string, v: optional(number) }).def)
+        expectTypeOf<Decoded<typeof met>>().toEqualTypeOf<{
+            readonly c: string
+            readonly v?: number
+        }>()
+        const nested = meet(
+            object({ n: object({ c: string }) }),
+            object({ n: object({ c: string, v: optional(number) }) }),
+        )
+        expect(nested.def).toEqual(
+            object({ n: object({ c: string, v: optional(number) }) }).def,
+        )
+        expectTypeOf<Decoded<typeof nested>>().toEqualTypeOf<{
+            readonly n: { readonly c: string; readonly v?: number }
+        }>()
+    })
+
+    /**
+     * **The meet of two recursive factors that differ is recursive.** The walk meets a pair of nodes
+     * again below itself, and a `ref` to the meet of the pair closes the cycle. The `ref` names the
+     * meet of the two unions, so the option that declares `k` stands below `m` as at the top.
+     */
+    it('closes the meet of two recursive factors with a ref to the meet', () => {
+        const { self: left } = scope({
+            self: union([string.set(), object({ m: optional(ref('self')) })]),
+        })
+        const { self: right } = scope({
+            self: union([
+                object({ k: string('p') }),
+                object({ m: optional(ref('self')) }),
+            ]),
+        })
+        const one: AnyCodec = left
+        const other: AnyCodec = right
+        const both: AnyCodec = meet(one, other)
+        expect(failed(both.decode({ M: { k: { S: 'p' } } }))).toBe(false)
+        expect(
+            failed(both.decode({ M: { m: { M: { k: { S: 'p' } } } } })),
+        ).toBe(false)
+        expect(failed(both.decode({ M: { m: { M: { m: { M: {} } } } } }))).toBe(
+            false,
+        )
+        expect(
+            failed(both.decode({ M: { m: { M: { k: { S: 'q' } } } } })),
+        ).toBe(true)
+        expect(failed(both.decode({ SS: ['a'] }))).toBe(true)
+    })
 })
 
 describe('the type of a meet reads the values that the run time keeps', () => {

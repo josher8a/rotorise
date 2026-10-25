@@ -529,25 +529,26 @@ the extraction keeps the present part with the key required, and the exclusion k
 part. A dissection splits no member. An option fits where every value that the option holds, as
 written, lies inside what the opening of the pattern holds. The opening holds every undeclared name
 of an object pattern at `opaque`. The host decides this on a fragment, and the order is the order of
-the meet. `opaque` is the top, and a term that holds no value is the bottom. A literal fits a
-literal of one base and adapter, and a literal fits its base. A base fits itself. A set fits a set
-where its element fits. An option fits a union that holds a member of the option. Two objects compare
-on the alignment of their names: each slot of the option fits the slot of the pattern, and the open
-block of the option fits the open block of the pattern. A closed option holds no undeclared name. A
-list with fixed positions fits a list pattern with the same positions where each position fits. A
-list fits a list of one element where each position fits that element. An array declares no
+the meet: an option fits exactly where the meet that reads the option as written and the pattern
+open is the option. `opaque` is the top, and a term that holds no value is the bottom. A literal
+fits a literal of one base and adapter, and a literal fits its base. A base fits itself. A set fits
+a set where its element fits. An option fits a union that holds a member of the option. Two objects
+compare on the alignment of their names: each slot of the option fits the slot of the pattern, and
+the open block of the option fits the open block of the pattern. A closed option holds no undeclared
+name. A list with fixed positions fits a list pattern with the same positions where each position
+fits. A list fits a list of one element where each position fits that element. An array declares no
 position, because its length is a run-time fact, so an array fits no fixed pattern. Any other pair
-fits only where the two terms are one term. A pattern that no option fits is an answer:
-the extraction is `never`, and the exclusion is the whole codec. The extraction of `never` is
-`never`. A pattern that holds a refinement is a refusal, because no function decides whether an
-option lies inside a predicate. An object with a union at a
-field is the union of the objects (`Term.product_join`), and a fixed list is the same product over
-its positions. The slice goes into that field or position, and the result stays compact, as the
-Extract of TypeScript reads it. An option with a union at a field keeps the part of the union that
-fits the pattern, in place. So the extraction has no option that the original lacks. The rejection
-has one option for each field or position that the pattern names, because the complement of a
-product is no product. A union pattern is no product of its keys, so it splits the option, and the
-parts that fit stay. A dissection changes no member, because its tag table is keyed by literals.
+fits only where the two terms are one term. A pattern that no option fits is an answer: the
+extraction is `never`, and the exclusion is the whole codec. The extraction of `never` is `never`. A
+pattern that holds a refinement is a refusal, because no function decides whether an option lies
+inside a predicate. An object with a union at a field is the union of the objects
+(`Term.product_join`), and a fixed list is the same product over its positions. The slice goes into
+that field or position, and the result stays compact, as the Extract of TypeScript reads it. An
+option with a union at a field keeps the part of the union that fits the pattern, in place. So the
+extraction has no option that the original lacks. The rejection has one option for each field or
+position that the pattern names, because the complement of a product is no product. A union pattern
+is no product of its keys, so it splits the option, and the parts that fit stay. A dissection
+changes no member, because its tag table is keyed by literals.
 
 **The strong law after narrowing needs a condition on the update, and the port states the condition
 as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to
@@ -697,9 +698,12 @@ with an option of the second, outer over the first. The product is associative o
 product is the union of the merges, so the meaning of a product is the join of the meanings of
 the merges where the merges agree (`Scoped.Term.product_join`). The host operation is `meet`, as
 TypeScript reads `A & B`: two closed objects at disjoint names meet as this product, and at a shared
-name the host meets the two fields. An open object meets on the alignment of the names: a name that
-one factor declares meets the open block of the other factor, and the two open blocks meet. The
-model has no term for the meet at a shared name.
+name the host meets the two fields. Each factor reads open, so two objects meet on the alignment of
+the names: a name that one factor declares meets the open block of the other factor, which is
+`opaque` where that factor is closed, and the two open blocks meet. The result closes again where
+both factors are closed. The meet of two recursive factors is recursive: a pair of nodes that the
+walk meets again below itself is a reference to the meet of the pair. The model has no term for the
+meet at a shared name.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

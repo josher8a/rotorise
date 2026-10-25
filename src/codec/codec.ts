@@ -58,7 +58,7 @@ import {
     type Result,
 } from './result'
 import { childAt, flatOf, guardAt, sideOf, storedApart } from './scoped'
-import type { Body, Field, NameForm, NonEmpty, Term } from './term'
+import type { Body, Field, NameForm, NonEmpty, RefSlot, Term } from './term'
 import {
     alwaysWritten,
     clauseForm,
@@ -4763,8 +4763,9 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
     : never
 
 /**
- * The meet of two slots at one name, at the type level. The slot that fits the other is the meet,
- * as the run time reads it. Two slots that fit neither way and share no decoded value meet at
+ * The meet of two slots at one name, at the type level. Two object slots meet on the union of
+ * their names, as the run time reads both open. Of two other slots, the slot that fits the other is
+ * the meet. Two slots that fit neither way and share no decoded value meet at
  * `never`. Two slots whose stored attributes share no member meet at `never` too, whatever adapter sits
  * over them. Two slots that overlap without one fitting the other, such as two literal sets that share
  * one literal, keep the intersection of the two codecs: the type cannot build the codec of the
@@ -4772,13 +4773,15 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
  */
 type MeetSlot<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
     ? never
-    : [FitsCodec<A, B>] extends ['t']
-      ? A
-      : [FitsCodec<B, A>] extends ['t']
-        ? B
-        : [Decoded<A> & Decoded<B>] extends [never]
-          ? never
-          : A & B
+    : [A, B] extends [AnyObjectCodec, AnyObjectCodec]
+      ? MeetObjects<A, B>
+      : [FitsCodec<A, B>] extends ['t']
+        ? A
+        : [FitsCodec<B, A>] extends ['t']
+          ? B
+          : [Decoded<A> & Decoded<B>] extends [never]
+            ? never
+            : A & B
 
 /** One meet of two objects at the type level: the union of the names. */
 type MeetSpecs<A, B> = [keyof A & keyof B] extends [never]
@@ -4938,13 +4941,14 @@ const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
 }
 
 /**
- * The meet of two codecs that are neither a union nor `never`. Where one codec fits the other, the
- * meet is that codec, because {@link fits} is the order of the meet. The shortcut keeps a closed
- * option closed: the meet of a closed option and a pattern that it fits is the option as written.
- * Two objects that fit neither way meet on their alignment. A part that the host cannot read, a
- * refinement, an adapter or an older reading, meets only a part it fits.
+ * The meet of two codecs that are neither a union nor `never`, at the reading of each side. Two
+ * sides that hold one set of values at their readings meet at the left side. Two objects meet on
+ * their alignment, and no order decides them, so {@link fits} is a consequence of the meet and no
+ * premise of it. Any other pair meets by the order at the two readings first: where one side lies
+ * below the other, the meet is that side. Two lists then meet position by position, and two sets
+ * by element. A refinement, an adapter or an older reading meets only a part that it lies below.
  */
-const meetParts = (a: AnyCodec, b: AnyCodec): AnyCodec => {
+const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     const A = resolvedTerm(termOf(a))
     const B = resolvedTerm(termOf(b))
     if (A === undefined || B === undefined) {
@@ -4952,14 +4956,23 @@ const meetParts = (a: AnyCodec, b: AnyCodec): AnyCodec => {
             'a factor of a meet names a cycle of refs with no node',
         )
     }
-    if (fits(A, B)) return a
-    if (fits(B, A)) return b
-    if (A.kind === 'object' && B.kind === 'object') return meetObjects(A, B)
+    const readA = readAs(A, walk.readings[0])
+    const readB = readAs(B, walk.readings[1])
+    const aBelow = below(readA, readB)
+    const bBelow = below(readB, readA)
+    // two sides that hold one set of values at their readings meet at either side, so the meet of
+    // one term with itself ends, and the walk of a recursive term ends where the two sides agree
+    if (aBelow && bBelow) return a
+    if (A.kind === 'object' && B.kind === 'object') {
+        return meetObjects(A, B, walk)
+    }
     const common = commonLiterals(A, B)
     if (common !== undefined) return codecOfTerms(common)
-    if (A.kind === 'list' && B.kind === 'list') return meetLists(A, B)
+    if (aBelow) return a
+    if (bBelow) return b
+    if (A.kind === 'list' && B.kind === 'list') return meetLists(A, B, walk)
     if (A.kind === 'set' && B.kind === 'set') {
-        const elem = meetOfTwo(codecOfTerm(A.elem), codecOfTerm(B.elem))
+        const elem = meetOfTwo(codecOfTerm(A.elem), codecOfTerm(B.elem), walk)
         const node = resolvedTerm(termOf(elem))
         return node?.kind === 'never'
             ? never
@@ -4990,23 +5003,30 @@ const meetParts = (a: AnyCodec, b: AnyCodec): AnyCodec => {
     )
 }
 
+/** A term at a reading: as declared, or its opening. */
+const readAs = (t: Term, reading: MeetReading): Term =>
+    reading === 'open' ? opened(t) : t
+
 /** Two lists meet position by position, where both have no spread and one arity. */
 const meetLists = (
     A: Extract<Term, { kind: 'list' }>,
     B: Extract<Term, { kind: 'list' }>,
+    walk: MeetWalk,
 ): AnyCodec => {
     const fixed = (t: Extract<Term, { kind: 'list' }>) =>
         t.spread === undefined && t.suf.length === 0
     const homogeneous = (t: Extract<Term, { kind: 'list' }>) =>
         t.pre.length === 0 && t.suf.length === 0 ? t.spread : undefined
     const meetAt = (x: Term, y: Term): Term | undefined => {
-        const one = termOf(meetOfTwo(codecOfTerm(x), codecOfTerm(y)))
+        const one = termOf(meetOfTwo(codecOfTerm(x), codecOfTerm(y), walk))
         return resolvedTerm(one)?.kind === 'never' ? undefined : one
     }
     const left = homogeneous(A)
     const right = homogeneous(B)
     if (left !== undefined && right !== undefined) {
-        const elem = termOf(meetOfTwo(codecOfTerm(left), codecOfTerm(right)))
+        const elem = termOf(
+            meetOfTwo(codecOfTerm(left), codecOfTerm(right), walk),
+        )
         return codecOfTerm({ kind: 'list', pre: [], spread: elem, suf: [] })
     }
     const positions = (
@@ -5035,40 +5055,72 @@ const meetLists = (
     )
 }
 
-/** The open block of an object as a term: the bottom where the object has no block. */
-const blockOf = (body: Body): Term => body.rest ?? never.def
+/**
+ * **How a meet reads one side.** `written` reads the side as declared, so a closed object holds no
+ * undeclared name. `open` reads the opening of the side: a closed object holds each undeclared name
+ * at `opaque`, and a declared open block stays. The composition reads both sides open, as TypeScript
+ * reads `A & B`. The order {@link fits} reads the option as written and the pattern open.
+ */
+type MeetReading = 'written' | 'open'
+
+/** The reading of each side of a meet, the left side first. */
+type MeetReadings = readonly [MeetReading, MeetReading]
+
+/** Both sides as declared: the reading of {@link below}, whose pattern side is an opened term. */
+const asWritten: MeetReadings = ['written', 'written']
+
+/** The reading of the composition: both sides open. */
+const asComposed: MeetReadings = ['open', 'open']
+
+/** The reading of the order and of the overlap: the option as written, the pattern open. */
+const asOrdered: MeetReadings = ['written', 'open']
+
+/**
+ * **The state of one meet**: the reading of each side, and the pairs of nodes on the path of the
+ * walk, each with the slot of the `ref` that names the meet of the pair.
+ */
+type MeetWalk = {
+    readonly readings: MeetReadings
+    readonly entered: Map<Term, Map<Term, RefSlot>>
+}
+
+/** A fresh walk at a reading. */
+const walkAt = (readings: MeetReadings): MeetWalk => ({
+    readings,
+    entered: new Map(),
+})
+
+/** The term that admits every value: the open block of a closed object read open. */
+const opaqueTerm: Term = { kind: 'opaq' }
+
+/**
+ * The open block of an object as a term, at a reading. A declared block stays. A closed object
+ * holds the bottom as written and `opaque` read open.
+ */
+const blockOf = (body: Body, reading: MeetReading): Term =>
+    body.rest ?? (reading === 'open' ? opaqueTerm : never.def)
 
 /**
  * **The alignment of two objects**, as the model's `objK` aligns them: each name that either side
  * declares, with the slot of each side there. A side that does not declare the name holds it as an
- * optional slot at its open block, which is the bottom where the side has no block
- * (`slotAtG`). The two blocks are the last pair, which the reader takes from {@link blockOf}.
+ * optional slot at its open block, read at the reading of that side (`slotAtG` reads the written
+ * side). The two blocks are the last pair, which the reader takes from {@link blockOf}.
  */
 const aligned = (
     a: Body,
     b: Body,
+    [left, right]: MeetReadings,
 ): readonly (readonly [string, Field, Field])[] => {
-    const at = (body: Body, name: string): Field =>
-        body.fields[name] ?? { mark: 'optional', t: blockOf(body) }
+    const at = (body: Body, name: string, reading: MeetReading): Field =>
+        body.fields[name] ?? { mark: 'optional', t: blockOf(body, reading) }
     return [
         ...new Set([...Object.keys(a.fields), ...Object.keys(b.fields)]),
     ].map((name): readonly [string, Field, Field] => [
         name,
-        at(a, name),
-        at(b, name),
+        at(a, name, left),
+        at(b, name, right),
     ])
 }
-
-/** The term that admits every value: the open block of an object read open. */
-const opaqueTerm: Term = { kind: 'opaq' }
-
-/** An object node read open at its own level: a closed node holds every undeclared name at `opaque`. */
-const openNode = (
-    t: Extract<Term, { kind: 'object' }>,
-): Extract<Term, { kind: 'object' }> =>
-    t.body.rest === undefined
-        ? { kind: 'object', body: { fields: t.body.fields, rest: opaqueTerm } }
-        : t
 
 /**
  * Two slots at one name meet at the meet of their codecs. A slot that one side leaves undeclared is
@@ -5081,9 +5133,10 @@ const meetSlots = (
     left: ObjectSlot | AnyCodec,
     right: ObjectSlot | AnyCodec,
     declared: readonly [boolean, boolean],
+    walk: MeetWalk,
 ): ObjectSlot | undefined => {
     if (left === right) return left
-    const held = meetOfTwo(entryCodec(left), entryCodec(right))
+    const held = meetOfTwo(entryCodec(left), entryCodec(right), walk)
     const empty = holdsNoValue(termOf(held))
     const [mine, theirs] = declared
     if (!mine || !theirs) {
@@ -5116,66 +5169,104 @@ const meetSlots = (
 }
 
 /**
- * **Two objects meet on their alignment**, each read open: a closed object holds every undeclared
- * name at `opaque`, as TypeScript reads `A & B`. Each aligned pair meets, and the two open key
- * entries meet. The result is closed again where both objects are closed, and where the two entries
- * meet at `never`.
+ * **Two objects meet on their alignment**, each side at its reading. Each aligned pair meets, and
+ * the two open blocks meet. The result is closed where both objects are closed, and where the two
+ * blocks meet at `never`. A closed result holds no undeclared name, so a name that one side leaves
+ * undeclared and that meets at `never` is no name of the result.
  */
 const meetObjects = (
     A: Extract<Term, { kind: 'object' }>,
     B: Extract<Term, { kind: 'object' }>,
+    walk: MeetWalk,
 ): AnyCodec => {
     const left = objectItem(A)
     const right = objectItem(B)
+    const block =
+        A.body.rest === undefined && B.body.rest === undefined
+            ? undefined
+            : meetOfTwo(
+                  codecOfTerm(blockOf(A.body, walk.readings[0])),
+                  codecOfTerm(blockOf(B.body, walk.readings[1])),
+                  walk,
+              )
+    const rest =
+        block === undefined || holdsNoValue(termOf(block)) ? undefined : block
     const spec: Record<string, ObjectSlot> = {}
-    for (const [name, mine, theirs] of aligned(
-        openNode(A).body,
-        openNode(B).body,
-    )) {
+    for (const [name, mine, theirs] of aligned(A.body, B.body, walk.readings)) {
+        const declared = [name in left.spec, name in right.spec] as const
         const slot = meetSlots(
             name,
             left.spec[name] ?? codecOfTerm(mine.t),
             right.spec[name] ?? codecOfTerm(theirs.t),
-            [name in left.spec, name in right.spec],
+            declared,
+            walk,
         )
         if (slot === undefined) return never
+        if (
+            rest === undefined &&
+            !(declared[0] && declared[1]) &&
+            holdsNoValue(fieldOf(slot).t)
+        )
+            continue
         spec[name] = slot
     }
-    const rest =
-        A.body.rest === undefined && B.body.rest === undefined
-            ? undefined
-            : meetOfTwo(
-                  codecOfTerm(blockOf(openNode(A).body)),
-                  codecOfTerm(blockOf(openNode(B).body)),
-              )
-    return objectFromMap(
-        spec,
-        rest === undefined || holdsNoValue(termOf(rest)) ? undefined : rest,
-    )
+    return objectFromMap(spec, rest)
 }
 
 /**
- * The binary meet: `never` absorbs, `opaque` is the unit, a union distributes, and the parts meet
- * otherwise.
+ * The binary meet at the reading of each side: `never` absorbs, `opaque` is the unit, a union
+ * distributes, and the parts meet otherwise.
  */
-const meetOfTwo = (first: AnyCodec, second: AnyCodec): AnyCodec => {
+const meetOfTwo = (
+    first: AnyCodec,
+    second: AnyCodec,
+    walk: MeetWalk,
+): AnyCodec => {
     if (holdsNoValue(termOf(first)) || holdsNoValue(termOf(second))) {
         return never
     }
     if (termOf(second).kind === 'opaq') return first
     if (termOf(first).kind === 'opaq') return second
+    const A = resolvedTerm(termOf(first))
+    const B = resolvedTerm(termOf(second))
+    if (A === undefined || B === undefined) {
+        return meetFactors(first, second, walk)
+    }
+    // **A pair on the path of the walk is a `ref` to its own meet.** The meet of two recursive terms
+    // is recursive, so the walk meets the pair again. The `ref` binds the meet of the pair when the
+    // walk of the pair returns, and closes the cycle there
+    const entered = walk.entered.get(A) ?? new Map<Term, RefSlot>()
+    const known = entered.get(B)
+    if (known !== undefined) return codecOfTerm({ kind: 'ref', slot: known })
+    const slot: RefSlot = { name: 'meet' }
+    walk.entered.set(A, entered.set(B, slot))
+    try {
+        const met = meetFactors(first, second, walk)
+        slot.bound = { [slot.name]: termOf(met) }
+        return met
+    } finally {
+        entered.delete(B)
+    }
+}
+
+/** A union distributes, outer over the options of the first factor, and two parts meet. */
+const meetFactors = (
+    first: AnyCodec,
+    second: AnyCodec,
+    walk: MeetWalk,
+): AnyCodec => {
     const lefts = meetOptions(first)
     const rights = meetOptions(second)
     if (lefts.length === 1 && rights.length === 1) {
         const [left] = lefts
         const [right] = rights
         if (left !== undefined && right !== undefined) {
-            return meetParts(left, right)
+            return meetParts(left, right, walk)
         }
     }
     const meets = lefts.flatMap((left) =>
         rights.flatMap((right) => {
-            const one = meetOfTwo(left, right)
+            const one = meetOfTwo(left, right, walk)
             return resolvedTerm(termOf(one))?.kind === 'never' ? [] : [one]
         }),
     )
@@ -5187,13 +5278,25 @@ const meetOfTwo = (first: AnyCodec, second: AnyCodec): AnyCodec => {
 }
 
 /**
+ * **The meet that reads the option as written and the pattern open.** The option `o` lies below the
+ * pattern `p` ({@link fits}) exactly where this meet is `o`, and `o` overlaps `p` exactly where this
+ * meet holds a value.
+ */
+export const meetOrdered = (option: AnyCodec, pattern: AnyCodec): AnyCodec =>
+    meetOfTwo(option, pattern, walkAt(asOrdered))
+
+/**
  * **The meet of codecs: the values that every factor holds**, as TypeScript reads `A & B`.
  *
- * Two objects meet at the union of their names, and a shared name holds the meet of its two
- * fields. Two literal sets meet at their common literals, a base meets its own literal at the
- * literal, and two bases of different members meet at `never`. A list and a set meet by element,
- * and a fixed list meets position by position. A union distributes, outer over the first factor's
- * options and inner over the second: the `flatMap` order. `never` absorbs.
+ * Each factor reads open: a closed object holds each undeclared name at `opaque`. So two objects
+ * meet at the union of their names, a name that one factor declares keeps the slot of that factor,
+ * and a shared name holds the meet of its two fields. The result closes again where both factors
+ * are closed. The meet of two recursive factors is recursive, and a `ref` closes it.
+ *
+ * Two literal sets meet at their common literals, a base meets its own literal at the literal, and
+ * two bases of different members meet at `never`. A list and a set meet by element, and a fixed list
+ * meets position by position. A union distributes, outer over the first factor's options and inner
+ * over the second: the `flatMap` order. `never` absorbs.
  *
  * **More than two factors fold left.** `meet(a, b, c)` is `meet(meet(a, b), c)`.
  *
@@ -5215,7 +5318,10 @@ export const meet = <const Fs extends readonly AnyCodec[]>(
     // one cast, where the run-time fold meets a type computed from the tuple of factors: the fold
     // returns `AnyCodec`, and `FoldMeet` is the same fold on the types, which the host cannot prove
     // equal. `tsc` refuses the line without the cast: `AnyCodec` is not assignable to `FoldMeet<Fs>`
-    return rest.reduce(meetOfTwo, head) as FoldMeet<Fs>
+    return rest.reduce(
+        (met, factor) => meetOfTwo(met, factor, walkAt(asComposed)),
+        head,
+    ) as FoldMeet<Fs>
 }
 
 /**
@@ -7180,8 +7286,9 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
 
 /**
  * **The order of the meet**: whether every value that the term `a` holds, as written, lies inside
- * what the opening of the pattern `p` holds. Where `fits(a, p)` holds, the meet of `a` and `p` is
- * `a`. The order itself is {@link below}, and the opening is {@link opened}.
+ * what the opening of the pattern `p` holds. `fits(a, p)` holds exactly where the meet that reads
+ * `a` as written and `p` open ({@link meetOrdered}) is `a`, up to a refinement, whose predicate the
+ * host cannot read. The order itself is {@link below}, and the opening is {@link opened}.
  */
 export const fits = (a: Term, p: Term): boolean => below(a, opened(p))
 
@@ -7252,11 +7359,11 @@ const fitsNode = (
     if (P.kind === 'object') {
         if (A.kind !== 'object') return false
         return (
-            aligned(A.body, P.body).every(
+            aligned(A.body, P.body, asWritten).every(
                 ([, mine, wanted]) =>
                     (!alwaysWritten(wanted) || alwaysWritten(mine)) &&
                     fits(mine.t, wanted.t),
-            ) && fits(blockOf(A.body), blockOf(P.body))
+            ) && fits(blockOf(A.body, 'written'), blockOf(P.body, 'written'))
         )
     }
     // a list is a product of its positions: the same layout, and each position inside the pattern's
@@ -7614,8 +7721,18 @@ const sliceSpec = (
         }
         return { keep, rest, original }
     }
-    if (!below(blockOf(node.body), blockOf(wantedObject.body))) leafFits = false
-    for (const [name, mine, wanted] of aligned(node.body, wantedObject.body)) {
+    if (
+        !below(
+            blockOf(node.body, 'written'),
+            blockOf(wantedObject.body, 'written'),
+        )
+    )
+        leafFits = false
+    for (const [name, mine, wanted] of aligned(
+        node.body,
+        wantedObject.body,
+        asWritten,
+    )) {
         // a name that one side holds at its open block splits nowhere: it fits whole or not
         if (!(name in node.body.fields && name in wantedObject.body.fields)) {
             if (
