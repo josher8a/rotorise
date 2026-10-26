@@ -746,13 +746,13 @@ theorem length_allPairs (NL NR : Nat) : (allPairs NL NR).length = NL * NR := by
 
 omit [Leaf B] in
 /-- **The measure of the first call is below the fuel.** -/
-theorem phi_root_lt (F : Fueled sL sR ρL ρR) (rL : Fin NL) (rR : Fin NR) :
-    phi ρL ρR [] (.leaf rL : Graph B NL) (.leaf rR : Graph B NR) < fuel NL NR := by
+theorem phi_root_lt (F : Fueled sL sR ρL ρR) (A : Tbl NL NR) (rL : Fin NL) (rR : Fin NR) :
+    phi ρL ρR A (.leaf rL : Graph B NL) (.leaf rR : Graph B NR) < fuel NL NR := by
   have h1 := hgt_leaf_le (B := B) ρL rL
   have h2 := hgt_leaf_le (B := B) ρR rR
   have h3 := F.ltL rL
   have h4 := F.ltR rR
-  have hf : freeCnt ([] : Tbl NL NR) ≤ NL * NR := by
+  have hf : freeCnt A ≤ NL * NR := by
     unfold freeCnt
     rw [← length_allPairs NL NR]
     exact List.length_filter_le _ _
@@ -764,13 +764,14 @@ theorem phi_root_lt (F : Fueled sL sR ρL ρR) (rL : Fin NL) (rR : Fin NR) :
   omega
 
 omit [Leaf B] in
-/-- **The fuel of the root call is adequate**, for each row that satisfies the two hypotheses. -/
+/-- **The fuel of the root call is adequate**, for each row that satisfies the two hypotheses, from
+    each initial table. -/
 theorem walkO_fuel_imp_walk {PL : Graph B NL → Prop} {PR : Graph B NR → Prop} {R : Row sL sR}
-    (F : Fueled sL sR ρL ρR) (hM : RowMono ρL ρR PL PR R) (hN : RowNever ρL R) (rL : Fin NL)
-    (rR : Fin NR) (hL : PL (.leaf rL)) (hR : PR (.leaf rR))
-    (h : walkO R (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
-    walk R (fuel NL NR) [] (.leaf rL) (.leaf rR) = true :=
-  walkO_imp_walk F hM hN _ _ _ _ hL hR (phi_root_lt sL sR ρL ρR F rL rR) h
+    (F : Fueled sL sR ρL ρR) (hM : RowMono ρL ρR PL PR R) (hN : RowNever ρL R) (A : Tbl NL NR)
+    (rL : Fin NL) (rR : Fin NR) (hL : PL (.leaf rL)) (hR : PR (.leaf rR))
+    (h : walkO R (fuel NL NR) A (.leaf rL) (.leaf rR) = true) :
+    walk R (fuel NL NR) A (.leaf rL) (.leaf rR) = true :=
+  walkO_imp_walk F hM hN _ _ _ _ hL hR (phi_root_lt sL sR ρL ρR F A rL rR) h
 
 /-- **The row of disjointness keeps its answer `true`** at the flat terms. -/
 theorem rowMono_G (F : Fueled sL sR ρL ρR) :
@@ -787,7 +788,7 @@ theorem rowNever_G (hρ : ∀ i j, (sL i).ulv (TSig B) j = true → ρL j < ρL 
 theorem decO_fuel_imp_decG (F : Fueled sL sR ρL ρR) (rL : Fin NL) (rR : Fin NR)
     (h : decO sL sR (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
     decG sL sR (fuel NL NR) [] (.leaf rL) (.leaf rR) = true :=
-  walkO_fuel_imp_walk sL sR ρL ρR F (rowMono_G sL sR ρL ρR F) (rowNever_G sL sR ρL F.edgeL) rL rR rfl rfl h
+  walkO_fuel_imp_walk sL sR ρL ρR F (rowMono_G sL sR ρL ρR F) (rowNever_G sL sR ρL F.edgeL) [] rL rR rfl rfl h
 
 end Adequacy
 

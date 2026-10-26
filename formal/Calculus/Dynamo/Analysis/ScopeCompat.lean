@@ -8,7 +8,8 @@ import Calculus.Lang.ScopeCompat
 the decision reads hold at each orientation (`dynLaws`), so the two meanings of a pair that the
 decision accepts agree at the host and at the dual (`Closed.compatPair_sound`). Over two lawful
 meanings, the two halves are `Compat` in each order (`Closed.compat_of_compatPair`), which is the
-obligation of a union of the two.
+obligation of a union of the two. Two options of one scope are two roots of one table of bodies
+(`Closed.Shared`), and the decision identifies each entry with itself.
 -/
 
 namespace Calculus
@@ -36,16 +37,33 @@ theorem Closed.compat_of_compatPair {x y : Closed} (h : x.compatPair y = true) (
   have hxy := (Alg.compat_iff_agree hx hy).mpr (x.compatPair_sound h α)
   exact ⟨hxy, Alg.compat_symm hx hy hxy⟩
 
-/-- **The compatibility of a closed codec with itself**, over one scope: the decision identifies
-    each entry with itself. -/
-def Closed.compatOne (x : Closed) : Bool :=
-  Alg.Scoped.compatPair Alg.Scoped.oneScope x.scope x.root x.scope x.root
+/-- **Two options of one scope**: two roots of one table of bodies. An entry that both roots reach
+    is one entry, so the decision identifies it with itself. A closed codec with itself is the pair
+    of one root twice. -/
+structure Closed.Shared where
+  N : Nat
+  scope : Alg.Scoped.Closed dynSig N
+  left : Fin N
+  right : Fin N
 
-/-- **The decision over one scope discharges the obligation of a union** of a lawful closed option
-    with itself. -/
-theorem Closed.compat_of_compatOne {x : Closed} (h : x.compatOne = true) (α : Table)
-    (hx : Lawful (x.meaning α)) : Alg.Compat (x.meaning α) (x.meaning α) :=
-  (Alg.compat_iff_agree hx hx).mpr
+/-- **The meaning of a root of a shared scope** at the caller table `α`: the solution of the one
+    scope at the root. -/
+def Closed.Shared.meaning (α : Table) (x : Closed.Shared) (r : Fin x.N) : Codec :=
+  Alg.Scoped.Closed.meaning (Alg.tables dynSyn.o α dynTableA) x.scope r
+
+/-- **The compatibility of two options of one scope**: the decision identifies each entry with
+    itself, by the index of the entry. -/
+def Closed.Shared.compatPair (x : Closed.Shared) : Bool :=
+  Alg.Scoped.compatPair Alg.Scoped.oneScope x.scope x.left x.scope x.right
+
+/-- **The decision over one scope discharges the obligation of a union** of two lawful options of
+    the scope: each meaning is `Compat` with the other. -/
+theorem Closed.Shared.compat_of_compatPair {x : Closed.Shared} (h : x.compatPair = true) (α : Table)
+    (hl : Lawful (x.meaning α x.left)) (hr : Lawful (x.meaning α x.right)) :
+    Alg.Compat (x.meaning α x.left) (x.meaning α x.right) ∧
+      Alg.Compat (x.meaning α x.right) (x.meaning α x.left) := by
+  have hxy := (Alg.compat_iff_agree hl hr).mpr
     (Alg.Scoped.compatPair_sound (S := dynSyn) dynLaws (Alg.Scoped.identSound_oneScope _) h)
+  exact ⟨hxy, Alg.compat_symm hl hr hxy⟩
 
 end Calculus

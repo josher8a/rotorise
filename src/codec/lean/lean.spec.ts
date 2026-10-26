@@ -1447,6 +1447,25 @@ const sharedLegacy = erase(
         }),
     ),
 )
+/**
+ * Two options that share a node, which two scopes refuse and one scope accepts: one adapter under
+ * two objects, under two lists, and one entry through two `ref`s. The two options sit in one term,
+ * so lexical scope binds each name once for both. Two declarations of one adapter, and two nodes of
+ * one structure, are two nodes, and the two scopes refuse them as before.
+ */
+const sharedNode = withLegacyRead({ current: string, older: string })
+const sharedRefs = (() => {
+    const { Pair } = scope({
+        Node: object({ v: withLegacyRead({ current: string, older: string }) }),
+        Pair: union([ref('Node'), ref('Node')]),
+    })
+    const options = (
+        Pair as unknown as {
+            readonly def: { readonly options: readonly Term[] }
+        }
+    ).def.options
+    return options.map((option) => erase(codecOfTerm(option)))
+})()
 const twoFields = erase(object({ a: string, n: boolean }))
 const legacyDecimalRestNumber = erase(
     object(
@@ -1613,6 +1632,34 @@ const separationPairs = (): readonly Separation[] => {
             name: 'shared_legacy__vs__shared_legacy',
             left: sharedLegacy,
             right: sharedLegacy,
+        },
+        {
+            name: 'object_over_shared_node__vs__object_over_shared_node',
+            left: erase(object({ v: sharedNode })),
+            right: erase(object({ v: sharedNode })),
+        },
+        {
+            name: 'array_of_shared_node__vs__array_of_shared_node',
+            left: erase(array(sharedNode)),
+            right: erase(array(sharedNode)),
+        },
+        {
+            name: 'ref_to_shared_entry__vs__ref_to_shared_entry',
+            left: sharedRefs[0] as AnyCodec,
+            right: sharedRefs[1] as AnyCodec,
+        },
+        {
+            name: 'object_over_two_adapters__vs__object_over_two_adapters',
+            left: erase(
+                object({
+                    v: withLegacyRead({ current: string, older: string }),
+                }),
+            ),
+            right: erase(
+                object({
+                    v: withLegacyRead({ current: string, older: string }),
+                }),
+            ),
         },
     )
     return out
@@ -2361,8 +2408,8 @@ describe("the declaration guard, against the model's classifier", () => {
     /**
      * **Each pair carries the warrant of the host's verdict**, and the gate elaborates each one.
      * An accepted pair carries the model's proof that the pair is compatible, through the warrant
-     * the host used. One option twice, where two scopes refuse, carries the model's proof over one
-     * scope. A refused pair carries `Closed.compatPair x y = false`: the host decides
+     * the host used. Two options that share a node, where two scopes refuse, carry the model's proof
+     * over one scope. A refused pair carries `Closed.compatPair x y = false`: the host decides
      * the model's decision, so the model refuses what the host refuses.
      *
      * **The counts pin a fact no law has, deliberately.** They are a property of this corpus, so
@@ -2378,15 +2425,17 @@ describe("the declaration guard, against the model's classifier", () => {
                 one,
             ),
         )
-        const acceptedOne = emitted.filter((one) =>
-            one.includes('Closed.compat_of_compatOne ('),
+        const acceptedShared = emitted.filter((one) =>
+            one.includes('Closed.Shared.compat_of_compatPair ('),
         )
-        expect(accepted.length + acceptedOne.length + refused.length).toBe(
+        expect(accepted.length + acceptedShared.length + refused.length).toBe(
             emitted.length,
         )
-        expect([accepted.length, acceptedOne.length, refused.length]).toEqual([
-            979, 2, 33,
-        ])
+        expect([
+            accepted.length,
+            acceptedShared.length,
+            refused.length,
+        ]).toEqual([979, 5, 34])
     })
 
     /**

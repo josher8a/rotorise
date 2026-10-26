@@ -146,29 +146,30 @@ def twoScopes {NL NR : Nat} : Fin NL → Fin NR → Bool := fun _ _ => false
 /-- **One scope identifies each entry with itself**, by the index of the entry. -/
 def oneScope {N : Nat} : Fin N → Fin N → Bool := fun i j => decide (i = j)
 
+/-- **The pairs that an identification names**, as a table. The walk starts from the table, so a pair
+    of entries that the identification names is assumed to agree wherever the walk meets the pair,
+    below a guard as well as at a root. -/
+def diagTbl {NL NR : Nat} (ι : Fin NL → Fin NR → Bool) : Tbl NL NR :=
+  ((List.finRange NL).flatMap fun i => (List.finRange NR).map fun j => (i, j)).filter
+    fun p => ι p.1 p.2
+
+/-- A pair in the table of an identification is a pair that the identification names. -/
+theorem ι_of_mem_diagTbl {NL NR : Nat} {ι : Fin NL → Fin NR → Bool} {p : Fin NL × Fin NR}
+    (h : p ∈ diagTbl ι) : ι p.1 p.2 = true := by
+  simp only [diagTbl, List.mem_filter] at h
+  exact h.2
+
 /-- **One half of the compatibility of two closed codecs**, at their roots and at the orientation,
-    under the identification `ι` of their entries. The fuel is the fuel of `disjoint`. -/
+    under the identification `ι` of their entries. The walk starts from the pairs that `ι` names.
+    The fuel is the fuel of `disjoint`. -/
 def compat [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (ι : Fin NL → Fin NR → Bool)
     (dL : Closed B NL) (rL : Fin NL) (dR : Closed B NR) (rR : Fin NR) : Bool :=
-  compG dL.graph dR.graph o ι (fuel NL NR) [] (.leaf rL) (.leaf rR)
+  compG dL.graph dR.graph o ι (fuel NL NR) (diagTbl ι) (.leaf rL) (.leaf rR)
 
 /-- **The compatibility of two closed codecs**: both halves, at the host and at the dual. -/
 def compatPair [Mean B] [Leaf B] {NL NR : Nat} (ι : Fin NL → Fin NR → Bool) (dL : Closed B NL)
     (rL : Fin NL) (dR : Closed B NR) (rR : Fin NR) : Bool :=
   compat .host ι dL rL dR rR && compat .dual ι dL rL dR rR
-
-/-- **A root of one scope agrees with itself**: the row of one entry answers at the root, before
-    the walk reads a body. -/
-theorem compatPair_oneScope [Mean B] [Leaf B] {N : Nat} (d : Closed B N) (r : Fin N) :
-    compatPair oneScope d r d r = true := by
-  have hn : fuel N N = (fuel N N - 1) + 1 :=
-    (Nat.succ_pred_eq_of_pos (Nat.mul_pos (Nat.succ_pos _) (Nat.succ_pos _))).symm
-  have half : ∀ o, compat o oneScope d r d r = true := by
-    intro o
-    simp only [compat, compG]
-    rw [hn]
-    simp only [walk, goW, rowSpecC, oneG, oneScope, decide_true, Bool.or_true, Bool.true_or]
-  simp only [compatPair, half, Bool.and_self]
 
 /-! ## A term with no leaf below a wall -/
 
@@ -785,6 +786,13 @@ theorem post_soundC (laws : Laws S o) (hι : IdentSound (τ := τ) cL cR ι)
 
 end Sound
 
+/-- **A pair that the identification names is visited**: the row of an entry answers `true` for the
+    entry that `ι` names, at one fuel from the empty table. -/
+theorem vis_diag {B : Sig} [Mean B] {NL NR : Nat} {sL : Fin NL → Graph B NL} {sR : Fin NR → Graph B NR}
+    [Leaf B] (o : Orient) (ι : Fin NL → Fin NR → Bool) {i : Fin NL} {j : Fin NR} (h : ι i j = true) :
+    Vis sL sR (walk (rowSpecC sL sR o ι)) (.leaf i) (.leaf j) :=
+  vis_walk sL sR _ (m := 1) (A := []) (by simp [walk, goW, rowSpecC, oneG, h]) fun _ hp => nomatch hp
+
 /-- **Soundness of one half**: where `compat` answers `true`, the two meanings agree at the
     orientation. -/
 theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
@@ -797,7 +805,7 @@ theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
   have he := eval_of_mng (Closed.toG τ dL) (.leaf rL) o v
   rw [show (mng τ (Closed.toG τ dL) (.leaf rL)).f o v = some w from hw] at he
   exact (post_soundC (cL := dL) (cR := dR) laws hι (vis_postW (rowSpecC dL.graph dR.graph o ι)) he rfl w rfl
-    (fun _ => rfl)).2 _ (vis_root dL.graph dR.graph _ h) z hz
+    (fun _ => rfl)).2 _ (vis_walk dL.graph dR.graph _ h fun _ hp => vis_diag o ι (ι_of_mem_diagTbl hp)) z hz
 
 /-- **Soundness of the pair**: where `compatPair` answers `true`, the two meanings agree at the
     host and at the dual. -/

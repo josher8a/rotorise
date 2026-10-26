@@ -365,7 +365,7 @@ describe('union', () => {
     })
 })
 
-describe('a union of one option twice', () => {
+describe('a union of two options that share a node', () => {
     // an older reader over `number`: the stored `S` of an earlier encoding reads as its number
     const legacyNumber = () =>
         withLegacyRead({
@@ -390,8 +390,8 @@ describe('a union of one option twice', () => {
 
     /**
      * **An option beside itself is that option, an older reader included.** The union is the join
-     * of its options, and the join is idempotent. The two options are one closed root, so the
-     * decision reads one scope, where one entry agrees with itself (`compatPair_oneScope`).
+     * of its options, and the join is idempotent. The two options sit in one term, so the decision
+     * reads one scope, where one entry agrees with itself (`identSound_oneScope`).
      */
     it('is the option, for an older reader', () => {
         const L = legacyNumber()
@@ -446,8 +446,40 @@ describe('a union of one option twice', () => {
     })
 
     /**
-     * **Two declarations of one adapter are two options.** The decision reads two closed roots as
-     * two scopes, and an adapter compares by syntax, so two stand-ins refuse.
+     * **A node that two options hold is one entry of one scope.** The two options sit in one term,
+     * so lexical scope binds each name once for both, and one adapter under two containers is one
+     * node. The pair reads as the option, under an object and under a list.
+     */
+    it('is the option, for one adapter under two containers', () => {
+        const L = legacyNumber()
+        const object2 = union([object({ v: L }), object({ v: L })])
+        checkEquivalent(object2, object({ v: L }), { seed })
+        expect(
+            object2.unsafeDecode(object({ v: L }).unsafeEncode({ v: 2 })),
+        ).toEqual({ v: 2 })
+        const list2 = union([array(L), array(L)])
+        checkEquivalent(list2, array(L), { seed })
+        expect(list2.unsafeDecode(array(L).unsafeEncode([3]))).toEqual([3])
+    })
+
+    /**
+     * **Two `ref`s of one name are one entry.** The name binds one entry in the scope, so a node
+     * below the entry is one node for both options.
+     */
+    it('is the option, for two refs of one entry that holds an older reader', () => {
+        const { Node, Pair } = scope({
+            Node: object({ v: legacyNumber() }),
+            Pair: union([ref('Node'), ref('Node')]),
+        })
+        const stored = Node.unsafeEncode({ v: 1 })
+        expect(Pair.unsafeEncode({ v: 1 } as never)).toEqual(stored)
+        expect(Pair.unsafeDecode(stored)).toEqual({ v: 1 })
+    })
+
+    /**
+     * **Two declarations of one adapter are two options.** The decision identifies a node that
+     * the two options hold, and two declarations are two nodes. An adapter compares by syntax, so
+     * two stand-ins refuse. Two nodes of one structure refuse for the same reason.
      */
     it('refuses two declarations of one adapter', () => {
         expect(() => declare([legacyNumber(), legacyNumber()])).toThrow(
@@ -456,6 +488,12 @@ describe('a union of one option twice', () => {
         expect(() => declare([onOff(), onOff()])).toThrow(
             /are not shown compatible/,
         )
+        expect(() =>
+            declare([
+                object({ v: legacyNumber() }),
+                object({ v: legacyNumber() }),
+            ]),
+        ).toThrow(/are not shown compatible/)
     })
 })
 

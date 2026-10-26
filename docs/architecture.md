@@ -845,10 +845,11 @@ lawfulness.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's
-`Closed.compatPair`, per half and per component. One term twice is one scope, and there
-`agrees(x, x)` is the model's `Closed.compatOne`. `Closed.pairwiseCompat_of_compatPair` proves each
-accepted pair compatible. The combinator refuses every other pair, because the pair is not shown
-compatible.
+`Closed.compatPair`, per half and per component. The two options sit in one term, so lexical scope
+binds each name once for both. A node that both options hold is one entry of one scope, and there
+`agrees(x, y)` is the model's `Closed.Shared.compatPair`: two roots of one table of bodies.
+`Closed.pairwiseCompat_of_compatPair` proves each accepted pair compatible. The combinator refuses
+every other pair, because the pair is not shown compatible.
 
 **Two `held`s of one adapter agree where their inner terms agree.** A `held` carries an adapter
 word at one side, and a table gives each word its two functions, so two `held`s of one side and

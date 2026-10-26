@@ -48,6 +48,8 @@ export type FlatScope = {
     readonly cycles: ReadonlyMap<Term, number>
     readonly index: ReadonlyMap<Term, number>
     readonly root: number
+    /** The second root, an entry of the same scope. One root twice names the same entry twice. */
+    readonly other: number
 }
 
 /** The flat scope of a term, or the reason that the term has no scoped form. */
@@ -55,15 +57,15 @@ type FlatResult =
     | ({ readonly kind: 'flat' } & FlatScope)
     | { readonly kind: 'refused'; readonly reason: string }
 
-const buildFlat = (root: Term): FlatResult => {
+const buildFlat = (root: Term, other: Term = root): FlatResult => {
     const bodies: Term[] = []
-    for (const component of componentsOf([root])) {
+    for (const component of componentsOf([root, other])) {
         const order = entryOrder(component)
         if (order.kind === 'refused')
             return { kind: 'refused', reason: order.reason }
         bodies.push(...order.entries)
     }
-    if (!bodies.includes(root)) bodies.push(root)
+    for (const one of [root, other]) if (!bodies.includes(one)) bodies.push(one)
     const cycles = new Map(bodies.map((one, j) => [one, j]))
     const index = new Map(cycles)
     // a child of a container is an entry: an entry of a cycle, or a new entry after the others
@@ -99,14 +101,31 @@ const buildFlat = (root: Term): FlatResult => {
         if (target !== undefined) keep(target)
     }
     for (let j = 0; j < bodies.length; j++) visit(bodies[j] as Term)
-    return { kind: 'flat', bodies, cycles, index, root: bodies.indexOf(root) }
+    return {
+        kind: 'flat',
+        bodies,
+        cycles,
+        index,
+        root: bodies.indexOf(root),
+        other: bodies.indexOf(other),
+    }
 }
 
 /**
  * **The flat scope of a term**, or the reason that the term has no scoped form. The flat scope of a
  * closed root is built one time, so each reader that runs after the scope closes reads one scope.
  */
-export const flatOf: (root: Term) => FlatResult = memoClosed(buildFlat)
+export const flatOf: (root: Term) => FlatResult = memoClosed((root) =>
+    buildFlat(root),
+)
+
+/**
+ * **The flat scope of two options**, the model's `Closed.Shared`: one scope with two roots. A node
+ * that both options hold is one entry, so a position of one option and a position of the other that
+ * name the node name one entry.
+ */
+export const sharedFlatOf = (left: Term, right: Term): FlatResult =>
+    buildFlat(left, right)
 
 /**
  * **A position of the graph**: an entry, a term in place, a refinement over a position, or a `ref`
@@ -155,9 +174,7 @@ type Ctx = {
     readonly same: (table: Table, l: At, r: At) => boolean
 }
 
-export const sideOf = (t: Term, mode: Mode): Side | undefined => {
-    const flat = flatOf(t)
-    if (flat.kind === 'refused') return undefined
+const sideOfFlat = (flat: FlatScope, mode: Mode): Side => {
     const base = {
         bodies: flat.bodies,
         cycles: flat.cycles,
@@ -173,6 +190,26 @@ export const sideOf = (t: Term, mode: Mode): Side | undefined => {
     const viewed: Side = { ...rawSide, mode }
     const [adapts, stable] = adaptersOf(viewed)
     return { ...viewed, adapts, stable }
+}
+
+export const sideOf = (t: Term, mode: Mode): Side | undefined => {
+    const flat = flatOf(t)
+    return flat.kind === 'refused' ? undefined : sideOfFlat(flat, mode)
+}
+
+/**
+ * **The two operands of one scope**: one flat scope that holds both options, so the two sides share
+ * their bodies, and the second side reads the second root.
+ */
+const sharedSidesOf = (
+    left: Term,
+    right: Term,
+    mode: Mode,
+): readonly [Side, Side] | undefined => {
+    const flat = sharedFlatOf(left, right)
+    if (flat.kind === 'refused') return undefined
+    const side = sideOfFlat(flat, mode)
+    return [side, { ...side, root: flat.other }]
 }
 
 /**
@@ -745,7 +782,8 @@ type Half = 'write' | 'read'
 /**
  * **Where the decision is**: the half, the two operands, the two operands of the view, and whether
  * the two operands are one scope. `one` is the model's identification `oneScope`, and its absence is
- * `twoScopes`.
+ * `twoScopes`. One scope holds both options in one flat scope ({@link sharedFlatOf}), so a node that
+ * both options hold is one entry.
  */
 type Agreement = Ctx & {
     readonly half: Half
@@ -759,7 +797,9 @@ type Agreement = Ctx & {
  * join of its options, and the join of two lawful options exists exactly when the two are
  * compatible (Lawson: `s ∨ t` exists iff `s ∼ t`). Compatibility of two partial bijections is two
  * halves of agreement. `true` gives agreement on both halves of the two meanings
- * (`Closed.compatPair_sound`). A term with no graph agrees with nothing.
+ * (`Closed.Shared.compat_of_compatPair`). The two options sit in one term, so lexical scope binds
+ * each name once for both, and the decision reads one flat scope that holds both ({@link sharedFlatOf}).
+ * A term with no graph agrees with nothing.
  */
 export const agrees = (x: Term, y: Term): boolean =>
     agreesAt('write', x, y, true) && agreesAt('read', x, y, true)
@@ -767,38 +807,39 @@ export const agrees = (x: Term, y: Term): boolean =>
 /**
  * **Whether two options agree on both halves, read as two scopes**, the model's
  * `Closed.compatPair`: the decision identifies no entry of one option with an entry of the other.
- * {@link agrees} reads one term as one scope, so the two answers differ only on one term twice.
+ * {@link agrees} reads one scope, so the two answers differ only on a pair that shares a node.
  */
 export const agreesApart = (x: Term, y: Term): boolean =>
     agreesAt('write', x, y, false) && agreesAt('read', x, y, false)
 
 /**
  * **One half of agreement**, the model's `Scoped.compat` at the orientation of the half. `scoped`
- * says whether the decision reads one flat scope as one scope.
+ * says whether the two options are two roots of one flat scope.
  */
 const agreesAt = (half: Half, x: Term, y: Term, scoped: boolean): boolean => {
-    const left = sideOf(x, 'raw')
-    const right = sideOf(y, 'raw')
     const mode: Mode = half === 'write' ? 'caller' : 'stored'
-    const viewL = sideOf(x, mode)
-    const viewR = sideOf(y, mode)
-    if (
-        left === undefined ||
-        right === undefined ||
-        viewL === undefined ||
-        viewR === undefined
-    )
-        return false
-    // the two operands are one scope where the two options share one flat scope: one closed root
-    const one = scoped && left.bodies === right.bodies
+    const sidesOf = (m: Mode): readonly [Side, Side] | undefined => {
+        if (scoped) return sharedSidesOf(x, y, m)
+        const l = sideOf(x, m)
+        const r = sideOf(y, m)
+        return l === undefined || r === undefined ? undefined : [l, r]
+    }
+    const operands = sidesOf('raw')
+    const views = sidesOf(mode)
+    if (operands === undefined || views === undefined) return false
+    const [left, right] = operands
+    const [viewL, viewR] = views
+    // the model's `diagTbl`: one scope names each entry once, so the walk assumes each entry to
+    // agree with itself wherever it meets the pair, below a guard as well as at a root
+    const diagonal: Table = scoped ? left.bodies.map((_, j) => [j, j]) : []
     return walkOf(
         agreeRow,
-        (c): Agreement => ({ ...c, half, viewL, viewR, one }),
+        (c): Agreement => ({ ...c, half, viewL, viewR, one: scoped }),
         left,
         right,
     )(
         fuelOf(left, right),
-        [],
+        diagonal,
         { kind: 'entry', j: left.root },
         { kind: 'entry', j: right.root },
     )
@@ -889,7 +930,7 @@ const agreeRight = (
 /**
  * **One row per operation of the left operand**, the model's `rowSpecC`, with `prev` as the walk at
  * the next fuel. In one scope, an entry agrees with the same entry, because one entry has one
- * meaning (`compatPair_oneScope`). A set and an object compare their positions below the guard ({@link pairX}). A
+ * meaning (`identSound_oneScope`). A set and an object compare their positions below the guard ({@link pairX}). A
  * list compares the aligned rows at each common length ({@link alignedRows}). A `held` compares its inner terms, which are closed, through the same test.
  */
 const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {

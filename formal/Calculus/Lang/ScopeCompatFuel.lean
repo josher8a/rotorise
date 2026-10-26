@@ -563,10 +563,10 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
 /-- **The fuel of agreement is adequate**: where the optimistic walk of agreement answers `true` at
     the fuel of `disjoint`, so does the walk. -/
 theorem compO_fuel_imp_compG (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : ∀ j, Good (sR j))
-    (rL : Fin NL) (rR : Fin NR)
-    (h : walkO (rowSpecC sL sR o ι) (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
-    compG sL sR o ι (fuel NL NR) [] (.leaf rL) (.leaf rR) = true :=
-  walkO_fuel_imp_walk sL sR ρL ρR F (rowMono_C sL sR o ι ρL ρR F hgL hgR) (rowNever_C sL sR o ι ρL) rL rR
+    (A : Tbl NL NR) (rL : Fin NL) (rR : Fin NR)
+    (h : walkO (rowSpecC sL sR o ι) (fuel NL NR) A (.leaf rL) (.leaf rR) = true) :
+    compG sL sR o ι (fuel NL NR) A (.leaf rL) (.leaf rR) = true :=
+  walkO_fuel_imp_walk sL sR ρL ρR F (rowMono_C sL sR o ι ρL ρR F hgL hgR) (rowNever_C sL sR o ι ρL) A rL rR
     ⟨rfl, fun _ => rfl⟩ ⟨rfl, fun _ => rfl⟩ h
 
 end Adequacy
@@ -575,9 +575,9 @@ end Adequacy
     root, so does `compat`. -/
 theorem compat_of_compO [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (ι : Fin NL → Fin NR → Bool)
     (dL : Closed B NL) (dR : Closed B NR) (rL : Fin NL) (rR : Fin NR)
-    (h : walkO (rowSpecC dL.graph dR.graph o ι) (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
+    (h : walkO (rowSpecC dL.graph dR.graph o ι) (fuel NL NR) (diagTbl ι) (.leaf rL) (.leaf rR) = true) :
     compat o ι dL rL dR rR = true :=
   compO_fuel_imp_compG dL.graph dR.graph o ι (fun i => i.val) (fun j => j.val) (Closed.fueled dL dR)
-    (Closed.good_graph dL) (Closed.good_graph dR) rL rR h
+    (Closed.good_graph dL) (Closed.good_graph dR) (diagTbl ι) rL rR h
 
 end Calculus.Alg.Scoped

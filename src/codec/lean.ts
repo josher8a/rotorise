@@ -88,7 +88,9 @@ import {
     agrees,
     agreesApart,
     disjoint,
+    type FlatScope,
     flatOf,
+    sharedFlatOf,
     storedApart,
     viewsDisjoint,
 } from './scoped'
@@ -693,6 +695,32 @@ type ClosedPrint = {
 const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
     const flat = flatOf(def)
     if (flat.kind === 'refused') return refuse(at, flat.reason)
+    const { scope, entries, children } = scopePrint(flat, at, bound)
+    return {
+        text: `(⟨${scope}, ${flat.root}⟩ : Closed)`,
+        entries,
+        children,
+        root: flat.root,
+    }
+}
+
+/**
+ * **Two options of one scope**, the model's `Closed.Shared`: the entries of the flat scope that holds
+ * both options ({@link sharedFlatOf}), and the two roots. A node that both options hold prints once.
+ */
+const leanSharedOf = (
+    left: AnyCodec,
+    right: AnyCodec,
+    at: string,
+    bound?: Bound,
+): string => {
+    const flat = sharedFlatOf(left.def, right.def)
+    if (flat.kind === 'refused') return refuse(at, flat.reason)
+    return `(⟨${scopePrint(flat, at, bound).scope}, ${flat.root}, ${flat.other}⟩ : Closed.Shared)`
+}
+
+/** The scope of a flat scope as the model's `Closed` reads it: the count of the entries, then the bodies. */
+const scopePrint = (flat: FlatScope, at: string, bound?: Bound) => {
     const entryMap = (m: ReadonlyMap<Term, number>) =>
         new Map<Term, Entry>([...m].map(([t, index]) => [t, { index }]))
     const entries = entryMap(flat.cycles)
@@ -716,10 +744,9 @@ const closedPrint = (def: Term, at: string, bound?: Bound): ClosedPrint => {
         })
         .join(' ')
     return {
-        text: `(⟨${flat.bodies.length}, (fun i => match i with ${arms} | ⟨_ + ${flat.bodies.length}, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), ${flat.root}⟩ : Closed)`,
+        scope: `${flat.bodies.length}, (fun i => match i with ${arms} | ⟨_ + ${flat.bodies.length}, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _)))`,
         entries,
         children,
-        root: flat.root,
     }
 }
 
@@ -1308,11 +1335,12 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  *   only for a codec that the model's guard accepts. Where {@link agrees} holds, the host decided
  *   the model's `Closed.compatPair`, and `Closed.compat_of_compatPair` gives `Compat` in each
  *   order over two lawful meanings. A host warrant that the model does not prove stops the file.
- * - `src/` **accepts** one option twice, where two scopes refuse the pair: the two options are one
- *   term, so {@link agrees} reads one scope. The pair prints as one closed codec, and the model's
- *   `Closed.compatOne` decides the pair over one scope. `Closed.compat_of_compatOne` gives `Compat`
- *   of the lawful meaning with itself. A pair that two scopes accept prints as two closed codecs,
- *   so a spelling that makes two terms of one codec prints the same row.
+ * - `src/` **accepts** two options that share a node, where two scopes refuse the pair: the two
+ *   options sit in one term, so {@link agrees} reads one scope that holds both. The pair prints as
+ *   one scope with two roots, and the model's `Closed.Shared.compatPair` decides the pair over one
+ *   scope. `Closed.Shared.compat_of_compatPair` gives `Compat` in each order over two lawful
+ *   meanings. A pair that two scopes accept prints as two closed codecs, so a spelling that makes
+ *   two terms of one codec prints the same row.
  * - `src/` **refuses** the pair at its compatibility test: the pair prints as two closed codecs,
  *   and the model's decision refuses the pair, `Closed.compatPair x y = false`. A decision that
  *   starts to accept a pair `src/` turns down stops the file.
@@ -1334,7 +1362,8 @@ export type Separation = {
 }
 
 /**
- * **The form of a separation verdict**: accepted, refused at compatibility, or refused at the guard.
+ * **The form of a separation verdict**: accepted, accepted over one scope, refused at compatibility, or
+ * refused at the guard.
  * The host's guard runs before its compatibility test, and reads each option on its own. The
  * emitter refuses a pair that the host accepts on no warrant that the model proves.
  *
@@ -1344,7 +1373,7 @@ export type Separation = {
  * guard or with `agrees`, no form states the host, and the emitter refuses the pair. Otherwise a row
  * checks the union decision alone, and a guard or `agrees` that drifts from the decision passes.
  */
-type SeparationForm = 'accepted' | 'acceptedOne' | 'refused' | 'guardRefused'
+type SeparationForm = 'accepted' | 'acceptedShared' | 'refused' | 'guardRefused'
 
 /** The form of one separation verdict, with the `src/` side decided here. */
 const separationForm = ({ name, left, right }: Separation): SeparationForm => {
@@ -1381,9 +1410,10 @@ const separationForm = ({ name, left, right }: Separation): SeparationForm => {
         )
     }
     if (agreesApart(left.def, right.def)) return 'accepted'
-    // one term is one scope, and the decision over one scope accepts where two scopes refuse
+    // two options that share a node are one scope, and the decision over one scope accepts where
+    // two scopes refuse
     return agrees(left.def, right.def)
-        ? 'acceptedOne'
+        ? 'acceptedShared'
         : refuse(
               name,
               '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
@@ -1401,8 +1431,12 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
     const form = separationForm({ name, left, right })
     // a pair that the guard refuses has no closed codec, so it prints as two graphs
     const print = form === 'guardRefused' ? leanGraphOf : leanClosedOf
-    const l = print(left, name, bound)
-    const r = print(right, name, bound)
+    // two options of one scope print as one closed scope with two roots, which `l` holds
+    const shared = form === 'acceptedShared'
+    const l = shared
+        ? leanSharedOf(left, right, name, bound)
+        : print(left, name, bound)
+    const r = shared ? '' : print(right, name, bound)
     const binders = leanBinders(bound)
     const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`}`
     const reduce = closing(binders)
@@ -1425,14 +1459,16 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `  ${reduce}`,
         ].join('\n')
     }
-    // one option twice is one scope, and the decision over one scope states the pair
-    if (form === 'acceptedOne') {
+    // two options that share a node are one scope, and the decision over one scope states the pair
+    if (form === 'acceptedShared') {
         return [
-            `/-- \`${name}\` — \`src/\` accepts one option twice; the model proves it compatible with itself -/`,
+            `/-- \`${name}\` — \`src/\` accepts two options of one scope; the model proves them compatible -/`,
             `${head} (κ : Callers) :`,
-            `    Lawful ((${l}).meaning (libTable κ)) →`,
-            `      Alg.Compat ((${l}).meaning (libTable κ)) ((${l}).meaning (libTable κ)) :=`,
-            `  Closed.compat_of_compatOne (${reduce}) (libTable κ)`,
+            `    let s := ${l}`,
+            `    Lawful (s.meaning (libTable κ) s.left) → Lawful (s.meaning (libTable κ) s.right) →`,
+            `      Alg.Compat (s.meaning (libTable κ) s.left) (s.meaning (libTable κ) s.right) ∧`,
+            `        Alg.Compat (s.meaning (libTable κ) s.right) (s.meaning (libTable κ) s.left) :=`,
+            `  Closed.Shared.compat_of_compatPair (${reduce}) (libTable κ)`,
         ].join('\n')
     }
     // the host's union verdict is the guard and the compatibility test, and a closed codec states the guard
@@ -1623,6 +1659,7 @@ export const leanShapes = (
         at: string,
         printer: Printer,
     ) => RowTerms
+    readonly shared: (left: AnyCodec, right: AnyCodec, at: string) => string
     readonly row: (
         pin: Pin | undefined,
         printer: Printer,
@@ -1632,21 +1669,17 @@ export const leanShapes = (
 } => {
     const names = new Map<string, string>()
     const defs: string[] = []
-    const nameOf = (
-        printed: string,
-        binders: string,
-        printer: Printer,
-    ): string => {
+    const nameOf = (printed: string, binders: string, type: string): string => {
         const known = names.get(printed)
         if (known !== undefined) return known
         const name = `t${names.size}`
         names.set(printed, name)
         defs.push(
-            `def ${name}${binders === '' ? '' : ` ${binders}`} : ${printers[printer].type} := ${printed}`,
+            `def ${name}${binders === '' ? '' : ` ${binders}`} : ${type} := ${printed}`,
         )
         return name
     }
-    const row = (pin: Pin = (_, made) => made, printer: Printer) => {
+    const session = (pin: Pin = (_, made) => made) => {
         const adapters = new Map<unknown, string>()
         const given = new Map<unknown, string>()
         const argumentOf = (fn: unknown, kind: 'closure' | 'reader') => {
@@ -1656,14 +1689,14 @@ export const leanShapes = (
             given.set(fn, made)
             return made
         }
-        return (codec: AnyCodec, at: string): string => {
+        return (print: (bound: Bound) => string, type: string): string => {
             const bound: Bound = {
                 closures: new Map(),
                 adapters,
                 readers: new Map(),
             }
-            const printed = printers[printer].print(codec, at, bound)
-            const name = nameOf(printed, leanBinders(bound), printer)
+            const printed = print(bound)
+            const name = nameOf(printed, leanBinders(bound), type)
             // the order of `leanBinders`: the closures, then the readers
             const applied = [
                 ...[...bound.closures.keys()].map((fn) =>
@@ -1678,6 +1711,14 @@ export const leanShapes = (
                 : `(${name} ${applied.join(' ')})`
         }
     }
+    const row = (pin: Pin | undefined, printer: Printer) => {
+        const apply = session(pin)
+        return (codec: AnyCodec, at: string): string =>
+            apply(
+                (bound) => printers[printer].print(codec, at, bound),
+                printers[printer].type,
+            )
+    }
     const pair = (
         left: AnyCodec,
         right: AnyCodec,
@@ -1689,10 +1730,17 @@ export const leanShapes = (
         const r = one(right, at)
         return { l, r }
     }
+    const shared = (left: AnyCodec, right: AnyCodec, at: string): string =>
+        session()(
+            (bound) => leanSharedOf(left, right, at, bound),
+            'Closed.Shared',
+        )
     return {
         pair,
+        shared,
         row,
-        closed: (printed, printer) => nameOf(printed, '', printer),
+        closed: (printed, printer) =>
+            nameOf(printed, '', printers[printer].type),
         defs: () => defs.join('\n'),
     }
 }
@@ -1929,13 +1977,14 @@ const separationLists = {
         Alg.Compat (p.2.2.meaning (libTable κ)) (p.2.1.meaning (libTable κ))`,
         lift: (list: string) => `accepted_of_rows (${list}_check ρ π) κ`,
     },
-    acceptedOne: {
-        type: 'Closed',
-        ok: 'acceptedOneOk',
+    acceptedShared: {
+        type: 'Closed.Shared',
+        ok: 'acceptedSharedOk',
         caller: ' (κ : Callers)',
-        verdict: `Lawful (p.2.meaning (libTable κ)) →
-      Alg.Compat (p.2.meaning (libTable κ)) (p.2.meaning (libTable κ))`,
-        lift: (list: string) => `acceptedOne_of_rows (${list}_check ρ π) κ`,
+        verdict: `Lawful (p.2.meaning (libTable κ) p.2.left) → Lawful (p.2.meaning (libTable κ) p.2.right) →
+      Alg.Compat (p.2.meaning (libTable κ) p.2.left) (p.2.meaning (libTable κ) p.2.right) ∧
+        Alg.Compat (p.2.meaning (libTable κ) p.2.right) (p.2.meaning (libTable κ) p.2.left)`,
+        lift: (list: string) => `acceptedShared_of_rows (${list}_check ρ π) κ`,
     },
     refused: {
         type: '(Closed × Closed)',
@@ -1956,8 +2005,8 @@ const separationLists = {
 /**
  * The declaration verdicts as rows, one form per {@link SeparationForm}. A row of an accepted pair
  * or of a pair refused at compatibility is the two closed codecs: a closed codec exists only for a
- * guarded codec, so the row states the guard by its type. A row of one option twice is the one
- * closed codec. A row of a pair refused at the guard is the two graphs, because such a pair has no
+ * guarded codec, so the row states the guard by its type. A row of two options of one scope is the
+ * one scope with two roots. A row of a pair refused at the guard is the two graphs, because such a pair has no
  * closed codec.
  */
 export const separationRows = (
@@ -1967,6 +2016,12 @@ export const separationRows = (
     rows: (shapes) =>
         separations.map((one) => {
             const form = separationForm(one)
+            if (form === 'acceptedShared')
+                return {
+                    name: leanIdent(one.name),
+                    form,
+                    row: shapes.shared(one.left, one.right, one.name),
+                }
             const { l, r } = shapes.pair(
                 one.left,
                 one.right,
@@ -1976,7 +2031,7 @@ export const separationRows = (
             return {
                 name: leanIdent(one.name),
                 form,
-                row: form === 'acceptedOne' ? l : `(${l}, ${r})`,
+                row: `(${l}, ${r})`,
             }
         }),
 })
