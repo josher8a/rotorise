@@ -15,7 +15,7 @@
     "Calculus/Alg/System.lean": 367,
     "Calculus/Axioms.lean": 1,
     "Calculus/Bridge/Kinds.lean": 10,
-    "Calculus/Bridge/Rows.lean": 0,
+    "Calculus/Bridge/Rows.lean": 10,
     "Calculus/Bridge/ScopePaths.lean": 114,
     "Calculus/Bridge/Vectors.lean": 0,
     "Calculus/Bridge/Verdicts.lean": 207,

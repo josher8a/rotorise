@@ -2053,6 +2053,104 @@ end Calculus
 `)
 }
 
+/* ── the meet cover ───────────────────────────────────────────────────────────────────────── */
+
+/**
+ * **One pair of a meet**: the two factors, the codec that `src/`'s `meet` built from them, and one
+ * value with the attribute that one factor writes from the value.
+ */
+export type MeetCover = {
+    readonly name: string
+    readonly left: AnyCodec
+    readonly right: AnyCodec
+    readonly meet: AnyCodec
+    readonly value: unknown
+    readonly attribute: AttributeValue
+}
+
+/**
+ * The meet pairs as rows: the fuel of the attribute, the three closed codecs, the value, and the
+ * attribute. The checker of a list states that the model's meaning of the meet writes the
+ * attribute from the value wherever the meanings of both factors do.
+ */
+export const meetCoverRows = (
+    covers: readonly MeetCover[],
+): RowFile<'meetCovers'> => ({
+    forms: {
+        meetCovers: {
+            type: '(Nat × Closed × Closed × Closed × Value × Attr)',
+            ok: 'meetCoversOk',
+        },
+    },
+    rows: (shapes) =>
+        covers.map((one) => {
+            const [l, r, m] = [one.left, one.right, one.meet].map((codec) =>
+                shapes.closed(leanClosedOf(codec, one.name), 'closed'),
+            )
+            return {
+                name: leanIdent(one.name),
+                form: 'meetCovers',
+                row: `(${fuelFor(one.attribute)}, ${l}, ${r}, ${m}, ${leanValueOf(one.value, one.name)}, ${leanAttrOf(one.attribute, one.name)})`,
+            }
+        }),
+})
+
+/**
+ * The meet pairs in the row form. Each list carries the checker, and the cover of the model's
+ * `Codec.meet` of the two factors by the meet that `src/` built, lifted from the checker.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanMeetCoverModule = (
+    covers: readonly MeetCover[],
+    subject: Subject = 'pool',
+): string => {
+    const shapes = kernelShapes()
+    const lists = kernelLists(meetCoverRows(covers), shapes)
+    return leanModule(`import Calculus.Bridge.Rows
+
+/-!
+# The meets of the ${subject}, covered in the model
+
+**Generated — do not edit.** One row per sampled pair of a meet of two ${subject} terms: the fuel,
+the two closed factors, the closed codec of \`src/\`'s \`meet\` of the two, a value, and the attribute
+that one factor writes from the value. The checker of a list states that the model's meaning
+of the meet writes the attribute from the value wherever the meanings of both factors do, and each
+check settles. \`meetCovers_of_rows\` lifts the checker to the cover of \`Codec.meet\` of the two
+meanings at each row. A row reads each factor as written, and \`src/\` reads each factor open, so
+the row states the cover and not the equation.
+
+${rowForm(subject)}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${lists
+    .map(({ name, text }) =>
+        [
+            text,
+            '',
+            `theorem ${name}_covers [DecidableEq Attr] ${rowBinders} :`,
+            `    ∀ x n A B M v s, (x, n, A, B, M, v, s) ∈ ${name} ρ π →`,
+            '      (Alg.Codec.meet (A.meaning (libTable noCallers)) (B.meaning (libTable noCallers))).e v =',
+            '        some s → (M.meaning (libTable noCallers)).e v = some s :=',
+            `  meetCovers_of_rows (${name}_check ρ π)`,
+        ].join('\n'),
+    )
+    .join('\n\n')}
+
+${leanDiagnostic(lists)}
+
+end Calculus
+`)
+}
+
 /* ── the legacy read gate ─────────────────────────────────────────────────────────────────── */
 
 /**

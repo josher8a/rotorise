@@ -23,6 +23,7 @@ tsconfig.tsbuildinfo
 /formal/.pool.paths2.lean
 /formal/.pool.paths3.lean
 /formal/.pool.guards.lean
+/formal/.pool.meets.lean
 # the generated pool: the type vectors
 /formal/.pool.types/
 

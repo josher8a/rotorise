@@ -63,6 +63,7 @@ import type {
     DisjointPair,
     FormerGuard,
     HostAt,
+    MeetCover,
     PathStep,
     PathVectors,
     Separation,
@@ -71,17 +72,21 @@ import type {
 import {
     hostAt,
     LeanUnemittable,
+    leanAttrOf,
+    leanClosedOf,
     leanDisjoint,
     leanDisjointRowModule,
     leanFormerGuard,
     leanFormerGuardModule,
     leanGraphOf,
+    leanMeetCoverModule,
     leanPath,
     leanPathModules,
     leanSeparation,
     leanSeparationRowModule,
     leanSlice,
     leanSliceModule,
+    leanValueOf,
     pairGuardRefusal,
     reachable,
     sliceableOf,
@@ -117,6 +122,8 @@ const DRAWS = 150
 const DEPTH = 3
 /** The partners of each codec, drawn from the built codecs, after the codec itself. */
 const PARTNERS = 8
+/** The values that the meet rows draw from each of the two factors. */
+const MEET_SAMPLES = 1
 
 type Entry = { readonly name: string; readonly codec: AnyCodec }
 
@@ -1282,6 +1289,127 @@ const nestedClause = (): PathVectors => ({
     ],
 })
 
+/**
+ * **The value as the model reads it**: a key that holds `undefined` is an absent key, as
+ * `leanValueOf` prints it. `opaque` refuses such a key on a write, so the host value and the
+ * printed value must be one value before the host writes it.
+ */
+const absentUndefined = (value: unknown): unknown =>
+    Array.isArray(value)
+        ? value.map(absentUndefined)
+        : value !== null &&
+            typeof value === 'object' &&
+            Object.getPrototypeOf(value) === Object.prototype
+          ? Object.fromEntries(
+                Object.entries(value)
+                    .filter(([, x]) => x !== undefined)
+                    .map(([k, x]) => [k, absentUndefined(x)]),
+            )
+          : value
+
+/**
+ * **The meet rows of the pool**: each pair in both orders, with the meet that `src/` builds, and
+ * each value that a draw from a factor writes. A draw from the meet states nothing: the meet holds
+ * the pair, so the row holds wherever each check settles. The draw also reads the spelling of the
+ * term, and the meet of a pair of thunks is another spelling of one term. A meet that `src/`
+ * refuses states no row. A term with a refinement states no row: the host meets a refinement by its
+ * predicate, and the model reads the predicate by name only for the predicates that this library
+ * ships, so the refinement is the stated limit of the meet. A term with a cycle states no row: the `#eval` of the
+ * module compiles the meaning of the term, and one list with a cycle ran past twenty minutes, where
+ * the kernel checks every list in under a minute. A term or a pair that the emitter refuses drops by
+ * reason.
+ */
+const meetCoversOf = (pairs: readonly PoolPair[]): MeetCover[] => {
+    const merge = meet as (a: AnyCodec, b: AnyCodec) => unknown
+    const covers: MeetCover[] = []
+    const seen = new Set<string>()
+    const emits = (f: () => unknown): boolean => {
+        try {
+            f()
+            return true
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            drop(`meet: ${error.reason}`)
+            return false
+        }
+    }
+    for (const p of pairs) {
+        const orders =
+            p.left.def === p.right.def
+                ? ([[p.left, p.right, 'lr']] as const)
+                : ([
+                      [p.left, p.right, 'lr'],
+                      [p.right, p.left, 'rl'],
+                  ] as const)
+        for (const [left, right, order] of orders) {
+            const name = `${p.name}_${order}`
+            let met: AnyCodec
+            try {
+                met = erase(merge(left, right))
+            } catch {
+                drop('meet: src/ refuses the meet')
+                continue
+            }
+            const three = [left, right, met]
+            if (
+                three.some(
+                    (c) =>
+                        'mark' in c.def ||
+                        [...reachable(c.def)].some((t) => t.kind === 'refine'),
+                )
+            ) {
+                drop('meet: a refinement, the stated limit')
+                continue
+            }
+            if (three.some((c) => recursionUse(c.def as Term) > 0)) {
+                drop(
+                    'meet: a cycle, which the diagnostic `#eval` cannot afford',
+                )
+                continue
+            }
+            const printed: string[] = []
+            if (
+                !emits(() =>
+                    three.forEach((c) => printed.push(leanClosedOf(c, name))),
+                )
+            )
+                continue
+            for (const from of [left, right])
+                for (let k = 1; k <= MEET_SAMPLES; k++) {
+                    let value: unknown
+                    try {
+                        value = absentUndefined(
+                            arbitraryOf(from, rngFrom(k), 3),
+                        )
+                    } catch {
+                        continue
+                    }
+                    const attribute = from.encode(value as never)
+                    if (failed(attribute)) continue
+                    let row = ''
+                    if (
+                        !emits(() => {
+                            row = `${leanValueOf(value)} ${leanAttrOf(attribute as AttributeValue)}`
+                        })
+                    )
+                        continue
+                    const key = `${printed.join('|')}|${row}`
+                    if (seen.has(key)) continue
+                    seen.add(key)
+                    covers.push({
+                        name: `${name}_${covers.length}`,
+                        left,
+                        right,
+                        meet: met,
+                        value,
+                        attribute: attribute as AttributeValue,
+                    })
+                }
+        }
+    }
+    return covers
+}
+
 /** The files that the gate elaborates, by name, from one build of the pool. */
 const poolModules = (
     perSeed: ReturnType<typeof buildPool>,
@@ -1315,6 +1443,10 @@ const poolModules = (
     [
         '.pool.guards.lean',
         leanFormerGuardModule(perSeed.flatMap((one) => one.guards)),
+    ],
+    [
+        '.pool.meets.lean',
+        leanMeetCoverModule(meetCoversOf(perSeed.flatMap((one) => one.pairs))),
     ],
 ]
 
@@ -1687,6 +1819,7 @@ describe('the generated pool, against the model', () => {
             '.pool.paths2.lean',
             '.pool.paths3.lean',
             '.pool.guards.lean',
+            '.pool.meets.lean',
         ])
     })
 

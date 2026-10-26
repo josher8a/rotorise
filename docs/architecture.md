@@ -978,12 +978,20 @@ samples, the read vectors and the guards of the pool state one theorem per vecto
 one theorem per union, and the paths one theorem per codec.
 
 **Each comparator has a law in `Calculus/Bridge`, and the law makes `true` the statement of the
-row.** `Vectors.lean` holds `check` and `vcheck`, which compare an attribute by `aeq` and a value
-by `veq` under fuel: `aeq_same` makes `.same` equality, and `aeq_differ` makes `.differ`
-disequality, with `veq_sound` as the twin at `Value`. `Rows.lean` holds `failing`, `ok_of_failing`, the comparator of
-each evaluation form with its law (`writesOk_iff` and the others), and the lifts of the separation
-forms. `ScopePaths.lean` holds `pathKindC` and `pathReadC`, with `pathReadC_resolved_sem` and
+row.** `Vectors.lean` holds `check` and `vcheck`, which compare an attribute by `aeq` and a value by
+`veq` under fuel: `aeq_same` makes `.same` equality, and `aeq_differ` makes `.differ` disequality,
+with `veq_sound` as the twin at `Value`. `Rows.lean` holds `failing`, `ok_of_failing`, the
+comparator of each evaluation form with its law (`writesOk_iff` and the others), the lifts of the
+separation forms, and the cover of the meet (`meetCoversOk_sound`, `meetCovers_of_rows`).
+`ScopePaths.lean` holds `pathKindC` and `pathReadC`, with `pathReadC_resolved_sem` and
 `two_frames_of_ambiguousC`, and `frameSameC` with its proved limit `pathKindC_reads_no_closure`.
+
+**A meet row asserts a cover, not an equation.** A row holds two pool factors, the term that
+`meet(...)` returned, a value, and the attribute that one factor writes from the value. The kernel
+checks that the model's meet term writes the attribute wherever the model's two factors write it,
+and that each check settles. `meetCovers_of_rows` lifts the row to the pair of `Codec.meet` of the
+two meanings. A row reads each factor as written, and the host reads each factor open, so the
+equation is out of reach. A term with a refinement or with a cycle states no row.
 
 **A read row asserts a decoded value.** A read vector states that the model's `p`, at the
 attribute that the library wrote, gives the value that `decode(...)` read back, by `vcheck`. The

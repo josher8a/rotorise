@@ -96,7 +96,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
     printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
       .pool.paths0.lean .pool.paths1.lean .pool.paths3.lean .pool.paths2.lean \
       .legacyreads.lean .separations.lean .readverdicts.lean .disjoints.lean .vectors.full.lean \
-      .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean |
+      .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean .pool.meets.lean |
     xargs -P "$jobs" -I{} sh -c "
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
       [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
@@ -109,7 +109,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       if [ "$(cat "$rc")" != 0 ]; then echo "$f: exit $(cat "$rc")"; echo "$o"; fail=1; continue; fi
       [ -z "$o" ] || { echo "$f: $o"; fail=1; }
     done
-    [ "$(ls "$out"/*.rc | wc -l)" -eq 18 ] || { echo "a job did not report"; fail=1; }
+    [ "$(ls "$out"/*.rc | wc -l)" -eq 19 ] || { echo "a job did not report"; fail=1; }
     exit $fail'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'

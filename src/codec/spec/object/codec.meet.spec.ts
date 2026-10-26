@@ -675,6 +675,47 @@ describe('the composition reads each factor open', () => {
     })
 })
 
+describe('a thunk changes no verdict of the order', () => {
+    /** The codec `codec` behind a `ref`: the model reads the term behind the thunk. */
+    const thunked = (codec: AnyCodec): AnyCodec =>
+        scope({ At: ref('It'), It: codec }).At
+
+    /**
+     * **`opaque` is the unit of the meet, written plain or behind a `ref`.** A union that meets the
+     * unit is the union itself. Read at the written node, the thunked unit distributes the union, and
+     * the two meets overlap, which no union holds.
+     */
+    it('returns the other factor when one factor is opaque behind a ref', () => {
+        const kind: AnyCodec = union([
+            object({ a: string }),
+            object({ b: number }),
+        ])
+        for (const top of [opaque, thunked(opaque)]) {
+            expect(meet(kind, top)).toBe(kind)
+            expect(meet(top, kind)).toBe(kind)
+        }
+    })
+
+    /**
+     * **A name that the pattern leaves to an `opaque` block is the top, written plain or behind a
+     * `ref`.** The stand-in of a `withLegacyRead` slot pairs the absent row with a value, and only
+     * the top holds that pair, so the order reads the block at the node behind the thunk.
+     */
+    it('reads an opaque block behind a ref as the top of a stand-in slot', () => {
+        const kind: AnyCodec = union([
+            object({
+                a: withLegacyRead({ current: string, whenMissing: 'x' }),
+            }),
+            object({ b: number }),
+        ])
+        for (const top of [opaque, thunked(opaque)]) {
+            const open: AnyCodec = object([string, optional(top)])
+            expect(meet(kind, open)).toBe(kind)
+            expect(meet(open, kind)).toBe(kind)
+        }
+    })
+})
+
 describe('the type of a meet reads the values that the run time keeps', () => {
     /** A base meets its literal at the literal, in the type and in the term. */
     it('meets a base and its literal at the literal', () => {

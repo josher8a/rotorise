@@ -5304,7 +5304,8 @@ const meetObjects = (
 
 /**
  * The binary meet at the reading of each side: `never` absorbs, `opaque` is the unit, a union
- * distributes, and the parts meet otherwise.
+ * distributes, and the parts meet otherwise. Each rule reads the node behind each `ref`, as the
+ * model reads the term, so a thunk changes no meet.
  */
 const meetOfTwo = (
     first: AnyCodec,
@@ -5314,10 +5315,10 @@ const meetOfTwo = (
     if (holdsNoValue(termOf(first)) || holdsNoValue(termOf(second))) {
         return never
     }
-    if (termOf(second).kind === 'opaq') return first
-    if (termOf(first).kind === 'opaq') return second
     const A = resolvedTerm(termOf(first))
     const B = resolvedTerm(termOf(second))
+    if (B?.kind === 'opaq') return first
+    if (A?.kind === 'opaq') return second
     if (A === undefined || B === undefined) {
         return meetFactors(first, second, walk)
     }
@@ -7414,7 +7415,7 @@ const slotBelow = (
     wanted: Field,
     order: Order,
 ): boolean =>
-    (!(name in pattern.fields) && wanted.t.kind === 'opaq') ||
+    (!(name in pattern.fields) && resolvedTerm(wanted.t)?.kind === 'opaq') ||
     absentBelow(mine, wanted, order)
 
 /**

@@ -16,7 +16,11 @@ The law of each comparator makes `true` the statement of the row. The lemmas of 
 forms lift a checked list to the verdict of each row. The verdict of a separation row is the full
 separation verdict of one pair. A row of a pair that the guard accepts holds two closed codecs: a
 closed codec exists only for a guarded codec, so the type of the row states the guard, and the row
-states the compatibility decision. A row of a pair that the guard refuses holds two graphs.
+states the compatibility decision. A row of a pair that the guard refuses holds two graphs. A row
+of a meet holds two closed codecs, the closed codec of the meet that `src/` built, and one pair of a
+value and an attribute: the meet holds the pair where both factors hold the pair. The row reads each
+factor as written, so the row states the cover and not the equation, because `src/` reads each
+factor open.
 -/
 
 namespace Calculus
@@ -144,5 +148,48 @@ theorem guardRefused_of_rows {rows : List (String × Graph × Graph)}
   intro p hp
   have h := ok_of_failing h p hp
   rwa [guardRefusedOk, Bool.not_eq_true'] at h
+
+/-! ## Meets -/
+
+/-- **The cover at three verdicts**: each verdict settles, and the third is `.same` where the first
+    two are `.same`. A run out of fuel fails the cover. -/
+def covers : Verdict → Verdict → Verdict → Bool
+  | .exhausted, _, _ | _, .exhausted, _ | _, _, .exhausted => false
+  | .same, .same, m => m == .same
+  | _, _, _ => true
+
+/-- Where the cover holds and neither of the first two verdicts is `.differ`, the third is `.same`. -/
+theorem covers_same {a b m : Verdict} (h : covers a b m = true) (ha : a ≠ .differ)
+    (hb : b ≠ .differ) : m = .same := by
+  cases a <;> cases b <;> cases m <;> simp_all [covers]
+
+/-- A row of a meet: `src/`'s meet `M` of `A` and `B` writes the attribute `s` from the value `v`
+    wherever the model's `A` and `B` both write `s` from `v`. -/
+def meetCoversOk : Nat × Closed × Closed × Closed × Value × Attr → Bool
+  | (n, A, B, M, v, s) =>
+    let mem := fun t : Closed => check n ((t.meaning (libTable noCallers)).e v) (some s)
+    covers (mem A) (mem B) (mem M)
+
+/-- The law of `meetCoversOk`: where the model's `A` and `B` write `s` from `v`, the model's `M`
+    writes `s` from `v`. -/
+theorem meetCoversOk_sound {n : Nat} {A B M : Closed} {v : Value} {s : Attr}
+    (h : meetCoversOk (n, A, B, M, v, s) = true)
+    (hA : (A.meaning (libTable noCallers)).e v = some s)
+    (hB : (B.meaning (libTable noCallers)).e v = some s) :
+    (M.meaning (libTable noCallers)).e v = some s :=
+  check_same (covers_same h (fun hd => check_differ hd hA) (fun hd => check_differ hd hB))
+
+/-- **A meet row covers the meet of the two meanings, at each row.** A pair of `Codec.meet` of the
+    meanings of `A` and `B` at the write is a pair of the meaning of `M`. The decision of equality
+    at `Attr` is a parameter: `Codec.meet` reads one, and the checker reads none. -/
+theorem meetCovers_of_rows [DecidableEq Attr]
+    {rows : List (String × Nat × Closed × Closed × Closed × Value × Attr)}
+    (h : failing meetCoversOk rows = []) :
+    ∀ x n A B M v s, (x, n, A, B, M, v, s) ∈ rows →
+      (Alg.Codec.meet (A.meaning (libTable noCallers)) (B.meaning (libTable noCallers))).e v =
+        some s → (M.meaning (libTable noCallers)).e v = some s :=
+  fun _ _ _ _ _ _ _ hp hm =>
+    let ⟨hA, hB⟩ := Alg.Codec.meet_f.mp hm
+    meetCoversOk_sound (ok_of_failing h _ hp) hA hB
 
 end Calculus
