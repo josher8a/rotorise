@@ -57,9 +57,9 @@ import {
     occV,
     openRefusal,
     RecursionRefused,
+    readMember,
     recursionUse,
     storedAlternatives,
-    member as termMember,
     unboundRefs,
     usedTargetOf,
     widensRead,
@@ -747,8 +747,8 @@ export const altSem = (
      * The option this is for, or why no option is.
      *
      * Two steps. The **kind** filter comes first and is the only step that can be trusted on its
-     * own: an option that writes `S` cannot read an `N`. If it leaves one option, that option *is*
-     * the answer, so a failure past that point is its error, reported as itself rather than
+     * own: an option that reads only `S` cannot read an `N`. If it leaves one option, that option
+     * *is* the answer, so a failure past that point is its error, reported as itself rather than
      * swallowed into "no option matched".
      *
      * If it leaves several, they are **tried**, and the first that succeeds answers. The options of
@@ -2318,7 +2318,7 @@ export const optionOfTerm = (def: Term): Option => {
     if (def.kind !== 'object') {
         return {
             codec,
-            member: termMember(def),
+            member: readMember(def),
             carries: valueKinds(def),
             item: undefined,
             declares: undefined,

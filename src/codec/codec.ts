@@ -6349,7 +6349,7 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  */
 export type Option = {
     readonly codec: AnyCodec
-    /** The member it writes, where the kind alone decides — a cheap filter on decode. */
+    /** The member it reads, where the term bounds the read — a cheap filter on decode. */
     readonly member: AttributeName | undefined
     /** The kinds of value it takes, where the kind alone decides — the same filter on encode. */
     readonly carries: readonly Shape[]

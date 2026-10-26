@@ -401,6 +401,24 @@ describe('a union of one option twice', () => {
         expect(union([L, L, L]).unsafeDecode({ N: '3' })).toBe(3)
     })
 
+    /**
+     * **A union reads every attribute that its option reads**, an older form included. The model's
+     * union reads through the first option that acts, and an older reader acts on a member that
+     * the option does not write.
+     */
+    it('reads the older form of its option', () => {
+        const L = legacyNumber()
+        expect(union([L]).unsafeDecode({ S: '2' })).toBe(2)
+        expect(union([L, L]).unsafeDecode({ S: '2' })).toBe(2)
+        expect(
+            union([
+                held(L, string, { encode: Number, decode: String }),
+            ]).unsafeDecode({
+                S: '2',
+            }),
+        ).toBe('2')
+    })
+
     it('is the option, for a caller held', () => {
         const H = onOff()
         const twice = union([H, H])

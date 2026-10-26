@@ -378,6 +378,26 @@ export const member = (t: Term): AttributeName | undefined => {
 }
 
 /**
+ * **The member that a term reads**, the bound of the stored side that a union's read filter needs.
+ * The model's union reads through the first option that acts (`select`), so the filter keeps each
+ * option that can act. A `withLegacyRead` reads its older form through caller code, so its read is
+ * not bounded by a member. Every other term reads the member that it writes.
+ */
+export const readMember = (t: Term): AttributeName | undefined => {
+    switch (t.kind) {
+        case 'legacy':
+            return undefined
+        case 'held':
+        case 'refine':
+            return readMember(t.inner)
+        case 'union':
+            return unanimous(t.options.map(readMember))
+        default:
+            return member(t)
+    }
+}
+
+/**
  * **The member that a set element stores**, read at the node that each `ref` names. The type gates
  * `.set()` on the attribute of the element, and the attribute of a scope entry is the attribute of
  * the definition that the entry names, so the run time reads the same node. A stored set holds no
