@@ -5,12 +5,14 @@
  * alone: no distribution, no variadic form, no slice.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
+import { DynamoNumber } from '../../attribute'
 import type { AnyCodec, Decoded } from '../../codec'
 import {
     array,
     boolean,
     CodecError,
     decimal,
+    dynamoNumber,
     held,
     item,
     list,
@@ -30,7 +32,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
-import { failed } from '../../result'
+import { failed, orThrow } from '../../result'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
@@ -768,14 +770,46 @@ describe('the type of a meet reads the values that the run time keeps', () => {
     })
 
     /**
-     * **The type stays coarser at two literal sets that share a literal.** The type cannot build the
-     * codec of the common literals, so the decoded type is that of one side and holds `'z'`, which the
-     * term drops. A caller reads the term for the exact values.
+     * **Two literal sets meet at their common literals**, in the type as in the term. The decoded
+     * type holds the literals that the term holds, and no literal of one side alone.
      */
-    it('keeps the decoded type of one side at two overlapping literal sets', () => {
+    it('meets two literal sets that share a literal at the common literal', () => {
         const both = meet(string('x', 'y'), string('y', 'z'))
-        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<'y' | 'z'>()
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<'y'>()
         expect(both.def).toEqual(string('y').def)
+    })
+
+    it('meets two literal sets that share several literals at the union of the common literals', () => {
+        const both = meet(string('x', 'y', 'z'), string('z', 'y', 'w'))
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<'y' | 'z'>()
+        expect(both.def).toEqual(string('y', 'z').def)
+    })
+
+    it('meets two literal sets of numbers at the common numeral', () => {
+        const one = orThrow(DynamoNumber.from('1'))
+        const two = orThrow(DynamoNumber.from('2'))
+        const three = orThrow(DynamoNumber.from('3'))
+        const both = meet(dynamoNumber(one, two), dynamoNumber(two, three))
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<typeof two>()
+        expect(both.def).toEqual(dynamoNumber(two).def)
+    })
+
+    it('meets two literal sets that share no literal at never', () => {
+        const none = meet(string('x', 'y'), string('z', 'w'))
+        expectTypeOf(none).toBeNever()
+        expect(defOf(none)).toEqual(never.def)
+    })
+
+    /** A field that holds the meet reads the common literals too, so the object holds no other literal. */
+    it('meets two literal sets under one name at the common literal', () => {
+        const both = meet(
+            object({ a: string('x', 'y') }),
+            object({ a: string('y', 'z') }),
+        )
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<{
+            readonly a: 'y'
+        }>()
+        expect(both.def).toEqual(object({ a: string('y') }).def)
     })
 
     /**
@@ -853,6 +887,7 @@ describe('the type of a meet reads the values that the run time keeps', () => {
     /**
      * **A `held` part that neither side fits, apart in neither view, is refused.** The adapter of
      * the part is an opaque function, and the function decides which common rows relate one value.
+     * The type states no such refusal, so the type builds each call below and the run time refuses it.
      */
     it('refuses a held part that neither side fits where the views overlap', () => {
         const shifted = held(number, number, {
@@ -865,6 +900,20 @@ describe('the type of a meet reads the values that the run time keeps', () => {
         expect(() => meet(number(1, 2), shifted)).toThrow(
             /`held` part that fits neither side.*opaque function/,
         )
+        expect(() => meet(decimal('1', '2'), decimal('2', '3'))).toThrow(
+            /`held` part that fits neither side.*opaque function/,
+        )
+    })
+
+    /** A held part that one side fits is no refusal, at the call as at run time. */
+    it('meets a held literal set at the part that lies below the other', () => {
+        for (const both of [
+            meet(decimal('1', '2'), decimal),
+            meet(decimal, decimal('1', '2')),
+        ]) {
+            expect(failed(both.decode({ N: '1' }))).toBe(false)
+            expect(failed(both.decode({ N: '3' }))).toBe(true)
+        }
     })
 
     /**

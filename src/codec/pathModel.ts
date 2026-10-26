@@ -224,13 +224,14 @@ type Listed<P, A> = A extends [infer Q, ...infer R]
  * **One frame for one entry.** An entry of a scope, or a `ref` that a scope binds, is the frame
  * of the definition of the entry, under the scope alone. So two paths to one entry give one frame,
  * as two paths to one term object give one term.
+ *
+ * A reader that goes into the options of a union reads each option under the scope stack of the
+ * frame that holds the union, and not under an empty stack.
  */
-type Norm<T, Env, Seen extends unknown[] = []> = EntryOf<T, Env> extends [
-    'some',
-    infer E,
-    infer M,
-    infer ME,
-]
+export type Norm<T, Env, Seen extends unknown[] = []> = EntryOf<
+    T,
+    Env
+> extends ['some', infer E, infer M, infer ME]
     ? Listed<E, Seen> extends true
         ? [T, Env]
         : Norm<M, ME, [E, ...Seen]>

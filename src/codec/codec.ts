@@ -45,6 +45,7 @@ import type {
     KindOfFrames,
     NarrowFrames,
     NodeOf,
+    Norm,
     OffersAt,
     ScopeWallCycle,
     StepFrames,
@@ -2493,28 +2494,79 @@ type DefOf<Defs, C, Seen = never> = TermOf<C> extends [
         : DefOf<Defs, Defs[N], Seen | N>
     : C
 /**
+ * **A `ref` read in a scope**: the codec of the `ref` with the term of the entry that the name
+ * binds. The decoded type reads the term, and the attribute reads the definition. The codec holds
+ * no structure of the entry, so a cycle of entries is no cycle of types, and a reader of the term
+ * resolves the name where the run time resolves it.
+ */
+type ClosedRef<Defs, N extends keyof Defs> = AttributeCodec<
+    DecodeTerm<ScopeTerm<Defs, N>>,
+    AttributeOf<DefOf<Defs, Defs[N]>> & AttributeValue
+> &
+    TermMark<ScopeTerm<Defs, N>>
+/**
+ * A slot of an object, with a bare `ref` closed in the scope `Defs`: the `ref` itself, or the codec
+ * that an `optional`, an `undefinable` or a fill marks. Any other slot is the slot.
+ */
+type SlotInScope<S, Defs> = S extends { readonly codec: infer C }
+    ? TermOf<C> extends ['ref', infer N extends keyof Defs]
+        ? S extends { readonly [fallbackMarker]: infer T }
+            ? MissingCodec<
+                  T,
+                  AttributeOf<ClosedRef<Defs, N>> & AttributeValue,
+                  ClosedRef<Defs, N>
+              > &
+                  TermMark<['fill', ScopeTerm<Defs, N>]>
+            : MarkLike<S, ClosedRef<Defs, N>>
+        : S
+    : TermOf<S> extends ['ref', infer N extends keyof Defs]
+      ? ClosedRef<Defs, N>
+      : S
+/** The spec of an object, with each bare `ref` of a slot closed in the scope `Defs`. */
+type SpecInScope<Spec extends Record<string, ObjectSlot>, Defs> = {
+    [K in keyof Spec]: SlotInScope<Spec[K], Defs>
+} extends infer S extends Record<string, ObjectSlot>
+    ? S
+    : never
+/** An option of an entry: an object reads its slots in the scope `Defs`, and any other option is the option. */
+type OptionInScope<O, Defs> = O extends ObjectCodec<
+    infer Spec extends Record<string, ObjectSlot>,
+    infer Rest extends AnyCodec | undefined
+>
+    ? ObjectCodec<SpecInScope<Spec, Defs>, Rest>
+    : O
+/**
  * An entry: the codec of the definition that the entry names, read at the term `Tm` of the entry.
  * An object keeps its item, and a union keeps its item and its slices, each typed from the term.
  * Each option of a union is the definition that the option names, so a slice reads a `ref` option
- * as the definition. Any other entry keeps the `.set()` of an element that writes `S`, `N` or `B`,
- * and a dissection keeps its options in declared order, each the definition that the option names.
+ * as the definition. Each slot of an object, and of an option that is an object, reads a bare `ref`
+ * as the entry that the `ref` names ({@link ClosedRef}). Any other entry keeps the `.set()` of an
+ * element that writes `S`, `N` or `B`, and a dissection keeps its options in declared order, each
+ * the definition that the option names.
  */
 type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
     infer Spec extends Record<string, ObjectSlot>,
     infer Rest extends AnyCodec | undefined
 >
-    ? ObjectCodec<Spec, Rest, DecodeTerm<Tm>, Tm>
+    ? ObjectCodec<SpecInScope<Spec, Defs>, Rest, DecodeTerm<Tm>, Tm>
     : C extends UnionCodec<infer _T, infer Options extends readonly unknown[]>
       ? UnionCodec<
             DecodeTerm<Tm>,
-            { [I in keyof Options]: DefOf<Defs, Options[I]> },
+            {
+                [I in keyof Options]: OptionInScope<
+                    DefOf<Defs, Options[I]>,
+                    Defs
+                >
+            },
             Tm
         >
       : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
             TermMark<Tm> &
             SetCapable<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue, Tm> &
             (C extends OptionsMark<infer Os extends readonly unknown[]>
-                ? OptionsMark<{ [I in keyof Os]: DefOf<Defs, Os[I]> }>
+                ? OptionsMark<{
+                      [I in keyof Os]: OptionInScope<DefOf<Defs, Os[I]>, Defs>
+                  }>
                 : unknown)
 /** A refusal on each definition that reads a name the scope does not declare. */
 type ScopeNamed<Defs> = {
@@ -3244,22 +3296,25 @@ type WrittenMembers<A> = A extends unknown
     : never
 
 /** The stored texts that the term of a codec pins, or `never` where the term pins no literal. */
-type StoredPin<C> = StoredPinAt<NodeOf<TermOf<C>>>
-type StoredPinAt<N> = N extends ['prim', ['literal', unknown, infer V]]
+type StoredPin<C> = StoredPinAt<TermOf<C>, []>
+type StoredPinAt<T, Env> = Norm<T, Env> extends [infer N, infer E]
+    ? StoredPinOf<N, E>
+    : never
+type StoredPinOf<N, E> = N extends ['prim', ['literal', unknown, infer V]]
     ? StoredText<V>
     : N extends ['union', infer Os extends unknown[]]
       ? true extends {
-            [I in keyof Os]: [StoredPinAt<NodeOf<Os[I]>>] extends [never]
+            [I in keyof Os]: [StoredPinAt<Os[I], E>] extends [never]
                 ? true
                 : false
         }[number]
           ? never
-          : { [I in keyof Os]: StoredPinAt<NodeOf<Os[I]>> }[number]
+          : { [I in keyof Os]: StoredPinAt<Os[I], E> }[number]
       : N extends ['refine', infer I]
-        ? StoredPinAt<NodeOf<I>>
+        ? StoredPinAt<I, E>
         : [LibraryInner<N>] extends [never]
           ? never
-          : StoredPinAt<NodeOf<LibraryInner<N>>>
+          : StoredPinAt<LibraryInner<N>, E>
 /**
  * The inner term of an adapter of the library, as `decimal('1')` and `number(1)` build, or `never`.
  * A caller's adapter (`['caller']`) pins nothing at the type: its decoded type is the caller's.
@@ -4800,9 +4855,10 @@ type SameAbsence<A, B> = [A] extends [{ readonly [undefinableMarker]: true }]
  * their names, as the run time reads both open. Of two other slots, the slot that fits the other is
  * the meet. Two slots that fit neither way and share no decoded value meet at
  * `never`. Two slots whose stored attributes share no member meet at `never` too, whatever adapter sits
- * over them. Two slots that overlap without one fitting the other, such as two literal sets that share
- * one literal, keep the intersection of the two codecs: the type cannot build the codec of the
- * common literals, so the decoded type is that of one side and holds the literals that the run time drops.
+ * over them. Two literal sets of one base that share a literal meet at the common literals, as the
+ * run time reads them ({@link MeetLiterals}). Any other two slots that overlap without one fitting
+ * the other keep the intersection of the two codecs, and decode to the values that both decode to:
+ * the pair of a meet is one row and one value that both sides relate.
  */
 type MeetCodecs<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
     ? never
@@ -4814,7 +4870,68 @@ type MeetCodecs<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
           ? B
           : [Decoded<A> & Decoded<B>] extends [never]
             ? never
-            : A & B
+            : MeetLiterals<A, B>
+
+/**
+ * **The meet of two literal sets, at the type level**: the codec of the common literals, as the run
+ * time builds it. Each side is a literal or a union of literals at `string`, `number` or `boolean`,
+ * with no adapter: the type reads no bytes of a `binary` literal. A side of another form is {@link Overlap}.
+ */
+type MeetLiterals<A, B> = [PlainLits<TermOf<A>>] extends [never]
+    ? Overlap<A, B>
+    : [PlainLits<TermOf<B>>] extends [never]
+      ? Overlap<A, B>
+      : CommonCodec<CommonLits<PlainLits<TermOf<A>>, PlainLits<TermOf<B>>>, A>
+/**
+ * The intersection of two codecs that overlap, with the decoded type of the values that both
+ * decode to. The last member decides the decoded type of an intersection of codecs, so a member
+ * that states the intersection of the two decoded types comes last.
+ */
+type Overlap<A, B> = A &
+    B &
+    AttributeCodec<
+        Decoded<A> & Decoded<B>,
+        AttributeOf<A> & AttributeOf<B> & AttributeValue
+    >
+/** The literal terms of a literal or of a union of literals with no adapter, or `never`. */
+type PlainLits<T> = T extends ['prim', ['literal', PlainBase, unknown]]
+    ? [T]
+    : T extends ['union', infer Os extends unknown[]]
+      ? [Os[number]] extends [['prim', ['literal', PlainBase, unknown]]]
+          ? Os
+          : never
+      : never
+type PlainBase = 'string' | 'number' | 'boolean'
+/** The literals of `As` that `Bs` holds too: the same base and the same stored value. */
+type CommonLits<As extends unknown[], Bs extends unknown[]> = As extends [
+    infer Head,
+    ...infer Rest extends unknown[],
+]
+    ? InLits<Head, Bs> extends true
+        ? [Head, ...CommonLits<Rest, Bs>]
+        : CommonLits<Rest, Bs>
+    : []
+type InLits<L, Bs extends unknown[]> = Bs extends [
+    infer Head,
+    ...infer Rest extends unknown[],
+]
+    ? [L] extends [Head]
+        ? [Head] extends [L]
+            ? true
+            : InLits<L, Rest>
+        : InLits<L, Rest>
+    : false
+/** The codec of the literals `Ls`, at the attribute of `A`: `never` where no literal is common. */
+type CommonCodec<Ls extends unknown[], A> = Ls extends []
+    ? never
+    : Ls extends [infer One]
+      ? AttributeCodec<DecodeTerm<One>, AttributeOf<A> & AttributeValue> &
+            TermMark<One>
+      : AttributeCodec<
+            DecodeTerm<['union', Ls]>,
+            AttributeOf<A> & AttributeValue
+        > &
+            TermMark<['union', Ls]>
 
 /** One meet of two objects at the type level: the union of the names. */
 type MeetSpecs<A, B> = [keyof A & keyof B] extends [never]
@@ -6046,8 +6163,9 @@ const slicedDissection = (
  * **A member's codec that pins a literal**: its term pins a literal, and it decodes to a literal
  * type rather than a base. The member's side reads through a refinement, as `pinnedForm` does.
  *
- * A caller's adapter pins nothing ({@link LibraryInner}). `NodeOf` resolves the entry of a scope
- * term, and a bare `ref` in the spec of an entry stays unresolved, so such a key pins nothing.
+ * A caller's adapter pins nothing ({@link LibraryInner}). `Norm` resolves the entry of a scope term
+ * and each option of a union under the scope of that entry, and a bare `ref` in the spec of an entry
+ * is the entry that the name binds ({@link ClosedRef}). A `ref` that no scope binds pins nothing.
  */
 type PinsALiteral<C> = TermPins<TermOf<C>, true> extends true
     ? PinsALiteralValue<Decoded<C>>
@@ -6057,12 +6175,15 @@ type PatternPins<C> = TermPins<TermOf<C>, false> extends true
     ? PinsALiteralValue<Decoded<C>>
     : false
 /** Whether a term pins a literal: a literal, a union of literals, or a library adapter over a pin. */
-type TermPins<T, R extends boolean> = NodeOf<T> extends infer N
+type TermPins<T, R extends boolean, Env = []> = Norm<T, Env> extends [
+    infer N,
+    infer E,
+]
     ? N extends ['prim', ['literal', ...unknown[]]]
         ? true
         : N extends ['union', infer Os extends unknown[]]
           ? false extends {
-                [I in keyof Os]: NodeOf<Os[I]> extends [
+                [I in keyof Os]: Norm<Os[I], E>[0] extends [
                     'prim',
                     ['literal', ...unknown[]],
                 ]
@@ -6073,11 +6194,11 @@ type TermPins<T, R extends boolean> = NodeOf<T> extends infer N
               : true
           : N extends ['refine', infer I]
             ? R extends true
-                ? TermPins<I, R>
+                ? TermPins<I, R, E>
                 : false
             : [LibraryInner<N>] extends [never]
               ? false
-              : TermPins<LibraryInner<N>, R>
+              : TermPins<LibraryInner<N>, R, E>
     : false
 
 /**
@@ -6711,15 +6832,18 @@ type FitsCodec<A, P> = PatternPins<MarkedCodec<P>> extends true
           ? 'f'
           : EveryFits<FieldSpecList<A>[number], FieldSpecList<P>[number]>
 /**
- * Whether a member's term reads a `ref`, or a union that holds one. The type reads no literal mark
- * through a `ref`, and the run time resolves the `ref`, so the type cannot decide the fit.
+ * Whether a member's term reads a `ref` with no scope in the term, or a union that holds one. The
+ * type reads no literal mark through such a `ref`, and the run time resolves the `ref`, so the
+ * type cannot decide the fit. An entry of a scope holds its scope in the term, and so does a bare
+ * `ref` slot of an entry ({@link ClosedRef}). A slot that holds a `ref` deeper, such as an option
+ * of a union, holds no scope.
  */
-type ReadsRef<T> = NodeOf<T> extends infer N
+type ReadsRef<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
     ? N extends ['ref', unknown]
         ? true
         : N extends ['union', infer Os extends unknown[]]
           ? true extends {
-                [I in keyof Os]: NodeOf<Os[I]> extends ['ref', unknown]
+                [I in keyof Os]: Norm<Os[I], E>[0] extends ['ref', unknown]
                     ? true
                     : false
             }[number]

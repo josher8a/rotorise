@@ -12,6 +12,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
 import type { Decoded } from '../../codec'
 import {
+    array,
     at,
     binary,
     boolean,
@@ -25,6 +26,7 @@ import {
     item,
     mdunion,
     narrow,
+    never,
     number,
     object,
     optional,
@@ -487,10 +489,9 @@ describe('a clause key no member pins extracts never', () => {
     })
 
     /**
-     * **A `ref` pins no key at the type.** A `ref` carries the term of a name and no literal mark,
-     * and the decoded type cannot say whether a literal constructor built the codec: a caller's
-     * adapter decodes to a literal type over a term that pins nothing. So the type cannot decide the
-     * fit and keeps the member, and the runtime, which resolves the `ref`, keeps the member too.
+     * **A `ref` in an entry of a scope is read in that scope.** The type resolves the name in the
+     * record of the scope, as the run time resolves it in the closed copy. The entry binds a literal
+     * set that the clause holds, so the key is pinned, and the type and the run time keep the member.
      */
     it('keeps at the type a member pinned through a ref, and the runtime keeps the member', () => {
         const { Large } = scope({
@@ -521,10 +522,80 @@ describe('a clause key no member pins extracts never', () => {
     })
 
     /**
+     * **A `ref` that the scope binds to a base pins no key.** The key holds each string, and the
+     * clause holds two literals, so the member lies outside the clause. The type resolves the name
+     * and drops the member, as the run time drops it.
+     */
+    it('drops at the type a member whose ref binds a base that the clause does not hold', () => {
+        const { Large } = scope({
+            Large: object({
+                kind: string('pet'),
+                size: string('large'),
+                colour: ref('Colour'),
+            }),
+            Colour: string,
+        })
+        const viaRef = mdunion(['kind', 'size'], [pet, Large])
+        const kept = extract(viaRef, object({ colour: string('red', 'blue') }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
+    })
+
+    /**
+     * **An optional key reads its `ref` in the scope.** The name binds a union of objects, which no
+     * `binary` literal holds. The type drops the member, as the run time drops it.
+     */
+    it('drops at the type a member whose optional key names a union of objects', () => {
+        const { Node } = scope({
+            Node: object({
+                kind: string('node'),
+                next: optional(ref('Tail')),
+            }),
+            Tail: union([object({ n: string }), ref('Node')]),
+        })
+        const viaOptional = union([object({ kind: string('leaf') }), Node])
+        const kept = extract(
+            viaOptional,
+            object({ next: binary(new Uint8Array([1, 2])) }),
+        )
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
+    })
+
+    /**
+     * **A union option that a `ref` names is read in the scope of the entry.** The key holds an
+     * entry of a scope, and one option of the entry names an array through a `ref`. No `binary`
+     * literal holds an array, so the type drops the member, as the run time drops it.
+     */
+    it('drops at the type a member whose key is an entry with a union option that names a ref', () => {
+        const { Tail } = scope({
+            Chain: array(ref('Tail')),
+            Tail: union([never, ref('Chain')]),
+        })
+        const viaEntry = mdunion(
+            ['kind', 'size'],
+            [
+                pet,
+                object({
+                    kind: string('pet'),
+                    size: string('large'),
+                    tail: Tail,
+                }),
+            ],
+        )
+        const kept = extract(
+            viaEntry,
+            object({ tail: binary(new Uint8Array([1, 2])) }),
+        )
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
+    })
+
+    /**
      * **A union option that a `ref` names pins its literal once the scope binds the name.** The
      * union reads the literals of each option through the `ref`, so the clause keeps the member.
-     * The type reads no literal mark through a `ref`, so the type cannot decide the fit, and keeps the
-     * member.
+     * The key is a union that holds a `ref` and is no bare `ref`, so the type reads no literal mark
+     * through the `ref`, cannot decide the fit, and keeps the member.
      */
     it('reads a key whose union option is a ref, because the union then pins its literals', () => {
         const { Large } = scope({

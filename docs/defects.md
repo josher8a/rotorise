@@ -195,33 +195,27 @@ repair is to route the remaining site through the same seam, not to write a rend
 ## Partially mitigated: the type level reads a key pinned through a ref as unpinned
 
 **Observation.** A pattern pins a key at the term only where the term holds a literal. The type
-level reads the literal from the term of the codec, as the run time does: a literal, a union of
-literals, and a library adapter over a pin each pin the key, a caller's adapter pins nothing, and a
-refinement in a pattern is refused at the type and at run time. One case remains. The pattern
-readers take a field codec out of a member spec, and inside a scope entry the field is a bare `ref`,
-with no environment at the type level to resolve the name. The type cannot decide whether the member
-fits, so the type keeps the member. Measured 2026-10-24 with `npx tsc --noEmit` and the pin below:
+level reads the literal from the term of the codec, as the run time does, and a refinement in a
+pattern is refused at the type and at run time. A bare `ref` slot of an entry of a scope, and a bare
+`ref` under `optional`, `undefinable(...)` or a fill, reads as the entry that the name binds, and
+each option of a union reads under the scope of the union. One case remains. A slot that holds a
+`ref` deeper, such as an option of a union inside a field, holds no scope in the term. The type
+cannot decide whether the member fits, so the type keeps the member:
 
-    a key pinned through `ref('Colour')`, where the scope binds `Colour: string('red', 'blue')`
+    a key pinned through `union([ref('Red'), string('blue')])`, where the scope binds the name Red
       type checker: the member is kept
       runtime:      the key is pinned, and the member is kept
 
-The run time resolves the `ref`, and drops a member that the pattern does not fit. Measured
-2026-10-24 with `formal/scripts/gate.sh`: the type bridge holds 391 extract refuse ids, and in each
-one the type keeps a member that reads a `ref` and that the run time drops.
+**Effect.** The result type of extract keeps a member that the run time can drop. Every value fits
+the type, and the type is wider than the value. Measured with `formal/scripts/gate.sh`: the type
+bridge holds no `extract(...)` refuse id.
 
-**Effect.** The result type of extract keeps a member that the run time drops. Every value fits
-the type, and the type is wider than the value.
-
-**Open.** A field closed in its scope at the type level closes the case. The run time closes each
-entry of a scope in the record of that scope, and the copy of a dissection carries the key set of
-the node that it replaces.
+**Open.** A slot closed in its scope at any depth closes the case.
 
 **Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the type keeps a member pinned through a
-`ref(...)`, the exclusion that keeps the adapter member, and the slice that keeps a member pinned
-through an adapter. `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
-The baseline of the type bridge, `formal/scripts/type_bridge_baseline.txt`, holds the 391 extract
-refuse ids.
+`ref(...)`, the type drops a member whose `ref` binds a base, an optional key, or an entry with a
+union option that names a `ref`, and the slice that keeps a member pinned through an adapter.
+`src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
 
 ---
 
@@ -258,25 +252,23 @@ ids, measured 2026-10-14.
 
 ---
 
-## Known: the type of meet keeps one side at two overlapping literal sets, and states no refusal of a closure
+## Known: the type of meet states no refusal of a held part that neither side fits
 
-**Observation.** The run time meets two literal sets at their common literals. The type cannot build
-the codec of the common literals, so it keeps the intersection of the two codecs, and the decoded
-type is that of one side. Two parts whose stored members are apart meet at `never` in the type and
-at run time. The run time refuses a `held` or an older reading where the two parts are apart in
-neither view and neither side fits the other, because an opaque function decides which common rows
-relate one value. The type states no such refusal. One example:
+**Observation.** The type of a meet reads two literal sets at their common literals, and reads any
+other overlap as the values that both sides decode to. The run time refuses a `held` or an older
+reading where the two parts are apart in neither view and neither side fits the other, because an
+opaque function decides which common rows relate one value. The type states no such refusal. One
+example:
 
-    const both = meet(string('x', 'y'), string('y', 'z'))
-      runtime: the term holds 'y'
-      type: the decoded type is 'y' | 'z'
+    const both = meet(decimal('1', '2'), decimal('2', '3'))
+      runtime: refused
+      type: the call builds
 
-**Effect.** The decoded type of such a meet admits a literal that the term drops. A write of that
-literal passes the type and fails at run time. A meet of a `held` part that neither side fits builds
-in the type and throws at run time.
+**Effect.** A meet of a `held` part that neither side fits builds in the type and throws at run
+time.
 
-**Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the overlapping literal sets and the
-refusal of a `held` part that neither side fits.
+**Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the common literals of two literal sets
+and the run-time refusal of a `held` part that neither side fits.
 
 ---
 
