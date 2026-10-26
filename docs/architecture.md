@@ -724,9 +724,12 @@ objects as the pairing of two payload maps (`objAt_union`), and not as `Codec.me
 name, a required or a `withLegacyRead(...)` side makes the slot required, because a stand-in and an
 absence share no absent row, and `optional` with `undefinable(...)` is `undefinable(...)`. A factor
 that lies below the other is the meet, and a union distributes only where neither lies below the
-other. Two lists meet on their aligned rows. A refinement meets as the refinement of the meet of its
-inner term, except against an adapter, which the meet refuses. A `held` or an older reading meets
-only a part that it lies below. The model has no term for the meet at a shared name.
+other. Two lists meet on their aligned rows. Two parts whose stored views share no attribute, or
+whose caller views share no value, meet at `never`, because each view is a projection of the
+relation. A refinement meets as the refinement of the meet of its inner term, whatever adapter the
+other side holds, because a pair of the meet has one value. A `held` or an older reading meets only
+a part that it lies below: an opaque function decides which common rows relate one value. The model
+has no term for the meet at a shared name.
 
 The prism inventory is partial on both sides on purpose. The gaps are the constructions that are
 not one payload between one pair: the numeric constructor, where the numeral gate stops the

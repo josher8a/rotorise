@@ -59,6 +59,7 @@ import {
 } from './result'
 import {
     alignedRows,
+    callerApart,
     childAt,
     flatOf,
     guardAt,
@@ -69,7 +70,6 @@ import type { Body, Field, NameForm, NonEmpty, RefSlot, Term } from './term'
 import {
     clauseForm,
     closedCopy,
-    holdsAdapter,
     holdsNoValue,
     member as memberOf,
     openRefusal,
@@ -4981,13 +4981,15 @@ const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
  * other pair meets by the order of the walk first: where one side lies below the other, the meet
  * is that side. Two lists then meet on their aligned rows, and two sets by element.
  *
+ * **Two parts apart in one view meet at the bottom**, whatever adapter sits over them. The stored
+ * views of the two parts share no attribute, or the caller views share no value: each view is a
+ * projection of the relation, so the two relations share no pair.
+ *
  * **A refinement reads through**, as the model's `rowSpecC` reads `refine`: the meet refines the
- * meet of its inner term with the other side by the same predicate. Each pair of the inner meet is
- * a pair of the inner term, so the predicate reads the value that it reads on the refinement. An
- * adapter on the other side breaks that: `opaque` is the unit of the meet, so the inner meet can
- * hand out the value of the adapter where the predicate reads the value of the inner term. That
- * pair is refused. A `held` or an older reading meets only a part that it lies below, because a
- * closure that no term states decides which pairs the two sides share.
+ * meet of its inner term with the other side by the same predicate. A pair of the meet is one row
+ * and one value that both sides relate, so the predicate reads that value on either side, whatever
+ * adapter the other side holds. A `held` or an older reading meets only a part that it lies below,
+ * because an opaque function decides which common rows relate one value.
  */
 const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     const A = resolvedTerm(termOf(a))
@@ -5019,19 +5021,20 @@ const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
             ? never
             : codecOfTerm({ kind: 'set', elem: termOf(elem) })
     }
-    // two parts whose stored views share no attribute hold no common value, whatever adapter sits
-    // over them: the meet is the bottom. Only a pair that is not apart can need a closure to decide
-    if (storedApart(A, B)) return never
+    // two parts apart in the stored view or in the caller view share no pair, whatever adapter sits
+    // over them: the meet is the bottom. Only a pair apart in neither view can need a function to
+    // decide. The caller view reads each side at its reading, because an open side holds more values
+    if (storedApart(A, B) || callerApart(readA, readB)) return never
     if (A.kind === 'refine') {
-        return refined(A, B, () => meetOfTwo(codecOfTerm(A.inner), b, walk))
+        return refined(A, () => meetOfTwo(codecOfTerm(A.inner), b, walk))
     }
     if (B.kind === 'refine') {
-        return refined(B, A, () => meetOfTwo(a, codecOfTerm(B.inner), walk))
+        return refined(B, () => meetOfTwo(a, codecOfTerm(B.inner), walk))
     }
     for (const one of [A, B]) {
         if (one.kind === 'held' || one.kind === 'legacy') {
             throw new CodecError(
-                `[meet] a factor holds a \`${one.kind}\` part that fits neither side, and the host cannot read the values of a caller's closure — meet only a part that one side fits`,
+                `[meet] a factor holds a \`${one.kind}\` part that fits neither side, and the two parts are apart in neither view. An opaque function decides which common rows relate one value: ${one.kind === 'held' ? 'the adapter of the part, a caller adapter or a library adapter such as `decimalText`' : 'the older reader of the part'}. The host cannot read the function. Meet only a part that one side fits`,
             )
         }
     }
@@ -5047,19 +5050,13 @@ const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
 }
 
 /**
- * The refinement `r` over the meet of its inner term with the other side `other`, by the predicate
+ * The refinement `r` over the meet `inner` of its inner term with the other side, by the predicate
  * of `r`. `never` where the inner meet holds no value.
  */
 const refined = (
     r: Extract<Term, { kind: 'refine' }>,
-    other: Term,
     inner: () => AnyCodec,
 ): AnyCodec => {
-    if (holdsAdapter(other)) {
-        throw new CodecError(
-            "[meet] a `refine` part meets a side that holds an adapter, and the predicate reads the value of the refinement's inner term, which the adapter can replace: the host cannot carry the predicate across a caller's closure — meet only a part that one side fits",
-        )
-    }
     const met = inner()
     return holdsNoValue(termOf(met))
         ? never

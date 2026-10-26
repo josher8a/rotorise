@@ -263,20 +263,20 @@ ids, measured 2026-10-14.
 **Observation.** The run time meets two literal sets at their common literals. The type cannot build
 the codec of the common literals, so it keeps the intersection of the two codecs, and the decoded
 type is that of one side. Two parts whose stored members are apart meet at `never` in the type and
-at run time. The run time refuses a `held` or an older reading where the two stored members are not
-apart and neither side fits the other, and a refinement against a side that holds an adapter,
-because the host cannot read a closure. The type states no such refusal. One example:
+at run time. The run time refuses a `held` or an older reading where the two parts are apart in
+neither view and neither side fits the other, because an opaque function decides which common rows
+relate one value. The type states no such refusal. One example:
 
     const both = meet(string('x', 'y'), string('y', 'z'))
       runtime: the term holds 'y'
       type: the decoded type is 'y' | 'z'
 
 **Effect.** The decoded type of such a meet admits a literal that the term drops. A write of that
-literal passes the type and fails at run time. A meet of a refinement with a side that holds an
-adapter builds in the type and throws at run time.
+literal passes the type and fails at run time. A meet of a `held` part that neither side fits builds
+in the type and throws at run time.
 
 **Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the overlapping literal sets and the
-refusal of a refinement against an adapter.
+refusal of a `held` part that neither side fits.
 
 ---
 

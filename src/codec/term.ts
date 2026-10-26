@@ -1290,20 +1290,6 @@ export const throughRefs =
 export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
 
 /**
- * **Whether a term holds an adapter**: a `held` or an older reading, at any depth. Each changes the
- * value that a stored attribute decodes to, so a predicate over the decoded value of another term
- * does not read the value that the adapter hands out. A `ref` with no target may name either, so it
- * answers "holds". A cycle holds an adapter where a node on the cycle holds one.
- */
-export const holdsAdapter = (t: Term, seen: Set<Term> = new Set()): boolean => {
-    if (t.kind === 'held' || t.kind === 'legacy') return true
-    if (t.kind === 'ref' && targetOf(t) === undefined) return true
-    if (seen.has(t)) return false
-    seen.add(t)
-    return childrenOf(t).some((one) => holdsAdapter(one, seen))
-}
-
-/**
  * **Whether two `held` terms are one adapter**: the tag test of the held row, which mirrors the
  * model's `dynOracle.same`. The tag of a library adapter is its `via` name, and the model carries
  * one generator for each name. The tag of a caller's adapter is the pair of functions that

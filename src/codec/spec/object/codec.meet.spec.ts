@@ -11,6 +11,7 @@ import {
     boolean,
     CodecError,
     decimal,
+    held,
     item,
     list,
     meet,
@@ -814,14 +815,55 @@ describe('the type of a meet reads the values that the run time keeps', () => {
     })
 
     /**
-     * **A refinement that meets an adapter is refused.** `opaque` is the unit of the meet, so the
-     * meet of the inner term can hand out the value of the adapter, and the predicate reads the
-     * value of the inner term. No term states the predicate over the adapter's value.
+     * **A refinement meets through an adapter.** A pair of the meet is one row and one value that
+     * both sides relate, so the predicate reads that value on either side. The meet refines the
+     * other side by the predicate.
      */
-    it('refuses a refinement against a side that holds an adapter', () => {
-        const any = (value: unknown): value is unknown => value !== 'no'
-        expect(() => meet(refine(opaque, any), decimal)).toThrow(
-            /`refine` part meets a side that holds an adapter/,
+    it('refines the other side by the predicate where the other side holds an adapter', () => {
+        const notOne = (value: unknown): value is unknown => value !== '1'
+        const both: AnyCodec = meet(refine(opaque, notOne), decimal)
+        expect(failed(both.decode({ N: '2.5' }))).toBe(false)
+        expect(failed(both.decode({ N: '1' }))).toBe(true)
+        expect(failed(both.decode({ S: '2.5' }))).toBe(true)
+        const positive = (value: string): value is string =>
+            !value.startsWith('-')
+        const listed: AnyCodec = meet(
+            refine(decimal, positive),
+            decimal('1', '-2.5'),
+        )
+        expect(failed(listed.decode({ N: '1' }))).toBe(false)
+        expect(failed(listed.decode({ N: '-2.5' }))).toBe(true)
+        expect(failed(listed.decode({ N: '3' }))).toBe(true)
+    })
+
+    /**
+     * **Two parts whose caller views share no value meet at the bottom**, in both orders. `decimal`
+     * and `number` store one member, so the stored views share each attribute. `decimal` decodes a
+     * text and `number` decodes a number, so no row relates one value on both sides.
+     */
+    it('meets decimal and number at never, because their caller views share no value', () => {
+        const bare = meet(decimal, number)
+        expectTypeOf(bare).toBeNever()
+        expect(defOf(bare)).toEqual(never.def)
+        const reversed = meet(number, decimal)
+        expectTypeOf(reversed).toBeNever()
+        expect(defOf(reversed)).toEqual(never.def)
+    })
+
+    /**
+     * **A `held` part that neither side fits, apart in neither view, is refused.** The adapter of
+     * the part is an opaque function, and the function decides which common rows relate one value.
+     */
+    it('refuses a held part that neither side fits where the views overlap', () => {
+        const shifted = held(number, number, {
+            encode: (value: number) => value + 1,
+            decode: (value: number) => value - 1,
+        })
+        expect(() => meet(shifted, number(1, 2))).toThrow(
+            /`held` part that fits neither side.*opaque function/,
+        )
+        expect(() => meet(number(1, 2), shifted)).toThrow(
+            /`held` part that fits neither side.*opaque function/,
         )
     })
 

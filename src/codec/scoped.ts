@@ -719,6 +719,14 @@ export const viewsDisjoint = (x: Term, y: Term): boolean =>
     apartIn('caller', x, y) && apartIn('stored', x, y)
 
 /**
+ * **Whether the caller views of two terms share no value**, the caller half of the model's
+ * `Closed.viewsDisjoint`: {@link apartIn} at the caller view of each term, the model's `viewG`. A
+ * `held` reads its held side, and an older reading reads its current form.
+ */
+export const callerApart = (x: Term, y: Term): boolean =>
+    apartIn('caller', x, y)
+
+/**
  * **Whether the stored views of two terms share no attribute**, the model's `narrowC` at one
  * option: {@link apartIn} at the stored view of each term.
  */
