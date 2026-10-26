@@ -110,6 +110,9 @@ theorem disjointOk_iff (p : Closed × Closed × Bool × Bool) : disjointOk p = t
 /-- An accepted pair: the decision accepts the two closed codecs. -/
 def acceptedOk (p : Closed × Closed) : Bool := p.1.compatPair p.2
 
+/-- An accepted pair of one option twice: the decision over one scope accepts the closed codec. -/
+def acceptedOneOk (p : Closed) : Bool := p.compatOne
+
 /-- A pair refused at compatibility: the decision refuses the two closed codecs. -/
 def refusedOk (p : Closed × Closed) : Bool := !p.1.compatPair p.2
 
@@ -133,6 +136,13 @@ theorem accepted_of_rows {rows : List (String × Closed × Closed)}
       Alg.Compat (p.2.1.meaning (libTable κ)) (p.2.2.meaning (libTable κ)) ∧
         Alg.Compat (p.2.2.meaning (libTable κ)) (p.2.1.meaning (libTable κ)) :=
   fun p hp => Closed.compat_of_compatPair (ok_of_failing h p hp) (libTable κ)
+
+/-- **An accepted pair of one option twice, at each row.** At every caller table, the meaning of
+    a lawful option is `Compat` with itself, which is the obligation of the union. -/
+theorem acceptedOne_of_rows {rows : List (String × Closed)}
+    (h : failing acceptedOneOk rows = []) (κ : Callers) : ∀ p ∈ rows,
+    Lawful (p.2.meaning (libTable κ)) → Alg.Compat (p.2.meaning (libTable κ)) (p.2.meaning (libTable κ)) :=
+  fun p hp => Closed.compat_of_compatOne (ok_of_failing h p hp) (libTable κ)
 
 /-- **A pair refused at compatibility, at each row.** The decision refuses the pair. -/
 theorem refused_of_rows {rows : List (String × Closed × Closed)}

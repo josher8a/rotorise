@@ -102,7 +102,7 @@ theorem alignedAll_imp {X Y : Type} {T T' : X → Y → Bool} {U : Y → Prop}
 
 section Adequacy
 variable {B : Sig} [Mean B] [Leaf B] {NL NR : Nat} {sL : Fin NL → Graph B NL}
-  {sR : Fin NR → Graph B NR} (o : Orient)
+  {sR : Fin NR → Graph B NR} (o : Orient) (ι : Fin NL → Fin NR → Bool)
 
 omit [Mean B] [Leaf B] in
 /-- A pair below a guard with a closed left side runs the row at the same fuel. -/
@@ -247,15 +247,15 @@ variable (sL sR)
 /-- **A pair of terms with no leaf reads no restart**: the row answers the same at each walk. -/
 theorem goW_noLeaf (prev prev' : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR) :
     ∀ x : Graph B NL, NoLeaf x → ∀ y : Graph B NR, NoLeaf y →
-      goW (rowSpecC sL sR o) prev A x y = goW (rowSpecC sL sR o) prev' A x y := by
+      goW (rowSpecC sL sR o ι) prev A x y = goW (rowSpecC sL sR o ι) prev' A x y := by
   intro x
   induction x with
   | leaf j => intro h; exact absurd h (not_noLeaf_leaf j)
   | node op a ih =>
     intro hx y hy
     have hk : ∀ (p : op.Pos) (u : Graph B NR), NoLeaf u →
-        pairX (sL := sL) (sR := sR) prev A (a p) (goW (rowSpecC sL sR o) prev A (a p)) u =
-        pairX (sL := sL) (sR := sR) prev' A (a p) (goW (rowSpecC sL sR o) prev' A (a p)) u := by
+        pairX (sL := sL) (sR := sR) prev A (a p) (goW (rowSpecC sL sR o ι) prev A (a p)) u =
+        pairX (sL := sL) (sR := sR) prev' A (a p) (goW (rowSpecC sL sR o ι) prev' A (a p)) u := by
       intro p u hu
       rw [pairX_noLeaf (noLeaf_child hx p), pairX_noLeaf (noLeaf_child hx p)]
       exact ih p (noLeaf_child hx p) u hu
@@ -348,25 +348,26 @@ theorem cbaseG_never (x : Graph B NL) (a' : (TSig B).Pos TOp.never → Graph B N
 /-- **A left entry against the bottom answers `true`.** -/
 theorem goW_leaf_never (prev : Tbl NL NR → Graph B NL → Graph B NR → Bool) (A : Tbl NL NR)
     (i : Fin NL) (a' : (TSig B).Pos TOp.never → Graph B NR) :
-    goW (rowSpecC sL sR o) prev A (.leaf i) (.node .never a') = true := by
-  change (cbaseG sL sR o (.leaf i) (.node .never a') || prev A (sL i) (.node .never a')) = true
-  exact Bool.or_eq_true_iff.mpr (Or.inl (cbaseG_never sL sR o _ a'))
+    goW (rowSpecC sL sR o ι) prev A (.leaf i) (.node .never a') = true := by
+  change ((cbaseG sL sR o (.leaf i) (.node .never a') || oneG ι i (.node .never a')) ||
+    prev A (sL i) (.node .never a')) = true
+  exact Bool.or_eq_true_iff.mpr (Or.inl (Bool.or_eq_true_iff.mpr (Or.inl (cbaseG_never sL sR o _ a'))))
 
 /-- **The row of agreement answers `true` against the bottom.** -/
-theorem rowNever_C (ρL : Fin NL → Nat) : RowNever ρL (rowSpecC sL sR o) := by
+theorem rowNever_C (ρL : Fin NL → Nat) : RowNever ρL (rowSpecC sL sR o ι) := by
   intro prev n _ A x a' _
   cases x with
-  | leaf j => exact goW_leaf_never sL sR o prev A j a'
+  | leaf j => exact goW_leaf_never sL sR o ι prev A j a'
   | node op b =>
     cases op with
     | never => rfl
     | refine q qA =>
       change (cbaseG sL sR o (.node (.refine q qA) b) (.node .never a') ||
-        goW (rowSpecC sL sR o) prev A (b ()) (.node .never a')) = true
+        goW (rowSpecC sL sR o ι) prev A (b ()) (.node .never a')) = true
       exact Bool.or_eq_true_iff.mpr (Or.inl (cbaseG_never sL sR o _ a'))
     | union m =>
       change (cbaseG sL sR o (.node (.union m) b) (.node .never a') ||
-        (List.finRange m).all fun p => goW (rowSpecC sL sR o) prev A (b p) (.node .never a')) = true
+        (List.finRange m).all fun p => goW (rowSpecC sL sR o ι) prev A (b p) (.node .never a')) = true
       exact Bool.or_eq_true_iff.mpr (Or.inl (cbaseG_never sL sR o _ a'))
     | prim _ => rfl
     | set => rfl
@@ -382,19 +383,19 @@ variable (ρL : Fin NL → Nat) (ρR : Fin NR → Nat)
 /-- **The row of agreement keeps its answer `true`** from a walk to a walk at the calls that the
     measure bounds. The terms hold no leaf below a wall. -/
 theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : ∀ j, Good (sR j)) :
-    RowMono ρL ρR Ok Ok (rowSpecC sL sR o) := by
+    RowMono ρL ρR Ok Ok (rowSpecC sL sR o ι) := by
   intro prev prev' m hM hN A
   have key : ∀ x : Graph B NL, Flat1 x = true → Good x → ∀ y : Graph B NR, Flat1 y = true → Good y →
-      phi ρL ρR A x y ≤ m → goW (rowSpecC sL sR o) prev A x y = true →
-        goW (rowSpecC sL sR o) prev' A x y = true := by
+      phi ρL ρR A x y ≤ m → goW (rowSpecC sL sR o ι) prev A x y = true →
+        goW (rowSpecC sL sR o ι) prev' A x y = true := by
     intro x
     induction x with
     | leaf j =>
       intro hx hg y hy hgy hφ h
       have h1 := le_hgt_leaf (B := B) ρL j
       have h2 := hgt_entry (B := B) (sys := sL) F.edgeL j
-      change (cbaseG sL sR o (.leaf j) y || prev A (sL j) y) = true at h
-      change (cbaseG sL sR o (.leaf j) y || prev' A (sL j) y) = true
+      change ((cbaseG sL sR o (.leaf j) y || oneG ι j y) || prev A (sL j) y) = true at h
+      change ((cbaseG sL sR o (.leaf j) y || oneG ι j y) || prev' A (sL j) y) = true
       rcases Bool.or_eq_true_iff.mp h with h | h
       · exact Bool.or_eq_true_iff.mpr (Or.inl h)
       · refine Bool.or_eq_true_iff.mpr (Or.inr (hM A (sL j) y ⟨F.flatL j, hgL j⟩ ⟨hy, hgy⟩ ?_ h))
@@ -413,15 +414,15 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
         omega
       have hU := fun (op : TOp B) (a : op.Pos → Graph B NR) (p : op.Pos) (hk : TOp.kind op ≠ .wall)
         (hg : Good (.node op a)) => good_child hg hk p
-      have hleaf : ∀ i a', goW (rowSpecC sL sR o) prev' A (.leaf i) (.node .never a') = true :=
-        fun i a' => goW_leaf_never sL sR o prev' A i a'
+      have hleaf : ∀ i a', goW (rowSpecC sL sR o ι) prev' A (.leaf i) (.node .never a') = true :=
+        fun i a' => goW_leaf_never sL sR o ι prev' A i a'
       cases op with
       | never => rfl
       | refine q qA =>
         change (cbaseG sL sR o (.node (.refine q qA) a) y ||
-          goW (rowSpecC sL sR o) prev A (a ()) y) = true at h
+          goW (rowSpecC sL sR o ι) prev A (a ()) y) = true at h
         change (cbaseG sL sR o (.node (.refine q qA) a) y ||
-          goW (rowSpecC sL sR o) prev' A (a ()) y) = true
+          goW (rowSpecC sL sR o ι) prev' A (a ()) y) = true
         rcases Bool.or_eq_true_iff.mp h with h | h
         · exact Bool.or_eq_true_iff.mpr (Or.inl h)
         · refine Bool.or_eq_true_iff.mpr (Or.inr (ih () (flat1_keep rfl hx ())
@@ -431,9 +432,9 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
           omega
       | union k =>
         change (cbaseG sL sR o (.node (.union k) a) y ||
-          (List.finRange k).all fun p => goW (rowSpecC sL sR o) prev A (a p) y) = true at h
+          (List.finRange k).all fun p => goW (rowSpecC sL sR o ι) prev A (a p) y) = true at h
         change (cbaseG sL sR o (.node (.union k) a) y ||
-          (List.finRange k).all fun p => goW (rowSpecC sL sR o) prev' A (a p) y) = true
+          (List.finRange k).all fun p => goW (rowSpecC sL sR o ι) prev' A (a p) y) = true
         rcases Bool.or_eq_true_iff.mp h with h | h
         · exact Bool.or_eq_true_iff.mpr (Or.inl h)
         · refine Bool.or_eq_true_iff.mpr (Or.inr (List.all_eq_true.mpr fun p hp => ?_))
@@ -470,14 +471,14 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
               have cla : NoLeaf (a true) := noLeaf_wall hg rfl true
               have clb : NoLeaf (b true) := noLeaf_wall hy'g rfl true
               have e : pairX (sL := sL) (sR := sR) prev A (a true)
-                  (goW (rowSpecC sL sR o) prev A (a true)) (b true) =
+                  (goW (rowSpecC sL sR o ι) prev A (a true)) (b true) =
                   pairX (sL := sL) (sR := sR) prev' A (a true)
-                  (goW (rowSpecC sL sR o) prev' A (a true)) (b true) := by
+                  (goW (rowSpecC sL sR o ι) prev' A (a true)) (b true) := by
                 rw [pairX_noLeaf cla, pairX_noLeaf cla]
-                exact goW_noLeaf sL sR o prev prev' A _ cla _ clb
+                exact goW_noLeaf sL sR o ι prev prev' A _ cla _ clb
               change (decide ((⟨s, k₀ :: ks⟩ : (s : Bool) × List (B.G s × Bool)) = ⟨s', k₀' :: ks'⟩) &&
                 pairX (sL := sL) (sR := sR) prev' A (a true)
-                  (goW (rowSpecC sL sR o) prev' A (a true)) (b true)) = true
+                  (goW (rowSpecC sL sR o ι) prev' A (a true)) (b true)) = true
               rw [← e]
               exact hm
             | _ => exact nomatch hm
@@ -494,9 +495,9 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
             | set =>
               obtain ⟨j, hj⟩ := flat1_down (o := TOp.set) rfl hy'1 ()
               change pairX (sL := sL) (sR := sR) prev' A (a ())
-                (goW (rowSpecC sL sR o) prev' A (a ())) (b ()) = true
+                (goW (rowSpecC sL sR o ι) prev' A (a ())) (b ()) = true
               have hm' : pairX (sL := sL) (sR := sR) prev A (a ())
-                (goW (rowSpecC sL sR o) prev A (a ())) (b ()) = true := hm
+                (goW (rowSpecC sL sR o ι) prev A (a ())) (b ()) = true := hm
               rw [hi] at hm' ⊢
               exact pairX_mono_gen sL sR ρL ρR F (fun i => ⟨F.flatL i, hgL i⟩)
                 (fun j => ⟨F.flatR j, hgR j⟩) hM hbud i (b ()) (Or.inl ⟨j, hj⟩) _ _
@@ -524,9 +525,9 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
                 (fun u h => hU u (Or.inr (Or.inr h))) hm
               obtain ⟨i, hi⟩ := hdown p
               have h0' : pairX (sL := sL) (sR := sR) prev A (a p)
-                  (goW (rowSpecC sL sR o) prev A (a p)) u = true := h0
+                  (goW (rowSpecC sL sR o ι) prev A (a p)) u = true := h0
               show pairX (sL := sL) (sR := sR) prev' A (a p)
-                (goW (rowSpecC sL sR o) prev' A (a p)) u = true
+                (goW (rowSpecC sL sR o ι) prev' A (a p)) u = true
               rw [hi] at h0' ⊢
               exact pairX_mono_gen sL sR ρL ρR F (fun i => ⟨F.flatL i, hgL i⟩)
                 (fun j => ⟨F.flatR j, hgR j⟩) hM hbud i u hu _ _ (fun a' => hleaf i a') h0'
@@ -544,14 +545,14 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
             | obj fs' md' w' =>
               have hbd := fun q => flat1_down (o := TOp.obj fs' md' w') rfl hy'1 q
               refine objK_mono (md := md) o a (kid := fun p => pairX (sL := sL) (sR := sR) prev A (a p)
-                (goW (rowSpecC sL sR o) prev A (a p))) (kid' := fun p => pairX (sL := sL) (sR := sR) prev' A (a p)
-                (goW (rowSpecC sL sR o) prev' A (a p))) (fun p => ?_) hbd hm
+                (goW (rowSpecC sL sR o ι) prev A (a p))) (kid' := fun p => pairX (sL := sL) (sR := sR) prev' A (a p)
+                (goW (rowSpecC sL sR o ι) prev' A (a p))) (fun p => ?_) hbd hm
               intro u hu h0
               obtain ⟨i, hi⟩ := hdown p
               have h0' : pairX (sL := sL) (sR := sR) prev A (a p)
-                  (goW (rowSpecC sL sR o) prev A (a p)) u = true := h0
+                  (goW (rowSpecC sL sR o ι) prev A (a p)) u = true := h0
               show pairX (sL := sL) (sR := sR) prev' A (a p)
-                (goW (rowSpecC sL sR o) prev' A (a p)) u = true
+                (goW (rowSpecC sL sR o ι) prev' A (a p)) u = true
               rw [hi] at h0' ⊢
               exact pairX_mono_gen sL sR ρL ρR F (fun i => ⟨F.flatL i, hgL i⟩)
                 (fun j => ⟨F.flatR j, hgR j⟩) hM hbud i u hu _ _ (fun a' => hleaf i a') h0'
@@ -563,20 +564,20 @@ theorem rowMono_C (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : �
     the fuel of `disjoint`, so does the walk. -/
 theorem compO_fuel_imp_compG (F : Fueled sL sR ρL ρR) (hgL : ∀ i, Good (sL i)) (hgR : ∀ j, Good (sR j))
     (rL : Fin NL) (rR : Fin NR)
-    (h : walkO (rowSpecC sL sR o) (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
-    compG sL sR o (fuel NL NR) [] (.leaf rL) (.leaf rR) = true :=
-  walkO_fuel_imp_walk sL sR ρL ρR F (rowMono_C sL sR o ρL ρR F hgL hgR) (rowNever_C sL sR o ρL) rL rR
+    (h : walkO (rowSpecC sL sR o ι) (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
+    compG sL sR o ι (fuel NL NR) [] (.leaf rL) (.leaf rR) = true :=
+  walkO_fuel_imp_walk sL sR ρL ρR F (rowMono_C sL sR o ι ρL ρR F hgL hgR) (rowNever_C sL sR o ι ρL) rL rR
     ⟨rfl, fun _ => rfl⟩ ⟨rfl, fun _ => rfl⟩ h
 
 end Adequacy
 
 /-- **The fuel of `compat` is adequate**: where the optimistic walk of agreement answers `true` at the
     root, so does `compat`. -/
-theorem compat_of_compO [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (dL : Closed B NL) (dR : Closed B NR) (rL : Fin NL)
-    (rR : Fin NR)
-    (h : walkO (rowSpecC dL.graph dR.graph o) (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
-    compat o dL rL dR rR = true :=
-  compO_fuel_imp_compG dL.graph dR.graph o (fun i => i.val) (fun j => j.val) (Closed.fueled dL dR)
+theorem compat_of_compO [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (ι : Fin NL → Fin NR → Bool)
+    (dL : Closed B NL) (dR : Closed B NR) (rL : Fin NL) (rR : Fin NR)
+    (h : walkO (rowSpecC dL.graph dR.graph o ι) (fuel NL NR) [] (.leaf rL) (.leaf rR) = true) :
+    compat o ι dL rL dR rR = true :=
+  compO_fuel_imp_compG dL.graph dR.graph o ι (fun i => i.val) (fun j => j.val) (Closed.fueled dL dR)
     (Closed.good_graph dL) (Closed.good_graph dR) rL rR h
 
 end Calculus.Alg.Scoped

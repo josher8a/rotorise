@@ -2361,7 +2361,8 @@ describe("the declaration guard, against the model's classifier", () => {
     /**
      * **Each pair carries the warrant of the host's verdict**, and the gate elaborates each one.
      * An accepted pair carries the model's proof that the pair is compatible, through the warrant
-     * the host used. A refused pair carries `Closed.compatPair x y = false`: the host decides
+     * the host used. One option twice, where two scopes refuse, carries the model's proof over one
+     * scope. A refused pair carries `Closed.compatPair x y = false`: the host decides
      * the model's decision, so the model refuses what the host refuses.
      *
      * **The counts pin a fact no law has, deliberately.** They are a property of this corpus, so
@@ -2377,8 +2378,15 @@ describe("the declaration guard, against the model's classifier", () => {
                 one,
             ),
         )
-        expect(accepted.length + refused.length).toBe(emitted.length)
-        expect([accepted.length, refused.length]).toEqual([979, 35])
+        const acceptedOne = emitted.filter((one) =>
+            one.includes('Closed.compat_of_compatOne ('),
+        )
+        expect(accepted.length + acceptedOne.length + refused.length).toBe(
+            emitted.length,
+        )
+        expect([accepted.length, acceptedOne.length, refused.length]).toEqual([
+            979, 2, 33,
+        ])
     })
 
     /**

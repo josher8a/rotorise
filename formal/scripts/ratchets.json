@@ -72,7 +72,7 @@
     "Calculus/JSON/ScopeExact.lean": 8,
     "Calculus/Lang/CodecPath.lean": 88,
     "Calculus/Lang/Scope.lean": 168,
-    "Calculus/Lang/ScopeCompat.lean": 156,
+    "Calculus/Lang/ScopeCompat.lean": 161,
     "Calculus/Lang/ScopeCompatFuel.lean": 176,
     "Calculus/Lang/ScopeDisjoint.lean": 718,
     "Calculus/Lang/ScopeExact.lean": 210,

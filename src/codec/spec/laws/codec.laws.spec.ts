@@ -365,6 +365,82 @@ describe('union', () => {
     })
 })
 
+describe('a union of one option twice', () => {
+    // an older reader over `number`: the stored `S` of an earlier encoding reads as its number
+    const legacyNumber = () =>
+        withLegacyRead({
+            current: number,
+            older: {
+                decode: (attribute) =>
+                    attribute.S === undefined
+                        ? new CodecError('no older number')
+                        : Number(attribute.S),
+            },
+        })
+    // a switch that the caller holds as `'on'` or `'off'`, and that the table stores as `BOOL`
+    const onOff = () =>
+        held(boolean, string('on', 'off'), {
+            encode: (s: 'on' | 'off') => s === 'on',
+            decode: (b) => (b ? 'on' : 'off'),
+        })
+    // declared through a cast, as a caller passing an erased list would
+    const declare = union as unknown as (
+        options: readonly AnyCodec[],
+    ) => AnyCodec
+
+    /**
+     * **An option beside itself is that option, an older reader included.** The union is the join
+     * of its options, and the join is idempotent. The two options are one closed root, so the
+     * decision reads one scope, where one entry agrees with itself (`compatPair_oneScope`).
+     */
+    it('is the option, for an older reader', () => {
+        const L = legacyNumber()
+        const twice = union([L, L])
+        checkEquivalent(twice, L, { seed })
+        expect(twice.unsafeDecode({ N: '2' })).toBe(2)
+        expect(union([L, L, L]).unsafeDecode({ N: '3' })).toBe(3)
+    })
+
+    it('is the option, for a caller held', () => {
+        const H = onOff()
+        const twice = union([H, H])
+        checkEquivalent(twice, H, { seed })
+        expect(twice.unsafeEncode('on')).toEqual({ BOOL: true })
+    })
+
+    /**
+     * **One `ref` twice is the entry that the `ref` names**, where the entry is recursive and
+     * holds an older reader. The scope judges the closed copy, and the copy keeps one term for the
+     * two options.
+     */
+    it('is the option, for a ref to a recursive entry', () => {
+        type Node = { readonly v: number; readonly kids: readonly Node[] }
+        const self = ref('Node')
+        const { Node, Pair } = scope({
+            Node: object({ v: legacyNumber(), kids: array(ref('Node')) }),
+            Pair: union([self, self]),
+        })
+        const tree: Node = { v: 1, kids: [{ v: 2, kids: [] }] }
+        const stored = Node.unsafeEncode(tree)
+        expect(Pair.unsafeEncode(tree as never)).toEqual(stored)
+        expect(Pair.unsafeDecode(stored)).toEqual(tree)
+        expect(union([Node, Node]).unsafeDecode(stored)).toEqual(tree)
+    })
+
+    /**
+     * **Two declarations of one adapter are two options.** The decision reads two closed roots as
+     * two scopes, and an adapter compares by syntax, so two stand-ins refuse.
+     */
+    it('refuses two declarations of one adapter', () => {
+        expect(() => declare([legacyNumber(), legacyNumber()])).toThrow(
+            /are not shown compatible/,
+        )
+        expect(() => declare([onOff(), onOff()])).toThrow(
+            /are not shown compatible/,
+        )
+    })
+})
+
 describe('optional', () => {
     /**
      * Not idempotent, because it is not derivable: a marker marks a declaration once.

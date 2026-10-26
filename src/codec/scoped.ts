@@ -742,11 +742,16 @@ export const storedApart = (x: Term, y: Term): boolean =>
  */
 type Half = 'write' | 'read'
 
-/** **Where the decision is**: the half, the two operands, and the two operands of the view. */
+/**
+ * **Where the decision is**: the half, the two operands, the two operands of the view, and whether
+ * the two operands are one scope. `one` is the model's identification `oneScope`, and its absence is
+ * `twoScopes`.
+ */
 type Agreement = Ctx & {
     readonly half: Half
     readonly viewL: Side
     readonly viewR: Side
+    readonly one: boolean
 }
 
 /**
@@ -757,10 +762,21 @@ type Agreement = Ctx & {
  * (`Closed.compatPair_sound`). A term with no graph agrees with nothing.
  */
 export const agrees = (x: Term, y: Term): boolean =>
-    agreesAt('write', x, y) && agreesAt('read', x, y)
+    agreesAt('write', x, y, true) && agreesAt('read', x, y, true)
 
-/** **One half of agreement**, the model's `Scoped.compat` at the orientation of the half. */
-const agreesAt = (half: Half, x: Term, y: Term): boolean => {
+/**
+ * **Whether two options agree on both halves, read as two scopes**, the model's
+ * `Closed.compatPair`: the decision identifies no entry of one option with an entry of the other.
+ * {@link agrees} reads one term as one scope, so the two answers differ only on one term twice.
+ */
+export const agreesApart = (x: Term, y: Term): boolean =>
+    agreesAt('write', x, y, false) && agreesAt('read', x, y, false)
+
+/**
+ * **One half of agreement**, the model's `Scoped.compat` at the orientation of the half. `scoped`
+ * says whether the decision reads one flat scope as one scope.
+ */
+const agreesAt = (half: Half, x: Term, y: Term, scoped: boolean): boolean => {
     const left = sideOf(x, 'raw')
     const right = sideOf(y, 'raw')
     const mode: Mode = half === 'write' ? 'caller' : 'stored'
@@ -773,9 +789,11 @@ const agreesAt = (half: Half, x: Term, y: Term): boolean => {
         viewR === undefined
     )
         return false
+    // the two operands are one scope where the two options share one flat scope: one closed root
+    const one = scoped && left.bodies === right.bodies
     return walkOf(
         agreeRow,
-        (c): Agreement => ({ ...c, half, viewL, viewR }),
+        (c): Agreement => ({ ...c, half, viewL, viewR, one }),
         left,
         right,
     )(
@@ -870,7 +888,8 @@ const agreeRight = (
 
 /**
  * **One row per operation of the left operand**, the model's `rowSpecC`, with `prev` as the walk at
- * the next fuel. A set and an object compare their positions below the guard ({@link pairX}). A
+ * the next fuel. In one scope, an entry agrees with the same entry, because one entry has one
+ * meaning (`compatPair_oneScope`). A set and an object compare their positions below the guard ({@link pairX}). A
  * list compares the aligned rows at each common length ({@link alignedRows}). A `held` compares its inner terms, which are closed, through the same test.
  */
 const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
@@ -878,7 +897,11 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
     const base = (r1: At) => agreeBase(k, l, r1)
     switch (l.kind) {
         case 'entry':
-            return base(r) || k.prev(table, body(k.left, l.j), r)
+            return (
+                base(r) ||
+                (k.one && r.kind === 'entry' && r.j === l.j) ||
+                k.prev(table, body(k.left, l.j), r)
+            )
         case 'refine':
             return base(r) || agreeRow(k, table, l.inner, r)
         case 'free':

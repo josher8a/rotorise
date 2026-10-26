@@ -612,19 +612,22 @@ describe('the held side is the write occupancy of a union option', () => {
     /**
      * **A legacy read is decided by the base test alone**, because its older reader is caller code
      * and the model reads that reader as opaque. On the write half the two legacy reads hold one
-     * text, and no base row separates them, so the union is refused even when both options are
-     * one codec. The `held` over the bottom stores nothing, so only the write half refuses.
+     * text, and no base row separates them, so two declarations of one codec are refused. One
+     * codec twice is one scope, and one entry agrees with itself. The `held` over the bottom
+     * stores nothing, so only the write half refuses.
      */
-    it('refuses a codec with a legacy read beside itself, because the older reader is opaque', () => {
-        const flag = held(never, boolean, {
-            encode: () => new CodecError('nothing is stored'),
-            decode: () => new CodecError('nothing is stored'),
-        })
-        const pair = list(
-            withLegacyRead({ current: string, older: string }),
-            flag,
-        )
-        expect(() => declare([pair, pair])).toThrow(CodecError)
+    it('refuses two declarations of a codec with a legacy read, because the older reader is opaque', () => {
+        const pairOf = () =>
+            list(
+                withLegacyRead({ current: string, older: string }),
+                held(never, boolean, {
+                    encode: () => new CodecError('nothing is stored'),
+                    decode: () => new CodecError('nothing is stored'),
+                }),
+            )
+        expect(() => declare([pairOf(), pairOf()])).toThrow(CodecError)
+        const pair = pairOf()
+        expect(() => declare([pair, pair])).not.toThrow()
     })
 
     /**

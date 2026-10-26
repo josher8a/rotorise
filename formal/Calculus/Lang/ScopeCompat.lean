@@ -111,11 +111,21 @@ def famN : (op : TOp B) → (op.Pos → Graph B NL) → (op.Pos → Graph B NR �
   | .obj _ md _, a, kid, y => objK (md := md) o a kid y
   | _, _, _, _ => false
 
+omit [Mean B] [Leaf B] in
+/-- **Two positions that are one entry**: a left entry beside a right entry that the
+    identification `ι` names. An identification names a pair of entries with one meaning, so the
+    pair agrees by reflexivity. Two scopes have no entry in common (`twoScopes`), and one scope
+    names each entry once (`oneScope`). -/
+def oneG (ι : Fin NL → Fin NR → Bool) (i : Fin NL) : Graph B NR → Bool
+  | .leaf j => ι i j
+  | _ => false
+
 variable (sL sR)
 
-/-- **The row of agreement**, one case for each operation of the left operand. -/
-def rowSpecC : Row sL sR where
-  leaf rs j y := cbaseG sL sR o (.leaf j) y || rs (sL j) y
+/-- **The row of agreement**, one case for each operation of the left operand. An entry agrees
+    with the entry that the identification `ι` names as the same entry. -/
+def rowSpecC (ι : Fin NL → Fin NR → Bool) : Row sL sR where
+  leaf rs j y := (cbaseG sL sR o (.leaf j) y || oneG ι j y) || rs (sL j) y
   node rs op a self kid y := match op, a, self, kid with
     | .never, _, _, _ => true
     | .refine q qA, a, self, _ => cbaseG sL sR o (.node (.refine q qA) a) y || self () y
@@ -125,20 +135,40 @@ def rowSpecC : Row sL sR where
         (fun y' => cbaseG sL sR o (.node op a) y' || famN o op a kid y') y
 
 /-- **The walk at a fuel**, the walk of the row of agreement. -/
-def compG : Nat → Tbl NL NR → Graph B NL → Graph B NR → Bool := walk (rowSpecC sL sR o)
+def compG (ι : Fin NL → Fin NR → Bool) : Nat → Tbl NL NR → Graph B NL → Graph B NR → Bool :=
+  walk (rowSpecC sL sR o ι)
 
 end Rows
 
-/-- **One half of the compatibility of two closed codecs**, at their roots and at the orientation.
-    The fuel is the fuel of `disjoint`. -/
-def compat [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (dL : Closed B NL) (rL : Fin NL)
-    (dR : Closed B NR) (rR : Fin NR) : Bool :=
-  compG dL.graph dR.graph o (fuel NL NR) [] (.leaf rL) (.leaf rR)
+/-- **Two scopes identify no entry.** The decision reads two closed codecs as two scopes. -/
+def twoScopes {NL NR : Nat} : Fin NL → Fin NR → Bool := fun _ _ => false
+
+/-- **One scope identifies each entry with itself**, by the index of the entry. -/
+def oneScope {N : Nat} : Fin N → Fin N → Bool := fun i j => decide (i = j)
+
+/-- **One half of the compatibility of two closed codecs**, at their roots and at the orientation,
+    under the identification `ι` of their entries. The fuel is the fuel of `disjoint`. -/
+def compat [Mean B] [Leaf B] {NL NR : Nat} (o : Orient) (ι : Fin NL → Fin NR → Bool)
+    (dL : Closed B NL) (rL : Fin NL) (dR : Closed B NR) (rR : Fin NR) : Bool :=
+  compG dL.graph dR.graph o ι (fuel NL NR) [] (.leaf rL) (.leaf rR)
 
 /-- **The compatibility of two closed codecs**: both halves, at the host and at the dual. -/
-def compatPair [Mean B] [Leaf B] {NL NR : Nat} (dL : Closed B NL) (rL : Fin NL) (dR : Closed B NR)
-    (rR : Fin NR) : Bool :=
-  compat .host dL rL dR rR && compat .dual dL rL dR rR
+def compatPair [Mean B] [Leaf B] {NL NR : Nat} (ι : Fin NL → Fin NR → Bool) (dL : Closed B NL)
+    (rL : Fin NL) (dR : Closed B NR) (rR : Fin NR) : Bool :=
+  compat .host ι dL rL dR rR && compat .dual ι dL rL dR rR
+
+/-- **A root of one scope agrees with itself**: the row of one entry answers at the root, before
+    the walk reads a body. -/
+theorem compatPair_oneScope [Mean B] [Leaf B] {N : Nat} (d : Closed B N) (r : Fin N) :
+    compatPair oneScope d r d r = true := by
+  have hn : fuel N N = (fuel N N - 1) + 1 :=
+    (Nat.succ_pred_eq_of_pos (Nat.mul_pos (Nat.succ_pos _) (Nat.succ_pos _))).symm
+  have half : ∀ o, compat o oneScope d r d r = true := by
+    intro o
+    simp only [compat, compG]
+    rw [hn]
+    simp only [walk, goW, rowSpecC, oneG, oneScope, decide_true, Bool.or_true, Bool.true_or]
+  simp only [compatPair, half, Bool.and_self]
 
 /-! ## A term with no leaf below a wall -/
 
@@ -496,20 +526,37 @@ theorem set_agree {cA cB : Mean.C S.sig} (h : Agree o cA cB) :
 
 /-! ### The rows -/
 
-variable {cL : Closed S.sig NL} {cR : Closed S.sig NR}
+/-- **An identification of entries is sound** where each pair of entries that it names has one
+    meaning. -/
+def IdentSound {NL NR : Nat} (cL : Closed S.sig NL) (cR : Closed S.sig NR)
+    (ι : Fin NL → Fin NR → Bool) : Prop :=
+  ∀ i j, ι i j = true → Closed.meaning τ cL i = Closed.meaning τ cR j
+
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
+/-- Two scopes identify no entry, so their identification is sound. -/
+theorem identSound_twoScopes {NL NR : Nat} (cL : Closed S.sig NL) (cR : Closed S.sig NR) :
+    IdentSound (τ := τ) cL cR twoScopes :=
+  fun _ _ h => nomatch h
+
+omit [Leaf S.sig] [Shapes S] [TopLaws S] in
+/-- One scope identifies an entry with itself only, so its identification is sound. -/
+theorem identSound_oneScope {N : Nat} (c : Closed S.sig N) : IdentSound (τ := τ) c c oneScope :=
+  fun _ _ h => by rw [of_decide_eq_true h]
+
+variable {cL : Closed S.sig NL} {cR : Closed S.sig NR} {ι : Fin NL → Fin NR → Bool}
 
 /-- **A guarded left node**: each answer of a term that its rows admit is the left answer, where
     each answer of a term of the family is. -/
 theorem guard_at (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Prop}
-    (hR : PostT (rowSpecC cL.graph cR.graph o) R) {op : TOp S.sig} {a : op.Pos → Graph S.sig NL}
+    (hR : PostT (rowSpecC cL.graph cR.graph o ι) R) {op : TOp S.sig} {a : op.Pos → Graph S.sig NL}
     {v w : Mean.V (B := S.sig)} (hx : (mng τ (Closed.toG τ cL) (.node op a)).f o v = some w)
     (hfam : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y' b, famN o op a (fun p => Rc (a p)) y' = true →
       (mng τ (Closed.toG τ cR) y').f o v = some b → w = b)
-    (heq : ∀ Rr Rc y, rowT (rowSpecC cL.graph cR.graph o) Rr Rc (.node op a) y =
+    (heq : ∀ Rr Rc y, rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc (.node op a) y =
       rightC cR.graph (Rr (.node op a)) (fun y' => cbaseG cL.graph cR.graph o (.node op a) y' ||
         famN o op a (fun p => Rc (a p)) y') y) :
     ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-      rowT (rowSpecC cL.graph cR.graph o) Rr Rc (.node op a) y = true →
+      rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc (.node op a) y = true →
       ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
   have fam' : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y' b,
       (cbaseG cL.graph cR.graph o (.node op a) y' || famN o op a (fun p => Rc (a p)) y') = true →
@@ -529,10 +576,10 @@ theorem guard_at (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Pr
 
 omit [Shapes S] [TopLaws S] in
 /-- **The relation from the rows**, at one input. -/
-theorem rformC {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostT (rowSpecC cL.graph cR.graph o) R)
+theorem rformC {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostT (rowSpecC cL.graph cR.graph o ι) R)
     {x : Graph S.sig NL} {v w : Mean.V (B := S.sig)}
     (hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-      rowT (rowSpecC cL.graph cR.graph o) Rr Rc x y = true →
+      rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc x y = true →
       ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z)
     (hleaf : ∀ i j, x = .leaf i → R (cL.graph i) (cR.graph j) →
       ∀ z, (mng τ (Closed.toG τ cR) (cR.graph j)).f o v = some z → w = z) :
@@ -548,11 +595,12 @@ theorem rformC {R : Graph S.sig NL → Graph S.sig NR → Prop} (hR : PostT (row
     with the left term gives the same answer. A container reads its children at a smaller depth
     of the datum, through `AgB`. A `held` reads the derivation of its inner term, which has no
     leaf, at each input. -/
-theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR → Prop}
-    (hR : PostT (rowSpecC cL.graph cR.graph o) R) :
+theorem post_soundC (laws : Laws S o) (hι : IdentSound (τ := τ) cL cR ι)
+    {R : Graph S.sig NL → Graph S.sig NR → Prop}
+    (hR : PostT (rowSpecC cL.graph cR.graph o ι) R) :
     ∀ {x o' v r}, Eval (Closed.toG τ cL) x o' v r → o' = o → ∀ w, r = some w → Good x →
       (∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-        rowT (rowSpecC cL.graph cR.graph o) Rr Rc x y = true →
+        rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc x y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z) ∧
       ∀ y, R x y → ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
   intro x o' v r h
@@ -562,12 +610,18 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     have hx := (mng_of_eval _ (Eval.leaf h0)).trans hw
     have IH := ih rfl w hw (fun j => (SSys.order cL).2 i j)
     have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-        rowT (rowSpecC cL.graph cR.graph o) Rr Rc (.leaf i) y = true →
+        rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc (.leaf i) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
       intro Rr Rc hr _ y h z hz
       simp only [rowT, rowSpecC, Bool.or_eq_true] at h
-      rcases h with h | h
+      rcases h with (h | h) | h
       · exact cbaseG_sound laws cL cR h v w z hx hz
+      · cases y with
+        | leaf j =>
+          have hz' : (Closed.meaning τ cR j).f o v = some z := hz
+          rw [← hι i j h] at hz'
+          exact Option.some.inj (hx.symm.trans hz')
+        | node _ _ => exact nomatch h
       · exact IH.2 y (hr _ _ h) z hz
     exact ⟨hrows, rformC hR hrows fun i' j hxi h => by cases hxi; exact IH.2 _ h⟩
   | @prim g a o' v =>
@@ -588,7 +642,7 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     have hx := (mng_of_eval _ (Eval.refine h0)).trans hw
     have IH := ih rfl w (bind_some_eq hw) (good_child hg (fun h => nomatch h) ())
     have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-        rowT (rowSpecC cL.graph cR.graph o) Rr Rc (.node (.refine p pA) a) y = true →
+        rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc (.node (.refine p pA) a) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
       intro Rr Rc hr hc y h z hz
       simp only [rowT, rowSpecC, Bool.or_eq_true] at h
@@ -602,7 +656,7 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     have hx := (mng_of_eval _ (Eval.unionHead h0)).trans hw
     have IH := ih rfl w hw (good_child hg (fun h => nomatch h) (0 : Fin (m + 1)))
     have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-        rowT (rowSpecC cL.graph cR.graph o) Rr Rc (.node (.union (m + 1)) a) y = true →
+        rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc (.node (.union (m + 1)) a) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
       intro Rr Rc hr hc y h z hz
       simp only [rowT, rowSpecC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
@@ -615,7 +669,7 @@ theorem post_soundC (laws : Laws S o) {R : Graph S.sig NL → Graph S.sig NR →
     have hx := (mng_of_eval _ (Eval.unionTail h0 h1)).trans hw
     have IH := ih rfl w hw (good_tail hg)
     have hrows : ∀ Rr Rc, SubR Rr R → SubR Rc R → ∀ y,
-        rowT (rowSpecC cL.graph cR.graph o) Rr Rc (.node (.union (m + 1)) a) y = true →
+        rowT (rowSpecC cL.graph cR.graph o ι) Rr Rc (.node (.union (m + 1)) a) y = true →
         ∀ z, (mng τ (Closed.toG τ cR) y).f o v = some z → w = z := by
       intro Rr Rc hr hc y h z hz
       simp only [rowT, rowSpecC, Bool.or_eq_true, List.all_eq_true, List.mem_finRange, true_implies] at h
@@ -736,12 +790,13 @@ end Sound
 theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
     {τ : (s : Bool) → TableAt S.sig s} {o : Orient} (laws : Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
-    (h : compat o dL rL dR rR = true) :
+    {ι : Fin NL → Fin NR → Bool} (hι : IdentSound (τ := τ) dL dR ι)
+    (h : compat o ι dL rL dR rR = true) :
     Agree o (Closed.meaning τ dL rL) (Closed.meaning τ dR rR) := by
   intro v w z hw hz
   have he := eval_of_mng (Closed.toG τ dL) (.leaf rL) o v
   rw [show (mng τ (Closed.toG τ dL) (.leaf rL)).f o v = some w from hw] at he
-  exact (post_soundC (cL := dL) (cR := dR) laws (vis_postW (rowSpecC dL.graph dR.graph o)) he rfl w rfl
+  exact (post_soundC (cL := dL) (cR := dR) laws hι (vis_postW (rowSpecC dL.graph dR.graph o ι)) he rfl w rfl
     (fun _ => rfl)).2 _ (vis_root dL.graph dR.graph _ h) z hz
 
 /-- **Soundness of the pair**: where `compatPair` answers `true`, the two meanings agree at the
@@ -749,10 +804,11 @@ theorem compat_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
 theorem compatPair_sound {S : Syn} [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S]
     {τ : (s : Bool) → TableAt S.sig s} (laws : ∀ o, Laws S o) {NL NR : Nat}
     {dL : Closed S.sig NL} {dR : Closed S.sig NR} {rL : Fin NL} {rR : Fin NR}
-    (h : compatPair dL rL dR rR = true) :
+    {ι : Fin NL → Fin NR → Bool} (hι : IdentSound (τ := τ) dL dR ι)
+    (h : compatPair ι dL rL dR rR = true) :
     Agree .host (Closed.meaning τ dL rL) (Closed.meaning τ dR rR) ∧
       Agree .dual (Closed.meaning τ dL rL) (Closed.meaning τ dR rR) := by
   simp only [compatPair, Bool.and_eq_true] at h
-  exact ⟨compat_sound (laws .host) h.1, compat_sound (laws .dual) h.2⟩
+  exact ⟨compat_sound (laws .host) hι h.1, compat_sound (laws .dual) hι h.2⟩
 
 end Calculus.Alg.Scoped

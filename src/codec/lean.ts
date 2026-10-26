@@ -84,7 +84,14 @@ import {
 } from './codec'
 import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
 import { CodecError, failed, type Result } from './result'
-import { agrees, disjoint, flatOf, storedApart, viewsDisjoint } from './scoped'
+import {
+    agrees,
+    agreesApart,
+    disjoint,
+    flatOf,
+    storedApart,
+    viewsDisjoint,
+} from './scoped'
 import type {
     Alternatives,
     Body,
@@ -1301,6 +1308,11 @@ const refusedBoth = (name: string, codec: AnyCodec, value: unknown): void => {
  *   only for a codec that the model's guard accepts. Where {@link agrees} holds, the host decided
  *   the model's `Closed.compatPair`, and `Closed.compat_of_compatPair` gives `Compat` in each
  *   order over two lawful meanings. A host warrant that the model does not prove stops the file.
+ * - `src/` **accepts** one option twice, where two scopes refuse the pair: the two options are one
+ *   term, so {@link agrees} reads one scope. The pair prints as one closed codec, and the model's
+ *   `Closed.compatOne` decides the pair over one scope. `Closed.compat_of_compatOne` gives `Compat`
+ *   of the lawful meaning with itself. A pair that two scopes accept prints as two closed codecs,
+ *   so a spelling that makes two terms of one codec prints the same row.
  * - `src/` **refuses** the pair at its compatibility test: the pair prints as two closed codecs,
  *   and the model's decision refuses the pair, `Closed.compatPair x y = false`. A decision that
  *   starts to accept a pair `src/` turns down stops the file.
@@ -1332,7 +1344,7 @@ export type Separation = {
  * guard or with `agrees`, no form states the host, and the emitter refuses the pair. Otherwise a row
  * checks the union decision alone, and a guard or `agrees` that drifts from the decision passes.
  */
-type SeparationForm = 'accepted' | 'refused' | 'guardRefused'
+type SeparationForm = 'accepted' | 'acceptedOne' | 'refused' | 'guardRefused'
 
 /** The form of one separation verdict, with the `src/` side decided here. */
 const separationForm = ({ name, left, right }: Separation): SeparationForm => {
@@ -1368,8 +1380,10 @@ const separationForm = ({ name, left, right }: Separation): SeparationForm => {
             '`src/` accepts this pair, and its guard refuses an option: no form states the host',
         )
     }
+    if (agreesApart(left.def, right.def)) return 'accepted'
+    // one term is one scope, and the decision over one scope accepts where two scopes refuse
     return agrees(left.def, right.def)
-        ? 'accepted'
+        ? 'acceptedOne'
         : refuse(
               name,
               '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
@@ -1409,6 +1423,16 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `    Closed.compatPair (${l})`,
             `      (${r}) = false :=`,
             `  ${reduce}`,
+        ].join('\n')
+    }
+    // one option twice is one scope, and the decision over one scope states the pair
+    if (form === 'acceptedOne') {
+        return [
+            `/-- \`${name}\` — \`src/\` accepts one option twice; the model proves it compatible with itself -/`,
+            `${head} (κ : Callers) :`,
+            `    Lawful ((${l}).meaning (libTable κ)) →`,
+            `      Alg.Compat ((${l}).meaning (libTable κ)) ((${l}).meaning (libTable κ)) :=`,
+            `  Closed.compat_of_compatOne (${reduce}) (libTable κ)`,
         ].join('\n')
     }
     // the host's union verdict is the guard and the compatibility test, and a closed codec states the guard
@@ -1905,6 +1929,14 @@ const separationLists = {
         Alg.Compat (p.2.2.meaning (libTable κ)) (p.2.1.meaning (libTable κ))`,
         lift: (list: string) => `accepted_of_rows (${list}_check ρ π) κ`,
     },
+    acceptedOne: {
+        type: 'Closed',
+        ok: 'acceptedOneOk',
+        caller: ' (κ : Callers)',
+        verdict: `Lawful (p.2.meaning (libTable κ)) →
+      Alg.Compat (p.2.meaning (libTable κ)) (p.2.meaning (libTable κ))`,
+        lift: (list: string) => `acceptedOne_of_rows (${list}_check ρ π) κ`,
+    },
     refused: {
         type: '(Closed × Closed)',
         ok: 'refusedOk',
@@ -1924,8 +1956,9 @@ const separationLists = {
 /**
  * The declaration verdicts as rows, one form per {@link SeparationForm}. A row of an accepted pair
  * or of a pair refused at compatibility is the two closed codecs: a closed codec exists only for a
- * guarded codec, so the row states the guard by its type. A row of a pair refused at the guard is
- * the two graphs, because such a pair has no closed codec.
+ * guarded codec, so the row states the guard by its type. A row of one option twice is the one
+ * closed codec. A row of a pair refused at the guard is the two graphs, because such a pair has no
+ * closed codec.
  */
 export const separationRows = (
     separations: readonly Separation[],
@@ -1940,7 +1973,11 @@ export const separationRows = (
                 one.name,
                 form === 'guardRefused' ? 'graph' : 'closed',
             )
-            return { name: leanIdent(one.name), form, row: `(${l}, ${r})` }
+            return {
+                name: leanIdent(one.name),
+                form,
+                row: form === 'acceptedOne' ? l : `(${l}, ${r})`,
+            }
         }),
 })
 

@@ -68,7 +68,7 @@ instance, and JSON is a second instance.
 | `Lang/Scope.lean`, `Lang/ScopeSound.lean`, `Lang/ScopeHeldFree.lean` | the closed codec `Scoped.Closed` and its meaning, the judgement `Scoped.Typed` and `Scoped.Obligations`, `Scoped.Closed.sound`, `Scoped.Closed.meaning_sub`, and the product of closed objects `Scoped.Term.product` |
 | `Lang/Universe.lean`, `Lang/ScopeDisjoint.lean` | the class `Leaf`, the one walk of the decisions (`Scoped.Row`, `Scoped.walk`) over pairs of terms, the structural disjointness decision `Scoped.disjoint` over two closed codecs with its soundness `Scoped.disjoint_sound`, the view `viewG` at an orientation, and `views_apart` |
 | `Lang/ScopeFuel.lean`, `Lang/ScopeExact.lean` | the adequacy of the fuel of the walk on a flat system, for each row that meets `Scoped.RowMono` and `Scoped.RowNever`, the witness laws `Scoped.WLaws`, the fragment `Scoped.Frag`, and the exactness `Scoped.disjoint_exact`; `Dynamo/Analysis/ScopeExact.lean` and `JSON/ScopeExact.lean` give the two universes |
-| `Lang/ScopeCompat.lean`, `Lang/ScopeCompatFuel.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs, the row of agreement on the one walk, `Scoped.compatPair_sound`, and the adequacy of its fuel |
+| `Lang/ScopeCompat.lean`, `Lang/ScopeCompatFuel.lean` | the compatibility decision `Scoped.compatPair` over two closed codecs under an identification of their entries, the row of agreement on the one walk, `Scoped.compatPair_sound`, and the adequacy of its fuel |
 | `Lang/CodecPath.lean`, `Lang/ScopePath.lean` | the write of the store at a path `putPath` with `path_law`, the frontier of a closed codec `Rooted.at`, the strong law `Closed.strong_law`, and narrowing `narrowC` with `narrowC_law` |
 
 `Rows.lean` is generic too, in the namespace `Calculus`. It states the row combinators of the
@@ -827,7 +827,8 @@ option that writes and reads other slots is disjoint from the option.
 (Lawson: `s ∨ t` exists iff `s ∼ t`), and compatibility is two halves of agreement: two writers of
 one value write one attribute (`Agree` at the host), and two readers of one attribute read one
 value (`Agree` at the dual). `Scoped.compat` decides each half per component: the two terms are
-disjoint there, or one codec bounds both there. The bottom agrees with every term. Two terms below
+disjoint there, one codec bounds both there, or the two positions are one entry of one scope. The
+bottom agrees with every term. Two terms below
 the top are bounded by the top (`belowTop`). The decision over
 closed codecs, `Closed.compatPair`, takes no oracle. A `held` whose
 half, or the half of the `held` inside it, is disjoint from the partner agrees there.
@@ -844,7 +845,8 @@ lawfulness.
 
 **The decision is the specification of the library's declaration-time guard, and a checked one.**
 The `union` combinator in `src/` accepts a pair where `agrees(x, y)` holds, which is the model's
-`Closed.compatPair`, per half and per component. `Closed.pairwiseCompat_of_compatPair` proves each
+`Closed.compatPair`, per half and per component. One term twice is one scope, and there
+`agrees(x, x)` is the model's `Closed.compatOne`. `Closed.pairwiseCompat_of_compatPair` proves each
 accepted pair compatible. The combinator refuses every other pair, because the pair is not shown
 compatible.
 
