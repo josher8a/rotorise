@@ -250,26 +250,26 @@ describe('a union pattern splits an option at a position as it splits one at a f
         M: { category: { S: 'CAT' }, coat: { S: 'tabby' } },
     }
 
-    it('keeps one option for each pattern member at a field', () => {
+    it('keeps the option whole where the pattern members cover its field', () => {
         const held = union([object({ x: union([Dog, Cat]) })])
         const kept = extract(
             held,
             union([object({ x: Dog }), object({ x: Cat })]),
         )
-        expect(optionsOf(kept)).toHaveLength(2)
+        expect(optionsOf(kept)).toHaveLength(1)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             { readonly x: Dog } | { readonly x: Cat }
         >()
     })
 
-    it('keeps one option for each pattern member at a position', () => {
+    it('keeps the option whole where the pattern members cover its position', () => {
         const held = union([object({ r: list(union([Dog, Cat])) })])
         const pattern = union([
             object({ r: list(Dog) }),
             object({ r: list(Cat) }),
         ])
         const kept = extract(held, pattern)
-        expect(optionsOf(kept)).toHaveLength(2)
+        expect(optionsOf(kept)).toHaveLength(1)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             { readonly r: readonly [Dog] } | { readonly r: readonly [Cat] }
         >()
@@ -351,14 +351,14 @@ describe('a union pattern splits an option at a position as it splits one at a f
         }
     })
 
-    it('splits a list held at a position of a list, as a position of a list', () => {
+    it('keeps a list held at a position of a list whole, as a position of a list', () => {
         const held = union([object({ r: list(list(union([Dog, Cat]))) })])
         const pattern = union([
             object({ r: list(list(Dog)) }),
             object({ r: list(list(Cat)) }),
         ])
         const kept = extract(held, pattern)
-        expect(optionsOf(kept)).toHaveLength(2)
+        expect(optionsOf(kept)).toHaveLength(1)
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             | { readonly r: readonly [readonly [Dog]] }
             | { readonly r: readonly [readonly [Cat]] }

@@ -11,12 +11,15 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import type { Decoded } from '../../codec'
 import {
+    array,
     binary,
     boolean,
     decimal,
     discriminatedUnion,
     exclude,
     extract,
+    fits,
+    list,
     meet,
     never,
     number,
@@ -25,6 +28,7 @@ import {
     optional,
     refine,
     string,
+    termOf,
     union,
 } from '../../codec'
 import { failed } from '../../result'
@@ -524,17 +528,82 @@ describe('fits is the order of the meet, at the top and at a set', () => {
 })
 
 /**
- * **The literal grain stays coarse.** `fits` reads a union pattern one option at a time, so a base
- * that a union of all its literals covers fits no option, and the extraction keeps nothing. The meet
- * holds the whole base. A canonical normal form closes the case.
+ * **A union pattern covers a part of the option, and the option fits where each part fits.** The
+ * parts of the option are the join-prime terms of its normal form: a finite base splits into its
+ * literals, and an object or a list splits at a union that sits at a field or at a position. A list
+ * of a union is one part, because the list holds mixed lists. A refinement is one part, because
+ * the host cannot read the predicate.
  */
-describe('fits reads a union pattern one option at a time', () => {
-    it('keeps no member whose base a union of every literal of the base covers', () => {
+describe('fits splits the option into its parts before it reads a union pattern', () => {
+    const both = union([boolean(true), boolean(false)])
+    const cell = (a: boolean, b: boolean) =>
+        object({ a: boolean(a), b: boolean(b) })
+
+    it('keeps the member whose base a union of every literal of the base covers', () => {
         const members = union([object({ k: boolean }), object({ n: number })])
-        const kept = extract(
-            members,
-            object({ k: union([boolean(true), boolean(false)]) }),
-        )
-        expect(kept.def.kind).toBe('never')
+        const kept = extract(members, object({ k: both }))
+        expect(optionsOf(kept).map((one) => one.kind)).toEqual(['object'])
+    })
+
+    it('fits a base to the union of its literals', () => {
+        expect(fits(termOf(boolean), termOf(both))).toBe(true)
+    })
+
+    it('fits an object at a field to the union of its literals at that field', () => {
+        expect(
+            fits(termOf(object({ k: boolean })), termOf(object({ k: both }))),
+        ).toBe(true)
+    })
+
+    it('fits two boolean fields to the four combinations', () => {
+        const four = union([
+            cell(true, true),
+            cell(true, false),
+            cell(false, true),
+            cell(false, false),
+        ])
+        expect(
+            fits(termOf(object({ a: boolean, b: boolean })), termOf(four)),
+        ).toBe(true)
+        const three = union([
+            cell(true, true),
+            cell(true, false),
+            cell(false, true),
+        ])
+        expect(
+            fits(termOf(object({ a: boolean, b: boolean })), termOf(three)),
+        ).toBe(false)
+    })
+
+    it('fits a tuple position to the union of its literals at that position', () => {
+        const split = union([
+            list(boolean(true), string),
+            list(boolean(false), string),
+        ])
+        expect(fits(termOf(list(boolean, string)), termOf(split))).toBe(true)
+    })
+
+    it('does not fit a list of a base to the union of the lists of its literals, because the list holds mixed lists', () => {
+        const split = union([array(boolean(true)), array(boolean(false))])
+        expect(fits(termOf(array(boolean)), termOf(split))).toBe(false)
+    })
+
+    it('stops the split at 1024 parts and answers no fit past the limit, because the parts of an object are a product of its fields', () => {
+        const fields = (n: number) =>
+            Object.fromEntries(
+                Array.from({ length: n }, (_, at) => [`f${at}`, boolean]),
+            )
+        const halves = union([
+            object({ f0: boolean(true) }),
+            object({ f0: boolean(false) }),
+        ])
+        // ten boolean fields are 2^10 = 1024 parts, which is the limit
+        expect(fits(termOf(object(fields(10))), termOf(halves))).toBe(true)
+        expect(fits(termOf(object(fields(11))), termOf(halves))).toBe(false)
+    })
+
+    it('does not fit a refinement of a base to the union of its literals, because the predicate is opaque', () => {
+        const refined = refine(boolean, (v): v is boolean => v === true)
+        expect(fits(termOf(refined), termOf(both))).toBe(false)
     })
 })

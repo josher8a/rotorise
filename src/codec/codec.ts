@@ -7611,6 +7611,77 @@ const below = (
     }
 }
 
+/**
+ * The most parts that {@link joinParts} builds for one term. A term past the limit stays one part,
+ * and `fits` errs towards no fit. The limit refuses, and the reason is the size: the parts of an
+ * object are a product of the parts of its fields, so `n` boolean fields give `2^n` parts, and the
+ * union rule walks each part against each option of the pattern.
+ */
+const PARTS_LIMIT = 1024
+
+/**
+ * **The parts of the normal form of a term in the value order**: a finite join of join-prime
+ * terms. `boolean` is `true ∨ false`. An object distributes over a union at a field, and a list
+ * distributes over a union at a position of its prefix or suffix. A list of a union is one part,
+ * because the list holds mixed lists. A refinement, an older reading, an adapter, a `ref` and a
+ * set are one part: the host cannot read the first two, and the others hold no split of their own.
+ * The split of one part is the split of its parts, so each union is flattened. The union rule of
+ * {@link fitsNode} needs this, because `a ≤ ⋁ pᵢ` gives `a ≤ pᵢ` for some `i` only where `a` is
+ * join-prime. A term whose parts pass {@link PARTS_LIMIT} stays one part, and `fits` errs towards
+ * no fit.
+ */
+const joinParts = (t: Term): Term[] => {
+    const product = <T>(slots: readonly T[][]): T[][] | undefined => {
+        let count = 1
+        for (const one of slots) {
+            count *= one.length
+            if (count > PARTS_LIMIT) return undefined
+        }
+        return slots.reduce<T[][]>(
+            (rows, one) => rows.flatMap((row) => one.map((x) => [...row, x])),
+            [[]],
+        )
+    }
+    switch (t.kind) {
+        case 'union':
+            return t.options.flatMap(joinParts)
+        case 'boolean':
+            return [true, false].map((v) => ({
+                kind: 'literal',
+                base: 'boolean',
+                v,
+            }))
+        case 'object': {
+            const rows = product(
+                Object.entries(t.body.fields).map(([name, field]) =>
+                    joinParts(field.t).map((part): [string, Field] => [
+                        name,
+                        { ...field, t: part },
+                    ]),
+                ),
+            )
+            return rows === undefined
+                ? [t]
+                : rows.map((row) => ({
+                      kind: 'object',
+                      body: { ...t.body, fields: Object.fromEntries(row) },
+                  }))
+        }
+        case 'list': {
+            const rows = product([...t.pre, ...t.suf].map(joinParts))
+            return rows === undefined
+                ? [t]
+                : rows.map((row) => ({
+                      ...t,
+                      pre: row.slice(0, t.pre.length),
+                      suf: row.slice(t.pre.length),
+                  }))
+        }
+        default:
+            return [t]
+    }
+}
+
 /** The rules of {@link below} at two nodes that are not `ref`s, with `fits` as the order of each child pair. */
 const fitsNode = (
     A: Term,
@@ -7620,7 +7691,12 @@ const fitsNode = (
 ): boolean => {
     if (holdsNoValue(A) || P.kind === 'opaq') return true
     if (A.kind === 'union') return A.options.every((one) => fits(one, P))
-    if (P.kind === 'union') return P.options.some((one) => fits(A, one))
+    if (P.kind === 'union') {
+        const { options } = P
+        return joinParts(A).every((part) =>
+            options.some((one) => fits(part, one)),
+        )
+    }
     // a refinement holds a part of the pairs of its inner term, and an older reading holds each
     // pair of its current form
     if (A.kind === 'refine') return fits(A.inner, P)

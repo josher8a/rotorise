@@ -384,18 +384,35 @@ describe('the partial fit sits two levels down', () => {
 })
 
 describe('a dissection keeps its members whole', () => {
-    it('refuses a pattern that fits a summand in part, and keeps no value that the type drops', () => {
+    it('refuses a pattern that covers a summand in part, and keeps no value that the type drops', () => {
         const byKind = discriminatedUnion('kind', [
             object({ kind: string('ADOPT'), pet: pets }),
             object({ kind: string('RETURN'), pet: pets, note: string }),
         ])
-        const both = object({
+        const part = object({
+            pet: union([
+                object({ owner: object({ type: string('PERSON') }) }),
+                object({
+                    category: string('DOG'),
+                    owner: object({ type: string('SHELTER') }),
+                }),
+            ]),
+        })
+        const slice = () => extract(byKind, part)
+        expect(slice).toThrow(/keeps its members whole/)
+    })
+
+    it('keeps a member whole where the pattern covers each part of the member, though no pattern option covers the member', () => {
+        const byKind = discriminatedUnion('kind', [
+            object({ kind: string('ADOPT'), pet: pets }),
+            object({ kind: string('RETURN'), pet: pets, note: string }),
+        ])
+        const cover = object({
             pet: union([
                 object({ owner: object({ type: string('PERSON') }) }),
                 object({ owner: object({ type: string('SHELTER') }) }),
             ]),
         })
-        const slice = () => extract(byKind, both)
-        expect(slice).toThrow(/keeps its members whole/)
+        expect(extract(byKind, cover).def).toEqual(byKind.def)
     })
 })

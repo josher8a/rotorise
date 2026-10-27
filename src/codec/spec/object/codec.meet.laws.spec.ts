@@ -8,7 +8,7 @@
  *
  * The laws that hold with `meet` are the meet laws (commute, associate, idempotent, covariant, bottom
  * is the disjoint pair, path), and the laws of `extract` and `exclude` that read the lattice (the meet
- * of two patterns, commute, idempotent, the join of two exclusions, the order of fit). `extract` is
+ * of two patterns, commute, idempotent, the exclusions of two patterns against the exclusion of their union, which is an inequality, and the order of fit). `extract` is
  * total: a pattern that no member fits gives `never`, and `extract` of `never` is `never`. So no law
  * skips a pair.
  */
@@ -20,6 +20,7 @@ import {
     boolean,
     exclude,
     extract,
+    fits,
     list,
     meet,
     never,
@@ -61,6 +62,14 @@ const same = (x: Outcome, y: Outcome): boolean =>
 
 const then = (o: Outcome, f: (c: AnyCodec) => AnyCodec): Outcome =>
     o === 'refused' ? o : run(() => f(o.codec))
+
+/** The options of a codec: a union gives its options, `never` gives none, and any other term is one option. */
+const optionsOfCodec = (c: AnyCodec): readonly Term[] =>
+    c.def.kind === 'union'
+        ? c.def.options
+        : c.def.kind === 'never'
+          ? []
+          : [c.def]
 
 const isNever = (o: Outcome): boolean =>
     o !== 'refused' && (o.codec.def as Term).kind === 'never'
@@ -233,8 +242,13 @@ describe('the meet is a lattice operation over the pool', () => {
         expect(compared).toBeGreaterThan(0)
     })
 
-    /** An option that each pattern rejects is an option that the union of the patterns rejects. */
-    it('makes exclude by two patterns the exclude by their union', () => {
+    /**
+     * **`exclude` keeps whole options, as `Exclude<T, U>` does**, so an option that a pattern
+     * covers in part stays whole. Two exclusions hold each option that the exclusion by the union
+     * of the patterns holds. An option that only the two patterns together cover is the one
+     * difference: neither pattern fits the option, and the union fits it.
+     */
+    it('holds by two exclusions each option that the exclusion by their union holds, and only an option that neither pattern fits and the union fits besides', () => {
         let compared = 0
         for (const t of TAGGED) {
             for (const [a, b] of pairs(PATTERNS)) {
@@ -246,11 +260,49 @@ describe('the meet is a lattice operation over the pool', () => {
                     run(() => union([a, b])),
                     (p) => excludeOf(t, p),
                 )
-                expect(same(twice, once)).toBe(true)
-                if (twice !== 'refused') compared++
+                if (twice === 'refused' || once === 'refused') {
+                    expect(twice).toBe(once)
+                    continue
+                }
+                const both = union([a, b]).def
+                const kept = optionsOfCodec(once.codec)
+                for (const option of optionsOfCodec(twice.codec)) {
+                    if (kept.some((one) => sameTerm(one, option))) continue
+                    expect(fits(option, a.def)).toBe(false)
+                    expect(fits(option, b.def)).toBe(false)
+                    expect(fits(option, both)).toBe(true)
+                }
+                for (const option of kept) {
+                    expect(
+                        optionsOfCodec(twice.codec).some((one) =>
+                            sameTerm(one, option),
+                        ),
+                    ).toBe(true)
+                }
+                compared++
             }
         }
         expect(compared).toBeGreaterThan(0)
+    })
+
+    /**
+     * The strict case. The option `{ kind: 'a', n: 'p' | 'q' }` fits neither `{ n: 'q' }` nor
+     * `{ n: 'p' }`, and fits their union. Each exclusion alone keeps the option whole, and the
+     * exclusion by the union drops it.
+     */
+    it('keeps an option that two patterns cover only together, in two exclusions, and drops the option in one exclusion by their union', () => {
+        const t = TAGGED[1] as AnyCodec
+        const q = object({ n: string('q') })
+        const p = object({ n: string('p') })
+        const twice = excludeOf(excludeOf(t, q), p)
+        const once = excludeOf(t, union([q, p]))
+        const whole = object({ kind: string('a'), n: string('p', 'q') }).def
+        expect(optionsOfCodec(twice).some((one) => sameTerm(one, whole))).toBe(
+            true,
+        )
+        expect(optionsOfCodec(once).some((one) => sameTerm(one, whole))).toBe(
+            false,
+        )
     })
 })
 

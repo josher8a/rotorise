@@ -643,6 +643,52 @@ const bit = (b: boolean): string => (b ? '1' : '0')
 const dropped = new Map<string, number>()
 const drop = (why: string) => dropped.set(why, (dropped.get(why) ?? 0) + 1)
 
+/**
+ * **The covers: a finite base against the union of its literals.** The random draw builds no union
+ * of every literal of a base, so a pattern that covers a base by its literals needs a fixed
+ * draw. Each cover is a root or a field of a pattern, built through the public constructors.
+ * The pairs among the covers hold the cases where a union on the pattern side must split: a base,
+ * an object field, two fields against the four combinations, and a tuple position. A list of a
+ * base does not split, so `array(boolean)` stands against `array(true) | array(false)` as the
+ * pair that must stay refused.
+ */
+const covers: readonly Entry[] = (() => {
+    const both = union([boolean(true), boolean(false)])
+    const cell = (a: boolean, b: boolean) =>
+        object({ a: boolean(a), b: boolean(b) })
+    return [
+        ['boolean', boolean],
+        ['true', boolean(true)],
+        ['true|false', both],
+        ['object{k:boolean}', object({ k: boolean })],
+        ['object{k:true|false}', object({ k: both })],
+        ['object{k:boolean,n:string}', object({ k: boolean, n: string })],
+        ['object{a:boolean,b:boolean}', object({ a: boolean, b: boolean })],
+        [
+            'object{a,b:literal}x4',
+            union([
+                cell(true, true),
+                cell(true, false),
+                cell(false, true),
+                cell(false, false),
+            ]),
+        ],
+        ['list(boolean,string)', list(boolean, string)],
+        [
+            'list(true,string)|list(false,string)',
+            union([list(boolean(true), string), list(boolean(false), string)]),
+        ],
+        ['array(boolean)', array(boolean)],
+        [
+            'array(true)|array(false)',
+            union([array(boolean(true)), array(boolean(false))]),
+        ],
+    ].map(([name, codec]) => ({
+        name: name as string,
+        codec: erase(codec),
+    }))
+})()
+
 /** The pairs of one seed. The names continue after `first`, so the seeds share one name space. */
 const pool = (seed: number, first: number): readonly PoolPair[] => {
     rng = rngFrom(seed)
@@ -715,6 +761,13 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     for (const e of built) {
         add(e, e)
         for (let j = 0; j < PARTNERS; j++) add(e, pick(built))
+    }
+    if (seed === SEEDS[0]) {
+        for (let i = 0; i < covers.length; i++) {
+            for (let j = i; j < covers.length; j++) {
+                add(covers[i] as Entry, covers[j] as Entry)
+            }
+        }
     }
     for (const [a, b] of declared) add(a, b)
     return pairs
@@ -1612,23 +1665,23 @@ describe('the generated pool, against the model', () => {
               "path: a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form": 1,
               "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 73,
               "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 17,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1586,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1628,
               "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 587,
             },
             "seeds": [
               {
                 "assignments": 33,
-                "clauses": 4035,
-                "codecsPathed": 226,
-                "disjoints": 1071,
+                "clauses": 4350,
+                "codecsPathed": 237,
+                "disjoints": 1149,
                 "fills": 5,
                 "guards": 0,
-                "pairs": 1071,
-                "paths": 1999,
+                "pairs": 1149,
+                "paths": 2033,
                 "seed": 20261004,
-                "separations": 1066,
-                "slices": 83,
-                "whenPaths": 6970,
+                "separations": 1144,
+                "slices": 93,
+                "whenPaths": 7012,
               },
               {
                 "assignments": 26,
