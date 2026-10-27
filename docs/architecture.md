@@ -991,7 +991,8 @@ row.** `Vectors.lean` holds `check` and `vcheck`, which compare an attribute by 
 `veq` under fuel: `aeq_same` makes `.same` equality, and `aeq_differ` makes `.differ` disequality,
 with `veq_sound` as the twin at `Value`. `Rows.lean` holds `failing`, `ok_of_failing`, the
 comparator of each evaluation form with its law (`writesOk_iff` and the others), the lifts of the
-separation forms, and the cover of the meet (`meetCoversOk_sound`, `meetCovers_of_rows`).
+separation forms, the cover of the meet (`meetCoversOk_sound`, `meetCovers_of_rows`), and the fit
+(`fitsOk_sound`, `fits_of_rows`).
 `ScopePaths.lean` holds `pathKindC` and `pathReadC`, with `pathReadC_resolved_sem` and
 `two_frames_of_ambiguousC`, and `frameSameC` with its proved limit `pathKindC_reads_no_closure`.
 
@@ -1001,6 +1002,14 @@ checks that the model's meet term writes the attribute wherever the model's two 
 and that each check settles. `meetCovers_of_rows` lifts the row to the pair of `Codec.meet` of the
 two meanings. A row reads each factor as written, and the host reads each factor open, so the
 equation is out of reach. A term with a refinement or with a cycle states no row.
+
+**A fit row asserts a witness of the value order.** A row holds an option of a pool pair, the
+pattern as the host opens it, a value that the option writes, the attribute, and a flag. The flag
+is true where `fits(...)` says yes, and false where the host refuses the value through the opened
+pattern. The kernel checks that the model's option writes the attribute from the value, and that
+the model's opened pattern writes from the value exactly where the flag is true. The model states
+the order as `VSub` on the held sets. A row states one value, so a row is a witness and not the
+order. A term with a refinement or with a cycle states no row.
 
 **A read row asserts a decoded value.** A read vector states that the model's `p`, at the
 attribute that the library wrote, gives the value that `decode(...)` read back, by `vcheck`. The

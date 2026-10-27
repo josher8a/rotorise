@@ -48,6 +48,7 @@ import {
     number,
     object,
     opaque,
+    opened,
     optional,
     ref,
     refine,
@@ -61,6 +62,7 @@ import {
 import { codecOfTerm, termOf } from '../denote'
 import type {
     DisjointPair,
+    FitRow,
     FormerGuard,
     HostAt,
     MeetCover,
@@ -74,8 +76,10 @@ import {
     LeanUnemittable,
     leanAttrOf,
     leanClosedOf,
+    leanClosedOfTerm,
     leanDisjoint,
     leanDisjointRowModule,
+    leanFitModule,
     leanFormerGuard,
     leanFormerGuardModule,
     leanGraphOf,
@@ -124,6 +128,8 @@ const DEPTH = 3
 const PARTNERS = 8
 /** The values that the meet rows draw from each of the two factors. */
 const MEET_SAMPLES = 1
+/** The values that the fit rows draw from each option. */
+const FIT_SAMPLES = 1
 
 type Entry = { readonly name: string; readonly codec: AnyCodec }
 
@@ -1463,6 +1469,111 @@ const meetCoversOf = (pairs: readonly PoolPair[]): MeetCover[] => {
     return covers
 }
 
+/**
+ * **The fit rows of the pool**: each pair in both orders, with the verdict of `fits` of the option
+ * against the pattern, and the value that a draw from the option writes. A row where `fits` says
+ * yes states that the model's opened pattern writes the value, and the sample finds no value that
+ * the opened pattern refuses where `fits` says yes: a refusal there is a failure of the row. A row
+ * where `fits` says no is a witness only where `src/` itself refuses the value through the opened
+ * pattern, so the kernel checks that the model refuses the same value. A term with a refinement or
+ * a cycle states no row, for the reasons of {@link meetCoversOf}.
+ */
+const fitRowsOf = (pairs: readonly PoolPair[]): FitRow[] => {
+    const rows: FitRow[] = []
+    const seen = new Set<string>()
+    const emits = (f: () => unknown): boolean => {
+        try {
+            f()
+            return true
+        } catch (error) {
+            if (!(error instanceof LeanUnemittable)) throw error
+            drop(`fit: ${error.reason}`)
+            return false
+        }
+    }
+    for (const p of pairs) {
+        const orders =
+            p.left.def === p.right.def
+                ? ([[p.left, p.right, 'lr']] as const)
+                : ([
+                      [p.left, p.right, 'lr'],
+                      [p.right, p.left, 'rl'],
+                  ] as const)
+        for (const [option, pattern, order] of orders) {
+            const name = `${p.name}_${order}`
+            const two = [option, pattern]
+            if (
+                two.some(
+                    (c) =>
+                        'mark' in c.def ||
+                        [...reachable(c.def)].some((t) => t.kind === 'refine'),
+                )
+            ) {
+                drop('fit: a refinement, the stated limit')
+                continue
+            }
+            if (two.some((c) => recursionUse(c.def as Term) > 0)) {
+                drop('fit: a cycle, which the diagnostic `#eval` cannot afford')
+                continue
+            }
+            const opening = opened(termOf(pattern))
+            const holds = fits(termOf(option), termOf(pattern))
+            // the opened pattern may have no codec: a refusal states no witness
+            const refuses = (() => {
+                try {
+                    return codecOfTerm<unknown, AttributeValue>(opening)
+                } catch {
+                    return undefined
+                }
+            })()
+            const printed: string[] = []
+            if (
+                !emits(() => {
+                    printed.push(leanClosedOf(option, name))
+                    printed.push(leanClosedOfTerm(opening, name))
+                })
+            )
+                continue
+            for (let k = 1; k <= FIT_SAMPLES; k++) {
+                let value: unknown
+                try {
+                    value = absentUndefined(arbitraryOf(option, rngFrom(k), 3))
+                } catch {
+                    continue
+                }
+                const attribute = option.encode(value as never)
+                if (failed(attribute)) continue
+                if (
+                    !holds &&
+                    (refuses === undefined ||
+                        !failed(refuses.encode(value as never)))
+                ) {
+                    continue
+                }
+                let row = ''
+                if (
+                    !emits(() => {
+                        row = `${leanValueOf(value)} ${leanAttrOf(attribute as AttributeValue)} ${holds}`
+                    })
+                )
+                    continue
+                const key = `${printed.join('|')}|${row}`
+                if (seen.has(key)) continue
+                seen.add(key)
+                rows.push({
+                    name: `${name}_${rows.length}`,
+                    option,
+                    pattern: opening,
+                    value,
+                    attribute: attribute as AttributeValue,
+                    holds,
+                })
+            }
+        }
+    }
+    return rows
+}
+
 /** The files that the gate elaborates, by name, from one build of the pool. */
 const poolModules = (
     perSeed: ReturnType<typeof buildPool>,
@@ -1496,6 +1607,10 @@ const poolModules = (
     [
         '.pool.guards.lean',
         leanFormerGuardModule(perSeed.flatMap((one) => one.guards)),
+    ],
+    [
+        '.pool.fits.lean',
+        leanFitModule(fitRowsOf(perSeed.flatMap((one) => one.pairs))),
     ],
     [
         '.pool.meets.lean',
@@ -1872,6 +1987,7 @@ describe('the generated pool, against the model', () => {
             '.pool.paths2.lean',
             '.pool.paths3.lean',
             '.pool.guards.lean',
+            '.pool.fits.lean',
             '.pool.meets.lean',
         ])
     })

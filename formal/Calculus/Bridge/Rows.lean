@@ -204,4 +204,44 @@ theorem meetCovers_of_rows [DecidableEq Attr]
     let ⟨hA, hB⟩ := Alg.Codec.meet_f.mp hm
     meetCoversOk_sound (ok_of_failing h _ hp) hA hB
 
+/-! ## Fits -/
+
+/-- A row of a fit: the model's `A` writes the attribute `s` from the value `v`, and the model's
+    `P` writes some attribute from `v` exactly where `holds` is `true`. `P` is the pattern as
+    `src/` opens it, printed as a closed codec. -/
+def fitsOk (p : Nat × Closed × Closed × Value × Attr × Bool) : Bool :=
+  check p.1 ((p.2.1.meaning (libTable noCallers)).e p.2.2.2.1) (some p.2.2.2.2.1) == Verdict.same &&
+    ((p.2.2.1.meaning (libTable noCallers)).e p.2.2.2.1).isSome == p.2.2.2.2.2
+
+/-- The law of `fitsOk`: the model's `A` writes `s` from `v`, and the model's `P` writes from `v`
+    exactly where `holds` is `true`. -/
+theorem fitsOk_sound {n : Nat} {A P : Closed} {v : Value} {s : Attr} {holds : Bool}
+    (h : fitsOk (n, A, P, v, s, holds) = true) :
+    (A.meaning (libTable noCallers)).e v = some s ∧
+      ((P.meaning (libTable noCallers)).e v).isSome = holds := by
+  simp only [fitsOk, Bool.and_eq_true, beq_iff_eq] at h
+  exact ⟨check_same h.1, h.2⟩
+
+/-- **A row of a fit that holds is a value of the value order.** Where both meanings hold each
+    value that they write, the value `v` is a value of `A` and a value of `P`. -/
+theorem fitsOk_held {n : Nat} {A P : Closed} {v : Value} {s : Attr}
+    (h : fitsOk (n, A, P, v, s, true) = true)
+    (hA : Alg.Carrier (A.meaning (libTable noCallers)))
+    (hP : Alg.Carrier (P.meaning (libTable noCallers))) :
+    (A.meaning (libTable noCallers)).T v ∧ (P.meaning (libTable noCallers)).T v :=
+  let ⟨ha, hp⟩ := fitsOk_sound h
+  let ⟨_, hw⟩ := Option.isSome_iff_exists.mp hp
+  ⟨hA.domE ha, hP.domE hw⟩
+
+/-- **A fit row states what the model's pattern writes at each row.** At each row, the model's
+    `A` writes `s` from `v`, and the model's `P` writes from `v` exactly where `holds` is
+    `true`. -/
+theorem fits_of_rows
+    {rows : List (String × Nat × Closed × Closed × Value × Attr × Bool)}
+    (h : failing fitsOk rows = []) :
+    ∀ x n A P v s holds, (x, n, A, P, v, s, holds) ∈ rows →
+      (A.meaning (libTable noCallers)).e v = some s ∧
+        ((P.meaning (libTable noCallers)).e v).isSome = holds :=
+  fun _ _ _ _ _ _ _ hp => fitsOk_sound (ok_of_failing h _ hp)
+
 end Calculus

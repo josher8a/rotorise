@@ -99,6 +99,56 @@ theorem lawful_meet (hc : Lawful member c) (hd : Lawful member d) : Lawful membe
 
 end Meet
 
+/-! ### The value order
+
+`Sub` compares graphs. The value order compares held sets: a codec is below another where the
+second holds each value that the first holds. The order reads `T` only, so a law of the order
+needs a premise on the carrier only where the law reads a write. The model has no top: a codec
+is a partial map, so the open reading of a pattern is a term that the host builds, and the model
+reads the term as written. -/
+
+/-- **The value order**: each value that `c` holds, `d` holds. -/
+def VSub (c d : Codec V M) : Prop := ∀ v, c.T v → d.T v
+
+/-- The value order is reflexive. -/
+theorem vsub_refl (c : Codec V M) : VSub c c := fun _ h => h
+
+/-- The value order is transitive. -/
+theorem vsub_trans {c d x : Codec V M} (h : VSub c d) (h' : VSub d x) : VSub c x :=
+  fun v hv => h' v (h v hv)
+
+/-- **A union on the left is every option**: the union is below a codec where each option is. -/
+theorem vsub_altCodec_left {os : List (Codec V M)} {μ : Option M} {d : Codec V M} :
+    VSub (altCodec os μ) d ↔ ∀ o ∈ os, VSub o d :=
+  ⟨fun h _ ho v hv => h v ⟨_, ho, hv⟩, fun h v ⟨o, ho, hv⟩ => h o ho v hv⟩
+
+/-- **A union on the right is the join**: a codec that is below one option is below the union. -/
+theorem vsub_altCodec_right {os : List (Codec V M)} {μ : Option M} {c o : Codec V M}
+    (ho : o ∈ os) (h : VSub c o) : VSub c (altCodec os μ) :=
+  fun v hv => ⟨o, ho, h v hv⟩
+
+/-- **The graph order gives the value order**, where `c` holds only values that it writes and `d`
+    holds each value that it writes. A write of `c` is a write of `d`, and `d` holds its writes. -/
+theorem vsub_of_sub {c d : Codec V M} (hs : Sub c d)
+    (hc : ∀ v, c.T v → (c.e v).isSome = true) (hd : Carrier d) : VSub c d :=
+  fun v hv =>
+    let ⟨_, ha⟩ := Option.isSome_iff_exists.mp (hc v hv)
+    hd.domE (hs Orient.host v _ ha)
+
+section MeetValue
+variable [DecidableEq V] {c d : Codec V M}
+
+/-- **The meet is the greatest lower bound of the value order.** -/
+theorem vsub_meet {x : Codec V M} : VSub x (c.meet d) ↔ VSub x c ∧ VSub x d :=
+  ⟨fun h => ⟨fun v hv => (h v hv).1, fun v hv => (h v hv).2⟩,
+   fun h v hv => ⟨h.1 v hv, h.2 v hv⟩⟩
+
+/-- **`c` is below `d` where the meet holds each value that `c` holds.** -/
+theorem vsub_iff_meet : VSub c d ↔ ∀ v, c.T v → (c.meet d).T v :=
+  ⟨fun h v hv => ⟨hv, h v hv⟩, fun h v hv => (h v hv).2⟩
+
+end MeetValue
+
 /-! ### First-match resolution under the obligation
 
 The definition takes the first admitter and never compares attributes, so no `DecidableEq`

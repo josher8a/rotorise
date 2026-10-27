@@ -672,8 +672,11 @@ export const leanClosedOf = (
 }
 
 /** The closed codec of a term, as {@link leanClosedOf} prints it. */
-const leanClosedOfTerm = (def: Term, at: string, bound?: Bound): string =>
-    closedPrint(def, at, bound).text
+export const leanClosedOfTerm = (
+    def: Term,
+    at: string,
+    bound?: Bound,
+): string => closedPrint(def, at, bound).text
 
 /**
  * A printed closed codec, with the entry of each term that prints as an entry: an entry is its index
@@ -2233,6 +2236,110 @@ ${lists
             '      (Alg.Codec.meet (A.meaning (libTable noCallers)) (B.meaning (libTable noCallers))).e v =',
             '        some s → (M.meaning (libTable noCallers)).e v = some s :=',
             `  meetCovers_of_rows (${name}_check ρ π)`,
+        ].join('\n'),
+    )
+    .join('\n\n')}
+
+${leanDiagnostic(lists)}
+
+end Calculus
+`)
+}
+
+/* ── the fit rows ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * **One row of a fit**: the option, the pattern as `src/` opens it, one value that the option
+ * writes with its attribute, and whether `src/` writes the value through the opened pattern.
+ */
+export type FitRow = {
+    readonly name: string
+    readonly option: AnyCodec
+    readonly pattern: Term
+    readonly value: unknown
+    readonly attribute: AttributeValue
+    readonly holds: boolean
+}
+
+/**
+ * The fit rows: the fuel of the attribute, the two closed codecs, the value, the attribute, and
+ * the flag. The checker of a list states that the model's meaning of the option writes the
+ * attribute from the value, and that the model's meaning of the opened pattern writes from the
+ * value exactly where the flag is `true`.
+ */
+export const fitRows = (fits: readonly FitRow[]): RowFile<'fits'> => ({
+    forms: {
+        fits: {
+            type: '(Nat × Closed × Closed × Value × Attr × Bool)',
+            ok: 'fitsOk',
+        },
+    },
+    rows: (shapes) =>
+        fits.map((one) => {
+            const o = shapes.closed(
+                leanClosedOf(one.option, one.name),
+                'closed',
+            )
+            const p = shapes.closed(
+                leanClosedOfTerm(one.pattern, one.name),
+                'closed',
+            )
+            return {
+                name: leanIdent(one.name),
+                form: 'fits',
+                row: `(${fuelFor(one.attribute)}, ${o}, ${p}, ${leanValueOf(one.value, one.name)}, ${leanAttrOf(one.attribute, one.name)}, ${one.holds})`,
+            }
+        }),
+})
+
+/**
+ * The fit rows in the row form. Each list carries the checker, and the statement about the model's
+ * meaning of the opened pattern at each row, lifted from the checker.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanFitModule = (
+    fits: readonly FitRow[],
+    subject: Subject = 'pool',
+): string => {
+    const shapes = kernelShapes()
+    const lists = kernelLists(fitRows(fits), shapes)
+    return leanModule(`import Calculus.Bridge.Rows
+
+/-!
+# The fits of the ${subject}, checked in the model
+
+**Generated — do not edit.** One row per sampled value of an option of a ${subject} pair: the fuel,
+the closed codec of the option, the closed codec of the pattern as \`src/\` opens it, the value, the
+attribute that the option writes from the value, and the flag. The flag is \`true\` where
+\`src/\`'s \`fits\` says that the option fits the pattern, and \`false\` where \`src/\` refuses the
+value through the opened pattern. The checker of a list states that the model's meaning of the
+option writes the attribute from the value, and that the model's meaning of the opened pattern
+writes from the value exactly where the flag is \`true\`. \`fits_of_rows\` lifts the checker to that
+statement at each row. A row reads a sampled value, so the row states a witness of the value order
+and not the order.
+
+${rowForm(subject)}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${lists
+    .map(({ name, text }) =>
+        [
+            text,
+            '',
+            `theorem ${name}_fits ${rowBinders} :`,
+            `    ∀ x n A P v s holds, (x, n, A, P, v, s, holds) ∈ ${name} ρ π →`,
+            '      (A.meaning (libTable noCallers)).e v = some s ∧',
+            '        ((P.meaning (libTable noCallers)).e v).isSome = holds :=',
+            `  fits_of_rows (${name}_check ρ π)`,
         ].join('\n'),
     )
     .join('\n\n')}
