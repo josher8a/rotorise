@@ -18,7 +18,9 @@
  *
  * Spoken to over plain HTTP rather than through the AWS SDK, so this package keeps its zero
  * dependencies. Local DynamoDB and LocalStack do not verify the signature; a real endpoint would
- * need SigV4 and is not what this tier is for.
+ * need SigV4 and is not what this tier is for. The real service was measured once, with the SDK, on
+ * the exponent, the trailing zero and the negative zero of the normalisation test: it returned the
+ * same strings as LocalStack, and the offline pin of those strings is in `dynamonumber.spec.ts`.
  *
  * The wire format is JSON, in which `B` is base64 — a detail the SDK normally hides, and one that
  * has to be handled here or `binary` could never be tested through storage at all.
@@ -197,6 +199,11 @@ suite('the law, against DynamoDB', () => {
             ['007', '7'],
             ['+1', '1'],
             ['1e5', '100000'],
+            ['1E+5', '100000'],
+            ['1e-130', `0.${'0'.repeat(129)}1`],
+            ['1e125', `1${'0'.repeat(125)}`],
+            ['9.9e125', `99${'0'.repeat(124)}`],
+            ['0.10', '0.1'],
             ['-0', '0'],
             ['0.0', '0'],
             ['1.0', '1'],

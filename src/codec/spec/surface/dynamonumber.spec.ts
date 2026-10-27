@@ -136,6 +136,34 @@ describe('the store normalises, and so does the constructor', () => {
         }
     })
 
+    /**
+     * The strings that the real service returned, measured in us-east-1 with a raw `PutItem` and a
+     * consistent `GetItem`. The constructor must land on the same string, not only on some stored
+     * spelling, because a read compares the text that the store hands back.
+     */
+    it('holds the string that the real store returned, for each spelling that was written', () => {
+        const returned: readonly (readonly [string, string])[] = [
+            ['1e5', '100000'],
+            ['1E+5', '100000'],
+            ['1e-130', `0.${'0'.repeat(129)}1`],
+            ['1e125', `1${'0'.repeat(125)}`],
+            ['9.9e125', `99${'0'.repeat(124)}`],
+            ['1.0', '1'],
+            ['0.10', '0.1'],
+            ['-0', '0'],
+            ['-0.000001', '-0.000001'],
+            ['100000', '100000'],
+        ]
+        for (const [written, stored] of returned) {
+            expect([written, num(written).toString()]).toEqual([
+                written,
+                stored,
+            ])
+        }
+        // the real store refuses this write with a number overflow, and so does the constructor
+        expect(failed(DynamoNumber.from('1e126'))).toBe(true)
+    })
+
     it('leaves a spelling the store already returns alone', () => {
         expect(num('1.5').toString()).toBe('1.5')
         expect(num('-0.00001').toString()).toBe('-0.00001')

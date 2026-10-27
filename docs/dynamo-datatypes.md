@@ -66,6 +66,12 @@ Numbers can be positive, negative, or zero. Numbers can have up to 38 digits of 
 
 In DynamoDB, numbers are represented as variable length. Leading and trailing zeroes are trimmed.
 
+**Measured by this repository** (us-east-1, 2026-10-27, a raw `PutItem` and a consistent `GetItem`): the store returns
+each number as a plain decimal and never in exponent form. `1e5` and `1E+5` return `100000`, `1e-130` returns `0.`
+followed by 129 zeros and `1`, `1.0` returns `1`, `0.10` returns `0.1`, and `-0` returns `0`. A write of `1e126` fails
+with a number overflow. A number set returns each element in that form, and not in the order written. LocalStack 4.12.0
+returns the same strings. `src/codec/spec/surface/dynamonumber.spec.ts` pins the strings.
+
 All numbers are sent across the network to DynamoDB as strings to maximize compatibility across languages and libraries. However, DynamoDB treats them as number type attributes for mathematical operations. 
 
 You can use the number data type to represent a date or a timestamp. One way to do this is by using epoch time—the number of seconds since 00:00:00 UTC on 1 January 1970. For example, the epoch time `1437136300` represents 12:31:40 PM UTC on 17 July 2015.
