@@ -257,9 +257,9 @@ describe('a union pattern splits an option at a position as it splits one at a f
             union([object({ x: Dog }), object({ x: Cat })]),
         )
         expect(optionsOf(kept)).toHaveLength(1)
-        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
-            { readonly x: Dog } | { readonly x: Cat }
-        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<{
+            readonly x: Dog | Cat
+        }>()
     })
 
     it('keeps the option whole where the pattern members cover its position', () => {
@@ -270,9 +270,9 @@ describe('a union pattern splits an option at a position as it splits one at a f
         ])
         const kept = extract(held, pattern)
         expect(optionsOf(kept)).toHaveLength(1)
-        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
-            { readonly r: readonly [Dog] } | { readonly r: readonly [Cat] }
-        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<{
+            readonly r: readonly [Dog | Cat]
+        }>()
         // the members cover the position, so nothing is rejected
         expect(optionsOf(exclude(held, pattern))).toHaveLength(0)
         for (const row of [dog, cat]) {
@@ -359,10 +359,9 @@ describe('a union pattern splits an option at a position as it splits one at a f
         ])
         const kept = extract(held, pattern)
         expect(optionsOf(kept)).toHaveLength(1)
-        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
-            | { readonly r: readonly [readonly [Dog]] }
-            | { readonly r: readonly [readonly [Cat]] }
-        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<{
+            readonly r: readonly [readonly [Dog | Cat]]
+        }>()
         expect(optionsOf(exclude(held, pattern))).toHaveLength(0)
         for (const row of [dog, cat]) {
             const value = {

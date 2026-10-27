@@ -6623,31 +6623,44 @@ type ObjectOfSpec<S> = S extends Record<string, ObjectSlot>
     : never
 
 /** A spec, split at the keys of the pattern specs `PU` where the spec holds objects. */
-type SplitSpec<Spec, PU> = SplitKeys<[Spec], KeyTuple<KeysOfUnion<PU>>, PU>
+type SplitSpec<Spec, PU, Lit extends boolean = false> = SplitKeys<
+    [Spec],
+    KeyTuple<KeysOfUnion<PU>>,
+    PU,
+    Lit
+>
 type SplitKeys<
     States extends readonly unknown[],
     Keys extends readonly unknown[],
     PU,
+    Lit extends boolean,
 > = Keys extends readonly [infer Key, ...infer Rest extends readonly unknown[]]
-    ? SplitKeys<SplitAt<States, Key, PU>, Rest, PU>
+    ? SplitKeys<
+          CapStates<SplitAt<States, Key, PU, Lit>, Key, Lit>,
+          Rest,
+          PU,
+          Lit
+      >
     : States
 type SplitAt<
     States extends readonly unknown[],
     Key,
     PU,
+    Lit extends boolean,
 > = States extends readonly [
     infer State,
     ...infer Rest extends readonly unknown[],
 ]
-    ? [...SplitState<State, Key, PU>, ...SplitAt<Rest, Key, PU>]
+    ? [...SplitState<State, Key, PU, Lit>, ...SplitAt<Rest, Key, PU, Lit>]
     : []
-type SplitState<State, Key, PU> = Key extends keyof State
+type SplitState<State, Key, PU, Lit extends boolean> = Key extends keyof State
     ? SplitsAtPresence<State[Key], PatternCodecsAt<PU, Key>> extends true
         ? ReplaceField<
               [
                   ...(SplitSlot<
                       Marks<State[Key]>,
-                      PatternCodecsAt<PU, Key>
+                      PatternCodecsAt<PU, Key>,
+                      Lit
                   > extends infer Parts extends readonly unknown[]
                       ? Parts
                       : [Marks<State[Key]>]),
@@ -6658,7 +6671,8 @@ type SplitState<State, Key, PU> = Key extends keyof State
           >
         : SplitSlot<
                 State[Key],
-                PatternCodecsAt<PU, Key>
+                PatternCodecsAt<PU, Key>,
+                Lit
             > extends infer Parts extends readonly unknown[]
           ? ReplaceField<Parts, State, Key>
           : [State]
@@ -6675,14 +6689,21 @@ type PatternCodecsAt<PU, Key> = PU extends unknown
  * objects do. A fixed list is a product of its positions, so it splits at each position, and a
  * position is a slot again.
  */
-type SplitSlot<C, PC> = [FixedElements<C>] extends [never]
+type SplitSlot<C, PC, Lit extends boolean = false> = [
+    FixedElements<C>,
+] extends [never]
     ? [FieldSpecList<C>] extends [never]
-        ? false
-        : MapObjects<InnerSpecs<FieldSpecList<C>, FieldSpecList<PC>[number]>>
+        ? Lit extends true
+            ? LiteralParts<C>
+            : false
+        : MapObjects<
+              InnerSpecs<FieldSpecList<C>, FieldSpecList<PC>[number], Lit>
+          >
     : SplitPositions<
             [C],
             PC,
-            FixedElements<C>['length']
+            FixedElements<C>['length'],
+            Lit
         > extends infer Ls extends readonly unknown[]
       ? [Ls] extends [[C]]
           ? [[C]] extends [Ls]
@@ -6695,29 +6716,42 @@ type SplitPositions<
     Ls extends readonly unknown[],
     PC,
     N extends number,
+    Lit extends boolean,
     I extends readonly unknown[] = [],
 > = I['length'] extends N
     ? Ls
-    : SplitPositions<SplitAtPosition<Ls, PC, N, I['length']>, PC, N, [...I, 0]>
+    : SplitPositions<
+          SplitAtPosition<Ls, PC, N, I['length'], Lit>,
+          PC,
+          N,
+          Lit,
+          [...I, 0]
+      >
 type SplitAtPosition<
     Ls extends readonly unknown[],
     PC,
     N extends number,
     I extends number,
+    Lit extends boolean,
 > = Ls extends readonly [infer L, ...infer Rest extends readonly unknown[]]
-    ? [...SplitPositionState<L, PC, N, I>, ...SplitAtPosition<Rest, PC, N, I>]
+    ? [
+          ...SplitPositionState<L, PC, N, I, Lit>,
+          ...SplitAtPosition<Rest, PC, N, I, Lit>,
+      ]
     : []
 type SplitPositionState<
     L,
     PC,
     N extends number,
     I extends number,
+    Lit extends boolean,
 > = FixedElements<L> extends infer Es extends readonly unknown[]
     ? [PositionCodecsAt<PC, `${I}`, N>] extends [never]
         ? [L]
         : SplitSlot<
                 Es[I],
-                PositionCodecsAt<PC, `${I}`, N>
+                PositionCodecsAt<PC, `${I}`, N>,
+                Lit
             > extends infer Parts extends readonly unknown[]
           ? WithPosition<Parts, Es, I>
           : [L]
@@ -6748,11 +6782,12 @@ type WithPosition<
 type InnerSpecs<
     Members extends readonly unknown[],
     PU,
+    Lit extends boolean,
 > = Members extends readonly [
     infer Head,
     ...infer Rest extends readonly unknown[],
 ]
-    ? [...SplitSpec<Head, PU>, ...InnerSpecs<Rest, PU>]
+    ? [...SplitSpec<Head, PU, Lit>, ...InnerSpecs<Rest, PU, Lit>]
     : []
 type ReplaceField<
     Parts extends readonly unknown[],
@@ -6769,6 +6804,66 @@ type ReplaceField<
           ...ReplaceField<Rest, State, Key>,
       ]
     : []
+
+/**
+ * The most parts that a split for the fit builds from one term, as a tuple of that length. The run
+ * time bounds the parts at 1024 ({@link PARTS_LIMIT}), and the type bounds them at 32, because the
+ * recursion over the parts passes the instantiation depth of the checker near 45 parts, and each
+ * part is one more instantiation of the fit against each member of the pattern. A term past the
+ * bound is one {@link OverflowCodec}, whose fit is `'u'`, so the slice keeps the option.
+ */
+type PartsCap = Repeat<32>
+type Repeat<
+    N extends number,
+    T extends readonly unknown[] = [],
+> = T['length'] extends N ? T : Repeat<N, [...T, unknown]>
+
+/** A slot that the bound cut. The fit of the slot is `'u'`: the type cannot decide it. */
+type OverflowCodec = AnyCodec & { readonly splitOverflow: true }
+type IsOverflow<A> = [A] extends [never]
+    ? false
+    : [A] extends [{ readonly splitOverflow: true }]
+      ? true
+      : false
+
+/** The states of a split, cut to one state where the parts reach the bound at `Key`. */
+type CapStates<
+    States extends readonly unknown[],
+    Key,
+    Lit extends boolean,
+> = Lit extends true
+    ? States extends readonly [...PartsCap, ...unknown[]]
+        ? States extends readonly [infer First, ...unknown[]]
+            ? ReplaceField<[OverflowCodec], First, Key>
+            : States
+        : States
+    : States
+
+/**
+ * The parts of a slot for the fit: one codec for each literal of a literal set, and `true` and
+ * `false` for `boolean`, as {@link joinParts} reads them. Any other slot is one part, and is
+ * `false` here. The split for the fit is the only reader: the run time keeps a literal set whole,
+ * so the result of a slice never holds a part.
+ */
+type LiteralParts<C> = TermOf<C> extends [
+    'union',
+    infer Ts extends readonly unknown[],
+]
+    ? Ts extends readonly [...PartsCap, ...unknown[]]
+        ? [OverflowCodec]
+        : LiteralOptions<C> extends infer Ls extends readonly unknown[]
+          ? Ls extends readonly [unknown, unknown, ...unknown[]]
+              ? Ls
+              : false
+          : false
+    : [TermOf<C>] extends [BaseT<'boolean'>]
+      ? [
+            ConstantCodec<true, Attribute<'BOOL'>> &
+                TermMark<LitT<'boolean', true>>,
+            ConstantCodec<false, Attribute<'BOOL'>> &
+                TermMark<LitT<'boolean', false>>,
+        ]
+      : false
 
 /** The options split at the keys of a pattern. An option that is no object stays whole. */
 type SplitOptions<
@@ -6803,34 +6898,38 @@ type MapObjects<Specs extends readonly unknown[]> = {
  * decoded type inside the pattern's. The mark is what tells a literal from a caller's adapter that
  * decodes to a literal type. The stored type is what tells `string('1')` from `decimal('1')`, which
  * decode to one text. A pattern that holds objects is met by a codec that holds objects, each of
- * them inside some object of the pattern ({@link SpecFits}). Any other pattern is met by a codec
- * whose decoded and stored types lie inside the pattern's. A literal whose alternatives the type
- * cannot name ({@link UnnamedValues}) is `'u'`.
+ * them inside some object of the pattern ({@link SpecFits}). Where the pattern is a union of
+ * objects, each part of the codec fits some object ({@link EveryFitsParts}). Any other pattern is
+ * met by a codec whose decoded and stored types lie inside the pattern's. A literal whose
+ * alternatives the type cannot name ({@link UnnamedValues}) is `'u'`. A slot that the bound cut
+ * ({@link OverflowCodec}) is `'u'`.
  */
 type Fit = 't' | 'f' | 'u'
-type FitsCodec<A, P> = PatternPins<MarkedCodec<P>> extends true
-    ? PinsALiteral<MarkedCodec<A>> extends true
-        ? [AttributeOf<A>] extends [AttributeOf<P>]
-            ? [Decoded<A>] extends [Decoded<P>]
-                ? true extends UnnamedValues<Decoded<P>>
-                    ? 'u'
-                    : 't'
-                : 'f'
+type FitsCodec<A, P> = IsOverflow<A> extends true
+    ? 'u'
+    : PatternPins<MarkedCodec<P>> extends true
+      ? PinsALiteral<MarkedCodec<A>> extends true
+          ? [AttributeOf<A>] extends [AttributeOf<P>]
+              ? [Decoded<A>] extends [Decoded<P>]
+                  ? true extends UnnamedValues<Decoded<P>>
+                      ? 'u'
+                      : 't'
+                  : 'f'
+              : 'f'
+          : ReadsRef<TermOf<MarkedCodec<A>>> extends true
+            ? 'u'
             : 'f'
-        : ReadsRef<TermOf<MarkedCodec<A>>> extends true
-          ? 'u'
-          : 'f'
-    : ListFit<A, P> extends infer LF extends Fit
-      ? LF
-      : [FieldSpecList<P>] extends [never]
-        ? [Decoded<A>] extends [Decoded<P>]
-            ? [AttributeOf<A>] extends [AttributeOf<P>]
-                ? 't'
-                : 'f'
-            : 'f'
-        : [FieldSpecList<A>] extends [never]
-          ? 'f'
-          : EveryFits<FieldSpecList<A>[number], FieldSpecList<P>[number]>
+      : ListFit<A, P> extends infer LF extends Fit
+        ? LF
+        : [FieldSpecList<P>] extends [never]
+          ? [Decoded<A>] extends [Decoded<P>]
+              ? [AttributeOf<A>] extends [AttributeOf<P>]
+                  ? 't'
+                  : 'f'
+              : 'f'
+          : [FieldSpecList<A>] extends [never]
+            ? 'f'
+            : EveryFitsParts<FieldSpecList<A>[number], FieldSpecList<P>[number]>
 /**
  * Whether a member's term reads a `ref` with no scope in the term, or a union that holds one. The
  * type reads no literal mark through such a `ref`, and the run time resolves the `ref`, so the
@@ -6876,6 +6975,25 @@ type FitsSpec<A, P> = [FieldSpecList<P>] extends [never]
     : EveryFits<A, PatternSpecs<P>>
 /** Each member spec of the codec fits some member spec of the pattern. */
 type EveryFits<A, P> = AllOf<A extends unknown ? SomeFit<A, P> : never>
+/**
+ * Each part of each member spec fits some member spec of the pattern. Where the pattern is a union
+ * of specs, the union rule needs the parts of the normal form of the codec ({@link joinParts}): a
+ * literal set fits two members where each of its literals fits one. A pattern of one spec has no
+ * such rule, and each member spec is one part.
+ */
+type EveryFitsParts<A, P> = AllOf<
+    A extends unknown
+        ? true extends IsUnion<P>
+            ? AllOf<
+                  SplitSpec<A, P, true>[number] extends infer S
+                      ? S extends unknown
+                          ? SomeFit<S, P>
+                          : never
+                      : never
+              >
+            : SomeFit<A, P>
+        : never
+>
 type SomeFit<A, P> = 't' extends SpecFits<A, P>
     ? 't'
     : 'u' extends SpecFits<A, P>
@@ -6909,8 +7027,10 @@ type KeepsFit<Keep extends boolean, F extends Fit> = Keep extends true
 /**
  * **The option codecs that a union pattern keeps**, in the order they were declared, after the
  * split. A union pattern is no product of its keys, so an option splits at each field that the
- * pattern names, and the parts that fit stay. `Keep` is `true` for the extraction and `false` for
- * the exclusion, so the two are one walk and the complement cannot drift from the selection.
+ * pattern names, and the parts that fit stay. An option whose parts all fit stays whole, because
+ * the fit reads the parts of the normal form ({@link EveryFitsParts}). `Keep` is `true` for the
+ * extraction and `false` for the exclusion, so the two are one walk and the complement cannot
+ * drift from the selection.
  */
 type KeptSplit<
     Options extends readonly unknown[],

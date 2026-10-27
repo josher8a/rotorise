@@ -562,8 +562,9 @@ positions. The slice goes into that field or position, and the result stays comp
 of TypeScript reads it. An option with a union at a field keeps the part of the union that fits the
 pattern, in place. So the extraction has no option that the original lacks. The rejection has one
 option for each field or position that the pattern names, because the complement of a product is no
-product. A union pattern is no product of its keys, so it splits the option, and the parts that fit
-stay. A dissection changes no member, because its tag table is keyed by literals.
+product. A union pattern is no product of its keys, so it splits an option that it does not cover,
+and the parts that fit stay. A dissection changes no member, because its tag table is keyed by
+literals.
 
 **The strong law after narrowing needs a condition on the update, and the port states the condition
 as data.** `narrowC_law` holds for an item that the stored view of the clause admits, and a write to

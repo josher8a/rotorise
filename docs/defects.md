@@ -294,21 +294,20 @@ declared by the shared legacy read vector of `src/codec/lean/lean.spec.ts` and b
 
 ---
 
-## Known: the type of extract keeps one option for each pattern member where the run time keeps the option whole
+## Known: the type of a slice reads 32 parts of an option where the run time reads 1024
 
-**Observation.** The run time splits an option into the parts of its normal form before it reads a
-union pattern, so an option fits a union where each part fits a member. The type level reads a union
-pattern one member at a time, so the type keeps one option for each member that the option meets.
-The two shapes hold the same values. Measured 2026-10-26 with `npx vitest --run` and the pins below:
+**Observation.** The run time splits an option into at most 1024 parts of its normal form before it
+reads a union pattern. The type splits an option into at most 32 parts. Past 32 parts the type
+cannot decide the fit, and the slice keeps the option. The checker passes its instantiation depth
+between 40 and 48 literals at one field. Measured 2026-10-27 with `npx vitest --run` and the pin below:
 
-    extract(union([object({ x: union([Dog, Cat]) })]),
-      union([object({ x: Dog }), object({ x: Cat })]))
-      runtime: one option, { x: Dog | Cat }
-      type:    { readonly x: Dog } | { readonly x: Cat }
+    const big = union([object({ x: string('l00', …, 'l32') })])
+    exclude(big, union([object({ x: string('l00', …, 'l16') }), object({ x: string('l17', …, 'l32') })]))
+      runtime: never
+      type:    the option is kept
 
-**Effect.** The decoded type holds each value that the run time decodes, and no other value. The
-number of options and the shape of the decoded type differ from the run time. A type-level normal
-form closes the case.
+**Effect.** The type of exclude is wider than the value past the bound. The type of extract keeps
+the option, as the run time keeps it.
 
-**Pin.** `src/codec/spec/union/codec.slice.position.spec.ts`: the option kept whole at a field, at a
-position, and for a list held at a position.
+**Pin.** `src/codec/spec/union/codec.slice.parts.spec.ts`: a split that passes the bound keeps the
+option.
