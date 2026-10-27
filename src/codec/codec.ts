@@ -5006,8 +5006,49 @@ type FoldMeet<Fs extends readonly unknown[]> = Fs extends readonly [
 export type ValidateMeet<Fs extends readonly unknown[]> = [
     AnyOpen<Fs[number]>,
 ] extends [never]
-    ? unknown
+    ? HeldRefusal<Fs> extends true
+        ? ErrorMessage<'[meet] a factor holds a `held` part whose adapter differs from the adapter of the other factor, and the two parts overlap. An opaque function decides which common rows relate one value, and the host cannot read the function. Meet only a part that one side fits'>
+        : unknown
     : ErrorMessage<'[meet] a factor holds undeclared names through a `rest` codec, and the type of a meet reads no open block. Close every factor: give it no open key entry'>
+
+/**
+ * **Whether the fold of a meet reaches two `held` parts that the run time refuses**, read at the
+ * top node of each factor, step by step as {@link FoldMeet} folds. The refusal needs two `held`
+ * parts with two adapters that differ for certain ({@link TagsDiffer}), whose stored views and
+ * decoded types overlap. Two parts that the type cannot tell apart are no refusal: a caller's
+ * adapter against a caller's adapter is one adapter or two, and the type cannot see which, so the
+ * run time builds the first and refuses the second. A `held` part below a field of an object is no
+ * refusal here either, and the run time refuses it.
+ */
+type HeldRefusal<Fs extends readonly unknown[]> = Fs extends readonly [
+    infer A,
+    infer B,
+    ...infer R extends readonly unknown[],
+]
+    ? HeldPairRefused<A, B> extends true
+        ? true
+        : HeldRefusal<[MeetOfTwo<A, B>, ...R]>
+    : false
+type HeldPairRefused<A, B> = TagsDiffer<
+    HeldTag<NodeOf<TermOf<MarkedCodec<A>>>>,
+    HeldTag<NodeOf<TermOf<MarkedCodec<B>>>>
+> extends true
+    ? [StoredMembers<A> & StoredMembers<B>] extends [never]
+        ? false
+        : [Decoded<A> & Decoded<B>] extends [never]
+          ? false
+          : true
+    : false
+/** Whether two tags of {@link HeldTag} differ for certain: both are tags, and they are two tags. */
+type TagsDiffer<X, Y> = [X] extends [never]
+    ? false
+    : [Y] extends [never]
+      ? false
+      : [X] extends [Y]
+        ? [Y] extends [X]
+            ? false
+            : true
+        : true
 
 /**
  * **The options a slot offers to the slice**: the object node that the slot names, or each option of
@@ -5061,13 +5102,43 @@ const meetOptions = (factor: AnyCodec): readonly AnyCodec[] => {
     )
 }
 
+/**
+ * **The common literals of two literal sets under one adapter.** The model's `Codec.meet` is the
+ * intersection of the two graphs, and one adapter relates one inner literal to one outer literal.
+ * So the common pairs are the pairs of the common inner literals, and the held part stays. Two
+ * adapters, or one adapter on one side only, give nothing: an opaque function decides which common
+ * rows relate one value, so the caller refuses.
+ */
+const commonHeldLiterals = (a: Term, b: Term): readonly Term[] | undefined => {
+    const A = resolvedTerm(a)
+    const B = resolvedTerm(b)
+    if (A?.kind !== 'held' || B?.kind !== 'held' || !sameAdapter(A, B)) {
+        return undefined
+    }
+    const inner = commonLiterals(A.inner, B.inner)
+    if (inner === undefined) return undefined
+    const outer =
+        clauseForm(A.outer) && clauseForm(B.outer)
+            ? commonLiterals(A.outer, B.outer)
+            : [A.outer]
+    if (outer === undefined || inner.length === 0 || outer.length === 0) {
+        return []
+    }
+    const [innerTerm, outerTerm] = [inner, outer].map((terms) =>
+        termOf(codecOfTerms(terms)),
+    )
+    return innerTerm && outerTerm
+        ? [{ ...A, inner: innerTerm, outer: outerTerm }]
+        : undefined
+}
+
 /** The common literals of two pinned terms of one form, or nothing where the form differs. */
 const commonLiterals = (a: Term, b: Term): readonly Term[] | undefined => {
     const left = clauseForm(a)
     const right = clauseForm(b)
     if (left === undefined || right === undefined) return undefined
     if (left.adapter !== undefined || right.adapter !== undefined) {
-        return undefined
+        return commonHeldLiterals(a, b)
     }
     if (left.alts.base !== right.alts.base) return []
     const node = resolvedTerm(a)
@@ -6907,29 +6978,93 @@ type MapObjects<Specs extends readonly unknown[]> = {
 type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = IsOverflow<A> extends true
     ? 'u'
-    : PatternPins<MarkedCodec<P>> extends true
-      ? PinsALiteral<MarkedCodec<A>> extends true
-          ? [AttributeOf<A>] extends [AttributeOf<P>]
-              ? [Decoded<A>] extends [Decoded<P>]
-                  ? true extends UnnamedValues<Decoded<P>>
-                      ? 'u'
-                      : 't'
-                  : 'f'
+    : HeldFit<A, P> extends infer HF extends Fit
+      ? HF
+      : PatternPins<MarkedCodec<P>> extends true
+        ? PinsALiteral<MarkedCodec<A>> extends true
+            ? [AttributeOf<A>] extends [AttributeOf<P>]
+                ? [Decoded<A>] extends [Decoded<P>]
+                    ? true extends UnnamedValues<Decoded<P>>
+                        ? 'u'
+                        : 't'
+                    : 'f'
+                : 'f'
+            : ReadsRef<TermOf<MarkedCodec<A>>> extends true
+              ? 'u'
               : 'f'
-          : ReadsRef<TermOf<MarkedCodec<A>>> extends true
-            ? 'u'
-            : 'f'
-      : ListFit<A, P> extends infer LF extends Fit
-        ? LF
-        : [FieldSpecList<P>] extends [never]
-          ? [Decoded<A>] extends [Decoded<P>]
-              ? [AttributeOf<A>] extends [AttributeOf<P>]
-                  ? 't'
-                  : 'f'
-              : 'f'
-          : [FieldSpecList<A>] extends [never]
+        : ListFit<A, P> extends infer LF extends Fit
+          ? LF
+          : [FieldSpecList<P>] extends [never]
+            ? [Decoded<A>] extends [Decoded<P>]
+                ? [AttributeOf<A>] extends [AttributeOf<P>]
+                    ? 't'
+                    : 'f'
+                : 'f'
+            : [FieldSpecList<A>] extends [never]
+              ? 'f'
+              : EveryFitsParts<
+                    FieldSpecList<A>[number],
+                    FieldSpecList<P>[number]
+                >
+/**
+ * The tag of the adapter of a `held` node, as `[tag]`, or `never` where the node is no `held`. The
+ * tag of a library adapter is its name. The tag of a caller's adapter is `['caller']`, and the
+ * type cannot tell two of them apart, because the run time tells them apart by object identity.
+ */
+type HeldTag<N> = N extends [
+    'held',
+    unknown,
+    unknown,
+    unknown,
+    [infer G, unknown],
+    ...unknown[],
+]
+    ? [G]
+    : never
+/**
+ * **The fit where the codec is a `held` part**, as the run time reads it: a `held` part fits an
+ * `opaque` pattern, and fits a `held` pattern of one adapter whose inner term it fits. It fits no
+ * other node, because the decoded type of the part says nothing about the stored rows that the
+ * adapter relates. So the type answers `'u'` where it cannot see the adapter, which is a caller's
+ * adapter against a caller's adapter, a `ref`, or a union with an option that is not `'f'`. A union
+ * and an older reading read through to their options ({@link HeldFitNode}). It answers `'f'` where
+ * the nodes differ for certain. It answers `'n'`, no answer, where the decoded types decide: the
+ * codec is no `held` part, the pattern is `opaque`, or both parts hold one library adapter.
+ */
+type HeldFit<A, P> = HeldTag<NodeOf<TermOf<MarkedCodec<A>>>> extends infer TA
+    ? [TA] extends [never]
+        ? 'n'
+        : HeldFitNode<TA, NodeOf<TermOf<MarkedCodec<P>>>>
+    : 'n'
+/**
+ * The fit of a `held` part with the adapter tag `TA` at the pattern node `NP`. A union reads each
+ * option, as the run time reads the parts of the part against the options: it is `'f'` where each
+ * option is `'f'`, and `'u'` otherwise. An older reading holds each pair of its current form, so it
+ * reads its current term. A `ref` is `'u'`.
+ */
+type HeldFitNode<TA, NP> = NP extends ['opaq']
+    ? 'n'
+    : NP extends ['union', infer Os extends unknown[]]
+      ? [
+            {
+                [I in keyof Os]: HeldFitNode<TA, NodeOf<Os[I]>>
+            }[number],
+        ] extends ['f']
+          ? 'f'
+          : 'u'
+      : NP extends ['legacy', infer I]
+        ? HeldFitNode<TA, NodeOf<I>>
+        : NP extends ['ref', unknown]
+          ? 'u'
+          : [HeldTag<NP>] extends [never]
             ? 'f'
-            : EveryFitsParts<FieldSpecList<A>[number], FieldSpecList<P>[number]>
+            : [TA] extends [HeldTag<NP>]
+              ? [HeldTag<NP>] extends [TA]
+                  ? [TA] extends [['caller']]
+                      ? 'u'
+                      : 'n'
+                  : 'f'
+              : 'f'
 /**
  * Whether a member's term reads a `ref` with no scope in the term, or a union that holds one. The
  * type reads no literal mark through such a `ref`, and the run time resolves the `ref`, so the

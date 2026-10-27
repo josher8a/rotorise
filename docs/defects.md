@@ -252,23 +252,29 @@ ids, measured 2026-10-14.
 
 ---
 
-## Known: the type of meet states no refusal of a held part that neither side fits
+## Known: the type of meet states no refusal of a held or older part that the run time refuses
 
-**Observation.** The type of a meet reads two literal sets at their common literals, and reads any
-other overlap as the values that both sides decode to. The run time refuses a `held` or an older
-reading where the two parts are apart in neither view and neither side fits the other, because an
-opaque function decides which common rows relate one value. The type states no such refusal. One
-example:
+**Observation.** The run time refuses a `held` part or an older reading where the two parts are
+apart in neither view and neither side fits the other, because an opaque function decides which
+common rows relate one value. The type states the refusal for two `held` parts whose adapters
+differ for certain, read at the top node of each factor. Three calls build in the type and throw at
+run time. Measured 2026-10-27 with `npx vitest --run` and `tsc --noEmit`:
 
-    const both = meet(decimal('1', '2'), decimal('2', '3'))
-      runtime: refused
-      type: the call builds
+    meet(h1, h2)                     two adapters of a caller, of one type
+    meet(withLegacyRead({ current: string, older: decimal }), decimal('1'))
+    union([object({ x: withLegacyRead({ current: string, older: decimal }) }), object({ x: number })])
 
-**Effect.** A meet of a `held` part that neither side fits builds in the type and throws at run
-time.
+The run time tells two adapters of a caller apart by object identity, and a structural type holds
+no identity. So `meet(h, h)` and `meet(h1, h2)` have one type, and a refusal of the pair refuses
+`meet(h, h)`, which the run time builds. The mark of an older reading holds the current term only,
+and the older reader is a function over any attribute, so the type holds no stored shape of the
+older reading.
 
-**Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the common literals of two literal sets
-and the run-time refusal of a `held` part that neither side fits.
+**Effect.** A call of the three forms builds in the type and throws at run time. A `held` part
+below a field of an object is not refused in the type either.
+
+**Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the refused pairs, the pairs that build,
+the pair of one type with two results, and the older reading.
 
 ---
 

@@ -9,7 +9,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
-import type { Decoded } from '../../codec'
+import type { AnyCodec, Decoded } from '../../codec'
 import {
     array,
     binary,
@@ -19,6 +19,7 @@ import {
     exclude,
     extract,
     fits,
+    held,
     list,
     meet,
     never,
@@ -37,6 +38,8 @@ import type { Term } from '../../term'
 import { clauseLiteralsOf } from '../../term'
 
 type Dec = Decoded<typeof decimal>
+
+const defOf = (codec: AnyCodec) => codec.def
 
 const optionsOf = (codec: { readonly def: Term }): readonly Term[] =>
     codec.def.kind === 'union' ? codec.def.options : []
@@ -605,5 +608,39 @@ describe('fits splits the option into its parts before it reads a union pattern'
     it('does not fit a refinement of a base to the union of its literals, because the predicate is opaque', () => {
         const refined = refine(boolean, (v): v is boolean => v === true)
         expect(fits(termOf(refined), termOf(both))).toBe(false)
+    })
+})
+
+/**
+ * **A `held` part fits a pattern only where the two terms are one term.** The run time reads the
+ * adapter, which is an opaque function, and the decoded type of the part says nothing about the
+ * stored rows that the function relates. So the type answers no fit against a base, and keeps the
+ * option in both slices where it cannot see the adapter.
+ */
+describe('the slice of a union that holds a caller adapter', () => {
+    const tag = held(string, string, {
+        encode: (v: string) => v,
+        decode: (v: string) => v,
+    })
+    const mixed = union([object({ x: tag }), object({ x: number })])
+
+    it('keeps the adapter option in the exclusion of a base, because the part fits no base', () => {
+        const rest = exclude(mixed, object({ x: string }))
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof mixed>
+        >()
+        const kept: Decoded<typeof rest> = { x: 's' }
+        expect(kept).toEqual({ x: 's' })
+        expect(failed(rest.decode({ M: { x: { S: 's' } } }))).toBe(false)
+        expect(failed(rest.decode({ M: { x: { N: '1' } } }))).toBe(false)
+    })
+
+    it('extracts no adapter option for a base pattern, and the type holds no value', () => {
+        const kept = extract(mixed, object({ x: string }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(defOf(kept)).toEqual(never.def)
+        expect(
+            fits(termOf(object({ x: tag })), termOf(object({ x: string }))),
+        ).toBe(false)
     })
 })

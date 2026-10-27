@@ -887,22 +887,115 @@ describe('the type of a meet reads the values that the run time keeps', () => {
     /**
      * **A `held` part that neither side fits, apart in neither view, is refused.** The adapter of
      * the part is an opaque function, and the function decides which common rows relate one value.
-     * The type states no such refusal, so the type builds each call below and the run time refuses it.
+     * The type refuses the first two calls below, and builds the third, which meets two caller adapters.
      */
     it('refuses a held part that neither side fits where the views overlap', () => {
         const shifted = held(number, number, {
             encode: (value: number) => value + 1,
             decode: (value: number) => value - 1,
         })
+        // @ts-expect-error the type refuses the pair, and the run time carries the reason
         expect(() => meet(shifted, number(1, 2))).toThrow(
             /`held` part that fits neither side.*opaque function/,
         )
+        // @ts-expect-error the type refuses the pair, and the run time carries the reason
         expect(() => meet(number(1, 2), shifted)).toThrow(
             /`held` part that fits neither side.*opaque function/,
         )
-        expect(() => meet(decimal('1', '2'), decimal('2', '3'))).toThrow(
+        const shiftedAgain = held(number, number, {
+            encode: (value: number) => value + 1,
+            decode: (value: number) => value - 1,
+        })
+        expect(() => meet(shifted, shiftedAgain)).toThrow(
             /`held` part that fits neither side.*opaque function/,
         )
+    })
+
+    /**
+     * **Two literal sets under one adapter meet at their common literals**, as the model's
+     * `Codec.meet` intersects the graphs. One adapter relates one inner literal to one outer
+     * literal, so the common rows are the rows of the common literals. Two adapters stay refused.
+     */
+    it('meets two literal sets under one adapter at the common literals', () => {
+        const text = meet(decimal('1', '2'), decimal('2', '3'))
+        expectTypeOf<Decoded<typeof text>>().toEqualTypeOf<'2'>()
+        expect(failed(text.decode({ N: '2' }))).toBe(false)
+        expect(failed(text.decode({ N: '1' }))).toBe(true)
+        expect(failed(text.decode({ N: '3' }))).toBe(true)
+        const float = meet(number(1, 2), number(2, 3))
+        expectTypeOf<Decoded<typeof float>>().toEqualTypeOf<2>()
+        expect(failed(float.decode({ N: '2' }))).toBe(false)
+        expect(failed(float.decode({ N: '1' }))).toBe(true)
+        expect(failed(float.decode({ N: '3' }))).toBe(true)
+        const none = meet(number(1, 2), number(3, 4))
+        expectTypeOf(none).toBeNever()
+        expect(defOf(none)).toEqual(never.def)
+    })
+
+    /**
+     * **Two `held` parts with two adapters that differ for certain are refused at the call**, as the
+     * run time refuses them: the type reads a library name or the name of `number`'s adapter against
+     * a caller's adapter. The refusal lands on the factors through an intersection with the
+     * parameter, as the refusal of an open factor does.
+     */
+    it('refuses at the call two held parts whose adapters differ and whose views overlap', () => {
+        const shifted = held(number, number, {
+            encode: (value: number) => value + 1,
+            decode: (value: number) => value - 1,
+        })
+        // @ts-expect-error a caller's adapter against the adapter of `number`
+        expect(() => meet(shifted, number(1, 2))).toThrow(/`held` part/)
+        // @ts-expect-error the same pair, reversed
+        expect(() => meet(number(1, 2), shifted)).toThrow(/`held` part/)
+        // @ts-expect-error a caller's adapter against the adapter of `number`, with no literal set
+        expect(() => meet(shifted, number)).toThrow(/`held` part/)
+    })
+
+    /** The pairs that the run time builds stay built, at the call too. */
+    it('builds the pairs of held parts that the run time builds', () => {
+        const shifted = held(number, number, {
+            encode: (value: number) => value + 1,
+            decode: (value: number) => value - 1,
+        })
+        const widened = withLegacyRead({ current: string, older: decimal })
+        expect(() => meet(decimal('1', '2'), decimal('2', '3'))).not.toThrow()
+        expect(() => meet(decimal('1', '2'), decimal)).not.toThrow()
+        expect(() => meet(number(1, 2), number)).not.toThrow()
+        expect(() => meet(decimal, number)).not.toThrow()
+        expect(() => meet(widened, string('q'))).not.toThrow()
+        expect(() => meet(shifted, shifted)).not.toThrow()
+    })
+
+    /**
+     * **One type, two run-time results: the limit that TypeScript forces.** `meet(shifted, shifted)`
+     * meets one adapter object with itself, and the run time builds the meet. `meet(shifted,
+     * again)` meets two adapter objects that have one type, and the run time refuses the meet,
+     * because adapter identity is object identity. A structural type holds no object identity, so
+     * the two calls have one type, and a refusal of the second refuses the first. The check that
+     * fails is the call of the first with a refusal of two caller adapters.
+     */
+    it('builds in the type two caller adapters of one type, and the run time refuses the pair of two objects', () => {
+        const shifted = held(number, number, {
+            encode: (value: number) => value + 1,
+            decode: (value: number) => value - 1,
+        })
+        const again = held(number, number, {
+            encode: (value: number) => value + 1,
+            decode: (value: number) => value - 1,
+        })
+        expectTypeOf(shifted).toEqualTypeOf(again)
+        expect(() => meet(shifted, shifted)).not.toThrow()
+        expect(() => meet(shifted, again)).toThrow(/`held` part/)
+    })
+
+    /**
+     * **An older reading shows no stored shape of its older form.** The older reader is a function
+     * of any attribute, so the type reads the stored view of the current form alone. The type
+     * builds the call below, and the run time refuses it.
+     */
+    it('builds in the type an older reading against a held literal, and the run time refuses the pair', () => {
+        const widened = withLegacyRead({ current: string, older: decimal })
+        expect(() => meet(widened, decimal('1'))).toThrow(/`legacy` part/)
     })
 
     /** A held part that one side fits is no refusal, at the call as at run time. */
