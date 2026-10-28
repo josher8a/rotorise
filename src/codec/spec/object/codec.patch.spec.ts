@@ -102,7 +102,7 @@ describe('a component the change does not carry', () => {
         // GSI1SK is built from status *and* updatedAt; changing one alone cannot rebuild it.
         // A thunk, so this asserts the type and never runs — the runtime guard below is a backstop
         // for callers who reach this through a cast.
-        // @ts-expect-error 'updatedAt' has to be supplied as context
+        // @ts-expect-error 'updatedAt' has to be written in the change
         const _incomplete = () => Adoption.keyUpdates({ status: 'CANCELED' })
         expect(typeof _incomplete).toBe('function')
     })
@@ -110,33 +110,30 @@ describe('a component the change does not carry', () => {
     it('is still refused at runtime, for a caller who cast past the type', () => {
         const untyped = Adoption.keyUpdates as (c: object) => unknown
         expect(() => untyped({ status: 'CANCELED' })).toThrow(
-            /'GSI1SK' is built from 'status', 'updatedAt'.*'updatedAt' is not given/s,
+            /'GSI1SK' is built from 'status', 'updatedAt'.*'updatedAt' is not given.*Write 'updatedAt' in the change/s,
         )
     })
 
-    it('is asked for by name, and by type', () => {
-        const keys = Adoption.keyUpdates(
-            { status: 'CANCELED' },
-            { updatedAt: '2026-08-26T00:00:00.000Z' },
-        )
+    it('is built when the change writes every component of the key', () => {
+        const keys = Adoption.keyUpdates({
+            status: 'CANCELED',
+            updatedAt: '2026-08-26T00:00:00.000Z',
+        })
         expect(keys.GSI1SK).toEqual({
             S: 'STATUS#CANCELED#UPDATEDAT#2026-08-26T00:00:00.000Z',
         })
         expect(keys.GSI2PK).toEqual({ S: 'STATUS#CANCELED' })
     })
 
-    it('will not accept the wrong thing as context', () => {
-        const _wrongContext = () =>
-            Adoption.keyUpdates(
-                { status: 'CANCELED' },
-                // @ts-expect-error 'userId' is not what GSI1SK is missing
-                { userId: 'u1' },
-            )
-        expect(typeof _wrongContext).toBe('function')
+    it('is not completed by an attribute that the key does not hold', () => {
+        // 'userId' is a component of GSI1PK and not of GSI1SK, so it does not complete the block
+        const _wrongAttribute = () =>
+            // @ts-expect-error 'updatedAt' has to be written in the change
+            Adoption.keyUpdates({ status: 'CANCELED', userId: 'u1' })
+        expect(typeof _wrongAttribute).toBe('function')
     })
 
-    it('asks for nothing once the change is self-sufficient', () => {
-        // no second argument, because there is nothing left to ask for
+    it('asks for nothing once the change writes the whole block', () => {
         expect(Object.keys(Adoption.keyUpdates(change))).toHaveLength(3)
     })
 })

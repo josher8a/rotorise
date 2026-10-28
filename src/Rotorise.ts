@@ -725,21 +725,19 @@ type TableEntryDefinition<
      * Only this layer can see it: the schema knows what a key is built from, the caller knows what
      * is changing, neither knows alone.
      *
-     * A key that cannot be rebuilt is reported rather than left stale; pass its other components as
-     * `context`. Components a single-valued `literal` already decides are neither asked for nor
-     * accepted — see {@link ConstantAttributes}.
+     * A change carries every component of each key it touches. The keys share attributes, so the
+     * change is a union of blocks: the attributes that the keys tie together, however far the tie
+     * runs. The refusal names the whole block. A block that holds a component of a table key is
+     * frozen, because rewriting it moves the item, and the refusal says so.
+     *
+     * Components a single-valued `literal` already decides join no key and are never written —
+     * see {@link ConstantAttributes}. A discriminated key reads the components of the variant that
+     * the change selects. A change that carries no discriminator reads every variant, so it has to
+     * carry the discriminator.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
         changed: Changed &
-            ([MovesTheItem<Schema, Changed>] extends [never]
-                ? unknown
-                : ErrorMessage<'[keyUpdates] this changes an attribute the table key is built from, which would move the item; DynamoDB cannot update a key attribute'>),
-        ...context: ContextFor<
-            Entity,
-            Schema,
-            Changed,
-            ConstantAttributes<CodecSpec>
-        >
+            KeyUpdateRefusal<Schema, Changed, DecidedValues<CodecSpec>>,
     ) => AttributeMap
 
     /**
@@ -1009,7 +1007,7 @@ export type MovesTheItem<Schema, Changed> = {
  * tells you what is missing after you have written the call and run it. This one asks for it while
  * you are writing the call, which is the only place it stops being your problem.
  */
-export type KeyComponents<Spec> = Spec extends string
+export type KeyComponents<Spec, Given = unknown> = Spec extends string
     ? Spec
     : Spec extends null | undefined
       ? never
@@ -1029,49 +1027,125 @@ export type KeyComponents<Spec> = Spec extends string
                 spec: infer Variants
             }
           ? // the discriminator chooses which list applies, so it is a component of the key
-            Discriminator | KeyComponents<Variants[keyof Variants]>
+            Discriminator | VariantComponents<Variants, Discriminator, Given>
           : never
 
 /**
- * The components a change touches but does not carry, across every key it invalidates.
+ * The components of the variants that the given discriminant selects, or of every variant.
  *
- * `never` when the change is self-sufficient, which is what makes `context` disappear from the
- * signature rather than sit there as an optional nobody reads.
+ * The type half of the narrowing in {@link componentsOf}. A discriminant that is not a literal
+ * of a variant selects nothing, so every variant is read.
+ */
+type VariantComponents<
+    Variants,
+    Discriminator extends string,
+    Given,
+> = Discriminator extends keyof Given
+    ? Given[Discriminator] extends infer Chosen extends keyof Variants
+        ? KeyComponents<Variants[Chosen], Given>
+        : KeyComponents<Variants[keyof Variants], Given>
+    : KeyComponents<Variants[keyof Variants], Given>
+
+/**
+ * The components a change touches but does not carry, across every key it touches.
  *
- * `TableKeys` and `KeyComponents` are each bound once. Both are a walk over the schema, and asking
- * either twice for the same answer — once to decide whether a key is touched, once to say what
- * rebuilding it is missing — is what made this the most expensive type in the signature.
+ * `never` when the change is self-sufficient, which is what makes the refusal disappear from the
+ * signature. A table key is read as any other key: a change that touches one is refused by
+ * {@link MovesTheItem} whatever this holds.
+ *
+ * `KeyComponents` is bound once for each key. Asking twice for the same answer, once to decide
+ * whether a key is touched and once to say what the key lacks, is what made this the most
+ * expensive type in the signature.
  */
 export type MissingComponents<
     Schema,
     Changed,
     Known = never,
-> = TableKeys<Schema> extends infer Table
-    ? {
-          [K in keyof Schema]: K extends Table
-              ? never
-              : KeyComponents<Schema[K]> extends infer Of
-                ? [Extract<Of, keyof Changed>] extends [never]
-                    ? never
-                    : Exclude<Of, keyof Changed | Known>
-                : never
-      }[keyof Schema]
+    Given = Changed,
+> = {
+    [K in keyof Schema]: KeyComponents<Schema[K], Given> extends infer Of
+        ? [Extract<Of, Exclude<keyof Changed, Known>>] extends [never]
+            ? never
+            : Exclude<Of, keyof Changed | Known>
+        : never
+}[keyof Schema]
+
+/**
+ * The attributes that the keys tie to a set of attributes, the set included.
+ *
+ * Two attributes are tied when a key holds both, so the tie is transitive and the result is the
+ * block of the set. A component that the codec decides joins no key: it is read from the codec and
+ * never written. The recursion ends because each step only grows a finite union. The refusal reads
+ * it on the failing path only, so a complete change never pays for it.
+ */
+type BlockOf<Schema, Given, Known, Block> = {
+    [K in keyof Schema]: KeyComponents<Schema[K], Given> extends infer Of
+        ? [Extract<Of, Block>] extends [never]
+            ? never
+            : Exclude<Of, Known>
+        : never
+}[keyof Schema] extends infer Joined
+    ? [Joined] extends [Block]
+        ? Block
+        : BlockOf<Schema, Given, Known, Block | Joined>
     : never
 
 /**
- * The trailing `context` parameter, or nothing at all.
+ * The table keys that hold a component of the block, which freezes the block.
  *
- * `infer` binds the missing set once — naming it twice evaluates it twice. The brackets stop the
- * conditional distributing: the components are a union, and "is each one alone `never`" is not the
- * question.
+ * `never` when the block moves no item.
  */
-type ContextFor<Entity, Schema, Changed, Known> = [
-    MissingComponents<Schema, Changed, Known>,
-] extends [infer Missing]
-    ? [Missing] extends [never]
-        ? []
-        : [context: Pick<Entity, Missing & keyof Entity>]
-    : never
+type FrozenBy<Schema, Given, Block> = {
+    [K in TableKeys<Schema>]: [
+        Extract<KeyComponents<Schema[K], Given>, Block>,
+    ] extends [never]
+        ? never
+        : K
+}[TableKeys<Schema>]
+
+/**
+ * Nothing, or why a change is not a union of blocks.
+ *
+ * The refusal lands on the parameter. A change that lacks a component of a touched key, or that
+ * touches a table key, gets a message that names the whole block. Where the block holds a component
+ * of a table key, the message names the table key and says that the block is frozen. The block is
+ * bound once with `infer`: naming it twice evaluates it twice.
+ */
+type KeyUpdateRefusal<Schema, Changed, Decided> = KeyRefusal<
+    Schema,
+    Changed,
+    keyof Decided,
+    Changed & Decided
+>
+
+type KeyRefusal<Schema, Changed, Known, Given> = [
+    | MissingComponents<Schema, Changed, Known, Given>
+    | MovesTheItem<Schema, Omit<Changed, Known & string>>,
+] extends [never]
+    ? unknown
+    : BlockOf<
+            Schema,
+            Given,
+            Known,
+            Exclude<keyof Changed, Known>
+        > extends infer Block
+      ? [FrozenBy<Schema, Given, Block>] extends [never]
+          ? ErrorMessage<`[keyUpdates] this change touches a key and lacks '${Exclude<Block, keyof Changed | Known> & string}', which the keys tie to what it writes. Write the whole block`>
+          : ErrorMessage<`[keyUpdates] '${FrozenBy<Schema, Given, Block> & string}' is a table key that holds '${Extract<KeyComponents<Schema[FrozenBy<Schema, Given, Block> & keyof Schema], Given>, Block> & string}', and the block of this change is frozen: a rewrite would move the item. DynamoDB cannot update a key attribute`>
+      : never
+
+/**
+ * The value of each attribute that the codec decides, as the codec states it.
+ *
+ * The type twin of `decided` at run time, and read from the codec as {@link ConstantAttributes}
+ * reads the names. The entity can type a decided attribute wider than the codec does, so the
+ * entity is not read. A variant spec reads the value that every variant agrees on.
+ */
+type DecidedValues<Spec> = {
+    [K in ConstantAttributes<Spec>]: IsVariantSpec<Spec> extends true
+        ? AcrossVariants<Spec, K>
+        : ConstantValue<Spec[K & keyof Spec]>
+}
 
 /**
  * The attributes whose codec admits exactly one value.
@@ -1548,14 +1622,68 @@ export const tableEntry =
         const touchedIn = (
             components: Iterable<string>,
             changed: Record<string, unknown>,
-        ) => [...components].filter((component) => component in changed)
+        ) =>
+            [...components].filter(
+                (component) => component in changed && !(component in decided),
+            )
 
-        const keyUpdates = (
+        /**
+         * The attributes that the keys tie to the change, the change included.
+         *
+         * The runtime half of {@link BlockOf}. Two attributes are tied when a key holds both, so the
+         * walk repeats until no key adds an attribute. A component that the codec decides joins no key.
+         */
+        const blockOf = (
             changed: Record<string, unknown>,
-            context: Record<string, unknown> = {},
-        ): AttributeMap => {
+            given: Record<string, unknown>,
+        ): Set<string> => {
+            const block = new Set(
+                Object.keys(changed).filter((name) => !(name in decided)),
+            )
+            for (let grew = true; grew; ) {
+                grew = false
+                for (const key of keys) {
+                    const components =
+                        key.fixed ?? componentsOf(key.spec, given).components
+                    if (![...components].some((c) => block.has(c))) continue
+                    for (const component of components) {
+                        if (component in decided || block.has(component))
+                            continue
+                        block.add(component)
+                        grew = true
+                    }
+                }
+            }
+            return block
+        }
+
+        /** The error for a change that is not a union of blocks, once a touched key shows it. */
+        const refusal = (
+            changed: Record<string, unknown>,
+            given: Record<string, unknown>,
+            touched: { name: string; components: ReadonlySet<string> },
+        ): RotoriseError => {
+            const block = blockOf(changed, given)
+            for (const key of keys) {
+                if (!key.ofTable) continue
+                const components =
+                    key.fixed ?? componentsOf(key.spec, given).components
+                const held = [...components].filter((c) => block.has(c))
+                if (held.length === 0) continue
+                return new RotoriseError(
+                    `'${key.name}' is the table's own key and is built from ${quoted(components)}. This change writes ${quoted(Object.keys(changed))}. The keys tie it to ${quoted(block)}, and the block holds ${quoted(held)} of '${key.name}'. A table key freezes its block, because rewriting the block would move the item and DynamoDB cannot update a key attribute. Write the new item and delete the old one.`,
+                )
+            }
+            const missing = [...touched.components].filter((c) => !(c in given))
+            const needed = [...block].filter((c) => !(c in given))
+            return new RotoriseError(
+                `'${touched.name}' is built from ${quoted(touched.components)} and this change touches ${quoted(touchedIn(touched.components, changed))}, so it has to be rebuilt, but ${quoted(missing)} ${missing.length === 1 ? 'is' : 'are'} not given. The keys tie ${quoted(block)} together. Write ${quoted(needed)} in the change.`,
+            )
+        }
+
+        const keyUpdates = (changed: Record<string, unknown>): AttributeMap => {
             const out: Record<string, AttributeValue> = {}
-            const given = { ...decided, ...context, ...changed }
+            const given = { ...decided, ...changed }
 
             for (const key of keys) {
                 const components =
@@ -1574,24 +1702,17 @@ export const tableEntry =
                 let touches = false
                 let lacks = false
                 for (const component of components) {
-                    if (component in changed) touches = true
+                    if (component in changed && !(component in decided))
+                        touches = true
                     else if (!(component in given)) lacks = true
                 }
                 if (!touches) continue
 
-                if (key.ofTable) {
-                    throw new RotoriseError(
-                        `'${key.name}' is the table's own key and is built from ${quoted(touchedIn(components, changed))}, which this change rewrites. That would move the item, and DynamoDB cannot update a key attribute — write the new item and delete the old one.`,
-                    )
-                }
-
-                if (lacks) {
-                    const missing = [...components].filter(
-                        (component) => !(component in given),
-                    )
-                    throw new RotoriseError(
-                        `'${key.name}' is built from ${quoted(components)} and this change touches ${quoted(touchedIn(components, changed))}, so it has to be rebuilt — but ${quoted(missing)} ${missing.length === 1 ? 'is' : 'are'} not given. Pass ${missing.length === 1 ? 'it' : 'them'} as \`context\`, or the index will disagree with the item.`,
-                    )
+                if (key.ofTable || lacks) {
+                    throw refusal(changed, given, {
+                        name: key.name,
+                        components,
+                    })
                 }
 
                 out[key.name] = asKey(

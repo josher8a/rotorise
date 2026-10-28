@@ -49,7 +49,7 @@ describe('a change that would move the item', () => {
         const untyped = Adoption.keyUpdates as (c: object) => unknown
         expect(() => untyped({ adoptionId: 'other' })).toThrow(RotoriseError)
         expect(() => untyped({ adoptionId: 'other' })).toThrow(
-            /'PK' is the table's own key.*write the new item and delete the old one/s,
+            /'PK' is the table's own key.*Write the new item and delete the old one/s,
         )
     })
 })
@@ -65,15 +65,58 @@ describe('index keys are still rebuilt', () => {
         expect(keys).not.toHaveProperty('SK')
     })
 
-    it('does not ask for context on behalf of a table key', () => {
-        // GSI1SK needs status and updatedAt; PK needs adoptionId, which is nobody's business here
-        const keys = Adoption.keyUpdates(
-            { status: 'CANCELED' },
-            { updatedAt: '2026-08-26T00:00:00.000Z' },
+    it('refuses a write of one component of an index key, and names the other', () => {
+        // @ts-expect-error GSI1SK is built from status and updatedAt, and the write holds status alone
+        const _partial = () => Adoption.keyUpdates({ status: 'CANCELED' })
+        expect(typeof _partial).toBe('function')
+        const untyped = Adoption.keyUpdates as (c: object) => unknown
+        expect(() => untyped({ status: 'CANCELED' })).toThrow(
+            /'GSI1SK' is built from 'status', 'updatedAt'.*Write 'updatedAt' in the change/s,
         )
+    })
+
+    it('asks for nothing on behalf of a table key that the write does not reach', () => {
+        // GSI1SK needs status and updatedAt; PK needs adoptionId, which no component of the write joins
+        const keys = Adoption.keyUpdates({
+            status: 'CANCELED',
+            updatedAt: '2026-08-26T00:00:00.000Z',
+        })
         expect(keys.GSI1SK).toEqual({
             S: 'STATUS#CANCELED#UPDATEDAT#2026-08-26T00:00:00.000Z',
         })
+    })
+})
+
+describe('a block that holds a component of a table key', () => {
+    type Order = { TAG: string; id: string; buyerId: string; note: string }
+    const Orders = tableEntry<Order>()({
+        PK: table(['TAG', 'id']),
+        SK: table(['TAG', 'id']),
+        GSI1PK: ['TAG', 'buyerId'],
+    })
+
+    it('is frozen, so a write of one attribute of the block is refused', () => {
+        // buyerId is tied to TAG by GSI1PK, and TAG is a component of PK
+        // @ts-expect-error the block of buyerId holds TAG, a component of the table key PK
+        const _frozen = () => Orders.keyUpdates({ buyerId: 'b1' })
+        expect(typeof _frozen).toBe('function')
+    })
+
+    it('is frozen, so a write of the whole block is refused too', () => {
+        // @ts-expect-error the write touches TAG, a component of the table key PK
+        const _whole = () => Orders.keyUpdates({ buyerId: 'b1', TAG: 'T' })
+        expect(typeof _whole).toBe('function')
+    })
+
+    it('names the table key and the component that joins it, at runtime', () => {
+        const untyped = Orders.keyUpdates as (c: object) => unknown
+        expect(() => untyped({ buyerId: 'b1' })).toThrow(
+            /'PK' is the table's own key.*writes 'buyerId'.*holds 'TAG', 'id' of 'PK'.*freezes its block/s,
+        )
+    })
+
+    it('leaves a write that no key reaches alone', () => {
+        expect(Orders.keyUpdates({ note: 'n' })).toEqual({})
     })
 })
 

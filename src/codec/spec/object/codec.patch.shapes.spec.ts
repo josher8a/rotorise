@@ -59,11 +59,15 @@ describe('shipments', () => {
         expect(keys.GSI1PK).toEqual({ S: 'TAG#SHIPMENT#STATUS#SETTLED' })
     })
 
-    it("rejects TAG as context, because it is not the caller's to decide", () => {
-        const _overridesTag = () =>
-            // @ts-expect-error the codec decides TAG; there is no context left to pass
-            Shipments.keyUpdates({ status: 'SETTLED' }, { TAG: 'SHIPMENT' })
-        expect(typeof _overridesTag).toBe('function')
+    it('reads a decided TAG that the change writes as a touch of no key', () => {
+        // the codec admits one value for TAG, so the write changes no key. TAG joins no block,
+        // and the change builds GSI1PK as it does without TAG
+        const keys = Shipments.keyUpdates({
+            status: 'SETTLED',
+            TAG: 'SHIPMENT',
+        })
+        expect(Object.keys(keys)).toEqual(['GSI1PK'])
+        expect(keys.GSI1PK).toEqual({ S: 'TAG#SHIPMENT#STATUS#SETTLED' })
     })
 
     it('supplies TAG to every key built from it, not only the first', () => {
@@ -126,11 +130,15 @@ describe('invoices, with a null variant', () => {
         expect(typeof _movesIndex).toBe('function')
     })
 
-    it('rebuilds the sparse key when every component is given', () => {
-        const patch = Invoices.keyUpdates(
-            { type: 'CARD', vendorInvoiceId: 'p1' },
-            { TAG: 'INVOICE', orgId: 'o1' },
-        )
+    it('rebuilds the sparse key when the change writes the whole block', () => {
+        // type ties vendorInvoiceId, TAG and orgId through the GSI1 keys, and TAG and orgId tie invoiceId
+        const patch = Invoices.keyUpdates({
+            type: 'CARD',
+            vendorInvoiceId: 'p1',
+            TAG: 'INVOICE',
+            orgId: 'o1',
+            invoiceId: 'i1',
+        })
         expect(patch.GSI1PK).toEqual({ S: 'VENDORINVOICEID#p1' })
         expect(patch.GSI1SK).toEqual({ S: 'TAG#INVOICE#ORGID#o1' })
     })
@@ -158,10 +166,13 @@ describe('a transform with a default', () => {
     })
 
     it('rebuilds it with the transform applied', () => {
-        const patch = Accounts.keyUpdates(
-            { externalId: 'e1' },
-            { TAG: 'KENNEL' },
-        )
+        // TAG ties orgId and id through PK and SK
+        const patch = Accounts.keyUpdates({
+            externalId: 'e1',
+            TAG: 'KENNEL',
+            orgId: 'o1',
+            id: 'a1',
+        })
         expect(patch.GSI1SK).toEqual({ S: 'TAG#KENNEL#EXTERNALID#e1' })
     })
 })
@@ -191,20 +202,71 @@ describe('identity, discriminated with transforms', () => {
 
     it('applies the variant transform when rebuilding', () => {
         /**
-         * Only `TAG` is asked for, not `phone`.
-         *
-         * `PK` names `email` or `phone` depending on the discriminant, so its components across all
-         * variants are `TAG | email | phone` — but the context is typed `Pick<Identity, …>`, and
-         * `keyof` a union is the keys its members share, which leaves `TAG`. That lands on the right
-         * answer for the right reason here: a change carrying `email` is an EMAIL identity, whose
-         * `PK` needs `TAG` and `email` and nothing else. It would under-ask for a change that named
-         * neither, which the runtime guard still catches.
+         * The change carries `TAG`, which selects the EMAIL variant, so `PK` needs `TAG` and
+         * `email` and not `phone`. A change without `TAG` reads every variant and has to carry it.
          */
-        const keys = Identities.keyUpdates(
-            { email: 'A@B.COM' },
-            { TAG: 'EMAIL' },
-        )
+        const keys = Identities.keyUpdates({ email: 'A@B.COM', TAG: 'EMAIL' })
         expect(keys.PK).toEqual({ S: 'TAG#EMAIL#EMAIL#a@b.com' })
+    })
+})
+
+describe('a discriminator that the codec decides', () => {
+    type Identity = {
+        TAG: 'EMAIL'
+        userId: string
+        email: string
+        phone?: string
+    }
+    const Identities = tableEntry<Identity>()(
+        {
+            PK: {
+                discriminator: 'TAG',
+                spec: { EMAIL: ['TAG', 'email'], PHONE: ['TAG', 'phone'] },
+            },
+            SK: ['userId'],
+        },
+        {
+            codec: {
+                TAG: string('EMAIL'),
+                userId: string,
+                email: string,
+                phone: string,
+            },
+        },
+    )
+
+    it('selects the variant, so a write of its components is complete', () => {
+        // the codec decides TAG as EMAIL, so PK reads the EMAIL list and never asks for phone
+        const keys = Identities.keyUpdates({ email: 'a@b' })
+        expect(keys).toEqual({ PK: { S: 'TAG#EMAIL#EMAIL#a@b' } })
+    })
+
+    it('reads the codec and not the entity, which can type the attribute wider', () => {
+        type Wide = {
+            TAG: 'EMAIL' | 'PHONE'
+            userId: string
+            email: string
+            phone?: string
+        }
+        const Wider = tableEntry<Wide>()(
+            {
+                PK: {
+                    discriminator: 'TAG',
+                    spec: { EMAIL: ['TAG', 'email'], PHONE: ['TAG', 'phone'] },
+                },
+            },
+            {
+                codec: {
+                    TAG: string('EMAIL'),
+                    userId: string,
+                    email: string,
+                    phone: string,
+                },
+            },
+        )
+        expect(Wider.keyUpdates({ email: 'a@b' })).toEqual({
+            PK: { S: 'TAG#EMAIL#EMAIL#a@b' },
+        })
     })
 })
 
@@ -256,7 +318,7 @@ describe('a literal decides a component only when it admits one value', () => {
     })
 
     it('asks for that one only, the single-valued one being settled', () => {
-        const keys = Rows.keyUpdates({ label: 'x' }, { kind: 'A' })
+        const keys = Rows.keyUpdates({ label: 'x', kind: 'A' })
         expect(Object.keys(keys).sort()).toEqual(['GSI1PK', 'GSI2PK'])
     })
 })
@@ -437,21 +499,26 @@ describe('a union entity, described by a tagged codec', () => {
 
     /** Every variant writes `TAG: string('INVOICE')`, so the variants together decide it. */
     it('reads a constant the variants agree on', () => {
-        // GSI2SK is built from TAG, orgId and invoiceId; only orgId has to be supplied
-        const keys = Invoices.keyUpdates({ invoiceId: 'p9' }, { orgId: 'o1' })
+        // GSI2SK is built from TAG, orgId and invoiceId; the block of invoiceId is invoiceId, orgId
+        // and type, and TAG is decided and written nowhere
+        const keys = Invoices.keyUpdates({
+            invoiceId: 'p9',
+            orgId: 'o1',
+            type: 'CARD',
+        })
         expect(keys.GSI2SK).toEqual({
             S: 'TAG#INVOICE#ORGID#o1#INVOICEID#p9',
         })
     })
 
-    it('rejects the agreed constant as context, having decided it', () => {
-        const _overrides = () =>
-            Invoices.keyUpdates(
-                { invoiceId: 'p9' },
-                // @ts-expect-error TAG is decided by the variants; only orgId is left to pass
-                { orgId: 'o1', TAG: 'INVOICE' },
-            )
-        expect(typeof _overrides).toBe('function')
+    it('refuses a write that leaves out a member of the block, the agreed constant aside', () => {
+        // @ts-expect-error TAG is decided by the variants; orgId and type are left to write
+        const _short = () => Invoices.keyUpdates({ invoiceId: 'p9' })
+        expect(typeof _short).toBe('function')
+        const untyped = Invoices.keyUpdates as (c: object) => unknown
+        expect(() => untyped({ invoiceId: 'p9' })).toThrow(
+            /'GSI2SK' is built from 'TAG', 'orgId', 'invoiceId'.*Write 'orgId', 'type' in the change/s,
+        )
     })
 
     it('agrees with what the codec would have written', () => {
@@ -472,20 +539,18 @@ describe('a union entity, described by a tagged codec', () => {
             Invoices.keyUpdates({ orgId: 'o2' })
         expect(typeof _needsType).toBe('function')
 
-        // with invoiceId supplied, GSI2SK is satisfied and GSI3PK is what is left short
-        const untyped = Invoices.keyUpdates as (
-            c: object,
-            ctx?: object,
-        ) => unknown
-        expect(() => untyped({ orgId: 'o2' }, { invoiceId: 'p1' })).toThrow(
+        // with invoiceId written, GSI2SK is satisfied and GSI3PK is what is left short
+        const untyped = Invoices.keyUpdates as (c: object) => unknown
+        expect(() => untyped({ orgId: 'o2', invoiceId: 'p1' })).toThrow(
             /'GSI3PK' is built from 'type', 'orgId'.*'type' is not given/s,
         )
 
-        // and with both supplied, PK still rebuilds without TAG being mentioned anywhere
-        const keys = Invoices.keyUpdates(
-            { orgId: 'o2' },
-            { type: 'PICKUP', invoiceId: 'p1' },
-        )
+        // and with the whole block written, PK still rebuilds without TAG being mentioned anywhere
+        const keys = Invoices.keyUpdates({
+            orgId: 'o2',
+            type: 'PICKUP',
+            invoiceId: 'p1',
+        })
         expect(keys.PK).toEqual({ S: 'TAG#INVOICE#ORGID#o2' })
         expect(keys.GSI3PK).toEqual({ S: 'TYPE#PICKUP#ORGID#o2' })
     })
