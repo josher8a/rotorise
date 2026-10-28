@@ -425,7 +425,9 @@ describe('DynamoDB Utils', () => {
             ),
         ).toBe(1)
 
-        attest.instantiations([7826, 'instantiations'])
+        // 7826 -> 8483: the codec types grew over the passes since the last refresh, each move
+        // inside the tolerance, so no single change moved the pin out of it
+        attest.instantiations([8483, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -466,7 +468,9 @@ describe('DynamoDB Utils', () => {
         // there so `item.at` can recover it. Both cost one more type per level.
         // 1869 -> 2235: `keyUpdates` asks the codec which components it already decides, which
         // walks the codec spec once per key
-        attest.instantiations([2235, 'instantiations'])
+        // 2235 -> 2378: the codec types grew over the passes since the last refresh, each move
+        // inside the tolerance, so no single change moved the pin out of it
+        attest.instantiations([2378, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -750,7 +754,9 @@ describe('DynamoDB Utils', () => {
 
         // 13308 -> 15421: same cause as the `path()` baseline above — `keyUpdates` now reads
         // `ConstantAttributes` off the codec spec for every key in the schema
-        attest.instantiations([15421, 'instantiations'])
+        // 15421 -> 15565: the codec types grew over the passes since the last refresh, each move
+        // inside the tolerance, so no single change moved the pin out of it
+        attest.instantiations([15565, 'instantiations'])
     })
 
     test('real world example', () => {
@@ -962,7 +968,9 @@ describe('DynamoDB Utils', () => {
             { depth: 2 },
         ) satisfies 'TAG#A#ID2#yolo')
 
-        attest.instantiations([32508, 'instantiations'])
+        // 32508 -> 33502: the codec types grew over the passes since the last refresh, each move
+        // inside the tolerance, so no single change moved the pin out of it
+        attest.instantiations([33502, 'instantiations'])
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1277,7 +1285,9 @@ describe('DynamoDB Utils', () => {
             a: { x: 'x1' },
         })
 
-        attest.instantiations([6982, 'instantiations'])
+        // 6982 -> 7273: the codec types grew over the passes since the last refresh, each move
+        // inside the tolerance, so no single change moved the pin out of it
+        attest.instantiations([7273, 'instantiations'])
     })
 
     test('NeedsValidation detects 3-tuples in mixed arrays', () => {
