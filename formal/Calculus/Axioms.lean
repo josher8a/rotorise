@@ -60,6 +60,7 @@ import Calculus.Dynamo.Lang.Clause
 import Calculus.Dynamo.Lang.Adapters
 import Calculus.Bridge.Kinds
 import Calculus.Bridge.Verdicts
+import Calculus.Bridge.KeyRows
 import Lean
 
 /-!

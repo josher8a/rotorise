@@ -19,8 +19,11 @@ separator selects more.
 
 The builder of the host prints each component as a word of segments: a name and a value, a tag
 and a value, or a value alone. The model states the three shapes, the absent value, and the
-boundary. The host appends the boundary where the print stops before the last component, which
-`boundary` states. The count of components decides it, and the count of segments does not.
+boundary. The print stops before the last component of the spec through an absent value where the
+host allows a partial key, or through a depth that cuts the spec. The host appends the boundary
+where the print stops before the last component of the spec, which `boundary` states. The count of
+components decides it, and the count of segments does not. Two facts enter: the length of the
+spec, and the parts that the host evaluated, which are the parts that a depth leaves.
 
 The multi-character separator, the print of a component that is not a string, and the encoding of
 a string into the attribute are outside the model.
@@ -308,37 +311,43 @@ theorem printed_partial :
   | none :: _ => by simp [printed]
   | some k :: r => by simp [printed, printed_partial r]
 
-/-- The boundary: a separator where the print stops before the last component. The host appends
-    it by this rule. -/
+/-- The boundary: a separator where the print stops before the last component of the spec. The
+    host appends it by this rule. `full` is the length of the spec. -/
 def boundary (full : Nat) (cs : List Comp) : Bool := decide (cs.length < full)
 
 /-- The key of the host: the segments of the printed components, and the empty segment of the
-    boundary where the option is on and the print stops before the last component. -/
-def build (allowPartial enforce : Bool) (parts : List (Option Comp)) : Option (List String) :=
+    boundary where the option is on and the print stops before the last component of the spec.
+    `full` is the length of the spec, and `parts` are the components that the host evaluates: the
+    spec cut to the depth. -/
+def build (full : Nat) (allowPartial enforce : Bool) (parts : List (Option Comp)) :
+    Option (List String) :=
   (printed allowPartial parts).map fun cs =>
-    if enforce && boundary parts.length cs then cs.flatMap Comp.segs ++ [""]
+    if enforce && boundary full cs then cs.flatMap Comp.segs ++ [""]
     else cs.flatMap Comp.segs
 
-/-- **The boundary is on exactly where the print stops before the last component.** The count of
-    segments does not enter: a component with one segment counts as one component. -/
+/-- **The boundary is on exactly where the print stops before the last component of the spec.**
+    The count of segments does not enter: a component with one segment counts as one component. -/
 theorem boundary_iff (full : Nat) (cs : List Comp) :
     boundary full cs = true ↔ cs.length < full :=
   decide_eq_true_iff
 
 /-- **A full key ends without the boundary.** Where the print holds each component of the spec,
     the key is the segments of the components, with the option on. -/
-theorem build_full_ends_without_boundary {allowPartial : Bool} {parts : List (Option Comp)}
-    {cs : List Comp} (h : printed allowPartial parts = some cs) (hfull : cs.length = parts.length) :
-    build allowPartial true parts = some (cs.flatMap Comp.segs) := by
-  have hb : boundary parts.length cs = false := by simp [boundary, hfull]
+theorem build_full_ends_without_boundary {full : Nat} {allowPartial : Bool}
+    {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
+    (hfull : cs.length = full) :
+    build full allowPartial true parts = some (cs.flatMap Comp.segs) := by
+  have hb : boundary full cs = false := by simp [boundary, hfull]
   simp [build, h, hb]
 
-/-- **A partial key ends with the boundary.** Where the print stops before the last component, the
-    key is the segments of the components and one empty segment, with the option on. -/
-theorem build_partial_ends_with_boundary {allowPartial : Bool} {parts : List (Option Comp)}
-    {cs : List Comp} (h : printed allowPartial parts = some cs) (hlt : cs.length < parts.length) :
-    build allowPartial true parts = some (cs.flatMap Comp.segs ++ [""]) := by
-  have hb : boundary parts.length cs = true := (boundary_iff _ _).mpr hlt
+/-- **A partial key ends with the boundary.** Where the print stops before the last component of
+    the spec, through an absent value or through a depth, the key is the segments of the components
+    and one empty segment, with the option on. -/
+theorem build_partial_ends_with_boundary {full : Nat} {allowPartial : Bool}
+    {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
+    (hlt : cs.length < full) :
+    build full allowPartial true parts = some (cs.flatMap Comp.segs ++ [""]) := by
+  have hb : boundary full cs = true := (boundary_iff _ _).mpr hlt
   simp [build, h, hb]
 
 /-! ## The key as a codec -/

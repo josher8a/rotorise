@@ -74,7 +74,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
                     <(grep -v "^#" scripts/classical_gateways.txt | sort))
      [ -z "$new" ] || { echo "new classical route(s):"; echo "$new"; exit 1; }'
   run 'vector emit' bash -c \
-    "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts src/codec/lean/lean.pool.spec.ts --reporter=dot"
+    "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts src/codec/lean/lean.pool.spec.ts src/codec/lean/lean.key.spec.ts --reporter=dot"
   # The vector bridge runs as one set of parallel jobs, longest first: the kernel checks the
   # theorems of one file in sequence, so the wall time of the set is the time of its longest file.
   # A file prints the name of each failing row and exits 0 after a print, so a job passes only
@@ -96,7 +96,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
     printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
       .pool.paths0.lean .pool.paths1.lean .pool.paths3.lean .pool.paths2.lean \
       .legacyreads.lean .separations.lean .readverdicts.lean .disjoints.lean .vectors.full.lean \
-      .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean .pool.meets.lean .pool.fits.lean |
+      .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean .pool.meets.lean .pool.fits.lean .keys.lean |
     xargs -P "$jobs" -I{} sh -c "
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
       [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
@@ -109,7 +109,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       if [ "$(cat "$rc")" != 0 ]; then echo "$f: exit $(cat "$rc")"; echo "$o"; fail=1; continue; fi
       [ -z "$o" ] || { echo "$f: $o"; fail=1; }
     done
-    [ "$(ls "$out"/*.rc | wc -l)" -eq 20 ] || { echo "a job did not report"; fail=1; }
+    [ "$(ls "$out"/*.rc | wc -l)" -eq 21 ] || { echo "a job did not report"; fail=1; }
     exit $fail'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'

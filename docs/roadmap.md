@@ -290,7 +290,9 @@ boundary, and a component that can print the separator is a refusal at construct
 `src/Rotorise.ts` build and strip key strings. The model states the key as a codec from a list of
 segments to a string, `DerivedKey.keyCodec`, lawful on the lists that have a segment and hold no
 separator (`DerivedKey.keyCodec_lawful`). A segment that holds the separator gives two lists one key
-(`DerivedKey.rawWrite_not_lawful`). No vector ties the run-time builder to the model yet.
+(`DerivedKey.rawWrite_not_lawful`). The vector bridge puts the run-time builder to
+`DerivedKey.build` and `DerivedKey.join` on a pool of specs, items and options, and states where a
+segment holds the separator.
 `item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
 and of the options of a union that a pattern names.
 
@@ -321,8 +323,9 @@ options, and the type of its result reads the same options. The model states the
 partial key with a trailing separator is a prefix of a key exactly where the key extends its
 segments (`DerivedKey.prefix_iff`), and without the separator it selects more
 (`DerivedKey.prefix_without_separator`). The key builder appends the boundary of
-`key(name, attributes, { enforceBoundary: true })` where the print stops before the last component,
-which the model states as `DerivedKey.boundary`, and the type of the result reads the same option.
+`key(name, attributes, { enforceBoundary: true })` where the print stops before the last component
+of the spec, through an absent value or a depth, which the model states as `DerivedKey.boundary`,
+and the type of the result reads the same option.
 
 **What decides it.** A query by a derived partial key that returns an item outside its prefix, or a
 hand-built prefix in a service that the derived form cannot state.

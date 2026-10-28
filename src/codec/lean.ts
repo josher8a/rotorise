@@ -4275,3 +4275,104 @@ The model reads the older answer only where the current term writes the answer, 
 the same.`,
         legacyReadRows(reads),
     )
+
+/* ── the key rows ─────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * **One component of a key spec, as the host evaluated it**: a name and a value, a tag that may be
+ * absent and a value, or an absent value. The segments are the strings that the host joins.
+ */
+export type KeyPart =
+    | undefined
+    | { readonly kind: 'named'; readonly name: string; readonly value: string }
+    | {
+          readonly kind: 'shaped'
+          readonly tag: string | undefined
+          readonly value: string
+      }
+
+/** What the host did with a row: it threw, it gave no key, or it gave a key. */
+export type KeyOutcome =
+    | { readonly kind: 'refused' }
+    | { readonly kind: 'nothing' }
+    | { readonly kind: 'key'; readonly key: string }
+
+/**
+ * **One row of the key builder**: the length of the spec, the options as the host read them, the
+ * parts that the host evaluated, the separator, and what the host gave. The parts are the spec cut
+ * to the depth, up to and including the first absent value. `lawful` says that the segments have a
+ * segment and that none holds the separator.
+ */
+export type KeyRow = {
+    readonly name: string
+    readonly full: number
+    readonly allowPartial: boolean
+    readonly enforce: boolean
+    readonly parts: readonly KeyPart[]
+    readonly separator: string
+    readonly outcome: KeyOutcome
+    readonly lawful: boolean
+}
+
+const leanKeyPart = (part: KeyPart): string =>
+    part === undefined
+        ? 'none'
+        : part.kind === 'named'
+          ? `some (.named ${leanString(part.name)} ${leanString(part.value)})`
+          : `some (.shaped ${part.tag === undefined ? 'none' : `(some ${leanString(part.tag)})`} ${leanString(part.value)})`
+
+const leanKeyOutcome = (outcome: KeyOutcome): string =>
+    outcome.kind === 'key'
+        ? `.key ${leanString(outcome.key)}`
+        : `.${outcome.kind}`
+
+/**
+ * The key rows as one list that the kernel checks. A row is a structure of `Calculus.Bridge.KeyRows`,
+ * and the comparator of that file reads it. The separator is one character: the model has no
+ * multi-character separator, so a row of one is refused.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanKeyModule = (rows: readonly KeyRow[]): string => {
+    const chars = rows.map((row) => [...row.separator])
+    const bad = chars.findIndex((c) => c.length !== 1)
+    if (bad >= 0) {
+        return refuse(
+            'key',
+            `the model has a one-character separator, and the row ${rows[bad]?.name} has another`,
+        )
+    }
+    const lines = rows.map(
+        (row, i) =>
+            `  { name := ${leanString(row.name)}, full := ${row.full}, allowPartial := ${row.allowPartial}, enforce := ${row.enforce},
+    parts := [${row.parts.map(leanKeyPart).join(', ')}], sep := Char.ofNat ${(chars[i]?.[0] ?? '').codePointAt(0)},
+    host := ${leanKeyOutcome(row.outcome)}, lawful := ${row.lawful} }`,
+    )
+    return leanModule(`import Calculus.Bridge.KeyRows
+
+/-!
+# The derived keys of the pool, checked in the model
+
+**Generated — do not edit.** One row per sampled item and option of a key spec of the pool: the
+length of the spec, the options, the parts that the key builder of \`src/\` evaluated, the separator,
+and what the builder gave. The checker of the list states that \`DerivedKey.build\` gives the
+segments that the builder joined, that the join of the segments is the key of the builder, and that
+the read of the key gives the segments back exactly where the row says so. A row where the builder
+threw states that the model gives no segments. A row of a \`null\` arm states that the null arm
+writes nothing. A row reads sampled items, so the row states a witness and not the law.
+-/
+
+namespace Calculus
+
+open DerivedKey
+
+def keyRows : List KeyRow := [
+${lines.join(',\n')}]
+
+theorem keyRows_check : failingKeys keyRows = [] := kernel_rfl%
+
+#eval (failingKeys keyRows).forM IO.println
+
+end Calculus
+`)
+}
