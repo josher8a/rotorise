@@ -9,18 +9,22 @@ the host read and what the host gave: the length of the spec, the options, the p
 evaluated, the separator, the key or the refusal, and whether the segments are usable as a key.
 The comparator states that `DerivedKey.build` gives the segments that the host joined, that the
 join of the segments is the key, and that the read of the key gives the segments back exactly where
-the row says so. A segment that holds the separator, or a list with no segment, is the case where
-the read does not give the segments back.
+the row says so. The host refuses a segment that holds the separator, because the join of that list
+is also the join of another list (`DerivedKey.join_collision`). So a row of a key holds no such
+segment, and a row of that refusal states that the model's segments hold the separator. The empty
+segment list is the one list that the host joins and the read does not give back.
 -/
 
 namespace Calculus
 
 namespace DerivedKey
 
-/-- What the host did with a row: it threw, it gave no key, or it gave a key. The builder gives no
-    key where a discriminated spec has a `null` arm. -/
+/-- What the host did with a row: it threw at an absent value, it threw at a segment that holds the
+    separator, it gave no key, or it gave a key. The builder gives no key where a discriminated spec
+    has a `null` arm. -/
 inductive HostKey where
   | refused
+  | separator
   | nothing
   | key (k : String)
 
@@ -45,31 +49,41 @@ def KeyRow.segs (r : KeyRow) : Option (List (List Char)) :=
 def lawfulSegs (c : Char) (segs : List (List Char)) : Bool :=
   !segs.isEmpty && segs.all fun s => !s.contains c
 
-/-- The comparator of a row. The builder refuses where the host threw. The null arm writes nothing
-    where the host gave no key. Where the host gave a key, the join of the segments is the key, the
-    flag says whether the list is usable, and the read of the key gives the segments back exactly
-    where the flag is `true`. -/
+/-- Some segment holds the separator. -/
+def holdsSep (c : Char) (segs : List (List Char)) : Bool :=
+  segs.any fun s => s.contains c
+
+/-- The comparator of a row. The builder refuses where the host threw at an absent value. The
+    segments hold the separator where the host threw at one. The null arm writes nothing where the
+    host gave no key. Where the host gave a key, no segment holds the separator, the join of the
+    segments is the key, the flag says whether the list is usable, and the read of the key gives the
+    segments back exactly where the flag is `true`. -/
 def keyRowOk (r : KeyRow) : Bool :=
   match r.host, r.segs with
   | .refused, none => true
+  | .separator, some segs => holdsSep r.sep segs
   | .nothing, _ => ((Codec.empty : Codec).e (Attr.s "")).isNone
   | .key k, some segs =>
-      join r.sep segs == k.toList && lawfulSegs r.sep segs == r.lawful &&
+      !holdsSep r.sep segs && join r.sep segs == k.toList && lawfulSegs r.sep segs == r.lawful &&
         (split r.sep k.toList == segs) == r.lawful
   | _, _ => false
 
-/-- **A row that passes states what the host did.** Where the host threw, the model gives no
-    segments. Where the host gave no key, the null arm writes nothing. Where the host gave a key,
-    the model's segments join to the key, and the read gives them back where the flag is `true` and
-    gives another list where the flag is `false`. -/
+/-- **A row that passes states what the host did.** Where the host threw at an absent value, the
+    model gives no segments. Where the host threw at the separator, the model's segments hold it.
+    Where the host gave no key, the null arm writes nothing. Where the host gave a key, no segment
+    holds the separator, the model's segments join to the key, and the read gives them back where the
+    flag is `true` and gives another list where the flag is `false`. -/
 theorem keyRowOk_iff (r : KeyRow) : keyRowOk r = true ↔
     (r.host = .refused ∧ r.segs = none) ∨
+    (r.host = .separator ∧ ∃ segs, r.segs = some segs ∧ holdsSep r.sep segs = true) ∨
     (r.host = .nothing ∧ ((Codec.empty : Codec).e (Attr.s "")) = none) ∨
-      ∃ segs k, r.host = .key k ∧ r.segs = some segs ∧ join r.sep segs = k.toList ∧
+      ∃ segs k, r.host = .key k ∧ r.segs = some segs ∧ holdsSep r.sep segs = false ∧
+        join r.sep segs = k.toList ∧
         lawfulSegs r.sep segs = r.lawful ∧ (split r.sep k.toList = segs ↔ r.lawful = true) := by
   unfold keyRowOk
   cases hh : r.host with
   | refused => cases hs : r.segs <;> simp
+  | separator => cases hs : r.segs <;> simp
   | nothing => simp [Option.isNone_iff_eq_none]
   | key k =>
       cases hs : r.segs with

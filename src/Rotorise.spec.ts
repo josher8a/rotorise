@@ -1,8 +1,10 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it, test } from 'vitest'
 import {
+    type CodecError,
     type CompositeKeyBuilder,
     type CompositeKeyParams,
+    failed,
     type TransformShape,
     tableEntry,
 } from './Rotorise'
@@ -360,9 +362,10 @@ describe('DynamoDB Utils', () => {
 
         const fromEntry = testTableEntry.fromEntry(testTableEntryObj)
 
-        attest<Entity>(
+        attest<Entity | CodecError>(
             null as any as ReturnType<typeof testTableEntry.fromEntry>,
         )
+        if (failed(fromEntry)) throw fromEntry
         attest<typeof entity>(fromEntry) // narrow down to the exact type
 
         expect(fromEntry).toEqual(entity)

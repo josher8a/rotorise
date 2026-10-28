@@ -44,16 +44,22 @@ const nulled: Transform = () => ({ value: null })
 const bracket: Transform = (x) => `<${String(x)}>`
 const doubled: Transform = (x) => ({ tag: 'N', value: Number(x) * 2 })
 
-/** The builder of `src/`, reached through the table entry of a schema with one key. */
-const builderOf = (spec: Spec, separator: string) => {
+/** The table entry of `src/` for a schema with one key. */
+const entryOf = (spec: Spec, separator: string) => {
     const make = tableEntry<Record<string, unknown>>() as unknown as (
         schema: unknown,
         separator: string,
     ) => {
         readonly key: (name: string, item: object, config?: object) => unknown
+        readonly toEntry: (item: object) => Record<string, unknown>
+        readonly fromEntry: (entry: object) => unknown
     }
-    return make({ K: spec }, separator).key
+    return make({ K: spec }, separator)
 }
+
+/** The builder of `src/`, reached through the table entry. */
+const builderOf = (spec: Spec, separator: string) =>
+    entryOf(spec, separator).key
 
 /** What the builder gave: a key, no key, or a throw of the library. */
 const hostOutcome = (
@@ -68,7 +74,11 @@ const hostOutcome = (
             throw new Error('the builder gave a non-key')
         return { kind: 'key', key }
     } catch (thrown) {
-        if (thrown instanceof RotoriseError) return { kind: 'refused' }
+        if (thrown instanceof RotoriseError) {
+            return /holds the separator/.test(thrown.message)
+                ? { kind: 'separator' }
+                : { kind: 'refused' }
+        }
         throw thrown
     }
 }
@@ -77,15 +87,24 @@ const hostOutcome = (
 const segment = (value: unknown): string =>
     value === undefined || value === null ? '' : String(value)
 
+const segmentsOf = (part: KeyPart & object): string[] =>
+    part.kind === 'named'
+        ? [part.name, part.value]
+        : part.tag === undefined
+          ? [part.value]
+          : [part.tag, part.value]
+
 /**
  * The parts of a spec for an item, as a second reading of the spec: the components cut to the
- * depth, up to and including the first absent value. A component is absent where its value is
- * undefined, and, with no transform, where its value is null or empty.
+ * depth, up to and including the first component that the builder refuses. A component is absent
+ * where its value is undefined, and, with no transform, where its value is null or empty. A
+ * component is refused as a separator where one of its segments holds the separator.
  */
 const partsOf = (
     components: readonly Component[],
     item: Item,
     depth: number | undefined,
+    separator: string,
 ): KeyPart[] => {
     const parts: KeyPart[] = []
     for (const component of depth === undefined
@@ -94,6 +113,7 @@ const partsOf = (
         const [name, transform, fallback] =
             typeof component === 'string' ? [component] : component
         const value = item[name] ?? fallback
+        let part: KeyPart
         if (transform !== undefined && value !== undefined) {
             const out = transform(value)
             if (typeof out === 'object' && out !== null) {
@@ -101,38 +121,29 @@ const partsOf = (
                     tag?: string
                     value: unknown
                 }
-                parts.push({
-                    kind: 'shaped',
-                    tag,
-                    value: segment(inner),
-                })
+                part = { kind: 'shaped', tag, value: segment(inner) }
             } else {
-                parts.push({
+                part = {
                     kind: 'named',
                     name: name.toUpperCase(),
                     value: segment(out),
-                })
+                }
             }
         } else if (value !== undefined && value !== null && value !== '') {
-            parts.push({
+            part = {
                 kind: 'named',
                 name: name.toUpperCase(),
                 value: segment(value),
-            })
+            }
         } else {
             parts.push(undefined)
             break
         }
+        parts.push(part)
+        if (segmentsOf(part).some((one) => one.includes(separator))) break
     }
     return parts
 }
-
-const segmentsOf = (part: KeyPart & object): string[] =>
-    part.kind === 'named'
-        ? [part.name, part.value]
-        : part.tag === undefined
-          ? [part.value]
-          : [part.tag, part.value]
 
 /** The segments that the model states for a row, as `DerivedKey.build` states them, or `undefined` where it refuses. */
 const modelSegments = (row: KeyRow): string[] | undefined => {
@@ -264,7 +275,7 @@ const keyRows = (): KeyRow[] => {
                         const parts =
                             outcome.kind === 'nothing'
                                 ? []
-                                : partsOf(shape, item, depth)
+                                : partsOf(shape, item, depth, separator)
                         const draft = {
                             name: '',
                             full: outcome.kind === 'nothing' ? 0 : shape.length,
@@ -291,15 +302,44 @@ const keyRows = (): KeyRow[] => {
 describe('the derived key rows, against the model of a key', () => {
     const rows = keyRows()
 
-    it('reads each key of the builder as the model joins the parts', () => {
+    it('reads each outcome of the builder as the model states it', () => {
         for (const row of rows) {
             if (row.outcome.kind === 'nothing') continue
-            const model = modelKey(row)
-            expect(
-                row.outcome.kind === 'key' ? row.outcome.key : undefined,
-                row.name,
-            ).toBe(model)
+            const segments = modelSegments(row)
+            const holds = segments?.some((one) => one.includes(row.separator))
+            switch (row.outcome.kind) {
+                case 'refused':
+                    expect(segments, row.name).toBeUndefined()
+                    break
+                case 'separator':
+                    expect(holds, row.name).toBe(true)
+                    break
+                case 'key':
+                    expect(holds, row.name).toBe(false)
+                    expect(row.outcome.key, row.name).toBe(modelKey(row))
+                    break
+            }
         }
+    })
+
+    it('reads back each item that the entry wrote, for each spec of the pool', () => {
+        let wrote = 0
+        for (const one of cases) {
+            const entry = entryOf(one.spec, one.separator ?? '#')
+            for (const item of itemsOf(one)) {
+                let written: Record<string, unknown>
+                try {
+                    written = entry.toEntry(item)
+                } catch (thrown) {
+                    if (thrown instanceof RotoriseError) continue
+                    throw thrown
+                }
+                wrote++
+                const { K: _key, ...rest } = written
+                expect(entry.fromEntry(written), one.name).toEqual(rest)
+            }
+        }
+        expect(wrote).toBeGreaterThan(0)
     })
 
     it('has a trailing separator where a depth stops before the last component', () => {
@@ -332,9 +372,9 @@ describe('the derived key rows, against the model of a key', () => {
         expect(full?.outcome).toEqual({ kind: 'key', key: 'A#1#B#2' })
     })
 
-    it('draws a refusal, a null arm, and a value that holds the separator', () => {
-        expect(rows.some((row) => row.outcome.kind === 'refused')).toBe(true)
-        expect(rows.some((row) => row.outcome.kind === 'nothing')).toBe(true)
+    it('draws a refusal, a refusal of the separator, a null arm and an empty key', () => {
+        for (const kind of ['refused', 'separator', 'nothing'] as const)
+            expect(rows.some((row) => row.outcome.kind === kind)).toBe(true)
         expect(
             rows.some((row) => row.outcome.kind === 'key' && !row.lawful),
         ).toBe(true)

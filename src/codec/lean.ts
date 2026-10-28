@@ -4291,17 +4291,21 @@ export type KeyPart =
           readonly value: string
       }
 
-/** What the host did with a row: it threw, it gave no key, or it gave a key. */
+/**
+ * What the host did with a row: it threw at an absent value, it threw at a segment that holds the
+ * separator, it gave no key, or it gave a key.
+ */
 export type KeyOutcome =
     | { readonly kind: 'refused' }
+    | { readonly kind: 'separator' }
     | { readonly kind: 'nothing' }
     | { readonly kind: 'key'; readonly key: string }
 
 /**
  * **One row of the key builder**: the length of the spec, the options as the host read them, the
  * parts that the host evaluated, the separator, and what the host gave. The parts are the spec cut
- * to the depth, up to and including the first absent value. `lawful` says that the segments have a
- * segment and that none holds the separator.
+ * to the depth, up to and including the first component that the builder refuses. `lawful` says that
+ * the segments have a segment and that none holds the separator.
  */
 export type KeyRow = {
     readonly name: string
@@ -4358,8 +4362,9 @@ length of the spec, the options, the parts that the key builder of \`src/\` eval
 and what the builder gave. The checker of the list states that \`DerivedKey.build\` gives the
 segments that the builder joined, that the join of the segments is the key of the builder, and that
 the read of the key gives the segments back exactly where the row says so. A row where the builder
-threw states that the model gives no segments. A row of a \`null\` arm states that the null arm
-writes nothing. A row reads sampled items, so the row states a witness and not the law.
+threw at an absent value states that the model gives no segments. A row where the builder threw at
+a segment that holds the separator states that the model's segments hold it. A row of a \`null\` arm
+states that the null arm writes nothing. A row reads sampled items, so the row states a witness and not the law.
 -/
 
 namespace Calculus

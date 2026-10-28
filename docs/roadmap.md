@@ -280,19 +280,22 @@ is sparse by construction. The row of an entry is the attributes of the item and
 attributes derive, and a key that disagrees with its attributes is a row that the entry does not
 read.
 
-**Why the state is wanted.** Derived keys are the most used part of the library. `fromEntry(entry)`
-today deletes the key attributes and reads nothing, so a service reads a row with a cast to the
-entry type, and the boundary parses no key. Two items with one key overwrite each other in silence
-where a component prints the separator. With a parse, `fromEntry(entry)` is a decode at the
-boundary, and a component that can print the separator is a refusal at construction.
+**Why the state is wanted.** Derived keys are the most used part of the library. Two items with
+one key overwrite each other in silence where a component prints the separator. The boundary checks
+each stored key against the key that the attributes build, and a key build refuses a component
+whose print holds the separator. The boundary still parses no key into its components: a service
+that reads the components of a key parses the string itself. With a parse, `fromEntry(entry)` is a
+decode of the key, and a component that can print the separator is a refusal at construction.
 
-**What the tree carries today.** `key(name, attributes)`, `toEntry(item)` and `fromEntry(entry)` in
-`src/Rotorise.ts` build and strip key strings. The model states the key as a codec from a list of
-segments to a string, `DerivedKey.keyCodec`, lawful on the lists that have a segment and hold no
-separator (`DerivedKey.keyCodec_lawful`). A segment that holds the separator gives two lists one key
-(`DerivedKey.rawWrite_not_lawful`). The vector bridge puts the run-time builder to
-`DerivedKey.build` and `DerivedKey.join` on a pool of specs, items and options, and states where a
-segment holds the separator.
+**What the tree carries today.** `key(name, attributes)` and `toEntry(item)` in `src/Rotorise.ts`
+build key strings and refuse a segment that holds the separator, a transform that prints it
+included. `fromEntry(entry)` and `fromItem(item)` return a result: a stored key that differs from
+the rebuilt key is a refusal that names the key, and a key that the row lacks is accepted. The model
+states the key as a codec from a list of segments to a string, `DerivedKey.keyCodec`, lawful on the
+lists that have a segment and hold no separator (`DerivedKey.keyCodec_lawful`). A segment that holds
+the separator gives two lists one key (`DerivedKey.rawWrite_not_lawful`). The vector bridge puts
+the run-time builder to `DerivedKey.build` and `DerivedKey.join` on a pool of specs, items and
+options, and states where a segment holds the separator.
 `item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
 and of the options of a union that a pattern names.
 

@@ -11,7 +11,8 @@ A segment is a string. The separator is one character. The join is injective on 
 lists that have a segment and hold no separator, and the read splits at the separator. So the key
 codec is lawful on those lists, and the laws of the model then cover the parse of a key. A segment
 list that holds the separator breaks the write at two values that print one key, and no codec with
-that write is lawful.
+that write is lawful. The host refuses a key build at such a segment, so no key of the host holds
+the collision.
 
 A partial key is the print of the first segments with a trailing separator. A prefix match on it
 selects exactly the items that agree on those segments. The same match without the trailing

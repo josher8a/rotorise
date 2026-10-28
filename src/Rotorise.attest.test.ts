@@ -16,11 +16,11 @@ describe('Rotorise Performance Baseline', () => {
 
     const userSchema = tableEntry<User>()({
         PK: [
-            ['orgId', (id: string) => `ORG#${id}`],
-            ['id', (id: string) => `USER#${id}`],
+            ['orgId', (id: string) => `ORG:${id}`],
+            ['id', (id: string) => `USER:${id}`],
         ],
         SK: ['role'],
-        GSI1PK: [['role', (role: string) => `ROLE#${role}`]],
+        GSI1PK: [['role', (role: string) => `ROLE:${role}`]],
     })
 
     it('measures instantiation count for tableEntry', () => {

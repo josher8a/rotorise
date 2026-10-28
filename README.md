@@ -45,6 +45,9 @@ The optional `separator` defaults to `'#'`.
 ### `.key(keyName, attributes, config?)`
 
 Builds a specific key value from the given attributes.
+It throws a `RotoriseError` where a segment of a component holds the separator, because the key
+would read back as another list of segments. The message names the component, and never the value.
+A transform whose tag or value prints the separator is refused too, and so is `.toEntry(item)`.
 
 ```ts
 UserTable.key('PK', { orgId: 'acme', id: '123' })
@@ -92,12 +95,21 @@ Rejects excess properties at the type level.
 
 ### `.fromEntry(entry)`
 
-Strips computed keys from a table entry, returning the raw entity.
+Checks each computed key of a table entry against its attributes, strips the keys, and returns the
+raw entity. It returns a `CodecError` where a key that the entry holds differs from the key that the
+attributes build. The error names the key, and never the value.
 
 ```ts
 const user = UserTable.fromEntry(item)
-// => { orgId: 'acme', id: '123', role: 'admin', email: 'a@b.com' }
+if (failed(user)) {
+    // user.path => ['GSI1SK']
+} else {
+    // user => { orgId: 'acme', id: '123', role: 'admin', email: 'a@b.com' }
+}
 ```
+
+A key that the entry lacks is accepted: the row is not in that index. A key that the attributes
+cannot build is a disagreement. The check uses the separator of the table.
 
 ### `.infer`
 

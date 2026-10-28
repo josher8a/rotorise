@@ -19,7 +19,9 @@ import type {
 } from './codec/codec'
 import {
     andThen,
+    CodecError,
     constantOf,
+    failed,
     item as itemOf,
     object,
     orThrow,
@@ -486,6 +488,21 @@ const key =
         const composite: joinable[] = []
         let printed = 0
 
+        // A segment that holds the separator reads back as two. The refusal names the component,
+        // and never the value that it printed.
+        const push = (component: string, segment: joinable) => {
+            if (
+                segment !== undefined &&
+                segment !== null &&
+                String(segment).includes(separator)
+            ) {
+                throw new RotoriseError(
+                    `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
+                )
+            }
+            composite.push(segment)
+        }
+
         for (const keySpec of structure) {
             const [key, transform, Default] = Array.isArray(keySpec)
                 ? keySpec
@@ -497,15 +514,18 @@ const key =
                 const transformed = transform(value as never)
                 if (typeof transformed === 'object' && transformed !== null) {
                     if (transformed.tag !== undefined)
-                        composite.push(transformed.tag)
-                    composite.push(transformed.value)
+                        push(`the tag of ${key.toString()}`, transformed.tag)
+                    push(key.toString(), transformed.value)
                 } else {
-                    composite.push(key.toString().toUpperCase())
-                    composite.push(transformed)
+                    push(
+                        `the name ${key.toString()}`,
+                        key.toString().toUpperCase(),
+                    )
+                    push(key.toString(), transformed)
                 }
             } else if (value !== undefined && value !== null && value !== '') {
-                composite.push(key.toString().toUpperCase())
-                composite.push(value as joinable)
+                push(`the name ${key.toString()}`, key.toString().toUpperCase())
+                push(key.toString(), value as joinable)
             } else if (config?.allowPartial) {
                 break
             } else {
@@ -564,6 +584,30 @@ const toEntry =
         return entry as never
     }
 
+/**
+ * The key that the attributes build, or `undefined` where they build none: a component is absent,
+ * a discriminator names no arm, or the arm is `null`. The stored key is then no key of these
+ * attributes.
+ */
+const rebuilt = (
+    build: (name: never, attributes: never) => unknown,
+    name: string,
+    attributes: object,
+): unknown => {
+    try {
+        return build(name as never, attributes as never)
+    } catch (thrown) {
+        if (thrown instanceof RotoriseError) return undefined
+        throw thrown
+    }
+}
+
+/** The error of a stored key that the attributes do not build. It names the key, and not the value. */
+const keyDisagrees = (name: string): CodecError =>
+    new CodecError(
+        'the stored key differs from the key that the attributes build',
+    ).under(name)
+
 const fromEntry =
     <const Entity extends Record<string, unknown>>() =>
     <
@@ -571,16 +615,32 @@ const fromEntry =
         Separator extends string = '#',
     >(
         schema: Schema,
-    ) =>
-    <const Entry extends TableEntryImpl<Entity, Schema, Separator>>(
-        entry: Entry,
-    ): DistributiveOmit<Entry, keyof Schema> => {
-        const item = { ...entry }
+        separator: Separator,
+    ) => {
+        const build = key<Entity>()(schema as never, separator) as (
+            name: never,
+            attributes: never,
+        ) => unknown
+        return <const Entry extends TableEntryImpl<Entity, Schema, Separator>>(
+            entry: Entry,
+        ): Result<DistributiveOmit<Entry, keyof Schema>> => {
+            const item = { ...entry }
 
-        for (const key_ in schema) {
-            delete item[key_]
+            for (const key_ in schema) {
+                delete item[key_]
+            }
+            // a key that the entry lacks is a row outside that index. A key that it holds must be
+            // the key that the attributes build
+            for (const key_ in schema) {
+                const stored = (entry as Record<string, unknown>)[key_]
+                if (stored === undefined) continue
+                const built = rebuilt(build, key_, item)
+                if (built === undefined || String(built) !== String(stored)) {
+                    return keyDisagrees(key_)
+                }
+            }
+            return item as never
         }
-        return item as never
     }
 
 type ProcessSpecType<
@@ -727,16 +787,24 @@ type TableEntryDefinition<
     ) => TableEntryImpl<ExactEntity, Schema, Separator>
 
     /**
-     * Extracts the raw entity from a table entry by removing all computed keys.
+     * Extracts the raw entity from a table entry by removing all computed keys, or says which key
+     * disagrees with the attributes.
+     *
+     * A key that the entry holds must be the key that the attributes build, with the same separator.
+     * A key that the entry lacks is accepted: the row is not in that index. A key that the attributes
+     * cannot build, because a component is absent, is a disagreement too. The error names the key
+     * and never its value.
      * Use this when processing items retrieved from DynamoDB.
      */
     fromEntry: <const Entry extends TableEntryImpl<Entity, Schema, Separator>>(
         entry: Entry,
-    ) => DistributiveOmit<Entry, keyof Schema>
+    ) => Result<DistributiveOmit<Entry, keyof Schema>>
 
     /**
      * Generates a specific key for the given entity attributes.
      * Supports partial keys and depth limiting for query operations.
+     * Throws a `RotoriseError` that names the component where a segment of its print holds the
+     * separator, because the key would read back as another list of segments.
      *
      * @param key The name of the key to generate (e.g., 'PK', 'GSIPK').
      * @param attributes the object containing the values needed to build the key.
@@ -1826,7 +1894,7 @@ export const tableEntry =
                 return out
             },
             toEntry: buildEntry as never,
-            fromEntry: fromEntry()(schema as never) as never,
+            fromEntry: fromEntry()(schema as never, sep) as never,
             key: buildKey as never,
             infer: chainableNoOpProxy as never,
             path: () => pathBuilder() as never,
@@ -1866,7 +1934,23 @@ export const tableEntry =
             // which allocated the same list on every read
             const withoutKeys: Record<string, AttributeValue> = { ...item }
             for (const name of keyNames) delete withoutKeys[name]
-            return attributes.decode(withoutKeys) as Result<unknown>
+            const entity = attributes.decode(withoutKeys) as Result<unknown>
+            if (failed(entity)) return entity
+            // a key that the item lacks is a row outside that index. A key that it holds must be the
+            // key that `toItem` writes from the entity
+            for (const name of keyNames) {
+                const stored = item[name]
+                if (stored === undefined) continue
+                const built = rebuilt(
+                    buildKey as (name: never, attributes: never) => unknown,
+                    name,
+                    entity as object,
+                )
+                if (built === undefined || stored.S !== String(built)) {
+                    return keyDisagrees(name)
+                }
+            }
+            return entity
         }
 
         return {
