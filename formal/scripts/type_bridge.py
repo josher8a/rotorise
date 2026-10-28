@@ -32,7 +32,7 @@ FORMAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(FORMAL)
 TYPES = os.path.join(FORMAL, ".pool.types")
 BASELINE = os.path.join(FORMAL, "scripts", "type_bridge_baseline.txt")
-SLICES = "tsconfig.slices.json"
+SLICES = "tsconfig.slices0.json"
 
 ERROR = re.compile(r"^(.*?)\((\d+),(\d+)\): error (TS\d+): (.*)$")
 
@@ -48,7 +48,10 @@ def compile_all():
     """Run the slice program beside the path programs, and the path programs one after another.
     Return the output and the exit code of each program."""
     paths = sorted(
-        os.path.basename(p) for p in glob.glob(os.path.join(TYPES, "tsconfig.paths[0-9]*.json"))
+        os.path.basename(p)
+        for kind in ("slices", "meets", "paths")
+        for p in glob.glob(os.path.join(TYPES, f"tsconfig.{kind}[0-9]*.json"))
+        if os.path.basename(p) != SLICES
     )
     slices = tsc(SLICES)
     results = []

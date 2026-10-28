@@ -905,6 +905,43 @@ const slicesOf = (declared: readonly Declared[], first: number): Slice[] => {
     return slices
 }
 
+/**
+ * **The roots that only the type square reads.** A key that a `ref` pins below a union in a field
+ * needs a scope in the print. The printer prints a `ref` that closes no cycle as its body, so each
+ * root here closes a cycle: the entry that names the literal reaches the entry that holds the
+ * field. The model reads these roots through the pool, and the square puts the literals of the
+ * root to `extract` and `exclude`.
+ */
+const typeOnlySlices: readonly Slice[] = (() => {
+    const pet = object({ kind: string('pet'), size: string('small') })
+    const { Large, Red } = scope({
+        Large: object({
+            kind: string('pet'),
+            size: string('large'),
+            colour: union([ref('Red'), string('blue')]),
+        }),
+        Red: union([string('red'), array(ref('Large'))]),
+    })
+    const { Wide } = scope({
+        Wide: object({
+            kind: string('pet'),
+            size: string('wide'),
+            colour: union([ref('Hot'), ref('Cold')]),
+        }),
+        Hot: union([string('red'), array(ref('Wide'))]),
+        Cold: string('blue'),
+    })
+    void Red
+    return [
+        { name: 'type_only_ref_union', codec: union([pet, Large]) },
+        { name: 'type_only_ref_refs', codec: union([pet, Wide]) },
+    ].map(({ name, codec }) => ({
+        name,
+        codec: sliceableOf(erase(codec)),
+        clauses: [],
+    }))
+})()
+
 /** A path with no clause. */
 const plainPath = (path: readonly PathStep[]): boolean =>
     path.every((step) => typeof step !== 'object')
@@ -2000,8 +2037,12 @@ describe('the generated pool, against the model', () => {
      */
     it('emits the type vectors for the gate', () => {
         const files = typeVectorFiles({
-            slices: perSeed.flatMap((one) => one.slices),
+            slices: [
+                ...perSeed.flatMap((one) => one.slices),
+                ...typeOnlySlices,
+            ],
             paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
+            meets: pairs,
             clauses: clauseVocabulary,
         })
         if (process.env.EMIT_LEAN_REFUSALS) {
@@ -2025,11 +2066,14 @@ describe('the generated pool, against the model', () => {
             'paths0.ts',
             'paths1.ts',
             'paths2.ts',
+            'meets0.ts',
             'rows.json',
-            'tsconfig.slices.json',
+            'tsconfig.slices0.json',
+            'tsconfig.slices1.json',
             'tsconfig.paths0.json',
             'tsconfig.paths1.json',
             'tsconfig.paths2.json',
+            'tsconfig.meets0.json',
         ])
     })
 })

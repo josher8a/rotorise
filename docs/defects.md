@@ -207,8 +207,11 @@ cannot decide whether the member fits, so the type keeps the member:
       runtime:      the key is pinned, and the member is kept
 
 **Effect.** The result type of extract keeps a member that the run time can drop. Every value fits
-the type, and the type is wider than the value. Measured with `formal/scripts/gate.sh`: the type
-bridge holds no `extract(...)` refuse id.
+the type, and the type is wider than the value. The type bridge holds the case as `extract(...)`
+refuse ids on two roots of the pool, one for each one-name clause that the pool draws and for three
+union-pattern clauses: the run time drops the member, and the type keeps it. The type bridge prints a
+`ref` that closes no cycle as a `ref` under a scope, so the type and the run time read one codec.
+Measured 2026-10-28 with `formal/scripts/gate.sh`.
 
 **Open.** A slot closed in its scope at any depth closes the case.
 
@@ -216,6 +219,7 @@ bridge holds no `extract(...)` refuse id.
 `ref(...)`, the type drops a member whose `ref` binds a base, an optional key, or an entry with a
 union option that names a `ref`, and the slice that keeps a member pinned through an adapter.
 `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
+`formal/scripts/type_bridge_baseline.txt`: the `extract(...)` refuse ids of the two roots.
 
 ---
 

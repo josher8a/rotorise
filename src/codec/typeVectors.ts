@@ -17,6 +17,11 @@
  * go in the order of the hash of their Lean print, so a reorder of the pool moves no line and no
  * row id.
  *
+ * A meet root is a pair of the pool: the call of `meet` at two constants, and one value of the
+ * result for each seed that the result codec writes. The bridge keeps the first {@link MEET_ROOTS}
+ * pairs in the order of the hash. A slice root also takes each literal that its options hold, a union
+ * pattern that covers or part-covers a name, and a union pattern at two names.
+ *
  * ── the row id ────────────────────────────────────────────────────────────────────────────────
  *
  * A row id is the group, the verdict that the run time expects, a hash of the Lean print of the
@@ -36,10 +41,10 @@
 import { createHash } from 'node:crypto'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec } from './codec'
-import { number, object } from './codec'
+import { boolean, meet, number, object, string, union } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
-import { hostAt, leanClosedOf, reachable } from './lean'
+import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
 import { CodecError, failed } from './result'
 import type { Literal, Term } from './term'
 import { componentsOf, leafKinds, sameTerm, targetOf } from './term'
@@ -542,8 +547,11 @@ const printerOf = (
             }
             case 'legacy':
                 return `withLegacyRead({ current: ${sub(t.inner)}, older: { decode: (): never => { throw new Error('older') } } })`
-            // a `ref` that closes no cycle prints as its target, as the emitter prints it, and a
-            // `ref` with no target is a `ref` that no scope binds
+            // a `ref` that closes no cycle prints as a `ref` under its own scope, and not as its
+            // target: the type level reads a key pinned through a `ref` as unpinned, so the print of the
+            // target would hand the type a codec that the run time never reads. A clause prints the
+            // target, because a clause is read as a pattern and holds no scope. A `ref` with no target
+            // is a `ref` that no scope binds
             case 'ref': {
                 const target = targetOf(t)
                 if (target === undefined) return "ref('Undeclared')"
@@ -553,6 +561,8 @@ const printerOf = (
                 // term: the print keeps a `ref` where its target would be that `never`
                 if (sub !== inline && target.kind === 'never')
                     return "scope({ At: ref('It'), It: never }).At"
+                if (sub !== inline)
+                    return `scope({ At: ref('It'), It: ${sub(target)} }).At`
                 return sub(target)
             }
             case 'object': {
@@ -641,13 +651,13 @@ const keptOptions = (
         : options.map((o) => kept.some((k) => sameTerm(k, o)))
 }
 
-/** The run-time slice, or nothing where the run time refuses the clause. */
+/** The run-time slice, or nothing where the run time refuses the pattern. */
 const sliced = (
     run: (pattern: AnyCodec) => AnyCodec,
-    clause: Readonly<Record<string, AnyCodec>>,
+    pattern: AnyCodec,
 ): readonly Term[] | undefined => {
     try {
-        return membersOf(run(object(clause)).def)
+        return membersOf(run(pattern).def)
     } catch (error) {
         if (!(error instanceof CodecError)) throw error
         return undefined
@@ -664,6 +674,154 @@ type Root = {
     readonly root: string
     readonly declarations: readonly Declaration[]
     readonly checks: Block
+}
+
+/**
+ * The distinct string literals that a field term holds, through each union and each `ref`. A
+ * `ref` reads its target, so a literal that a scope binds counts as a literal of the field.
+ */
+const literalsOf = (t: Term, depth = 0): readonly string[] => {
+    if (depth > 8) return []
+    switch (t.kind) {
+        case 'literal':
+            return t.base === 'string' ? [t.v] : []
+        case 'union':
+            return t.options.flatMap((o) => literalsOf(o, depth + 1))
+        case 'ref': {
+            const target = targetOf(t)
+            return target === undefined ? [] : literalsOf(target, depth + 1)
+        }
+        default:
+            return []
+    }
+}
+
+/** Whether a field term is the base `boolean` through a union or a `ref`. */
+const holdsBoolean = (t: Term, depth = 0): boolean => {
+    if (depth > 8) return false
+    switch (t.kind) {
+        case 'boolean':
+            return true
+        case 'union':
+            return t.options.some((o) => holdsBoolean(o, depth + 1))
+        case 'ref': {
+            const target = targetOf(t)
+            return target !== undefined && holdsBoolean(target, depth + 1)
+        }
+        default:
+            return false
+    }
+}
+
+/** The literals of each name that the options of a union hold, at most four for each name. */
+const namedLiterals = (
+    options: readonly Term[],
+): ReadonlyMap<string, readonly string[]> => {
+    const out = new Map<string, string[]>()
+    for (const o of options) {
+        if (o.kind !== 'object') continue
+        for (const [name, f] of Object.entries(o.body.fields)) {
+            const seen = out.get(name) ?? []
+            for (const l of literalsOf(f.t))
+                if (!seen.includes(l) && seen.length < 4) seen.push(l)
+            out.set(name, seen)
+        }
+    }
+    return out
+}
+
+/**
+ * A pattern: the argument of the call as the row id spells it, the same argument as source text,
+ * and the codec that builds it.
+ */
+type Pattern = {
+    readonly argument: string
+    readonly source: string
+    readonly codec: AnyCodec
+}
+
+// one cast each, where a constructor takes a tuple of literals and the root gives a list at run time
+const stringOf = string as unknown as (...values: readonly string[]) => AnyCodec
+const booleanOf = boolean as unknown as (value: boolean) => AnyCodec
+
+/**
+ * **The patterns that the options of a root suggest.** Each literal that an option holds at a name
+ * is a clause of its own, and so is the set of them. A union pattern splits the literals of one
+ * name into two members (a cover), keeps one literal and adds one that the root lacks (a partial
+ * cover), and puts two names in one pattern. The base `boolean` is covered by `true` and `false`.
+ * Each literal comes from the root, so the pattern meets the root.
+ */
+const patternsOf = (
+    options: readonly Term[],
+    clause: (codec: AnyCodec) => string,
+): readonly Pattern[] => {
+    const out: Pattern[] = []
+    const member = (name: string, c: AnyCodec): AnyCodec =>
+        object({ [name]: c })
+    const objectPattern = (name: string, c: AnyCodec): Pattern => {
+        const argument = `{ ${keyText(name)}: ${clause(c)} }`
+        return {
+            argument,
+            source: `object(${argument})`,
+            codec: member(name, c),
+        }
+    }
+    const unionPattern = (members: readonly AnyCodec[]): Pattern => {
+        const codec = union(members)
+        const source = clause(codec)
+        return { argument: source, source, codec }
+    }
+    const named = namedLiterals(options)
+    const literal = [...named].filter(([, ls]) => ls.length > 0)
+    for (const [name, ls] of literal) {
+        for (const l of ls) out.push(objectPattern(name, stringOf(l)))
+        const half = Math.ceil(ls.length / 2)
+        if (ls.length >= 2) {
+            out.push(objectPattern(name, stringOf(...ls)))
+            out.push(
+                unionPattern([
+                    member(name, stringOf(...ls.slice(0, half))),
+                    member(name, stringOf(...ls.slice(half))),
+                ]),
+            )
+        }
+        if (ls.length >= 3)
+            out.push(unionPattern(ls.map((l) => member(name, stringOf(l)))))
+        out.push(
+            unionPattern([
+                member(name, stringOf(...ls.slice(0, 1))),
+                member(name, stringOf('zz')),
+            ]),
+        )
+    }
+    for (const name of named.keys()) {
+        const field = (o: Term) =>
+            o.kind === 'object' ? o.body.fields[name] : undefined
+        if (
+            !options.some((o) => holdsBoolean(field(o)?.t ?? { kind: 'never' }))
+        )
+            continue
+        out.push(
+            unionPattern([
+                member(name, booleanOf(true)),
+                member(name, booleanOf(false)),
+            ]),
+            unionPattern([member(name, booleanOf(true))]),
+        )
+    }
+    literal.forEach(([a, firsts], i) => {
+        const next = literal[i + 1]
+        const x = firsts[0]
+        const y = next?.[1][0]
+        if (next === undefined || x === undefined || y === undefined) return
+        out.push(
+            unionPattern([
+                member(a, stringOf(x)),
+                member(next[0], stringOf(y)),
+            ]),
+        )
+    })
+    return out
 }
 
 /** One slice root: the union, its options, a sample of each option, and each clause. */
@@ -704,49 +862,56 @@ const sliceRoot = (
             o.kind === 'object' ? Object.keys(o.body.fields) : [],
         ),
     )
+    const patterns: Pattern[] = []
     for (const name of names)
-        for (const make of vocabulary)
-            for (const op of ['extract', 'exclude'] as const) {
-                const clause = { [name]: make() }
-                const spelled = p.clause(make())
-                const text = `${op}({ ${keyText(name)}: ${spelled} })`
-                const pattern = `object({ ${keyText(name)}: ${spelled} })`
-                const kept = sliced(slice.codec[op], clause)
-                const callRow = rowId(
-                    'call',
-                    kept === undefined ? 'refuse' : 'accept',
-                    root,
-                    text,
-                )
-                b.lines.push('{')
-                assert(
-                    b,
-                    {
-                        id: callRow,
-                        expect: kept === undefined ? 'refuse' : 'accept',
-                    },
-                    `const r = ${op}(C.${p.full('root')}, ${pattern})`,
-                )
-                if (kept !== undefined)
-                    keptOptions(options, kept).forEach((keeps, i) => {
-                        const expect = keeps ? 'accept' : 'refuse'
-                        assert(
-                            b,
-                            {
-                                id: rowId(
-                                    op,
-                                    expect,
-                                    root,
-                                    `${text} member ${i}`,
-                                ),
-                                expect,
-                                after: callRow,
-                            },
-                            `const m${i}: Decoded<typeof r> = C.${p.full(`m${i}`)}`,
-                        )
-                    })
-                b.lines.push('}')
-            }
+        for (const make of vocabulary) {
+            const argument = `{ ${keyText(name)}: ${p.clause(make())} }`
+            patterns.push({
+                argument,
+                source: `object(${argument})`,
+                codec: object({ [name]: make() }),
+            })
+        }
+    const spelledAlready = new Set(patterns.map((q) => q.argument))
+    for (const q of patternsOf(options, p.clause)) {
+        if (spelledAlready.has(q.argument)) continue
+        spelledAlready.add(q.argument)
+        patterns.push(q)
+    }
+    for (const pattern of patterns)
+        for (const op of ['extract', 'exclude'] as const) {
+            const text = `${op}(${pattern.argument})`
+            const kept = sliced(slice.codec[op], pattern.codec)
+            const callRow = rowId(
+                'call',
+                kept === undefined ? 'refuse' : 'accept',
+                root,
+                text,
+            )
+            b.lines.push('{')
+            assert(
+                b,
+                {
+                    id: callRow,
+                    expect: kept === undefined ? 'refuse' : 'accept',
+                },
+                `const r = ${op}(C.${p.full('root')}, ${pattern.source})`,
+            )
+            if (kept !== undefined)
+                keptOptions(options, kept).forEach((keeps, i) => {
+                    const expect = keeps ? 'accept' : 'refuse'
+                    assert(
+                        b,
+                        {
+                            id: rowId(op, expect, root, `${text} member ${i}`),
+                            expect,
+                            after: callRow,
+                        },
+                        `const m${i}: Decoded<typeof r> = C.${p.full(`m${i}`)}`,
+                    )
+                })
+            b.lines.push('}')
+        }
     return { root, declarations: p.declarations, checks: b }
 }
 
@@ -807,6 +972,100 @@ const pathRoot = (
     return { root, declarations: p.declarations, checks: b }
 }
 
+/** Two factors of a `meet`, as the pool pairs them. */
+export type MeetPair = { readonly left: AnyCodec; readonly right: AnyCodec }
+
+// one cast, where the run time takes erased factors and `meet` takes the tuple that it validates
+const meetOfCodecs = meet as unknown as (
+    ...factors: readonly AnyCodec[]
+) => AnyCodec
+
+/** The run-time meet, or nothing where the run time refuses the factors. */
+const met = (pair: MeetPair): AnyCodec | undefined => {
+    try {
+        return meetOfCodecs(pair.left, pair.right)
+    } catch (error) {
+        if (!(error instanceof CodecError)) throw error
+        return undefined
+    }
+}
+
+/**
+ * The values that the result of a meet generates, as value expressions: the seeds of
+ * {@link rngFrom}. A value that the codec cannot generate, or that no expression states, adds
+ * nothing.
+ */
+const meetSamples = (result: AnyCodec, at: string): readonly string[] => {
+    const out = new Set<string>()
+    for (const seed of SAMPLES) {
+        try {
+            const value = arbitraryOf(result, rngFrom(seed), 3)
+            // a value that the run-time codec itself cannot write is no sample of the result
+            if (!failed(result.encode(value as never)))
+                out.add(valueText(value, at))
+        } catch (error) {
+            if (
+                !(
+                    error instanceof CodecError ||
+                    error instanceof RangeError ||
+                    error instanceof TypeUnemittable
+                )
+            )
+                throw error
+        }
+    }
+    return [...out]
+}
+
+/**
+ * **One meet root**: the call of `meet` at two constants. The row expects `accept` where the run
+ * time builds the meet, and `refuse` where the run time throws. Where the run time builds, each
+ * value that the result generates must fit the decoded type of the call.
+ */
+const meetRoot = (
+    pair: MeetPair,
+    result: AnyCodec | undefined,
+    p: ReturnType<typeof printerOf>,
+    root: string,
+    at: string,
+): Root => {
+    p.constant('l', 'left', pair.left.def)
+    p.constant('r', 'right', pair.right.def)
+    const text = `meet(${p.full('l')}, ${p.full('r')})`
+    const callRow = rowId(
+        'meet',
+        result === undefined ? 'refuse' : 'accept',
+        root,
+        text,
+    )
+    const b = block()
+    b.lines.push('{')
+    assert(
+        b,
+        { id: callRow, expect: result === undefined ? 'refuse' : 'accept' },
+        `const m = meet(C.${p.full('l')}, C.${p.full('r')})`,
+    )
+    if (result !== undefined)
+        meetSamples(result, at).forEach((expression, i) => {
+            assert(
+                b,
+                {
+                    id: rowId(
+                        'meetvalue',
+                        'accept',
+                        root,
+                        `${text} ${expression}`,
+                    ),
+                    expect: 'accept',
+                    after: callRow,
+                },
+                `const v${i}: Decoded<typeof m> = ${expression}`,
+            )
+        })
+    b.lines.push('}')
+    return { root, declarations: p.declarations, checks: b }
+}
+
 /** The samples of a codec at a path: the seeds of {@link rngFrom}. */
 const SAMPLES = [1, 2, 3, 4, 5, 6] as const
 
@@ -849,7 +1108,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { at, binary, boolean, decimal, dynamoNumber, exclude, extract, narrow, number, object, string } from '${library}/codec'`,
+    `import { at, binary, boolean, decimal, dynamoNumber, exclude, extract, meet, narrow, number, object, string, union } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",
@@ -885,6 +1144,19 @@ const PATH_FILES = [
     ['paths1.ts', 'tsconfig.paths1.json'],
     ['paths2.ts', 'tsconfig.paths2.json'],
 ] as const
+
+/**
+ * **The meet checks go to their own programs**, cut at the boundary of a root. The bridge compiles
+ * them beside the path programs, one after another, so the peak memory holds one program.
+ */
+const MEET_FILES = [['meets0.ts', 'tsconfig.meets0.json']] as const
+
+/**
+ * **The meets that the bridge puts to the checker**, the first ones in the order of the hash of the
+ * pair. The type of a meet over a pair of the pool costs the checker more than a slice: all 3275
+ * pairs ran a program for over an hour and past 8 GB.
+ */
+const MEET_ROOTS = 100
 
 /** Each block in a file of its own lines, with its rows placed in that file. */
 const placed = (
@@ -969,18 +1241,46 @@ const byHash = <T>(
 export const typeVectorFiles = ({
     slices,
     paths,
+    meets,
     clauses,
 }: {
     readonly slices: readonly Slice[]
     readonly paths: readonly PathVectors[]
+    readonly meets: readonly MeetPair[]
     readonly clauses: readonly (() => AnyCodec)[]
 }): readonly (readonly [string, string])[] => {
+    /** The meets whose two factors print as library calls, each once by the identity of its pair. */
+    const printable = byHash(
+        meets.flatMap((pair) => {
+            try {
+                const scratch = shared([pair.left.def, pair.right.def])
+                const p = printerOf(scratch, 'x', 'meet')
+                p.constant('l', 'left', pair.left.def)
+                p.constant('r', 'right', pair.right.def)
+                return [pair]
+            } catch (error) {
+                if (
+                    !(
+                        error instanceof TypeUnemittable ||
+                        error instanceof LeanUnemittable
+                    )
+                )
+                    throw error
+                return []
+            }
+        }),
+        (pair) =>
+            `meet|${leanClosedOf(pair.left, 'meet', freshBound())}|${leanClosedOf(pair.right, 'meet', freshBound())}`,
+    )
     const constants = shared([
         ...slices.flatMap((s) => [
             s.codec.def,
             ...(s.codec.def.kind === 'union' ? s.codec.def.options : []),
         ]),
         ...paths.map((v) => v.codec.def),
+        ...printable
+            .slice(0, MEET_ROOTS)
+            .flatMap(([, pair]) => [pair.left.def, pair.right.def]),
     ])
     const sliceRoots = byHash(
         slices,
@@ -997,10 +1297,21 @@ export const typeVectorFiles = ({
     ).map(([root, v], i) =>
         pathRoot(v, printerOf(constants, `p${i}`, v.name), root),
     )
+    const meetRoots = printable
+        .slice(0, MEET_ROOTS)
+        .map(([root, pair], i) =>
+            meetRoot(
+                pair,
+                met(pair),
+                printerOf(constants, `m${i}`, 'meet'),
+                root,
+                'meet',
+            ),
+        )
     const codecs = placed(
         'codecs.ts',
         codecsHeader,
-        [...sliceRoots, ...pathRoots].map(({ declarations }) => ({
+        [...sliceRoots, ...pathRoots, ...meetRoots].map(({ declarations }) => ({
             lines: declarations.map((d) => d.line),
             checks: declarations.map((d, i) => ({
                 id: rowId('declaration', 'accept', hash(d.content), d.kind),
@@ -1025,10 +1336,19 @@ export const typeVectorFiles = ({
         file,
         ...placed(file, checksHeader, pathParts[i] ?? []),
     }))
+    const meetParts = split(
+        meetRoots.map((r) => r.checks),
+        MEET_FILES.length,
+    )
+    const meetFiles = MEET_FILES.map(([file], i) => ({
+        file,
+        ...placed(file, checksHeader, meetParts[i] ?? []),
+    }))
     const rows = [
         ...codecs.rows,
         ...sliceFiles.flatMap((f) => f.rows),
         ...pathFiles.flatMap((f) => f.rows),
+        ...meetFiles.flatMap((f) => f.rows),
     ]
     // two declarations of one content share one id; each check has an id of its own
     const checks = rows.filter((r) => !r.id.startsWith('declaration|'))
@@ -1040,12 +1360,20 @@ export const typeVectorFiles = ({
         ['codecs.ts', codecs.text],
         ...sliceFiles.map((f) => [f.file, f.text] as const),
         ...pathFiles.map((f) => [f.file, f.text] as const),
+        ...meetFiles.map((f) => [f.file, f.text] as const),
         [
             'rows.json',
             `[\n${rows.map((r) => JSON.stringify(r)).join(',\n')}\n]\n`,
         ],
-        ['tsconfig.slices.json', tsconfig(['codecs.ts', ...SLICE_FILES])],
-        ...PATH_FILES.map(
+        [
+            'tsconfig.slices0.json',
+            tsconfig(['codecs.ts', ...SLICE_FILES.slice(0, 5)]),
+        ],
+        [
+            'tsconfig.slices1.json',
+            tsconfig(['codecs.ts', ...SLICE_FILES.slice(5)]),
+        ],
+        ...[...PATH_FILES, ...MEET_FILES].map(
             ([file, config]) =>
                 [config, tsconfig(['codecs.ts', file])] as const,
         ),

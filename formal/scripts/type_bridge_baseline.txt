@@ -35,3 +35,49 @@ exclude|refuse|e2198121e1|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|ea30057fc2|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|f45cbe8e82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|feb1120b66|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|66f50cd26f|extract(union([object({ colour: string("red") }), object({ colour: string("blue") })])) member 1
+extract|refuse|66f50cd26f|extract(union([object({ colour: string("red") }), object({ colour: string("zz") })])) member 1
+extract|refuse|66f50cd26f|extract(union([object({ size: string("small") }), object({ colour: string("red") })])) member 1
+extract|refuse|66f50cd26f|extract({ colour: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: boolean(false) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: boolean(true) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: decimal("1") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: decimal("2.5") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: number(1) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: number(2.5) }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("A") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("a") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("a", "b") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("b") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("blue") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("p") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("q") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("red") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("red", "blue") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("x") }) member 1
+extract|refuse|66f50cd26f|extract({ colour: string("y") }) member 1
+extract|refuse|7d74c61692|extract(union([object({ colour: string("red") }), object({ colour: string("blue") })])) member 1
+extract|refuse|7d74c61692|extract(union([object({ colour: string("red") }), object({ colour: string("zz") })])) member 1
+extract|refuse|7d74c61692|extract(union([object({ size: string("small") }), object({ colour: string("red") })])) member 1
+extract|refuse|7d74c61692|extract({ colour: binary(new Uint8Array([1, 2])) }) member 1
+extract|refuse|7d74c61692|extract({ colour: boolean(false) }) member 1
+extract|refuse|7d74c61692|extract({ colour: boolean(true) }) member 1
+extract|refuse|7d74c61692|extract({ colour: decimal("1") }) member 1
+extract|refuse|7d74c61692|extract({ colour: decimal("2.5") }) member 1
+extract|refuse|7d74c61692|extract({ colour: dynamoNumber(orThrow(DynamoNumber.from("1"))) }) member 1
+extract|refuse|7d74c61692|extract({ colour: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) }) member 1
+extract|refuse|7d74c61692|extract({ colour: number(1) }) member 1
+extract|refuse|7d74c61692|extract({ colour: number(2.5) }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("A") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("a") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("a", "b") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("b") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("blue") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("p") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("q") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("red") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("red", "blue") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("x") }) member 1
+extract|refuse|7d74c61692|extract({ colour: string("y") }) member 1
