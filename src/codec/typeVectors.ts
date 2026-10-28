@@ -390,9 +390,14 @@ const printerOf = (
                     return `readonly ${keyText(k)}: ${x}`
                 })
                 const body = `{ ${fields.join('; ')} }`
-                return t.body.rest === undefined
-                    ? body
-                    : `(${body} & { readonly [name: string]: ${typeText(t.body.rest)} })`
+                if (t.body.rest === undefined) return body
+                // the index admits the declared fields too, as the decoded type of the library does
+                const declared = Object.values(t.body.fields).map((f) =>
+                    f.mark === 'optional'
+                        ? `${typeText(f.t)} | undefined`
+                        : typeText(f.t),
+                )
+                return `(${body} & { readonly [name: string]: ${[typeText(t.body.rest), ...declared].join(' | ')} })`
             }
             case 'list': {
                 if (

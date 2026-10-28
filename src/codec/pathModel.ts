@@ -598,7 +598,15 @@ type DecodeObject<Fd, W, Env extends unknown[]> = ([ReqNames<Fd>] extends [
         ? unknown
         : { readonly [K in OptNames<Fd>]?: DecodeT<SlotTerm<Fd[K]>, Env> }) &
     (W extends ['some', infer R]
-        ? { readonly [name: string]: DecodeT<R, Env> }
+        ? {
+              // the index admits the declared fields too, as `DerivedItem` does
+              readonly [name: string]:
+                  | DecodeT<R, Env>
+                  | {
+                        [K in keyof Fd]: DecodeT<SlotTerm<Fd[K]>, Env>
+                    }[keyof Fd]
+                  | ([OptNames<Fd>] extends [never] ? never : undefined)
+          }
         : unknown)
 
 /*

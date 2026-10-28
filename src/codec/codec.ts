@@ -3775,7 +3775,13 @@ type ItemOf<T, Spec, Rest> = [T] extends [OfParts] ? DerivedItem<Spec, Rest> : T
  */
 type DerivedItem<Spec, Rest> = [Rest] extends [undefined]
     ? show<ObjectOf<Spec>>
-    : show<ObjectOf<Spec>> & { readonly [name: string]: Decoded<Rest> }
+    : show<ObjectOf<Spec>> & {
+          // TypeScript checks each declared key against the index of an intersection, so the index
+          // admits the declared fields too. An optional field adds `undefined`, as the key may hold it
+          readonly [name: string]:
+              | Decoded<Rest>
+              | ObjectOf<Spec>[keyof ObjectOf<Spec>]
+      }
 
 /**
  * The keys a type states, without an index signature's.
@@ -4794,7 +4800,9 @@ export function object(
 }
 
 /** The options a factor offers, at the type level: a union's, or the factor itself. */
-type FactorOptions<F> = F extends UnionCodec<infer _T, infer Os>
+// the term is matched too: an entry of a scope is a union at the term of the entry, and a match at
+// the default term reads such an entry as one option
+type FactorOptions<F> = F extends UnionCodec<infer _T, infer Os, infer _Tm>
     ? Os
     : F extends {
             readonly [optionsMarker]?: infer Os extends readonly unknown[]
@@ -7107,7 +7115,7 @@ type FitsPositions<
 /** Whether a member spec fits a pattern codec: the pattern must hold objects. */
 type FitsSpec<A, P> = [FieldSpecList<P>] extends [never]
     ? 'f'
-    : EveryFits<A, PatternSpecs<P>>
+    : EveryFitsParts<A, PatternSpecs<P>>
 /** Each member spec of the codec fits some member spec of the pattern. */
 type EveryFits<A, P> = AllOf<A extends unknown ? SomeFit<A, P> : never>
 /**

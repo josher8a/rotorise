@@ -13,6 +13,7 @@ import type { Decoded } from '../../codec'
 import {
     boolean,
     CodecError,
+    discriminatedUnion,
     exclude,
     extract,
     held,
@@ -249,5 +250,32 @@ describe('a split that passes the bound keeps the option', () => {
         expect(optionsOf(rest)).toHaveLength(0)
         const row: Decoded<typeof rest> = { x: 'l00' }
         expect(row.x).toBe('l00')
+    })
+})
+
+describe('a dissection reads a union pattern by the parts of each option, as a plain union does', () => {
+    const o0 = object({ k: string('a'), x: string('a', 'b') })
+    const o1 = object({ k: string('b'), y: string })
+    const pattern = union([
+        object({ x: string('a') }),
+        object({ x: string('b') }),
+    ])
+
+    it('keeps a dissection option whose parts each fit the union pattern, as the run time keeps it', () => {
+        const kept = extract(discriminatedUnion('k', [o0, o1]), pattern)
+        expect(optionsOf(kept)).toHaveLength(1)
+        const row: Decoded<typeof kept> = { k: 'a', x: 'b' }
+        expect(row.x).toBe('b')
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<Decoded<typeof o0>>()
+    })
+
+    it('drops that option from the exclusion of a dissection, as the run time drops it', () => {
+        const rest = exclude(discriminatedUnion('k', [o0, o1]), pattern)
+        expect(optionsOf(rest)).toHaveLength(1)
+        const row: Decoded<typeof rest> = { k: 'b', y: 'q' }
+        expect(row.y).toBe('q')
+        // @ts-expect-error the covered option is no longer in the exclusion
+        const covered: Decoded<typeof rest> = { k: 'a', x: 'a' }
+        expect(covered.k).toBe('a')
     })
 })

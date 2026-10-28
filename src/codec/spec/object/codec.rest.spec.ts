@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import type { AnyCodec } from '../../codec'
+import type { AnyCodec, Decoded } from '../../codec'
 import {
     CodecError,
     codecOfTerm,
@@ -26,6 +26,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
+import { failed, orThrow } from '../../result'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
 
 type VendorMeta = {
@@ -480,5 +481,31 @@ describe('a built codec passed to tableEntry', () => {
             name: { S: 'n' },
             PK: { S: 'ID#a' },
         })
+    })
+})
+
+describe('an object with a rest of another type decodes the values that the run time gives', () => {
+    const rested = object({ a: string }, [string, optional(number)])
+
+    it('admits an item that holds only its declared field', () => {
+        const only: Decoded<typeof rested> = { a: 'x' }
+        const back = orThrow(rested.decode(orThrow(rested.encode(only))))
+        expect(back).toEqual(only)
+    })
+
+    it('admits an undeclared name at the rest type beside a declared field of another type', () => {
+        const both: Decoded<typeof rested> = { a: 'x', b: 1 }
+        const back = orThrow(rested.decode(orThrow(rested.encode(both))))
+        expect(back).toEqual(both)
+    })
+
+    /**
+     * **The index is wider than the run time.** TypeScript has no type for "each other key holds
+     * `T`". The index admits the declared field type at an undeclared name, and the run time refuses
+     * that value.
+     */
+    it('admits in the type a declared field type at an undeclared name, and the run time refuses the value', () => {
+        const wide: Decoded<typeof rested> = { a: 'x', c: 'y' }
+        expect(failed(rested.encode(wide))).toBe(true)
     })
 })

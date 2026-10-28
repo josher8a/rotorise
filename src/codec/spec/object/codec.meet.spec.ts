@@ -1019,3 +1019,17 @@ describe('the type of a meet reads the values that the run time keeps', () => {
         expect(meet(string('q'), widened).def).toEqual(string('q').def)
     })
 })
+
+describe('a meet over a cyclic scope entry that is a union reads the options of the entry', () => {
+    const cyclic = scope({
+        k0: object({ w: optional(ref('k1')) }),
+        k1: union([object({ v: string }), ref('k0')]),
+    })
+
+    it('holds the names of an option of the entry beside the names of the other factor, as the run time holds them', () => {
+        const met = meet(object({ x: string }), cyclic.k1)
+        const both: Decoded<typeof met> = { x: 'a', v: 'a' }
+        const back = orThrow(met.decode(orThrow(met.encode(both))))
+        expect(back).toEqual(both)
+    })
+})

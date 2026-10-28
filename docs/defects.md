@@ -317,3 +317,25 @@ the option, as the run time keeps it.
 
 **Pin.** `src/codec/spec/union/codec.slice.parts.spec.ts`: a split that passes the bound keeps the
 option.
+
+---
+
+## Known: the decoded type of an object with a rest admits the type of a declared field at an undeclared name
+
+**Observation.** The decoded type of an object with a rest intersects the spec with an index
+signature. TypeScript checks each declared key against the index of the intersection, so the index
+admits the type of each declared field beside the type of the rest. The host has no type for "each
+undeclared key holds the type of the rest". Measured 2026-10-28 with `npx vitest --run` and the pin
+below:
+
+    const rested = object({ a: string }, [string, optional(number)])
+    const wide: Decoded<typeof rested> = { a: 'x', c: 'y' }
+      type checker: accepted
+      runtime:      rested.encode(wide) fails, because c holds no number
+
+**Effect.** The decoded type is wider than the value. Each value that the run time gives fits the
+type. A value with the type of a declared field at an undeclared name compiles, and the run time
+refuses the value.
+
+**Pin.** `src/codec/spec/object/codec.rest.spec.ts`: the type admits a declared field type at an
+undeclared name, and the run time refuses the value.
