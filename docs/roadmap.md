@@ -1,4 +1,4 @@
-# Roadmap of the Lean development
+# Roadmap
 
 What this system would be in the future. One entry per future state, with what decides whether the
 state arrives.
@@ -266,3 +266,97 @@ bridged against it. `MapOf` in `Alg/Maps.lean` is where it starts, because the k
 whole tree and moved a small fraction of the declarations that reach the axiom. So the entry arrives
 only with the restated lemmas, not with an instance. It arrives sooner if mathlib makes the set-like
 route constructive upstream, and the entry closes with no work here if that happens.
+
+---
+
+## A derived key is a codec of the item, and a key parses back to its components
+
+**The future state.** The model states a key spec as a codec. Each component of the spec is a codec
+of one attribute, a tag is a literal, and a transform is an adapter. The key is the word of the
+components, printed with the separator into one `S` attribute. The print is injective where no
+component prints the separator, and the parse of a key gives back its components. A variant that has
+no key, the `null` arm of a discriminated spec, is the codec that writes no attribute, so the index
+is sparse by construction. The row of an entry is the attributes of the item and the keys that the
+attributes derive, and a key that disagrees with its attributes is a row that the entry does not
+read.
+
+**Why the state is wanted.** Derived keys are the most used part of the library. `fromEntry(entry)`
+today deletes the key attributes and reads nothing, so a service reads a row with a cast to the
+entry type, and the boundary parses no key. Two items with one key overwrite each other in silence
+where a component prints the separator. With a parse, `fromEntry(entry)` is a decode at the
+boundary, and a component that can print the separator is a refusal at construction.
+
+**What the tree carries today.** `key(name, attributes)`, `toEntry(item)` and `fromEntry(entry)` in
+`src/Rotorise.ts` build and strip key strings. The model holds no declaration about a derived key.
+`item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
+and of the options of a union that a pattern names.
+
+**What decides it.** A pair of items of one entry that derive one key, or a row whose key disagrees
+with its attributes, in a table that a service writes.
+
+---
+
+## A partial key is a prefix, and a query by the prefix selects exactly the items that agree on it
+
+**The future state.** The components of a key spec are ordered, and a partial key is the print of a
+prefix of the components. `begins_with(key, prefix)` on the partial key selects an item exactly
+where the item agrees with the prefix, on each component that the prefix holds. The model states the
+condition: each component prints no separator, and the partial key ends with a separator where the
+prefix stops between two components, so that `A#1` does not select `A#10`. A range condition on a
+sort key is sound where the print of each component preserves the order of its values. The library
+refuses a partial key or a range for which the condition fails, and does not build a key that
+selects more than the prefix states.
+
+**Why the state is wanted.** Services query by partial keys at many sites, through
+`key(name, attributes, { depth })` and `key(name, attributes, { allowPartial: true })`. The boundary
+is an option today, `key(name, attributes, { enforceBoundary: true })`, and a partial key without it
+can select items outside the prefix. Services also build prefix strings by hand, such as a tag
+followed by a separator, because the spec form cannot state a prefix that holds only a tag.
+
+**What the tree carries today.** The run-time key builder in `src/Rotorise.ts` reads the three
+options, and the type of its result reads the same options. No statement relates a partial key to
+the items that it selects.
+
+**What decides it.** A query by a derived partial key that returns an item outside its prefix, or a
+hand-built prefix in a service that the derived form cannot state.
+
+---
+
+## A table entry is built from the item codec, and the spec form is a spelling of the construction
+
+**The future state.** An entry has two forms. The spec form stays: `tableEntry<Entity>()(schema)`,
+with arrays of attribute names, transforms, discriminated specs and `null` arms. A constructive form
+builds each key from the codec of the item: a component reads a path of the codec, a tag is a
+literal, a transform is an adapter, and a discriminated spec is one key for each option of the
+union. The type of each key is the template literal that the construction gives, and the type of
+each component is the decoded type of the codec at its path. The spec form denotes the construction,
+so the two forms have one semantics and one type. The footprint of each key, the attributes that it
+reads, is one fact. `keyUpdates(changed)`, the refusal of a change that moves the item, and the type
+of a key read that fact.
+
+**Why the state is wanted.** The spec form finds its type by trial at the type level: the validation
+and processing types of `src/Rotorise.ts` test each shape of a spec in turn. Services cast around
+the result: `as never` at `toEntry(item)` and at `key(name, attributes)`, a helper that strips the
+readonly mark from a shared spec, and a key updater written again by hand with a cast of `key`,
+because the type cannot relate the name of a key to the row. The codec already carries the decoded
+type of each path, so a construction from the codec gives the type in one step.
+
+**What the tree carries today.** The spec form takes a `{ codec }` option, and no service passes
+one. `keyUpdates(changed)` exists with its refusal of a change that moves the item, and services
+write their own updater instead. The key types of `src/Rotorise.ts` state the footprint at the type
+level.
+
+**What decides it.** The services' entries, written in the constructive form, typecheck with no
+cast, and each spec entry gives the same keys and the same types as its construction.
+
+---
+
+## An entry costs the checker and the run time no more than the spec form costs today
+
+**The future state.** After the two forms above, the type of an entry and the build of a key are
+measured on the entries of the services. The checker time and the instantiations of the largest
+service, and the run time of `key(name, attributes)` and `toEntry(item)`, are no worse than the spec
+form at the base. Where a form is worse, a pass makes it cheaper before the form ships.
+
+**What decides it.** The measurement at the base, taken before the constructive form lands. That
+figure is the threshold.
