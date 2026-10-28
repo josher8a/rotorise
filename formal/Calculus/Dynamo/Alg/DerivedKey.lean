@@ -19,9 +19,8 @@ separator selects more.
 
 The builder of the host prints each component as a word of segments: a name and a value, a tag
 and a value, or a value alone. The model states the three shapes, the absent value, and the
-boundary. The rule of the host for the boundary reads the count of segments, so a component with
-one segment makes the rule append a separator to a full key. The model states the rule that the
-host intends, and states the rule of the host beside it.
+boundary. The host appends the boundary where the print stops before the last component, which
+`boundary` states. The count of components decides it, and the count of segments does not.
 
 The multi-character separator, the print of a component that is not a string, and the encoding of
 a string into the attribute are outside the model.
@@ -309,63 +308,38 @@ theorem printed_partial :
   | none :: _ => by simp [printed]
   | some k :: r => by simp [printed, printed_partial r]
 
-/-- The boundary that the host intends: a separator where the print stops before the last
-    component. -/
+/-- The boundary: a separator where the print stops before the last component. The host appends
+    it by this rule. -/
 def boundary (full : Nat) (cs : List Comp) : Bool := decide (cs.length < full)
 
-/-- The boundary that the host computes: a separator where twice the count of components is
-    greater than the count of segments. -/
-def hostBoundary (full : Nat) (cs : List Comp) : Bool :=
-  decide (full * 2 > (cs.flatMap Comp.segs).length)
-
-/-- A component with two segments adds two segments. -/
-theorem flatMap_length_of_two :
-    ∀ cs : List Comp, (∀ k ∈ cs, k.segs.length = 2) →
-      (cs.flatMap Comp.segs).length = 2 * cs.length
-  | [], _ => rfl
-  | k :: cs, h => by
-      have := flatMap_length_of_two cs (fun x hx => h x (List.mem_cons_of_mem _ hx))
-      simp [List.flatMap_cons, h k (by simp), this]
-      omega
-
-/-- **The boundary of the host is the boundary that the host intends where each printed component
-    has two segments.** -/
-theorem hostBoundary_eq_boundary (full : Nat) (cs : List Comp)
-    (h : ∀ k ∈ cs, k.segs.length = 2) : hostBoundary full cs = boundary full cs := by
-  simp only [hostBoundary, boundary, flatMap_length_of_two cs h]
-  have key : 2 * cs.length < full * 2 ↔ cs.length < full := by
-    rw [Nat.two_mul, Nat.mul_two]
-    constructor
-    · intro h
-      cases Nat.lt_or_ge cs.length full with
-      | inl hlt => exact hlt
-      | inr hge => exact absurd h (Nat.not_lt.mpr (Nat.add_le_add hge hge))
-    · intro h
-      exact Nat.add_lt_add h h
-  exact decide_eq_decide.mpr key
-
-/-- **A component with one segment makes the host append a separator to a full key.** One
-    component prints in full, and the host appends the boundary. -/
-theorem hostBoundary_misfires :
-    hostBoundary 1 [.shaped none "1"] = true ∧ boundary 1 [.shaped none "1"] = false := by
-  decide
-
-/-- The key of the host, as the host computes the boundary. -/
-def hostBuild (allowPartial enforce : Bool) (parts : List (Option Comp)) : Option (List String) :=
-  (printed allowPartial parts).map fun cs =>
-    if enforce && hostBoundary parts.length cs then cs.flatMap Comp.segs ++ [""]
-    else cs.flatMap Comp.segs
-
-/-- The key that the host intends. -/
+/-- The key of the host: the segments of the printed components, and the empty segment of the
+    boundary where the option is on and the print stops before the last component. -/
 def build (allowPartial enforce : Bool) (parts : List (Option Comp)) : Option (List String) :=
   (printed allowPartial parts).map fun cs =>
     if enforce && boundary parts.length cs then cs.flatMap Comp.segs ++ [""]
     else cs.flatMap Comp.segs
 
-/-- **The host and the intended rule differ on one component with no tag.** -/
-theorem hostBuild_ne_build :
-    hostBuild false true [some (.shaped none "1")] ≠ build false true [some (.shaped none "1")] := by
-  decide
+/-- **The boundary is on exactly where the print stops before the last component.** The count of
+    segments does not enter: a component with one segment counts as one component. -/
+theorem boundary_iff (full : Nat) (cs : List Comp) :
+    boundary full cs = true ↔ cs.length < full :=
+  decide_eq_true_iff
+
+/-- **A full key ends without the boundary.** Where the print holds each component of the spec,
+    the key is the segments of the components, with the option on. -/
+theorem build_full_ends_without_boundary {allowPartial : Bool} {parts : List (Option Comp)}
+    {cs : List Comp} (h : printed allowPartial parts = some cs) (hfull : cs.length = parts.length) :
+    build allowPartial true parts = some (cs.flatMap Comp.segs) := by
+  have hb : boundary parts.length cs = false := by simp [boundary, hfull]
+  simp [build, h, hb]
+
+/-- **A partial key ends with the boundary.** Where the print stops before the last component, the
+    key is the segments of the components and one empty segment, with the option on. -/
+theorem build_partial_ends_with_boundary {allowPartial : Bool} {parts : List (Option Comp)}
+    {cs : List Comp} (h : printed allowPartial parts = some cs) (hlt : cs.length < parts.length) :
+    build allowPartial true parts = some (cs.flatMap Comp.segs ++ [""]) := by
+  have hb : boundary parts.length cs = true := (boundary_iff _ _).mpr hlt
+  simp [build, h, hb]
 
 /-! ## The key as a codec -/
 

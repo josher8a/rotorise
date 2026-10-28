@@ -93,6 +93,7 @@ type CompositeKeyBuilderImpl<
     Separator extends string = '#',
     Deep extends number = number,
     isPartial extends boolean = false,
+    Boundary extends boolean = false,
 > = Entity extends unknown
     ? CompositeKeyStringBuilder<
           Entity,
@@ -102,9 +103,31 @@ type CompositeKeyBuilderImpl<
                 ? Spec
                 : SliceFromStart<Spec, Deep>,
           Separator,
-          boolean extends isPartial ? false : isPartial
+          boolean extends isPartial ? false : isPartial,
+          '',
+          never,
+          Boundary,
+          Boundary extends true ? StopsBeforeLast<Spec, Deep> : false
       >
     : never
+
+/**
+ * Whether the depth keeps fewer components than the spec holds.
+ *
+ * The type half of the count in the run-time builder: the boundary follows a print that stops
+ * before the last component. A depth that is no literal keeps the whole spec here, as the print does.
+ */
+type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
+    ? false
+    : number extends Deep
+      ? false
+      : SliceFromStart<Spec, Deep> extends infer Kept extends readonly unknown[]
+        ? Spec extends readonly unknown[]
+            ? Kept['length'] extends Spec['length']
+                ? false
+                : true
+            : false
+        : false
 
 export type CompositeKeyBuilder<
     Entity extends Record<string, unknown>,
@@ -147,6 +170,8 @@ type CompositeKeyStringBuilder<
     KeepIntermediate extends boolean,
     Acc extends string = '',
     AllAcc extends string = never,
+    Boundary extends boolean = false,
+    Stops extends boolean = false,
 > = Spec extends [infer Head, ...infer Tail]
     ? ExtractPair<Entity, Head> extends [
           infer Key extends joinable,
@@ -165,11 +190,25 @@ type CompositeKeyStringBuilder<
                     ? `${Acc}${Separator}${Value}`
                     : `${Acc}${Separator}${Key}${Separator}${Value}`,
               KeepIntermediate extends true
-                  ? AllAcc | (Acc extends '' ? never : Acc)
-                  : never
+                  ?
+                        | AllAcc
+                        | (Acc extends ''
+                              ? never
+                              : Boundary extends true
+                                ? `${Acc}${Separator}`
+                                : Acc)
+                  : never,
+              Boundary,
+              Stops
           >
         : never
-    : AllAcc | Acc
+    :
+          | AllAcc
+          | (Boundary extends true
+                ? Stops extends true
+                    ? `${Acc}${Separator}`
+                    : Acc
+                : Acc)
 
 type DiscriminatedSchemaShape = {
     discriminator: PropertyKey
@@ -445,6 +484,7 @@ const key =
             structure = structure.slice(0, config.depth) as typeof structure
         }
         const composite: joinable[] = []
+        let printed = 0
 
         for (const keySpec of structure) {
             const [key, transform, Default] = Array.isArray(keySpec)
@@ -473,11 +513,13 @@ const key =
                     `buildCompositeKey: Attribute ${key.toString()} not found in ${JSON.stringify(attributes)}`,
                 )
             }
+            printed++
         }
 
-        // Each spec element produces 2 segments (KEY, value). If fewer segments
-        // were emitted than expected (partial key), append a trailing separator.
-        if (config?.enforceBoundary && fullLength * 2 > composite.length) {
+        // A component prints one or two segments: a transform that gives a value with no tag prints
+        // one. So the components are counted, and not the segments. If the print stops before the
+        // last component (a partial key), append a trailing separator.
+        if (config?.enforceBoundary && printed < fullLength) {
             composite.push('')
         }
 
@@ -631,7 +673,8 @@ type ProcessKey<
               Spec,
               Separator,
               Exclude<Config['depth'], undefined>,
-              Exclude<Config['allowPartial'], undefined>
+              Exclude<Config['allowPartial'], undefined>,
+              [Config['enforceBoundary']] extends [true] ? true : false
           >
         : Spec extends null | undefined
           ? NullAs

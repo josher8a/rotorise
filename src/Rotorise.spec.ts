@@ -259,7 +259,9 @@ describe('DynamoDB Utils', () => {
             >,
         )
 
-        attest.instantiations([5662, 'instantiations'])
+        // 5662 -> 5746: the type of a key reads `enforceBoundary`, so the builder of the key type
+        // carries one more parameter and each prefix of a partial key one more template
+        attest.instantiations([5746, 'instantiations'])
     })
 
     it('tableEntry', () => {
@@ -427,7 +429,9 @@ describe('DynamoDB Utils', () => {
 
         // 7826 -> 8483: the codec types grew over the passes since the last refresh, each move
         // inside the tolerance, so no single change moved the pin out of it
-        attest.instantiations([8483, 'instantiations'])
+        // 8483 -> 8590: the type of a key reads `enforceBoundary`, so the builder of the key type
+        // carries one more parameter and each prefix of a partial key one more template
+        attest.instantiations([8590, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -470,7 +474,9 @@ describe('DynamoDB Utils', () => {
         // walks the codec spec once per key
         // 2235 -> 2378: the codec types grew over the passes since the last refresh, each move
         // inside the tolerance, so no single change moved the pin out of it
-        attest.instantiations([2378, 'instantiations'])
+        // 2378 -> 2388: the type of a key reads `enforceBoundary`, so the builder of the key type
+        // carries one more parameter and each prefix of a partial key one more template
+        attest.instantiations([2388, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -756,7 +762,9 @@ describe('DynamoDB Utils', () => {
         // `ConstantAttributes` off the codec spec for every key in the schema
         // 15421 -> 15565: the codec types grew over the passes since the last refresh, each move
         // inside the tolerance, so no single change moved the pin out of it
-        attest.instantiations([15565, 'instantiations'])
+        // 15565 -> 15628: the type of a key reads `enforceBoundary`, so the builder of the key type
+        // carries one more parameter and each prefix of a partial key one more template
+        attest.instantiations([15628, 'instantiations'])
     })
 
     test('real world example', () => {
@@ -970,7 +978,9 @@ describe('DynamoDB Utils', () => {
 
         // 32508 -> 33502: the codec types grew over the passes since the last refresh, each move
         // inside the tolerance, so no single change moved the pin out of it
-        attest.instantiations([33502, 'instantiations'])
+        // 33502 -> 33647: the type of a key reads `enforceBoundary`, so the builder of the key type
+        // carries one more parameter and each prefix of a partial key one more template
+        attest.instantiations([33647, 'instantiations'])
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1287,7 +1297,9 @@ describe('DynamoDB Utils', () => {
 
         // 6982 -> 7273: the codec types grew over the passes since the last refresh, each move
         // inside the tolerance, so no single change moved the pin out of it
-        attest.instantiations([7273, 'instantiations'])
+        // 7273 -> 7329: the type of a key reads `enforceBoundary`, so the builder of the key type
+        // carries one more parameter and each prefix of a partial key one more template
+        attest.instantiations([7329, 'instantiations'])
     })
 
     test('NeedsValidation detects 3-tuples in mixed arrays', () => {

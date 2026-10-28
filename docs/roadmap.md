@@ -320,9 +320,9 @@ followed by a separator, because the spec form cannot state a prefix that holds 
 options, and the type of its result reads the same options. The model states the prefix law: a
 partial key with a trailing separator is a prefix of a key exactly where the key extends its
 segments (`DerivedKey.prefix_iff`), and without the separator it selects more
-(`DerivedKey.prefix_without_separator`). The run-time rule of
-`key(name, attributes, { enforceBoundary: true })` counts segments, so a transform that prints one
-segment makes it append a separator to a full key (`DerivedKey.hostBuild_ne_build`).
+(`DerivedKey.prefix_without_separator`). The key builder appends the boundary of
+`key(name, attributes, { enforceBoundary: true })` where the print stops before the last component,
+which the model states as `DerivedKey.boundary`, and the type of the result reads the same option.
 
 **What decides it.** A query by a derived partial key that returns an item outside its prefix, or a
 hand-built prefix in a service that the derived form cannot state.
