@@ -1681,9 +1681,37 @@ export const tableEntry =
             )
         }
 
+        /**
+         * Whether a written value is the constant the codec decides.
+         *
+         * A primitive constant is compared as it is. A constant that an adapter puts back, such as a
+         * decimal, is an object, so two of them are the same when they print the same: the key is built
+         * from that print.
+         */
+        const sameConstant = (written: unknown, constant: unknown): boolean =>
+            Object.is(written, constant) ||
+            (typeof written === 'object' &&
+                written !== null &&
+                typeof constant === 'object' &&
+                constant !== null &&
+                String(written) === String(constant))
+
         const keyUpdates = (changed: Record<string, unknown>): AttributeMap => {
             const out: Record<string, AttributeValue> = {}
             const given = { ...decided, ...changed }
+
+            // the codec admits one value for a decided attribute, so any other value is not a write
+            // of that attribute. The message names the constant and never the written value
+            for (const name of Object.keys(decided)) {
+                if (
+                    name in changed &&
+                    !sameConstant(changed[name], decided[name])
+                ) {
+                    throw new RotoriseError(
+                        `'${name}' is decided by the codec as '${String(decided[name])}', and this change writes another value. The codec admits one value, so write '${String(decided[name])}' or leave '${name}' out.`,
+                    )
+                }
+            }
 
             for (const key of keys) {
                 const components =

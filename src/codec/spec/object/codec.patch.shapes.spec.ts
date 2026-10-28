@@ -70,6 +70,33 @@ describe('shipments', () => {
         expect(keys.GSI1PK).toEqual({ S: 'TAG#SHIPMENT#STATUS#SETTLED' })
     })
 
+    it('refuses a write of a decided TAG at another value, and names the constant', () => {
+        const _otherTag = () =>
+            Shipments.keyUpdates({
+                status: 'SETTLED',
+                // @ts-expect-error the entity types TAG as 'SHIPMENT'
+                TAG: 'OTHER',
+            })
+        expect(typeof _otherTag).toBe('function')
+        const untyped = Shipments.keyUpdates as (c: object) => unknown
+        expect(() => untyped({ status: 'SETTLED', TAG: 'OTHER' })).toThrow(
+            RotoriseError,
+        )
+        expect(() => untyped({ status: 'SETTLED', TAG: 'OTHER' })).toThrow(
+            /'TAG' is decided by the codec as 'SHIPMENT'/,
+        )
+        // the message names the constant and never the written value
+        expect(() => untyped({ status: 'SETTLED', TAG: 'OTHER' })).not.toThrow(
+            /OTHER/,
+        )
+        // the constant itself still builds
+        expect(
+            Object.keys(
+                untyped({ status: 'SETTLED', TAG: 'SHIPMENT' }) as object,
+            ),
+        ).toEqual(['GSI1PK'])
+    })
+
     it('supplies TAG to every key built from it, not only the first', () => {
         const keys = Shipments.keyUpdates({ vendorShipmentId: 'p2' })
         expect(Object.keys(keys)).toEqual(['GSI2SK'])
