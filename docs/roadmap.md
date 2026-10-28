@@ -326,10 +326,11 @@ hand-built prefix in a service that the derived form cannot state.
 
 **The future state.** An entry has two forms. The spec form stays: `tableEntry<Entity>()(schema)`,
 with arrays of attribute names, transforms, discriminated specs and `null` arms. A constructive form
-builds each key from the codec of the item: a component reads a path of the codec, a tag is a
-literal, a transform is an adapter, and a discriminated spec is one key for each option of the
-union. The type of each key is the template literal that the construction gives, and the type of
-each component is the decoded type of the codec at its path. The spec form denotes the construction,
+is a free function over the codec of the item, as `item(codec)` is a free function: the entry is
+a reading of one codec, not a second declaration. The function builds each key from the codec of the
+item: a component reads a path of the codec, a tag is a literal, a transform is an adapter, and a
+discriminated spec is one key for each option of the union. The type of each key is the template
+literal that the construction gives, and the type of each component is the decoded type of the codec at its path. The spec form denotes the construction,
 so the two forms have one semantics and one type. The footprint of each key, the attributes that it
 reads, is one fact. `keyUpdates(changed)`, the refusal of a change that moves the item, and the type
 of a key read that fact.
@@ -347,7 +348,9 @@ write their own updater instead. The key types of `src/Rotorise.ts` state the fo
 level.
 
 **What decides it.** The services' entries, written in the constructive form, typecheck with no
-cast, and each spec entry gives the same keys and the same types as its construction.
+cast. The vector bridge puts the keys of the free function to the model of a derived key, as it puts
+the codec to the model of a codec. Each spec entry gives the same keys and the same types as its
+construction, on the entries that the services declare.
 
 ---
 
