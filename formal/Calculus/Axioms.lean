@@ -9,6 +9,7 @@ import Calculus.Dynamo.Lang.ScopeHeldFree
 import Calculus.Dynamo.Lang.ScopeEquations
 import Calculus.Dynamo.Witness.ScopeDischarge
 import Calculus.Dynamo.Alg.Continuity
+import Calculus.Dynamo.Alg.DerivedKey
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Witness.ScopeRefutations
 import Calculus.Dynamo.Lang.Equations

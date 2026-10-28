@@ -287,7 +287,10 @@ where a component prints the separator. With a parse, `fromEntry(entry)` is a de
 boundary, and a component that can print the separator is a refusal at construction.
 
 **What the tree carries today.** `key(name, attributes)`, `toEntry(item)` and `fromEntry(entry)` in
-`src/Rotorise.ts` build and strip key strings. The model holds no declaration about a derived key.
+`src/Rotorise.ts` build and strip key strings. The model states the key as a codec from a list of
+segments to a string, `DerivedKey.keyCodec`, lawful on the lists that have a segment and hold no
+separator (`DerivedKey.keyCodec_lawful`). A segment that holds the separator gives two lists one key
+(`DerivedKey.rawWrite_not_lawful`). No vector ties the run-time builder to the model yet.
 `item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
 and of the options of a union that a pattern names.
 
@@ -314,8 +317,12 @@ can select items outside the prefix. Services also build prefix strings by hand,
 followed by a separator, because the spec form cannot state a prefix that holds only a tag.
 
 **What the tree carries today.** The run-time key builder in `src/Rotorise.ts` reads the three
-options, and the type of its result reads the same options. No statement relates a partial key to
-the items that it selects.
+options, and the type of its result reads the same options. The model states the prefix law: a
+partial key with a trailing separator is a prefix of a key exactly where the key extends its
+segments (`DerivedKey.prefix_iff`), and without the separator it selects more
+(`DerivedKey.prefix_without_separator`). The run-time rule of
+`key(name, attributes, { enforceBoundary: true })` counts segments, so a transform that prints one
+segment makes it append a separator to a full key (`DerivedKey.hostBuild_ne_build`).
 
 **What decides it.** A query by a derived partial key that returns an item outside its prefix, or a
 hand-built prefix in a service that the derived form cannot state.
