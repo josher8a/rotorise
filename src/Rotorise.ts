@@ -620,22 +620,32 @@ type ValidateSchema<Schema> = [NeedsValidation<Schema[keyof Schema]>] extends [
       }
 
 /**
- * The paths that a spec holds, anywhere in it: a component, a discriminator or an attribute-name
- * arm. The walk stops at four matches, so a loose arm that names itself ends it.
+ * What a spec holds that only the exact check reads: a path, in a component, a discriminator or an
+ * attribute-name arm, and the marker `'cases'` for a match that groups literals. The marker holds no
+ * `.`, so no path equals it. The walk stops at four matches, so a loose arm that names itself ends it.
  */
-type DottedIn<S, Depth extends unknown[] = []> = S extends string
+type NeedsExactCheck<S, Depth extends unknown[] = []> = S extends string
     ? S extends `${infer Head}.${string}`
         ? string extends Head // the pattern of the constraint, which names no path
             ? never
             : S
         : never
     : S extends readonly unknown[]
-      ? DottedIn<S[number], Depth>
+      ? NeedsExactCheck<S[number], Depth>
       : S extends { discriminator: infer D; spec: infer Arms }
         ? Depth['length'] extends 4
             ? never
-            : DottedIn<D, Depth> | DottedIn<Arms[keyof Arms], [...Depth, 0]>
-        : never
+            :
+                  | NeedsExactCheck<D, Depth>
+                  | NeedsExactCheck<Arms[keyof Arms], [...Depth, 0]>
+        : S extends { discriminator: infer D; cases: infer C }
+          ? Depth['length'] extends 4
+              ? never
+              :
+                    | 'cases'
+                    | NeedsExactCheck<D, Depth>
+                    | NeedsExactCheck<ArmOfCases<C>, [...Depth, 0]>
+          : never
 
 type DefaultSlot<V> = [DefaultOf<Exclude<V, undefined>>]
 
@@ -672,7 +682,9 @@ type ValidateSpec<E, S> = S extends string
       ? { [I in keyof S]: ValidateComponent<E, S[I]> }
       : S extends { discriminator: infer D extends string; spec: infer Arms }
         ? ValidateMatchPaths<E, D, Arms>
-        : S
+        : S extends { discriminator: infer D extends string; cases: infer C }
+          ? ValidateCasesMatch<E, D, C>
+          : S
 
 /**
  * A match: the arms name the literals of the value at the discriminator and no other, and each arm
@@ -694,6 +706,141 @@ type ValidateMatchPaths<E, D extends string, Arms> = {
     }
 }
 
+/** The arms of a list of cases. */
+type ArmOfCases<C> = C extends readonly (readonly [unknown, infer Arm])[]
+    ? Arm
+    : never
+
+/** The literals that a list of cases names. */
+type LiteralOfCases<C> = C extends readonly (readonly [
+    infer Literals extends readonly unknown[],
+    unknown,
+])[]
+    ? Literals[number] & PropertyKey
+    : never
+
+/** The arm of the case that names a literal. */
+type ArmOfLiteral<C, L> = C extends readonly unknown[]
+    ? C[number] extends infer Case
+        ? Case extends readonly [
+              infer Literals extends readonly unknown[],
+              infer Arm,
+          ]
+            ? L extends Literals[number]
+                ? Arm
+                : never
+            : never
+        : never
+    : never
+
+/**
+ * A match that groups literals, as the match of one arm for each literal. Each case names its
+ * literals once, so the two forms are one function from a literal to an arm.
+ * The constraint is shallow, so an arm below the first match is inferred as a readonly tuple. The
+ * list of components that the types of a key read is mutable, so the arm is made mutable here.
+ */
+type ExpandSpec<S> = S extends readonly unknown[]
+    ? DeepMutable<S>
+    : S extends { discriminator: infer D; cases: infer C }
+      ? {
+            discriminator: D
+            spec: { [L in LiteralOfCases<C>]: ExpandSpec<ArmOfLiteral<C, L>> }
+        }
+      : S extends { discriminator: infer D; spec: infer Arms }
+        ? { discriminator: D; spec: { [L in keyof Arms]: ExpandSpec<Arms[L]> } }
+        : S
+
+/** The schema with each grouped match written as a match of one arm for each literal. A schema with no group is unchanged. */
+type ExpandCases<Schema> = string extends keyof Schema
+    ? Schema
+    : 'cases' extends NeedsExactCheck<Schema[keyof Schema]>
+      ? {
+            [K in keyof Schema]: ExpandSpec<Schema[K]> &
+                (Schema[K] extends { readonly [tableKeyMark]: true }
+                    ? { readonly [tableKeyMark]: true }
+                    : unknown)
+        }
+      : Schema
+
+/** Whether each option holds the name or the path. */
+type HeldByEach<E, P extends string> = false extends (
+    E extends unknown
+        ? [ValueOfKey<E, P>] extends [never]
+            ? false
+            : true
+        : never
+)
+    ? false
+    : true
+
+/**
+ * The arm of a case, against the options that the literals of the case select. Where the case
+ * selects more than one option, each option holds each name that the arm reads: an arm is one spec
+ * for all of them.
+ */
+type ValidateGroupArm<E, Arm> = IsUnion<E> extends false
+    ? ValidateSpec<E, Arm>
+    : Arm extends string
+      ? HeldByEach<E, Arm> extends true
+          ? ValidateSpec<E, Arm>
+          : ErrorMessage<`'${Arm}' is not held by each option of this case`>
+      : Arm extends readonly unknown[]
+        ? {
+              [I in keyof Arm]: NameOfComponent<Arm[I]> extends infer N extends
+                  string
+                  ? [N] extends [never]
+                      ? ValidateComponent<E, Arm[I]>
+                      : HeldByEach<E, N> extends true
+                        ? ValidateComponent<E, Arm[I]>
+                        : ErrorMessage<`'${N}' is not held by each option of this case`>
+                  : never
+          }
+        : ValidateSpec<E, Arm>
+
+/** The name or the path that a component reads. */
+type NameOfComponent<C> = C extends string
+    ? C
+    : C extends readonly [infer P extends string, ...unknown[]]
+      ? P
+      : never
+
+/** One case of a match, against the options that the match reads: the literals it names, then its arm. */
+type ValidateCases<E, D extends string, C, Seen = never> = C extends readonly [
+    readonly [infer Literals extends readonly unknown[], infer Arm],
+    ...infer Rest,
+]
+    ? [
+          [
+              {
+                  [I in keyof Literals]: Literals[I] extends Seen
+                      ? ErrorMessage<`'${D}' has the literal '${Literals[I] & (string | number)}' in two cases`>
+                      : Literals[I] extends ValueOfKey<E, D>
+                        ? Literals[I]
+                        : ErrorMessage<`'${D}' never holds '${Literals[I] & (string | number)}'`>
+              },
+              ValidateGroupArm<
+                  Extract<E, Tagged<D, Literals[number] & PropertyKey>>,
+                  Arm
+              >,
+          ],
+          ...ValidateCases<E, D, Rest, Seen | Literals[number]>,
+      ]
+    : C
+
+/**
+ * A match that groups literals: the literals of each case are literals of the value at the
+ * discriminator, no case repeats a literal, the cases cover each literal, and each arm is a spec of
+ * the options that its literals select.
+ */
+type ValidateCasesMatch<E, D extends string, C> = {
+    discriminator: [
+        Exclude<ValueOfKey<E, D> & PropertyKey, LiteralOfCases<C>>,
+    ] extends [never]
+        ? D
+        : ErrorMessage<`'${D}' has the literal '${Exclude<ValueOfKey<E, D> & PropertyKey, LiteralOfCases<C>> & (string | number)}', and no case names it`>
+    cases: ValidateCases<E, D, C>
+}
+
 /**
  * Reads each path that a schema holds against the entity. A wrong path, a path that no option
  * holds, a transform whose parameter does not fit the value, a path whose value can be absent, and a
@@ -702,7 +849,7 @@ type ValidateMatchPaths<E, D extends string, Arms> = {
  */
 type ValidatePaths<Schema, E> = string extends keyof Schema // the constraint, before a schema is inferred
     ? unknown
-    : [DottedIn<Schema[keyof Schema]>] extends [never]
+    : [NeedsExactCheck<Schema[keyof Schema]>] extends [never]
       ? unknown
       : { [K in keyof Schema]: ValidateSpec<E, Schema[K]> }
 
@@ -747,6 +894,7 @@ type DiscriminatedSchema<Entity, E, Used extends PropertyKey = never> = {
     [key in OpenKeys<E, Used>]: E[key] extends PropertyKey
         ? {
               discriminator: key
+              cases?: never
               spec: {
                   [val in E[key]]: NestedKeySpec<
                       Extract<
@@ -771,23 +919,37 @@ type DiscriminatedSchema<Entity, E, Used extends PropertyKey = never> = {
 type PathMatch = {
     discriminator: AnyPath
     spec: { [literal: string]: LooseArm }
+    cases?: never
+}
+
+/**
+ * A match that groups literals: each case is a list of literals and the arm that they share. The
+ * constraint is shallow for the same reason: {@link ValidatePaths} reads the cases.
+ */
+type CasesMatch = {
+    discriminator: string
+    spec?: ErrorMessage<'a match holds spec or cases, not both'>
+    cases: [[string | number, ...(string | number)[]], LooseArm][]
 }
 
 type LooseArm =
-    | unknown[]
+    | (string | unknown[])[]
     | string
     | null
     | { discriminator: string; spec: { [literal: string]: unknown } }
+    | { discriminator: string; cases: unknown[] }
 
 type NestedKeySpec<Entity, Used extends PropertyKey> =
     | FullKeySpecSimple<Entity>
     | DiscriminatedSchema<Entity, MergeIntersectionObject<Entity>, Used>
     | PathMatch
+    | CasesMatch
 
 type FullKeySpec<Entity> =
     | FullKeySpecSimple<Entity>
     | DiscriminatedSchema<Entity, MergeIntersectionObject<Entity>>
     | PathMatch
+    | CasesMatch
 
 type FullKeySpecShape = FullKeySpecSimpleShape | DiscriminatedSchemaShape
 
@@ -894,6 +1056,67 @@ const checkPaths = (schema: Record<string, unknown>): void => {
         }
     }
     for (const spec of Object.values(schema)) visit(spec)
+}
+
+/** A match that groups literals: a discriminator and a list of cases. */
+const holdsCases = (
+    value: unknown,
+): value is { discriminator: PropertyKey; cases?: unknown; spec?: unknown } =>
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'discriminator' in value &&
+    'cases' in value
+
+/**
+ * Writes each grouped match of a key spec as a match of one arm for each literal, at each level.
+ * A spec that holds no group stays the same object. The refusals name the discriminator and the
+ * literal, which are part of the spec and not values of an item.
+ */
+const expandCases = (spec: unknown): unknown => {
+    if (!holdsCases(spec)) {
+        if (!isMatch(spec)) return spec
+        const arms = Object.entries(spec.spec)
+        const expanded = arms.map(
+            ([literal, arm]) => [literal, expandCases(arm)] as const,
+        )
+        return expanded.every(([, arm], i) => arm === arms[i]?.[1])
+            ? spec
+            : { ...spec, spec: Object.fromEntries(expanded) }
+    }
+    const name = String(spec.discriminator)
+    if ('spec' in spec) {
+        throw new RotoriseError(
+            `Match on ${name} holds both spec and cases: write one`,
+        )
+    }
+    if (!Array.isArray(spec.cases)) {
+        throw new RotoriseError(`Match on ${name}: cases is no list of cases`)
+    }
+    const arms = new Map<string, unknown>()
+    for (const entry of spec.cases as unknown[]) {
+        const [literals, arm] = Array.isArray(entry) ? entry : []
+        if (!Array.isArray(literals) || literals.length === 0) {
+            throw new RotoriseError(
+                `Match on ${name}: a case names no literal, or is no pair of literals and an arm`,
+            )
+        }
+        for (const literal of literals) {
+            if (typeof literal !== 'string' && typeof literal !== 'number') {
+                throw new RotoriseError(
+                    `Match on ${name}: a literal is a string or a number`,
+                )
+            }
+            if (arms.has(String(literal))) {
+                throw new RotoriseError(
+                    `Match on ${name}: the literal ${String(literal)} is in two cases`,
+                )
+            }
+            arms.set(String(literal), expandCases(arm))
+        }
+    }
+    // `fromEntries` defines each property, so a literal such as `__proto__` is a key like any other
+    return { discriminator: spec.discriminator, spec: Object.fromEntries(arms) }
 }
 
 /** A key spec that matches: a discriminator and one arm for each literal. */
@@ -1670,7 +1893,16 @@ export const table = <const Spec extends object>(
 }
 
 /** `const` infers a readonly tuple; the schema wants the mutable one. */
-type Mutable<T> = { -readonly [K in keyof T]: T[K] }
+type Mutable<T> = {
+    -readonly [K in keyof T]: K extends 'cases' ? DeepMutable<T[K]> : T[K]
+}
+
+/** The cases of a grouped match hold lists in lists, and `const` infers each as a readonly tuple. */
+type DeepMutable<T> = T extends (...args: never[]) => unknown
+    ? T
+    : T extends object
+      ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
+      : T
 
 /** The keys marked with {@link table}. */
 export type TableKeys<Schema> = {
@@ -2228,7 +2460,7 @@ export const tableEntry =
                         } & WritesRow<
                             Pinned,
                             Entity,
-                            Schema,
+                            ExpandCases<Schema>,
                             CodecSpec,
                             CodecRest,
                             Separator
@@ -2236,7 +2468,7 @@ export const tableEntry =
               ]
     ): TableEntryDefinition<
         Entity,
-        Schema,
+        ExpandCases<Schema>,
         Separator,
         CodecSpec,
         CodecRest
@@ -2255,10 +2487,21 @@ export const tableEntry =
             throw new RotoriseError('Separator must not be an empty string')
         }
 
-        const buildEntry = toEntry()(schema as never, sep) as (
+        const expanded = Object.fromEntries(
+            Object.entries(schema).map(([name, spec]) => {
+                const grouped = expandCases(spec)
+                // the mark of `table(...)` is on the object that the caller built, so a copy carries it
+                if (grouped !== spec && isTableKey(spec)) {
+                    tableKeys.add(grouped as object)
+                }
+                return [name, grouped]
+            }),
+        )
+
+        const buildEntry = toEntry()(expanded as never, sep) as (
             item: never,
         ) => Record<string, unknown>
-        const buildKey = key()(schema as never, sep) as (
+        const buildKey = key()(expanded as never, sep) as (
             name: never,
             attributes: never,
         ) => unknown
@@ -2319,8 +2562,8 @@ export const tableEntry =
          * filled from the same walk. A key whose components a discriminant chooses is the one that
          * must still be walked per update, and says so — see {@link componentsOf}.
          */
-        const keys = Object.keys(schema).map((name) => {
-            const spec = (schema as Record<string, unknown>)[name]
+        const keys = Object.keys(expanded).map((name) => {
+            const spec = expanded[name]
             const { components, narrows } = componentsOf(spec, {})
             if (constantAt) {
                 for (const component of components) {
@@ -2517,7 +2760,7 @@ export const tableEntry =
                 return out
             },
             toEntry: buildEntry as never,
-            fromEntry: fromEntry()(schema as never, sep) as never,
+            fromEntry: fromEntry()(expanded as never, sep) as never,
             key: buildKey as never,
             infer: chainableNoOpProxy as never,
             path: () => pathBuilder() as never,

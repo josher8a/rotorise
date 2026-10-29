@@ -257,6 +257,30 @@ does not fit. A path whose value can be absent needs a transform with a default.
 is for a path only. A top-level name that the item holds as an attribute with a `.` reads as that
 attribute.
 
+### An Arm that Groups Literals
+
+A match takes `cases` in place of `spec` when several literals share one arm. A case is a list of
+literals and the arm that they share. The cases are a partition of the literals: a literal in two
+cases, or a literal that no case names, is refused. An arm reads only the attributes that each
+option of its case holds. A case nests, and the keys are the keys of the same match written with
+`spec`.
+
+```ts
+const HandoffsByOwner = tableEntry<Handoff>()({
+  PK: ['id'],
+  GSI1PK: {
+    discriminator: 'type',
+    cases: [
+      [['INTAKE', 'ADOPTION'], [['to.ownerId', { tag: 'ownerId' }]]],
+      [['RELEASE'], null],
+    ],
+  },
+})
+
+HandoffsByOwner.key('GSI1PK', { type: 'ADOPTION', to: { ownerId: 'u1' } })
+// => 'ownerId#u1'
+```
+
 ### Preconditions of a Narrowed Path
 
 `at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.

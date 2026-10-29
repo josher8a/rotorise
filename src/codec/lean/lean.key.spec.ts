@@ -32,10 +32,15 @@ type Component =
     | string
     | readonly [string, Transform, unknown?]
     | readonly [string, Tag]
-type Discriminated = {
-    readonly discriminator: string
-    readonly spec: Readonly<Record<string, Arm>>
-}
+type Discriminated =
+    | {
+          readonly discriminator: string
+          readonly spec: Readonly<Record<string, Arm>>
+      }
+    | {
+          readonly discriminator: string
+          readonly cases: readonly (readonly [readonly string[], Arm])[]
+      }
 type Arm = readonly Component[] | string | null | Discriminated
 type Spec = readonly Component[] | Discriminated
 type Item = Readonly<Record<string, unknown>>
@@ -188,7 +193,12 @@ const partsOf = (
 const selectArm = (tree: KeyTree, item: KeyRow['item']): KeyArm => {
     if (tree.kind === 'arm') return tree.arm
     const value = item.find(([name]) => name === tree.discriminator)?.[1]
-    const arm = tree.arms.find(([literal]) => literal === value)?.[1]
+    const arm =
+        tree.kind === 'cases'
+            ? tree.cases.find(([literals]) =>
+                  literals.some((literal) => literal === value),
+              )?.[1]
+            : tree.arms.find(([literal]) => literal === value)?.[1]
     return value === undefined || arm === undefined
         ? { kind: 'missing' }
         : selectArm(arm, item)
@@ -345,12 +355,83 @@ const cases: readonly Case[] = [
             },
         },
     },
+    {
+        name: 'grouped',
+        spec: {
+            discriminator: 'kind',
+            cases: [
+                [
+                    ['x', 'y'],
+                    ['a', 'b'],
+                ],
+                [['z'], null],
+            ],
+        },
+    },
+    {
+        name: 'groupedAttribute',
+        spec: {
+            discriminator: 'kind',
+            cases: [
+                [['x', 'y'], 'a'],
+                [['z'], [['a', tagged], 'b']],
+            ],
+        },
+    },
+    {
+        name: 'groupedNested',
+        spec: {
+            discriminator: 'tag',
+            cases: [
+                [['OBJECT'], ['a']],
+                [
+                    ['ANIMAL'],
+                    {
+                        discriminator: 'specie',
+                        cases: [
+                            [['CAT', 'HORSE'], null],
+                            [
+                                ['DOG'],
+                                {
+                                    discriminator: 'breed',
+                                    cases: [
+                                        [
+                                            ['LAB', 'PUG'],
+                                            ['a', 'b'],
+                                        ],
+                                    ],
+                                },
+                            ],
+                        ],
+                    },
+                ],
+            ],
+        },
+    },
+    {
+        name: 'groupedPath',
+        spec: {
+            discriminator: 'meta.kind',
+            cases: [
+                [['x', 'y'], ['meta.a']],
+                [['z'], 'meta.b'],
+            ],
+        },
+    },
     { name: 'dashPlain', spec: ['a', 'b'], separator: '-' },
     { name: 'dashTagless', spec: [['a', tagless], 'b'], separator: '-' },
 ]
 
 const isDiscriminated = (arm: Arm): arm is Discriminated =>
     typeof arm === 'object' && arm !== null && !Array.isArray(arm)
+
+/** The arm of each literal of a match, for a match that groups literals and for one that does not. */
+const entriesOf = (arm: Discriminated): (readonly [string, Arm])[] =>
+    'cases' in arm
+        ? arm.cases.flatMap(([literals, inner]) =>
+              literals.map((literal) => [literal, inner] as const),
+          )
+        : Object.entries(arm.spec)
 
 /** The tree of an arm for an item: each arm is evaluated, and the item selects one. */
 const treeOf = (
@@ -360,14 +441,29 @@ const treeOf = (
     separator: string,
 ): KeyTree =>
     isDiscriminated(arm)
-        ? {
-              kind: 'match',
-              discriminator: arm.discriminator,
-              arms: Object.entries(arm.spec).map(
-                  ([literal, inner]) =>
-                      [literal, treeOf(inner, item, depth, separator)] as const,
-              ),
-          }
+        ? 'cases' in arm
+            ? {
+                  kind: 'cases',
+                  discriminator: arm.discriminator,
+                  cases: arm.cases.map(
+                      ([literals, inner]) =>
+                          [
+                              literals,
+                              treeOf(inner, item, depth, separator),
+                          ] as const,
+                  ),
+              }
+            : {
+                  kind: 'match',
+                  discriminator: arm.discriminator,
+                  arms: Object.entries(arm.spec).map(
+                      ([literal, inner]) =>
+                          [
+                              literal,
+                              treeOf(inner, item, depth, separator),
+                          ] as const,
+                  ),
+              }
         : {
               kind: 'arm',
               arm:
@@ -385,7 +481,10 @@ const treeOf = (
 /** The attributes that a tree reads: each discriminator, and each attribute that an arm names. */
 const readNames = (arm: Arm): string[] =>
     isDiscriminated(arm)
-        ? [arm.discriminator, ...Object.values(arm.spec).flatMap(readNames)]
+        ? [
+              arm.discriminator,
+              ...entriesOf(arm).flatMap(([, inner]) => readNames(inner)),
+          ]
         : typeof arm === 'string'
           ? [arm]
           : []
@@ -402,7 +501,7 @@ const itemOf = (spec: Spec, item: Item): KeyRow['item'] =>
 /** The components of each list arm of a spec, at each depth. */
 const componentsOf = (arm: Arm): readonly (readonly Component[])[] =>
     isDiscriminated(arm)
-        ? Object.values(arm.spec).flatMap(componentsOf)
+        ? entriesOf(arm).flatMap(([, inner]) => componentsOf(inner))
         : Array.isArray(arm)
           ? [arm as readonly Component[]]
           : []
@@ -423,7 +522,7 @@ const discriminatorsOf = (arm: Arm): string[] =>
     isDiscriminated(arm)
         ? [
               arm.discriminator,
-              ...Object.values(arm.spec).flatMap(discriminatorsOf),
+              ...entriesOf(arm).flatMap(([, inner]) => discriminatorsOf(inner)),
           ]
         : []
 
@@ -432,7 +531,7 @@ type Path = Readonly<Record<string, string>>
 /** The assignments of discriminators that reach each arm that is not a match. */
 const pathsOf = (arm: Arm): Path[] =>
     isDiscriminated(arm)
-        ? Object.entries(arm.spec).flatMap(([literal, inner]) =>
+        ? entriesOf(arm).flatMap(([literal, inner]) =>
               pathsOf(inner).map((path) => ({
                   [arm.discriminator]: literal,
                   ...path,
@@ -448,7 +547,7 @@ const stopsOf = (
     isDiscriminated(arm)
         ? [
               { prefix, discriminator: arm.discriminator },
-              ...Object.entries(arm.spec).flatMap(([literal, inner]) =>
+              ...entriesOf(arm).flatMap(([literal, inner]) =>
                   stopsOf(inner, { ...prefix, [arm.discriminator]: literal }),
               ),
           ]

@@ -8,7 +8,7 @@ import {
     type TransformShape,
     tableEntry,
 } from './Rotorise'
-import type { Exact, NonEmptyArray, show } from './utils'
+import type { ErrorMessage, Exact, NonEmptyArray, show } from './utils'
 
 // The constraint of a key spec admits any path and any match on a path, whatever the entity holds,
 // and `ValidatePaths` reads the paths that a spec holds. The pins below state the two shapes.
@@ -18,15 +18,21 @@ type PathComponents =
     | [AnyPathPin, { readonly tag: string }]
     // biome-ignore lint/suspicious/noExplicitAny: the constraint types the parameter of a path transform as any
     | [AnyPathPin, (key: any) => TransformShape, unknown?]
+type LooseArmPin =
+    | (string | unknown[])[]
+    | string
+    | null
+    | { discriminator: string; spec: { [literal: string]: unknown } }
+    | { discriminator: string; cases: unknown[] }
 type PathMatchPin = {
     discriminator: AnyPathPin
-    spec: {
-        [literal: string]:
-            | unknown[]
-            | string
-            | null
-            | { discriminator: string; spec: { [literal: string]: unknown } }
-    }
+    spec: { [literal: string]: LooseArmPin }
+    cases?: never
+}
+type CasesMatchPin = {
+    discriminator: string
+    spec?: ErrorMessage<'a match holds spec or cases, not both'>
+    cases: [[string | number, ...(string | number)[]], LooseArmPin][]
 }
 
 describe('Exact<> with discriminated unions', () => {
@@ -529,8 +535,10 @@ describe('DynamoDB Utils', () => {
                       >
                     | null
                     | PathMatchPin
+                    | CasesMatchPin
                     | {
                           discriminator: 'a'
+                          cases?: never
                           spec: {
                               a1:
                                   | 'a'
@@ -553,6 +561,7 @@ describe('DynamoDB Utils', () => {
                                     >
                                   | null
                                   | PathMatchPin
+                                  | CasesMatchPin
                               a2:
                                   | 'a'
                                   | 'b'
@@ -574,10 +583,12 @@ describe('DynamoDB Utils', () => {
                                     >
                                   | null
                                   | PathMatchPin
+                                  | CasesMatchPin
                           }
                       }
                     | {
                           discriminator: 'z'
+                          cases?: never
                           spec: {
                               never:
                                   | 'a'
@@ -608,8 +619,10 @@ describe('DynamoDB Utils', () => {
                                     >
                                   | null
                                   | PathMatchPin
+                                  | CasesMatchPin
                                   | {
                                         discriminator: 'a'
+                                        cases?: never
                                         spec: {
                                             a1:
                                                 | 'a'
@@ -649,6 +662,7 @@ describe('DynamoDB Utils', () => {
                                                   >
                                                 | null
                                                 | PathMatchPin
+                                                | CasesMatchPin
                                             a2:
                                                 | 'a'
                                                 | 'b'
@@ -687,6 +701,7 @@ describe('DynamoDB Utils', () => {
                                                   >
                                                 | null
                                                 | PathMatchPin
+                                                | CasesMatchPin
                                         }
                                     }
                           }
@@ -1200,8 +1215,10 @@ describe('DynamoDB Utils', () => {
                       >
                     | null
                     | PathMatchPin
+                    | CasesMatchPin
                     | {
                           discriminator: 'a'
+                          cases?: never
                           spec: {
                               a1:
                                   | 'a'
@@ -1221,6 +1238,7 @@ describe('DynamoDB Utils', () => {
                                     >
                                   | null
                                   | PathMatchPin
+                                  | CasesMatchPin
                               a2:
                                   | 'a'
                                   | 'b'
@@ -1233,6 +1251,7 @@ describe('DynamoDB Utils', () => {
                                     >
                                   | null
                                   | PathMatchPin
+                                  | CasesMatchPin
                           }
                       }
                 >,

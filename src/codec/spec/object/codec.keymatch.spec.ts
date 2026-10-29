@@ -200,9 +200,9 @@ describe('the type of a nested key match', () => {
             SK: {
                 discriminator: 'tag',
                 spec: {
-                    // @ts-expect-error `specie` does not exist on an object
                     OBJECT: {
                         discriminator: 'specie',
+                        // @ts-expect-error `specie` does not exist on an object, so no match reads it
                         spec: { CAT: null },
                     },
                     ANIMAL: ['name'],

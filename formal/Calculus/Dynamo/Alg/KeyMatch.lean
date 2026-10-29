@@ -4,14 +4,15 @@ import Calculus.Dynamo.Alg.DerivedKey
 # The key match
 
 A key spec chooses the parts of a key from the item. The spec is one of four arms, or a match: a
-discriminator names one attribute of the item, and the value of that attribute selects the spec
-that continues. A match is the dual of `extract`: the arms of the match are the cases of a
-coproduct, and the discriminator value is the tag.
+discriminator names one attribute of the item, and the value of that attribute selects the spec that
+continues. A match is the dual of `extract(codec, pattern)`: the arms of the match are the cases of
+a coproduct, and the discriminator value is the tag.
 
 The arms of a match are a function from the literal to the spec. A function has one value at a
 literal, so two arms with one literal have no representation, and no theorem needs a premise that
 the literals differ. The host writes the arms as the keys of one object, which cannot repeat a key
-either. A literal that the function does not list maps to the arm `missing`.
+either, or as cases, and construction refuses a literal that two cases name. A literal that the
+function does not list maps to the arm `missing`.
 
 The model is parametric in the name of an attribute. A name is opaque: the item is a function
 from a name to the printed value, and no definition or theorem reads a name as a top-level
@@ -19,7 +20,7 @@ attribute. A later pass can instantiate the name with a path and change no law.
 
 A leaf holds the parts that the host evaluated, as a function of the item, and the length of the
 spec. The selection of the leaf reads only the discriminator values. The key of a match is the key
-of the arm that the selection reaches (`keyOf_eq_arm`), and the key of a leaf is `build`.
+of the arm that the selection reaches (`keyOf_match`), and the key of a leaf is `build`.
 
 Two arms with equal leaves give one key to two items in different arms (`collision`). The key then
 does not decode to its arm (`not_decodable`), and the ruling is a mark on the match, not a refusal.
@@ -67,6 +68,77 @@ inductive KeySpec (N : Type) where
     one arm for each literal. -/
 def KeySpec.ofList {N : Type} (xs : List (String × KeySpec N)) : String → KeySpec N :=
   fun l => (xs.lookup l).getD (.arm .missing)
+
+/-- The arms of a match from cases: a case names a list of literals and one arm, and each literal of
+    the case selects the arm. A literal that no case names is `missing`. The host refuses two cases that
+    name one literal, so a row has none. Where two cases name one, the first case wins here. -/
+def KeySpec.ofCases {N : Type} : List (List String × KeySpec N) → String → KeySpec N
+  | [], _ => .arm .missing
+  | (ls, a) :: rest, l => if ls.contains l then a else KeySpec.ofCases rest l
+
+/-- **A literal of a case selects the arm of the case**, where no other case names the literal. -/
+theorem KeySpec.ofCases_of_mem {N : Type} {xs : List (List String × KeySpec N)} {ls : List String}
+    {a : KeySpec N} {l : String} (hm : (ls, a) ∈ xs) (hl : ls.contains l = true)
+    (hone : ∀ c ∈ xs, c.1.contains l = true → c = (ls, a)) : KeySpec.ofCases xs l = a := by
+  induction xs with
+  | nil => cases hm
+  | cons c rest ih =>
+    obtain ⟨ls', a'⟩ := c
+    simp only [KeySpec.ofCases]
+    cases h : ls'.contains l
+    · have hne : (ls, a) ≠ (ls', a') := by
+        intro he
+        have : ls = ls' := (Prod.mk.inj he).1
+        rw [← this, hl] at h
+        exact Bool.noConfusion h
+      have hm' : (ls, a) ∈ rest := by
+        rcases List.mem_cons.mp hm with h' | h'
+        · exact absurd h' hne
+        · exact h'
+      simp only [Bool.false_eq_true, if_false]
+      exact ih hm' fun c hc hcl => hone c (List.mem_cons_of_mem _ hc) hcl
+    · have := hone (ls', a') List.mem_cons_self h
+      simp only [if_true]
+      exact (Prod.mk.inj this).2
+
+/-- **A literal that no case names selects `missing`.** -/
+theorem KeySpec.ofCases_of_none {N : Type} {xs : List (List String × KeySpec N)} {l : String}
+    (h : ∀ c ∈ xs, c.1.contains l = false) : KeySpec.ofCases xs l = .arm .missing := by
+  induction xs with
+  | nil => rfl
+  | cons c rest ih =>
+    obtain ⟨ls', a'⟩ := c
+    simp only [KeySpec.ofCases]
+    have h1 := h (ls', a') List.mem_cons_self
+    simp only [h1, Bool.false_eq_true, if_false]
+    exact ih fun c hc => h c (List.mem_cons_of_mem _ hc)
+
+/-- The lookup of a literal in the entries of one case, then in the rest. -/
+theorem lookup_map_append {β : Type} (ls : List String) (a : β) (rest : List (String × β)) (l : String) :
+    (ls.map (fun l' => (l', a)) ++ rest).lookup l = if ls.contains l then some a else rest.lookup l := by
+  induction ls with
+  | nil => simp
+  | cons x ls ih =>
+    have e1 : (x :: ls).contains l = (l == x || ls.contains l) := List.contains_cons
+    rw [List.map_cons, List.cons_append, e1]
+    rcases Bool.eq_false_or_eq_true (l == x) with h | h
+    · simp [List.lookup, h]
+    · simpa [List.lookup, h] using ih
+
+/-- **A grouped match is another way to write the match of one arm for each literal.** The host
+    writes one entry for each literal of each case, and the arms of the two forms are one function. -/
+theorem KeySpec.ofCases_eq_ofList {N : Type} (xs : List (List String × KeySpec N)) (l : String) :
+    KeySpec.ofCases xs l =
+      KeySpec.ofList (xs.flatMap fun c => c.1.map fun l' => (l', c.2)) l := by
+  induction xs with
+  | nil => rfl
+  | cons c rest ih =>
+    obtain ⟨ls', a'⟩ := c
+    simp only [KeySpec.ofCases, KeySpec.ofList, List.flatMap_cons] at ih ⊢
+    rw [lookup_map_append]
+    cases ls'.contains l
+    · simpa using ih
+    · simp
 
 /-! ## The selection -/
 

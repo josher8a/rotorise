@@ -4319,6 +4319,7 @@ export type KeyArm =
 /**
  * **A key spec as a tree**: an arm, or a match on one discriminator with an arm for each literal.
  * An arm of a match is a tree, so a match nests. A literal names one arm, as the keys of an object do.
+ * A match of `cases` groups literals: each case holds a list of literals and one arm.
  */
 export type KeyTree =
     | { readonly kind: 'arm'; readonly arm: KeyArm }
@@ -4326,6 +4327,11 @@ export type KeyTree =
           readonly kind: 'match'
           readonly discriminator: string
           readonly arms: readonly (readonly [string, KeyTree])[]
+      }
+    | {
+          readonly kind: 'cases'
+          readonly discriminator: string
+          readonly cases: readonly (readonly [readonly string[], KeyTree])[]
       }
 
 /**
@@ -4363,12 +4369,19 @@ const leanKeyArm = (arm: KeyArm): string =>
 const leanKeyTree = (tree: KeyTree): string =>
     tree.kind === 'arm'
         ? `.arm (${leanKeyArm(tree.arm)})`
-        : `.match_ ${leanString(tree.discriminator)} (KeySpec.ofList [${tree.arms
-              .map(
-                  ([literal, arm]) =>
-                      `(${leanString(literal)}, ${leanKeyTree(arm)})`,
-              )
-              .join(', ')}])`
+        : tree.kind === 'cases'
+          ? `.match_ ${leanString(tree.discriminator)} (KeySpec.ofCases [${tree.cases
+                .map(
+                    ([literals, arm]) =>
+                        `([${literals.map(leanString).join(', ')}], ${leanKeyTree(arm)})`,
+                )
+                .join(', ')}])`
+          : `.match_ ${leanString(tree.discriminator)} (KeySpec.ofList [${tree.arms
+                .map(
+                    ([literal, arm]) =>
+                        `(${leanString(literal)}, ${leanKeyTree(arm)})`,
+                )
+                .join(', ')}])`
 
 const leanKeyOutcome = (outcome: KeyOutcome): string =>
     outcome.kind === 'key'
@@ -4420,6 +4433,7 @@ namespace Calculus
 open DerivedKey
 
 set_option maxRecDepth 20000 in
+set_option maxHeartbeats 1000000 in
 def keyRows : List KeyRow := [
 ${lines.join(',\n')}]
 

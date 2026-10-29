@@ -276,14 +276,15 @@ of one attribute, a tag is a literal, and a transform is an adapter. The key is 
 components, printed with the separator into one `S` attribute. The print is injective where no
 component prints the separator, and the parse of a key gives back its components. A variant that has
 no key, the `null` arm of a discriminated spec, is the codec that writes no attribute, so the index
-is sparse by construction. A discriminated spec is a match, the dual of `extract`: the value of
-the discriminator selects the spec that continues. An arm is a spec, so a match nests, and an inner
-discriminator exists only on the variant that the outer literal selects. A literal names one arm, so
-the arms are disjoint by construction. Two arms that print one key get a mark, not a refusal. An arm
-that groups several literals, or an arm that matches a structure, comes with an unordered partition
-and a check that two arms do not meet. The row of an entry is the attributes of the item and the
-keys that the attributes derive, and a key that disagrees with its attributes is a row that the
-entry does not read.
+is sparse by construction. A discriminated spec is a match, the dual of `extract(codec, pattern)`:
+the value of the discriminator selects the spec that continues. An arm is a spec, so a match nests,
+and an inner discriminator exists only on the variant that the outer literal selects. A literal
+names one arm, so the arms are disjoint by construction. Two arms that print one key get a mark, not
+a refusal. An arm that matches a structure, or an arm that is a pattern codec such as
+`string('CAT', 'DOG')`, belongs to the constructive entry over the item codec, and comes with a
+check that two arms do not meet. The row of an entry is the attributes of
+the item and the keys that the attributes derive, and a key that disagrees with its attributes is a
+row that the entry does not read.
 
 **Why the state is wanted.** Derived keys are the most used part of the library. Two items with
 one key overwrite each other in silence where a component prints the separator. The boundary checks
@@ -307,7 +308,8 @@ one key to two items, and no function of the key gives back the literal (`KeyMat
 The key rows select the arm before they build, nested matches included. The run-time builder
 selects the arm by recursion, and reads each arm as an own property of the match. A component and
 a discriminator read a path of names, and the key input is the deep pick of the paths that the key
-reads.
+reads. A match can group literals in cases, an unordered partition that construction expands into
+the map of one arm for each literal (`KeyMatch.KeySpec.ofCases`, `KeyMatch.ofCases_eq_ofList`).
 `item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
 and of the options of a union that a pattern names.
 
