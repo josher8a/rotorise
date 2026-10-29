@@ -116,13 +116,14 @@ describe('a grouped match', () => {
     })
 
     it('treats the discriminator of a group as a component of the key, as a match does', () => {
-        const updates = Grouped.keyUpdates({
+        const { set: updates } = Grouped.keyUpdates({
             type: 'ADOPTION',
             to: alice,
             from: bob,
         })
         expect(updates).toEqual(
-            Ungrouped.keyUpdates({ type: 'ADOPTION', to: alice, from: bob }),
+            Ungrouped.keyUpdates({ type: 'ADOPTION', to: alice, from: bob })
+                .set,
         )
         const _lacks = () =>
             // @ts-expect-error a transfer reads `from` in `GSI2PK`

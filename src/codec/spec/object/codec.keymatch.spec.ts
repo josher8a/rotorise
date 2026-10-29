@@ -231,7 +231,7 @@ describe('the type of a nested key match', () => {
 
 describe('the change of a key that a nested match builds', () => {
     it('gives the key of the variant that the change selects', () => {
-        expect(Creatures.keyUpdates(lab).SK).toEqual({
+        expect(Creatures.keyUpdates(lab).set.SK).toEqual({
             S: 'BREED#LAB#NAME#rex',
         })
     })

@@ -56,7 +56,7 @@ describe('a change that would move the item', () => {
 
 describe('index keys are still rebuilt', () => {
     it('rebuilds them and never emits a table key', () => {
-        const keys = Adoption.keyUpdates({
+        const { set: keys } = Adoption.keyUpdates({
             status: 'CANCELED',
             updatedAt: '2026-08-26T00:00:00.000Z',
         })
@@ -77,7 +77,7 @@ describe('index keys are still rebuilt', () => {
 
     it('asks for nothing on behalf of a table key that the write does not reach', () => {
         // GSI1SK needs status and updatedAt; PK needs adoptionId, which no component of the write joins
-        const keys = Adoption.keyUpdates({
+        const { set: keys } = Adoption.keyUpdates({
             status: 'CANCELED',
             updatedAt: '2026-08-26T00:00:00.000Z',
         })
@@ -116,7 +116,10 @@ describe('a block that holds a component of a table key', () => {
     })
 
     it('leaves a write that no key reaches alone', () => {
-        expect(Orders.keyUpdates({ note: 'n' })).toEqual({})
+        expect(Orders.keyUpdates({ note: 'n' })).toEqual({
+            set: {},
+            remove: [],
+        })
     })
 })
 
@@ -150,7 +153,8 @@ describe('a schema that marks nothing', () => {
         // marking is opt-in, so an existing schema is unchanged — including the
         // unsound part, where PK is rebuilt and DynamoDB would reject the update
         expect(Unmarked.keyUpdates({ adoptionId: 'q2' })).toEqual({
-            PK: { S: 'ADOPTIONID#q2' },
+            set: { PK: { S: 'ADOPTIONID#q2' } },
+            remove: [],
         })
     })
 })

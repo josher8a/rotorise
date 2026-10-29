@@ -320,7 +320,7 @@ describe('the change of a key that reads a path', () => {
     })
 
     it('rebuilds each key that reads a path below a written attribute', () => {
-        const keys = Things.keyUpdates({
+        const { set: keys } = Things.keyUpdates({
             meta: { kind: 'k', size: 1 },
             label: 'l',
         })

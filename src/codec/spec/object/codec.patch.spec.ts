@@ -54,7 +54,7 @@ const change = {
 
 describe('the keys a change invalidates', () => {
     it('rebuilds exactly the three maintainAdoptionKeys rebuilds', () => {
-        const keys = Adoption.keyUpdates(change)
+        const { set: keys } = Adoption.keyUpdates(change)
 
         expect(Object.keys(keys).sort()).toEqual(['GSI1SK', 'GSI2PK', 'GSI2SK'])
         expect(keys.GSI1SK).toEqual({
@@ -65,7 +65,7 @@ describe('the keys a change invalidates', () => {
     })
 
     it('leaves alone the keys the change does not touch', () => {
-        const keys = Adoption.keyUpdates(change)
+        const { set: keys } = Adoption.keyUpdates(change)
         // PK/SK and GSI3 come from adoptionId, GSI1PK from userId — none are changing
         for (const untouched of ['PK', 'SK', 'GSI1PK', 'GSI3PK', 'GSI3SK']) {
             expect(keys).not.toHaveProperty(untouched)
@@ -73,7 +73,10 @@ describe('the keys a change invalidates', () => {
     })
 
     it('returns nothing when no key component changes', () => {
-        expect(Adoption.keyUpdates({ currentLegIndex: 1 })).toEqual({})
+        expect(Adoption.keyUpdates({ currentLegIndex: 1 })).toEqual({
+            set: {},
+            remove: [],
+        })
     })
 
     it('does not encode the attributes — that is the codec, separately', () => {
@@ -84,7 +87,7 @@ describe('the keys a change invalidates', () => {
         // an UpdateItem is the two put together, by the caller who knows they want both
         expect({
             ...Adoption.codec.unsafeEncodePartial(change),
-            ...Adoption.keyUpdates(change),
+            ...Adoption.keyUpdates(change).set,
         }).toEqual({
             status: { S: 'PACKING' },
             updatedAt: { S: '2026-08-26T00:00:00.000Z' },
@@ -115,7 +118,7 @@ describe('a component the change does not carry', () => {
     })
 
     it('is built when the change writes every component of the key', () => {
-        const keys = Adoption.keyUpdates({
+        const { set: keys } = Adoption.keyUpdates({
             status: 'CANCELED',
             updatedAt: '2026-08-26T00:00:00.000Z',
         })
@@ -134,6 +137,6 @@ describe('a component the change does not carry', () => {
     })
 
     it('asks for nothing once the change writes the whole block', () => {
-        expect(Object.keys(Adoption.keyUpdates(change))).toHaveLength(3)
+        expect(Object.keys(Adoption.keyUpdates(change).set)).toHaveLength(3)
     })
 })

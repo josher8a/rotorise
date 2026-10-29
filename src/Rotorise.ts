@@ -1609,11 +1609,17 @@ type TableEntryDefinition<
      * see {@link ConstantAttributes}. A discriminated key reads the components of the variant that
      * the change selects. A change that carries no discriminator reads every variant, so it has to
      * carry the discriminator.
+     *
+     * The key part of a row is a function from a key name to an optional string: a `null` arm gives
+     * no key. A map of `SET` values cannot remove an attribute, so the result has the two clauses of
+     * an `UpdateExpression`. `set` holds the keys the item writes after the change. `remove` holds
+     * the keys the item omits after the change, which only a key with a `null` arm or an attribute can name. A key
+     * is in one of the two and never in both. The two agree with {@link toEntry} on the merged item.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
         changed: Changed &
             KeyUpdateRefusal<Schema, Changed, DecidedValues<CodecSpec>>,
-    ) => AttributeMap
+    ) => KeyUpdate<AbsentKeyNames<Schema>>
 
     /**
      * The named keys, encoded.
@@ -1906,6 +1912,33 @@ export type MovesTheItem<Schema, Changed> = {
         ? never
         : K
 }[TableKeys<Schema>]
+
+/** The `SET` and `REMOVE` clauses of the key part of an update. A key name is in one clause only. */
+type KeyUpdate<RemovableName extends string> = {
+    set: AttributeMap
+    remove: readonly RemovableName[]
+}
+
+/**
+ * Whether a key spec can give no key: a `null` arm at any depth of the match, or an attribute that
+ * is the key. A list of components gives a key or a refusal, because a component cannot be absent.
+ * The type does not read the attribute, so a required attribute is in the set too.
+ */
+type CanBeAbsent<Spec> = [Spec] extends [null]
+    ? true
+    : Spec extends string
+      ? true
+      : Spec extends { readonly spec: infer Arms }
+        ? true extends { [L in keyof Arms]: CanBeAbsent<Arms[L]> }[keyof Arms]
+            ? true
+            : false
+        : false
+
+/** The names of the keys that can be absent from a row. */
+type AbsentKeyNames<Schema> = {
+    [K in keyof Schema]: CanBeAbsent<Schema[K]> extends true ? K : never
+}[keyof Schema] &
+    string
 
 /**
  * The attributes a key is built from, at the type level.
@@ -2626,8 +2659,11 @@ export const tableEntry =
                 constant !== null &&
                 String(written) === String(constant))
 
-        const keyUpdates = (changed: Record<string, unknown>): AttributeMap => {
-            const out: Record<string, AttributeValue> = {}
+        const keyUpdates = (
+            changed: Record<string, unknown>,
+        ): KeyUpdate<string> => {
+            const set: Record<string, AttributeValue> = {}
+            const remove: string[] = []
             const given = { ...decided, ...changed }
             const changedNames = Object.keys(changed)
             const givenNames = Object.keys(given)
@@ -2678,12 +2714,12 @@ export const tableEntry =
                     })
                 }
 
-                out[key.name] = asKey(
-                    buildKey(key.name as never, given as never),
-                )
+                const built = buildKey(key.name as never, given as never)
+                if (built === undefined) remove.push(key.name)
+                else set[key.name] = asKey(built)
             }
 
-            return out
+            return { set, remove }
         }
 
         const tableKeyNames = keys
