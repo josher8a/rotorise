@@ -2,6 +2,7 @@ import Calculus.Dynamo.Alg.Lists
 import Calculus.Dynamo.Domain
 import Calculus.Alg.Codec
 import Calculus.Alg.Combinators
+import Calculus.Alg.Derive
 import Calculus.Alg.Relations
 import Calculus.Alg.Maps
 import Calculus.Alg.Lists
@@ -31,6 +32,7 @@ import Calculus.JSON.ScopeCompat
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.DerivedKey
 import Calculus.Dynamo.Alg.KeyMatch
+import Calculus.Dynamo.Alg.DerivedItem
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products
 import Calculus.Dynamo.Alg.Objects

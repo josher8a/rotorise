@@ -1066,6 +1066,33 @@ into an answer.
 
 ---
 
+## The item with derived keys
+
+A derived key lives only in the stored universe. Encode writes the key of the item. Decode never
+reads a key, and a row can lack the key. The key adds no information to the item.
+
+A split is a lens from a row onto its key part, and the key part has its own carrier. `keep` reads
+the key part, and gives no key part where the row holds none. `join` puts a key part into a row.
+`drop` is the complement: the row without its key part. The laws are PutGet, GetPut, and a join that
+leaves the complement unchanged.
+
+The graph of an item codec `c` and a key function `k` writes the row of `c` with the key part `k t`.
+The graph reads a row only where the key part of the row is the key part of the item that `c` reads
+from the complement. The graph is lawful in both orientations. The premises are on `c`: `c` is
+lawful, and the write of `c` is a row that holds no key name. The key function has no law.
+
+The derived item is the graph with a second reader, the read of `c` on the complement. A row with a
+stale key, a row with no key, and a row with an attribute other than `S` at a key name read as the
+item. The two readers agree wherever both read, so the read is the order-free union of the two. The
+read adds no constructor: it is `Codec.extendRead`.
+
+At the DynamoDB row, the key names are a finite set, and the key part is the string at each key name.
+The carrier of the row has no decidable equality, and the key part has one. An object codec with no
+fill, lawful fields, a rest policy that refuses, and no declared key name meets the premises.
+
+A leaf of a key spec holds its parts, and a part holds the name that the part reads and the print of
+the value at that name. Two items that agree on the names that a spec reads give one key.
+
 ## What is deliberately not modelled
 
 Each of these is a decision with a price, not a gap, and each has a witness.

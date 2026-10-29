@@ -18,8 +18,11 @@ The model is parametric in the name of an attribute. A name is opaque: the item 
 from a name to the printed value, and no definition or theorem reads a name as a top-level
 attribute. A later pass can instantiate the name with a path and change no law.
 
-A leaf holds the parts that the host evaluated, as a function of the item, and the length of the
-spec. The selection of the leaf reads only the discriminator values. The key of a match is the key
+A leaf holds its parts and the length of the spec. A part holds the name of the attribute that it
+reads and the print of the value at that name, because the host gives a transform the value at the
+path of its component and nothing else. So the parts of an item are the prints at the names, and two
+items that agree on the names that a spec reads give one key (`keyOf_congr`). The selection of the
+leaf reads only the discriminator values. The key of a match is the key
 of the arm that the selection reaches (`keyOf_match`), and the key of a leaf is `build`.
 
 Two arms with equal leaves give one key to two items in different arms (`collision`). The key then
@@ -40,14 +43,36 @@ namespace DerivedKey
     is absent. A name is opaque. -/
 abbrev Item (N : Type) := N → Option String
 
-/-- A leaf: the length of the spec, and the parts that the host evaluated for an item. -/
+/-- A part of a leaf: the name of the attribute that the part reads, and the print of the value at
+    that name. A part with no name reads no attribute. -/
+structure Part (N : Type) where
+  name : Option N
+  print : Option String → Option Comp
+
+/-- The part of an item: the print of the value at the name of the part. -/
+def Part.eval {N : Type} (p : Part N) (i : Item N) : Option Comp := p.print (p.name.bind i)
+
+/-- A leaf: the length of the spec, and the parts. -/
 structure Leaf (N : Type) where
   full : Nat
-  parts : Item N → List (Option Comp)
+  comps : List (Part N)
 
-/-- A leaf whose parts do not depend on the item. A row of the vectors holds one item, so its
-    leaves are constant. -/
-def Leaf.const {N : Type} (full : Nat) (ps : List (Option Comp)) : Leaf N := ⟨full, fun _ => ps⟩
+/-- The parts of a leaf for an item. -/
+def Leaf.parts {N : Type} (l : Leaf N) (i : Item N) : List (Option Comp) :=
+  l.comps.map (·.eval i)
+
+/-- The names that a leaf reads. -/
+def Leaf.reads {N : Type} (l : Leaf N) : List N := l.comps.flatMap fun p => p.name.toList
+
+/-- A leaf whose parts read no attribute. A row of the vectors holds one item, so its leaves are
+    constant. -/
+def Leaf.const {N : Type} (full : Nat) (ps : List (Option Comp)) : Leaf N :=
+  ⟨full, ps.map fun p => ⟨none, fun _ => p⟩⟩
+
+/-- **A constant leaf gives its parts at every item.** -/
+theorem Leaf.parts_const {N : Type} (full : Nat) (ps : List (Option Comp)) (i : Item N) :
+    (Leaf.const full ps).parts i = ps := by
+  simp [Leaf.parts, Leaf.const, Part.eval, List.map_map, Function.comp_def]
 
 /-- An arm that does not match. A leaf prints parts. `null` gives no key. `attr` gives the printed
     value of one attribute as the key, with no join. `missing` is the arm that the host lacks: the
@@ -58,10 +83,26 @@ inductive Arm (N : Type) where
   | attr (name : N)
   | missing
 
+/-- The names that an arm reads. -/
+def Arm.reads {N : Type} : Arm N → List N
+  | .leaf l => l.reads
+  | .null => []
+  | .attr name => [name]
+  | .missing => []
+
 /-- A key spec: an arm, or a match on one discriminator with an arm for each literal. -/
 inductive KeySpec (N : Type) where
   | arm (a : Arm N)
   | match_ (disc : N) (arms : String → KeySpec N)
+
+/-- **The names that a spec reads**: the names of the arm, or the discriminator and the names of
+    each arm of a match. The arms are a function of the literal, so the names are a predicate and
+    not a list. -/
+inductive KeySpec.Reads {N : Type} : KeySpec N → N → Prop
+  | arm {a : Arm N} {n : N} : n ∈ a.reads → KeySpec.Reads (.arm a) n
+  | disc {d : N} {arms : String → KeySpec N} : KeySpec.Reads (.match_ d arms) d
+  | under {d : N} {arms : String → KeySpec N} {n : N} (v : String) :
+      KeySpec.Reads (arms v) n → KeySpec.Reads (.match_ d arms) n
 
 /-- The arms of a match from a list of literals. A literal that the list does not name is
     `missing`. The first entry of a literal wins, but the result is a function, so the match holds
@@ -213,6 +254,42 @@ theorem keyOf_null {s : KeySpec N} (h : select i s = .null) :
     keyOf allowPartial enforce i s = .nothing := by
   simp [keyOf, h, Arm.key]
 
+/-! ## The support of a key -/
+
+/-- **Two items that agree on the names of a leaf give one list of parts.** -/
+theorem Leaf.parts_congr {l : Leaf N} (h : ∀ n ∈ l.reads, i n = i' n) : l.parts i = l.parts i' := by
+  refine List.map_congr_left fun p hp => ?_
+  cases hn : p.name with
+  | none => simp [Part.eval, hn]
+  | some n =>
+      have : i n = i' n := h n (by
+        simp only [Leaf.reads, List.mem_flatMap]
+        exact ⟨p, hp, by simp [hn]⟩)
+      simp [Part.eval, hn, this]
+
+/-- Two items that agree on the names of an arm give one key at the arm. -/
+theorem Arm.key_congr {a : Arm N} (h : ∀ n ∈ a.reads, i n = i' n) :
+    a.key allowPartial enforce i = a.key allowPartial enforce i' := by
+  cases a with
+  | leaf l => simp [Arm.key, Leaf.parts_congr h]
+  | null => rfl
+  | attr n => simp [Arm.key, h n (by simp [Arm.reads])]
+  | missing => rfl
+
+/-- **The key reads only the names of the spec.** Two items that agree on each name that the spec
+    reads give one key. -/
+theorem keyOf_congr {s : KeySpec N} (h : ∀ n, s.Reads n → i n = i' n) :
+    keyOf allowPartial enforce i s = keyOf allowPartial enforce i' s := by
+  induction s with
+  | arm a => exact Arm.key_congr fun n hn => h n (.arm hn)
+  | match_ d arms ih =>
+      have hd : i d = i' d := h d .disc
+      cases hi : i d with
+      | none => rw [keyOf_refused (select_absent hi), keyOf_refused (select_absent (hd ▸ hi))]
+      | some v =>
+          rw [keyOf_match hi, keyOf_match (hd ▸ hi)]
+          exact ih v fun n hn => h n (.under v hn)
+
 /-! ## Flattening -/
 
 /-- The discriminator values that an item reads on its way through a spec. The path stops at an
@@ -295,7 +372,7 @@ theorem collision_const {d : N} {arms : String → KeySpec N} {x y : String} {fu
     (hy : arms y = .arm (.leaf (.const full ps))) (hi : i d = some x) (hi' : i' d = some y) :
     keyOf allowPartial enforce i (.match_ d arms) =
       keyOf allowPartial enforce i' (.match_ d arms) :=
-  collision hx hy hi hi' rfl
+  collision hx hy hi hi' (by simp [Arm.key, Leaf.parts_const])
 
 /-! ## The case of the owner -/
 
