@@ -30,6 +30,7 @@ import Calculus.JSON.ScopeExact
 import Calculus.JSON.ScopeCompat
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.DerivedKey
+import Calculus.Dynamo.Alg.KeyMatch
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products
 import Calculus.Dynamo.Alg.Objects

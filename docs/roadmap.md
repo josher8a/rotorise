@@ -276,9 +276,14 @@ of one attribute, a tag is a literal, and a transform is an adapter. The key is 
 components, printed with the separator into one `S` attribute. The print is injective where no
 component prints the separator, and the parse of a key gives back its components. A variant that has
 no key, the `null` arm of a discriminated spec, is the codec that writes no attribute, so the index
-is sparse by construction. The row of an entry is the attributes of the item and the keys that the
-attributes derive, and a key that disagrees with its attributes is a row that the entry does not
-read.
+is sparse by construction. A discriminated spec is a match, the dual of `extract`: the value of
+the discriminator selects the spec that continues. An arm is a spec, so a match nests, and an inner
+discriminator exists only on the variant that the outer literal selects. A literal names one arm, so
+the arms are disjoint by construction. Two arms that print one key get a mark, not a refusal. An arm
+that groups several literals, or an arm that matches a structure, comes with an unordered partition
+and a check that two arms do not meet. The row of an entry is the attributes of the item and the
+keys that the attributes derive, and a key that disagrees with its attributes is a row that the
+entry does not read.
 
 **Why the state is wanted.** Derived keys are the most used part of the library. Two items with
 one key overwrite each other in silence where a component prints the separator. The boundary checks
@@ -295,7 +300,11 @@ states the key as a codec from a list of segments to a string, `DerivedKey.keyCo
 lists that have a segment and hold no separator (`DerivedKey.keyCodec_lawful`). A segment that holds
 the separator gives two lists one key (`DerivedKey.rawWrite_not_lawful`). The vector bridge puts
 the run-time builder to `DerivedKey.build` and `DerivedKey.join` on a pool of specs, items and
-options, and states where a segment holds the separator.
+options, and states where a segment holds the separator. The model states a match as a tree whose
+arms are a function of the literal (`KeyMatch.select`). A nested match selects the arm that one flat
+match selects at the path of the literals (`KeyMatch.select_eq_flat`). Two arms with one leaf give
+one key to two items, and no function of the key gives back the literal (`KeyMatch.not_decodable`).
+The key rows select the arm before they build. The run-time builder reads one level of match.
 `item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
 and of the options of a union that a pattern names.
 

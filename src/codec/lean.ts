@@ -4302,17 +4302,45 @@ export type KeyOutcome =
     | { readonly kind: 'key'; readonly key: string }
 
 /**
- * **One row of the key builder**: the length of the spec, the options as the host read them, the
- * parts that the host evaluated, the separator, and what the host gave. The parts are the spec cut
- * to the depth, up to and including the first component that the builder refuses. `lawful` says that
- * the segments have a segment and that none holds the separator.
+ * **One arm of a key spec**: a leaf with the length of the spec and the parts that the host
+ * evaluated for the item, the `null` arm, the arm that reads one attribute and gives its printed
+ * value as the key, or the arm that the host lacks.
+ */
+export type KeyArm =
+    | {
+          readonly kind: 'leaf'
+          readonly full: number
+          readonly parts: readonly KeyPart[]
+      }
+    | { readonly kind: 'null' }
+    | { readonly kind: 'attr'; readonly name: string }
+    | { readonly kind: 'missing' }
+
+/**
+ * **A key spec as a tree**: an arm, or a match on one discriminator with an arm for each literal.
+ * An arm of a match is a tree, so a match nests. A literal names one arm, as the keys of an object do.
+ */
+export type KeyTree =
+    | { readonly kind: 'arm'; readonly arm: KeyArm }
+    | {
+          readonly kind: 'match'
+          readonly discriminator: string
+          readonly arms: readonly (readonly [string, KeyTree])[]
+      }
+
+/**
+ * **One row of the key builder**: the key spec as a tree, with each leaf evaluated by the host for
+ * the item, the printed attributes of the item that the tree reads, the options as the host read
+ * them, the separator, and what the host gave. The parts of a leaf are the spec cut to the depth,
+ * up to and including the first component that the builder refuses. `lawful` says that the segments
+ * have a segment and that none holds the separator.
  */
 export type KeyRow = {
     readonly name: string
-    readonly full: number
+    readonly tree: KeyTree
+    readonly item: readonly (readonly [string, string])[]
     readonly allowPartial: boolean
     readonly enforce: boolean
-    readonly parts: readonly KeyPart[]
     readonly separator: string
     readonly outcome: KeyOutcome
     readonly lawful: boolean
@@ -4324,6 +4352,23 @@ const leanKeyPart = (part: KeyPart): string =>
         : part.kind === 'named'
           ? `some (.named ${leanString(part.name)} ${leanString(part.value)})`
           : `some (.shaped ${part.tag === undefined ? 'none' : `(some ${leanString(part.tag)})`} ${leanString(part.value)})`
+
+const leanKeyArm = (arm: KeyArm): string =>
+    arm.kind === 'leaf'
+        ? `.leaf (.const ${arm.full} [${arm.parts.map(leanKeyPart).join(', ')}])`
+        : arm.kind === 'attr'
+          ? `.attr ${leanString(arm.name)}`
+          : `.${arm.kind}`
+
+const leanKeyTree = (tree: KeyTree): string =>
+    tree.kind === 'arm'
+        ? `.arm (${leanKeyArm(tree.arm)})`
+        : `.match_ ${leanString(tree.discriminator)} (KeySpec.ofList [${tree.arms
+              .map(
+                  ([literal, arm]) =>
+                      `(${leanString(literal)}, ${leanKeyTree(arm)})`,
+              )
+              .join(', ')}])`
 
 const leanKeyOutcome = (outcome: KeyOutcome): string =>
     outcome.kind === 'key'
@@ -4348,8 +4393,9 @@ export const leanKeyModule = (rows: readonly KeyRow[]): string => {
     }
     const lines = rows.map(
         (row, i) =>
-            `  { name := ${leanString(row.name)}, full := ${row.full}, allowPartial := ${row.allowPartial}, enforce := ${row.enforce},
-    parts := [${row.parts.map(leanKeyPart).join(', ')}], sep := Char.ofNat ${(chars[i]?.[0] ?? '').codePointAt(0)},
+            `  { name := ${leanString(row.name)}, spec := ${leanKeyTree(row.tree)},
+    item := [${row.item.map(([name, value]) => `(${leanString(name)}, ${leanString(value)})`).join(', ')}],
+    allowPartial := ${row.allowPartial}, enforce := ${row.enforce}, sep := Char.ofNat ${(chars[i]?.[0] ?? '').codePointAt(0)},
     host := ${leanKeyOutcome(row.outcome)}, lawful := ${row.lawful} }`,
     )
     return leanModule(`import Calculus.Bridge.KeyRows
@@ -4358,11 +4404,13 @@ export const leanKeyModule = (rows: readonly KeyRow[]): string => {
 # The derived keys of the pool, checked in the model
 
 **Generated — do not edit.** One row per sampled item and option of a key spec of the pool: the
-length of the spec, the options, the parts that the key builder of \`src/\` evaluated, the separator,
-and what the builder gave. The checker of the list states that \`DerivedKey.build\` gives the
+key spec as a tree, the parts that the key builder of \`src/\` evaluated at each leaf, the attributes
+of the item that the tree reads, the options, the separator, and what the builder gave. The checker
+of the list selects the arm that the item reaches, and states that \`DerivedKey.build\` gives the
 segments that the builder joined, that the join of the segments is the key of the builder, and that
 the read of the key gives the segments back exactly where the row says so. A row where the builder
-threw at an absent value states that the model gives no segments. A row where the builder threw at
+threw at an absent value, at an absent discriminator or at a literal that names no arm states that the
+model gives no segments. A row where the builder threw at
 a segment that holds the separator states that the model's segments hold it. A row of a \`null\` arm
 states that the null arm writes nothing. A row reads sampled items, so the row states a witness and not the law.
 -/

@@ -343,3 +343,21 @@ refuses the value.
 
 **Pin.** `src/codec/spec/object/codec.rest.spec.ts`: the type admits a declared field type at an
 undeclared name, and the run time refuses the value.
+
+## Known: a discriminator value that names a property of the prototype gives no key
+
+**Observation.** The run-time key builder reads the arm of a discriminated spec through the
+prototype chain. A value such as `constructor` finds a function, not an arm, and the builder reads
+the function as an attribute name. Measured 2026-10-29 with `npx vitest --run` on the spec
+`{ discriminator: 'kind', spec: { x: ['a'], z: null } }`:
+
+    kind 'x'                                   key "A#1"
+    kind 'w'                                   throws: the value names no arm
+    kind 'constructor', 'toString', '__proto__' no key, no throw
+
+**Effect.** An item whose discriminator holds such a value gets no key, and nothing reports it. The
+model refuses the item (`KeyMatch.select_unknown`).
+
+**Pin.** `src/codec/lean/lean.key.spec.ts`: a test that expects the refusal, marked to fail while
+the builder reads the prototype. The fix makes the test fail, and moves the rows into the key vector
+pool.
