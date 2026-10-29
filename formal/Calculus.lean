@@ -32,6 +32,8 @@ import Calculus.JSON.ScopeCompat
 import Calculus.Dynamo.Alg.Codec
 import Calculus.Dynamo.Alg.DerivedKey
 import Calculus.Dynamo.Alg.KeyMatch
+import Calculus.Dynamo.Alg.KeyUpdate
+import Calculus.Dynamo.Alg.KeyUpdate
 import Calculus.Dynamo.Alg.DerivedItem
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products
@@ -81,3 +83,4 @@ import Calculus.Dynamo.Lang.Adapters
 import Calculus.Bridge.Kinds
 import Calculus.Bridge.Verdicts
 import Calculus.Bridge.KeyRows
+import Calculus.Bridge.UpdateRows

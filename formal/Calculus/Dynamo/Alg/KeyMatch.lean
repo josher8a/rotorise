@@ -276,20 +276,6 @@ theorem Arm.key_congr {a : Arm N} (h : ∀ n ∈ a.reads, i n = i' n) :
   | attr n => simp [Arm.key, h n (by simp [Arm.reads])]
   | missing => rfl
 
-/-- **The key reads only the names of the spec.** Two items that agree on each name that the spec
-    reads give one key. -/
-theorem keyOf_congr {s : KeySpec N} (h : ∀ n, s.Reads n → i n = i' n) :
-    keyOf allowPartial enforce i s = keyOf allowPartial enforce i' s := by
-  induction s with
-  | arm a => exact Arm.key_congr fun n hn => h n (.arm hn)
-  | match_ d arms ih =>
-      have hd : i d = i' d := h d .disc
-      cases hi : i d with
-      | none => rw [keyOf_refused (select_absent hi), keyOf_refused (select_absent (hd ▸ hi))]
-      | some v =>
-          rw [keyOf_match hi, keyOf_match (hd ▸ hi)]
-          exact ih v fun n hn => h n (.under v hn)
-
 /-! ## Flattening -/
 
 /-- The discriminator values that an item reads on its way through a spec. The path stops at an

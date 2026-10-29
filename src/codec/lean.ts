@@ -4444,3 +4444,153 @@ theorem keyRows_check : failingKeys keyRows = [] := kernel_rfl%
 end Calculus
 `)
 }
+
+/**
+ * **One arm of a key of an update row**: a leaf of plain components, each a name of an attribute that
+ * the leaf reads and prints as the upper case name and the value, the `null` arm, the arm that
+ * reads one attribute and gives its printed value as the key, or the arm that the host lacks.
+ */
+export type UpdateArm =
+    | { readonly kind: 'components'; readonly names: readonly string[] }
+    | { readonly kind: 'null' }
+    | { readonly kind: 'attr'; readonly name: string }
+    | { readonly kind: 'missing' }
+
+/** **A key spec of an update row as a tree**: an arm, or a match on one discriminator. */
+export type UpdateTree =
+    | { readonly kind: 'arm'; readonly arm: UpdateArm }
+    | {
+          readonly kind: 'match'
+          readonly discriminator: string
+          readonly arms: readonly (readonly [string, UpdateTree])[]
+      }
+
+/**
+ * **One key of an update row**: the name, the spec as a tree, whether the key addresses the table,
+ * and the components that `keyComponents` read at the item that the update reads.
+ */
+export type UpdateKey = {
+    readonly name: string
+    readonly tree: UpdateTree
+    readonly ofTable: boolean
+    readonly footprint: readonly string[]
+}
+
+/**
+ * What `keyUpdates` did: a refusal of one of three kinds, or a patch. An entry of the patch holds the
+ * name of a touched key and its key, or `null` where the key is removed.
+ */
+export type UpdateOutcome =
+    | { readonly kind: 'decided' }
+    | { readonly kind: 'rewrite' }
+    | { readonly kind: 'unbuilt' }
+    | {
+          readonly kind: 'patch'
+          readonly entries: readonly (readonly [string, string | null])[]
+      }
+
+/**
+ * **One row of the key update**: the keys of a schema, the values that the codec decides, the
+ * change, the separator, and what `keyUpdates` gave.
+ */
+export type UpdateRow = {
+    readonly name: string
+    readonly keys: readonly UpdateKey[]
+    readonly decided: readonly (readonly [string, string])[]
+    readonly changed: readonly (readonly [string, string])[]
+    readonly separator: string
+    readonly outcome: UpdateOutcome
+}
+
+const leanUpdateArm = (arm: UpdateArm): string =>
+    arm.kind === 'components'
+        ? `.leaf ⟨${arm.names.length}, [${arm.names
+              .map(
+                  (n) =>
+                      `Part.named ${leanString(n)} ${leanString(n.toUpperCase())}`,
+              )
+              .join(', ')}]⟩`
+        : arm.kind === 'attr'
+          ? `.attr ${leanString(arm.name)}`
+          : `.${arm.kind}`
+
+const leanUpdateTree = (tree: UpdateTree): string =>
+    tree.kind === 'arm'
+        ? `Tree.arm (${leanUpdateArm(tree.arm)})`
+        : `Tree.match_ ${leanString(tree.discriminator)} [${tree.arms
+              .map(
+                  ([literal, arm]) =>
+                      `(${leanString(literal)}, ${leanUpdateTree(arm)})`,
+              )
+              .join(', ')}]`
+
+const leanPairs = (pairs: readonly (readonly [string, string])[]): string =>
+    `[${pairs.map(([name, value]) => `(${leanString(name)}, ${leanString(value)})`).join(', ')}]`
+
+const leanUpdateOutcome = (outcome: UpdateOutcome): string =>
+    outcome.kind === 'patch'
+        ? `.patch [${outcome.entries
+              .map(
+                  ([name, key]) =>
+                      `(${leanString(name)}, ${key === null ? 'none' : `some ${leanString(key)}`})`,
+              )
+              .join(', ')}]`
+        : `.${outcome.kind}`
+
+/**
+ * The update rows as one list that the kernel checks. A row is a structure of
+ * `Calculus.Bridge.UpdateRows`, and the comparator of that file reads it. The separator is one
+ * character, as in a key row.
+ *
+ * Generated at gate time and elaborated, never committed.
+ */
+export const leanUpdateModule = (rows: readonly UpdateRow[]): string => {
+    const chars = rows.map((row) => [...row.separator])
+    const bad = chars.findIndex((c) => c.length !== 1)
+    if (bad >= 0) {
+        return refuse(
+            'update',
+            `the model has a one-character separator, and the row ${rows[bad]?.name} has another`,
+        )
+    }
+    const lines = rows.map(
+        (row, i) =>
+            `  { name := ${leanString(row.name)},
+    keys := [${row.keys
+        .map(
+            (key) =>
+                `{ name := ${leanString(key.name)}, tree := ${leanUpdateTree(key.tree)}, ofTable := ${key.ofTable}, footprint := [${key.footprint.map(leanString).join(', ')}] }`,
+        )
+        .join(',\n      ')}],
+    decided := ${leanPairs(row.decided)}, changed := ${leanPairs(row.changed)},
+    sep := Char.ofNat ${(chars[i]?.[0] ?? '').codePointAt(0)}, host := ${leanUpdateOutcome(row.outcome)} }`,
+    )
+    return leanModule(`import Calculus.Bridge.UpdateRows
+
+/-!
+# The key updates of the pool, checked in the model
+
+**Generated — do not edit.** One row for each change of a schema: the keys as trees, the components
+that \`keyComponents\` read at the item that the update reads, the values that the codec decides, the
+change, and what \`keyUpdates\` of \`src/\` gave. The checker of the list states that the footprint of
+each key at that item is the set that the host read, and that \`update\` of the model gives the result
+of the host: a refusal of the same kind, or the same patch, where a removed key has no value. A row
+reads one change, so the row states a witness and not the law.
+-/
+
+namespace Calculus
+
+open DerivedKey
+
+set_option maxRecDepth 20000 in
+set_option maxHeartbeats 1000000 in
+def updateRows : List UpdateRow := [
+${lines.join(',\n')}]
+
+theorem updateRows_check : failingUpdates updateRows = [] := kernel_rfl%
+
+#eval (failingUpdates updateRows).forM IO.println
+
+end Calculus
+`)
+}

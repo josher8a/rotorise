@@ -12,6 +12,8 @@ import Calculus.Dynamo.Alg.Continuity
 import Calculus.Alg.Derive
 import Calculus.Dynamo.Alg.DerivedKey
 import Calculus.Dynamo.Alg.KeyMatch
+import Calculus.Dynamo.Alg.KeyUpdate
+import Calculus.Dynamo.Alg.KeyUpdate
 import Calculus.Dynamo.Alg.DerivedItem
 import Calculus.Dynamo.Witness.Refutations
 import Calculus.Dynamo.Witness.ScopeRefutations
@@ -64,6 +66,7 @@ import Calculus.Dynamo.Lang.Adapters
 import Calculus.Bridge.Kinds
 import Calculus.Bridge.Verdicts
 import Calculus.Bridge.KeyRows
+import Calculus.Bridge.UpdateRows
 import Lean
 
 /-!
