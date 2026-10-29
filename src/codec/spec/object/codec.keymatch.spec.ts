@@ -149,9 +149,9 @@ describe('a nested key match', () => {
         }
     })
 
-    it('refuses a key of a path that the entry does not hold', () => {
+    it('reads a stale key of a path as the item, because a read never reads a key', () => {
         const entry = { ...Creatures.toEntry(lab), SK: 'NAME#other' }
-        expect(Creatures.fromEntry(entry as never)).toBeInstanceOf(Error)
+        expect(Creatures.fromEntry(entry as never)).toEqual(lab)
     })
 })
 

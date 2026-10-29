@@ -95,21 +95,15 @@ Rejects excess properties at the type level.
 
 ### `.fromEntry(entry)`
 
-Checks each computed key of a table entry against its attributes, strips the keys, and returns the
-raw entity. It returns a `CodecError` where a key that the entry holds differs from the key that the
-attributes build. The error names the key, and never the value.
+Strips the computed keys of a table entry and returns the raw entity. A read never reads a key:
+a row with a correct key, a stale key, or no key gives one entity.
 
 ```ts
 const user = UserTable.fromEntry(item)
-if (failed(user)) {
-    // user.path => ['GSI1SK']
-} else {
-    // user => { orgId: 'acme', id: '123', role: 'admin', email: 'a@b.com' }
-}
+// user => { orgId: 'acme', id: '123', role: 'admin', email: 'a@b.com' }
 ```
 
-A key that the entry lacks is accepted: the row is not in that index. A key that the attributes
-cannot build is a disagreement. The check uses the separator of the table.
+`fromEntry` cannot fail. `fromItem` returns a `Result`, because the decode of the item can fail.
 
 ### `.infer`
 

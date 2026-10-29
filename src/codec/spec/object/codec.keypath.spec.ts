@@ -303,7 +303,7 @@ describe('the round trip of the entries that read a path', () => {
         const item = { id: 'a', to: { ownerId: 'u', name: 'n' } }
         expect(Transfers.fromEntry(Transfers.toEntry(item))).toEqual(item)
         const entry = { ...Transfers.toEntry(item), GSI1PK: 'ownerId#other' }
-        expect(Transfers.fromEntry(entry as never)).toBeInstanceOf(Error)
+        expect(Transfers.fromEntry(entry as never)).toEqual(item)
     })
 })
 

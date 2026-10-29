@@ -1,11 +1,10 @@
 /**
- * A read checks each derived key, and a key build refuses a segment that holds the separator.
+ * A read never reads a derived key, and a key build refuses a segment that holds the separator.
  *
  * A key is the join of its segments. Two lists of segments give one key where a segment holds the
  * separator, so a key with such a segment reads back as another list. The build refuses the segment
- * and names the component. A stored key that differs from the key that the attributes build is a row
- * that another writer wrote, and the read refuses it and names the key. A key that the row lacks
- * only says that the row is not in that index.
+ * and names the component, so that two items never share one key. The key adds no information to the
+ * attributes, so a row with a correct key, a stale key or no key decodes to one item.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -29,53 +28,46 @@ const user: User = { orgId: 'acme', id: '1', role: 'admin', email: 'a@b.c' }
 const read = Users.fromEntry as (entry: object) => unknown
 
 describe('a read of an entry', () => {
-    it('refuses a key that disagrees with its attributes, and names the key', () => {
-        const entry = { ...Users.toEntry(user), GSI1SK: 'EMAIL#other@b.c' }
-        const out = read(entry)
-        expect(failed(out)).toBe(true)
-        expect(out).toBeInstanceOf(CodecError)
-        expect((out as CodecError).path).toEqual(['GSI1SK'])
-        expect((out as CodecError).message).toContain('GSI1SK')
-        expect((out as CodecError).message).not.toContain('other@b.c')
+    const entry = Users.toEntry(user)
+    const { GSI1PK: _a, GSI1SK: _b, ...absent } = entry
+    const { email: _gone, ...unbuildable } = entry
+    const stale = { ...entry, GSI1SK: 'EMAIL#other@b.c' }
+
+    it('gives one item for a row with a correct key, a stale key, or an absent key', () => {
+        for (const [name, row] of Object.entries({ entry, stale, absent })) {
+            expect(read(row), name).toEqual(user)
+        }
     })
 
-    it('accepts a row that lacks a key attribute', () => {
-        const { GSI1PK: _a, GSI1SK: _b, ...row } = Users.toEntry(user)
-        expect(read(row)).toEqual(user)
-    })
-
-    it('refuses a key that its attributes cannot build', () => {
-        const { email: _gone, ...row } = Users.toEntry(user)
-        const out = read(row)
-        expect(failed(out)).toBe(true)
-        expect((out as CodecError).path).toEqual(['GSI1SK'])
-    })
-
-    it('gives the item for a row that toEntry wrote', () => {
-        expect(read(Users.toEntry(user))).toEqual(user)
+    it('returns no failure for a row that lacks an attribute that a key reads', () => {
+        const out = read(unbuildable)
+        expect(failed(out)).toBe(false)
+        expect(out).not.toBeInstanceOf(CodecError)
     })
 })
 
 describe('a read of a stored item', () => {
     const item = Users.toItem(user)
 
-    it('refuses a key that disagrees with its attributes, and names the key', () => {
+    it('gives one item for a row with a correct key, a stale key, or an absent key', () => {
         if (failed(item)) throw item
-        const out = Users.fromItem({ ...item, SK: { S: 'ROLE#other' } })
+        const { GSI1PK: _a, GSI1SK: _b, ...absent } = item
+        const rows = {
+            correct: item,
+            stale: { ...item, SK: { S: 'ROLE#other' } },
+            absent,
+        }
+        for (const [name, row] of Object.entries(rows)) {
+            expect(Users.fromItem(row), name).toEqual(user)
+        }
+    })
+
+    it('still fails where the attributes do not decode, and names no key', () => {
+        if (failed(item)) throw item
+        const { email: _gone, ...row } = item
+        const out = Users.fromItem(row)
         expect(failed(out)).toBe(true)
-        expect((out as CodecError).path).toEqual(['SK'])
-        expect((out as CodecError).message).not.toContain('other')
-    })
-
-    it('accepts a row that lacks a key attribute', () => {
-        if (failed(item)) throw item
-        const { GSI1PK: _a, GSI1SK: _b, ...row } = item
-        expect(Users.fromItem(row)).toEqual(user)
-    })
-
-    it('gives the item for a row that toItem wrote', () => {
-        if (failed(item)) throw item
-        expect(Users.fromItem(item)).toEqual(user)
+        expect((out as CodecError).path).not.toContain('GSI1SK')
     })
 })
 

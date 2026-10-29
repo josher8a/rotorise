@@ -19,9 +19,7 @@ import type {
 } from './codec/codec'
 import {
     andThen,
-    CodecError,
     constantOf,
-    failed,
     item as itemOf,
     object,
     orThrow,
@@ -870,8 +868,6 @@ type FullKeySpecSimple<Entity> =
     | (keyof Entity & string)
     | null
 
-type FullKeySpecSimpleShape = InputSpecShape | string | null
-
 /**
  * The attributes that a match can read. Below a match, an attribute that the variant holds as one
  * literal has nothing to select, and an attribute that selected an arm above is used.
@@ -950,8 +946,6 @@ type FullKeySpec<Entity> =
     | DiscriminatedSchema<Entity, MergeIntersectionObject<Entity>>
     | PathMatch
     | CasesMatch
-
-type FullKeySpecShape = FullKeySpecSimpleShape | DiscriminatedSchemaShape
 
 export class RotoriseError extends Error {
     constructor(message: string) {
@@ -1337,63 +1331,13 @@ const toEntry =
         return entry as never
     }
 
-/**
- * The key that the attributes build, or `undefined` where they build none: a component is absent,
- * a discriminator names no arm, or the arm is `null`. The stored key is then no key of these
- * attributes.
- */
-const rebuilt = (
-    build: (name: never, attributes: never) => unknown,
-    name: string,
-    attributes: object,
-): unknown => {
-    try {
-        return build(name as never, attributes as never)
-    } catch (thrown) {
-        if (thrown instanceof RotoriseError) return undefined
-        throw thrown
-    }
-}
-
-/** The error of a stored key that the attributes do not build. It names the key, and not the value. */
-const keyDisagrees = (name: string): CodecError =>
-    new CodecError(
-        'the stored key differs from the key that the attributes build',
-    ).under(name)
-
+/** The entry without its derived keys. A read never reads a key: the entity holds the information. */
 const fromEntry =
-    <const Entity extends Record<string, unknown>>() =>
-    <
-        const Schema extends Record<string, FullKeySpecShape>,
-        Separator extends string = '#',
-    >(
-        schema: Schema,
-        separator: Separator,
-    ) => {
-        const build = key<Entity>()(schema as never, separator) as (
-            name: never,
-            attributes: never,
-        ) => unknown
-        return <const Entry extends TableEntryImpl<Entity, Schema, Separator>>(
-            entry: Entry,
-        ): Result<DistributiveOmit<Entry, keyof Schema>> => {
-            const item = { ...entry }
-
-            for (const key_ in schema) {
-                delete item[key_]
-            }
-            // a key that the entry lacks is a row outside that index. A key that it holds must be
-            // the key that the attributes build
-            for (const key_ in schema) {
-                const stored = (entry as Record<string, unknown>)[key_]
-                if (stored === undefined) continue
-                const built = rebuilt(build, key_, item)
-                if (built === undefined || String(built) !== String(stored)) {
-                    return keyDisagrees(key_)
-                }
-            }
-            return item as never
-        }
+    (schema: object) =>
+    (entry: object): object => {
+        const item: Record<string, unknown> = { ...entry }
+        for (const key_ in schema) delete item[key_]
+        return item
     }
 
 type ProcessSpecType<
@@ -1593,18 +1537,15 @@ type TableEntryDefinition<
     ) => TableEntryImpl<ExactEntity, Schema, Separator>
 
     /**
-     * Extracts the raw entity from a table entry by removing all computed keys, or says which key
-     * disagrees with the attributes.
+     * Extracts the raw entity from a table entry by removing all computed keys.
      *
-     * A key that the entry holds must be the key that the attributes build, with the same separator.
-     * A key that the entry lacks is accepted: the row is not in that index. A key that the attributes
-     * cannot build, because a component is absent, is a disagreement too. The error names the key
-     * and never its value.
+     * A read never reads a key. A key that the entry holds, a stale key included, and a key that the
+     * entry lacks give the same entity, because the key adds no information to the attributes.
      * Use this when processing items retrieved from DynamoDB.
      */
     fromEntry: <const Entry extends TableEntryImpl<Entity, Schema, Separator>>(
         entry: Entry,
-    ) => Result<DistributiveOmit<Entry, keyof Schema>>
+    ) => DistributiveOmit<Entry, keyof Schema>
 
     /**
      * Generates a specific key for the given entity attributes.
@@ -2760,7 +2701,7 @@ export const tableEntry =
                 return out
             },
             toEntry: buildEntry as never,
-            fromEntry: fromEntry()(expanded as never, sep) as never,
+            fromEntry: fromEntry(expanded) as never,
             key: buildKey as never,
             infer: chainableNoOpProxy as never,
             path: () => pathBuilder() as never,
@@ -2800,23 +2741,7 @@ export const tableEntry =
             // which allocated the same list on every read
             const withoutKeys: Record<string, AttributeValue> = { ...item }
             for (const name of keyNames) delete withoutKeys[name]
-            const entity = attributes.decode(withoutKeys) as Result<unknown>
-            if (failed(entity)) return entity
-            // a key that the item lacks is a row outside that index. A key that it holds must be the
-            // key that `toItem` writes from the entity
-            for (const name of keyNames) {
-                const stored = item[name]
-                if (stored === undefined) continue
-                const built = rebuilt(
-                    buildKey as (name: never, attributes: never) => unknown,
-                    name,
-                    entity as object,
-                )
-                if (built === undefined || stored.S !== String(built)) {
-                    return keyDisagrees(name)
-                }
-            }
-            return entity
+            return attributes.decode(withoutKeys) as Result<unknown>
         }
 
         return {
