@@ -60,7 +60,7 @@ UserTable.key('GSI1SK', { email: 'a@b.com' })
 **`config` options:**
 
 - **`depth`** — Limit composite key to the first N components. Useful for `begins_with` queries.
-- **`allowPartial`** — When `true`, stops building the key when an attribute is missing instead of throwing. Returns a union of all valid partial prefixes at the type level.
+- **`allowPartial`** — When `true`, stops building the key at the first component whose value is `undefined`, `null` or `''`, instead of throwing. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
 - **`enforceBoundary`** — When `true`, appends a trailing separator if the key is partial. Ensures a `begins_with` query doesn't match unintended prefixes.
 
 ```ts

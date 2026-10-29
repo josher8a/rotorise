@@ -243,7 +243,17 @@ type ExtractHelper<Key, Value> = Value extends object
           : never
     : [Key, Value]
 
-type ExtractPair<Entity, Spec> = Spec extends [
+/**
+ * The values of a component that the builder prints. A partial key ends at a component whose value
+ * is `undefined`, `null` or `''`, so the continuation reads the value without these members. A full
+ * key throws at such a value, and its type keeps the members. A full key passes `never` for
+ * `Partial`, so the test is `true extends Partial` and no distribution over `never`.
+ */
+type Printed<Value, Partial extends boolean> = true extends Partial
+    ? Exclude<Value, undefined | null | ''>
+    : Value
+
+type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends [
     infer Key extends string,
     // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
     (...key: any[]) => infer Value,
@@ -251,7 +261,7 @@ type ExtractPair<Entity, Spec> = Spec extends [
 ]
     ? ExtractHelper<Uppercase<Key>, Value>
     : Spec extends keyof Entity & string
-      ? [Uppercase<Spec>, Entity[Spec] & joinable]
+      ? [Uppercase<Spec>, Printed<Entity[Spec] & joinable, Partial>]
       : never
 
 type CompositeKeyStringBuilder<
@@ -264,7 +274,7 @@ type CompositeKeyStringBuilder<
     Boundary extends boolean = false,
     Stops extends boolean = false,
 > = Spec extends [infer Head, ...infer Tail]
-    ? ExtractPair<Entity, Head> extends [
+    ? ExtractPair<Entity, Head, KeepIntermediate> extends [
           infer Key extends joinable,
           infer Value extends joinable,
       ]
@@ -305,7 +315,11 @@ type CompositeKeyStringBuilder<
  * The pair of a component that reads a path: a name that the item holds as an attribute prints
  * whole, and a path prints its last name. A tag in an options object prints in place of the name.
  */
-type ExtractPathPair<Entity, Spec> = Spec extends [
+type ExtractPathPair<
+    Entity,
+    Spec,
+    Partial extends boolean = false,
+> = Spec extends [
     infer Key extends string,
     // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
     (...key: any[]) => infer Value,
@@ -316,9 +330,12 @@ type ExtractPathPair<Entity, Spec> = Spec extends [
             infer Key extends string,
             { readonly tag: infer Tag extends string },
         ]
-      ? [Tag, ValueOfKey<Entity, Key> & joinable]
+      ? [Tag, Printed<ValueOfKey<Entity, Key> & joinable, Partial>]
       : Spec extends string
-        ? [NameOf<Entity, Spec>, ValueOfKey<Entity, Spec> & joinable]
+        ? [
+              NameOf<Entity, Spec>,
+              Printed<ValueOfKey<Entity, Spec> & joinable, Partial>,
+          ]
         : never
 
 /** Whether a spec holds a component that reads a path. */
@@ -343,7 +360,7 @@ type CompositeKeyStringBuilderPath<
     Boundary extends boolean = false,
     Stops extends boolean = false,
 > = Spec extends [infer Head, ...infer Tail]
-    ? ExtractPathPair<Entity, Head> extends [
+    ? ExtractPathPair<Entity, Head, KeepIntermediate> extends [
           infer Key extends joinable,
           infer Value extends joinable,
       ]
