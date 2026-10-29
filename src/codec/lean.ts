@@ -4419,6 +4419,7 @@ namespace Calculus
 
 open DerivedKey
 
+set_option maxRecDepth 20000 in
 def keyRows : List KeyRow := [
 ${lines.join(',\n')}]
 

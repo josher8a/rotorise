@@ -215,6 +215,48 @@ ThingTable.key('SK', { TAG: 'ANIMAL', SPECIE: 'DOG', BREED: 'LAB', id: '4' })
 // => 'BREED#LAB#ID#4'
 ```
 
+### Components that Read a Path
+
+A component can name a value below the top level. A path joins names with `.` and reads into
+objects only. The key prints the last name of the path, or the tag of an options object. The key
+input holds the paths that the key reads, and no sibling of a path. An absent name on the path is an
+absent component. A discriminator can be a path too.
+
+```ts
+type Owner = { ownerId: string; extra: { deep: { id: string; note: string } } }
+type Handoff =
+  | { type: 'INTAKE'; id: string; to: Owner }
+  | { type: 'ADOPTION'; id: string; to: Owner; from: Owner }
+  | { type: 'RELEASE'; id: string; from: Owner }
+
+const HandoffTable = tableEntry<Handoff>()({
+  PK: ['id'],
+  GSI1PK: {
+    discriminator: 'type',
+    spec: {
+      INTAKE: [['to.ownerId', { tag: 'ownerId' }]],
+      ADOPTION: [['to.ownerId', { tag: 'ownerId' }], 'to.extra.deep.id'],
+      RELEASE: null,
+    },
+  },
+})
+
+HandoffTable.key('GSI1PK', { type: 'INTAKE', to: { ownerId: 'u1' } })
+// => 'ownerId#u1'
+
+HandoffTable.key('GSI1PK', {
+  type: 'ADOPTION',
+  to: { ownerId: 'u1', extra: { deep: { id: 'd9' } } },
+})
+// => 'ownerId#u1#ID#d9'
+```
+
+A transform on a path needs an annotation on its parameter, such as
+`['to.ownerId', (x: string) => x]`. The checker refuses an annotation that the value at the path
+does not fit. A path whose value can be absent needs a transform with a default. The options object
+is for a path only. A top-level name that the item holds as an attribute with a `.` reads as that
+attribute.
+
 ### Preconditions of a Narrowed Path
 
 `at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.

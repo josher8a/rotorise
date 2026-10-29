@@ -27,7 +27,11 @@ import {
 } from '../lean'
 
 type Transform = (value: unknown) => unknown
-type Component = string | readonly [string, Transform, unknown?]
+type Tag = { readonly tag: string }
+type Component =
+    | string
+    | readonly [string, Transform, unknown?]
+    | readonly [string, Tag]
 type Discriminated = {
     readonly discriminator: string
     readonly spec: Readonly<Record<string, Arm>>
@@ -98,6 +102,32 @@ const segmentsOf = (part: KeyPart & object): string[] =>
           ? [part.value]
           : [part.tag, part.value]
 
+/** The value at a path of names, through own properties of objects, or `undefined`. */
+const readAt = (item: unknown, path: string): unknown => {
+    let current: unknown = item
+    for (const name of path.split('.')) {
+        if (
+            typeof current !== 'object' ||
+            current === null ||
+            !Object.hasOwn(current, name)
+        )
+            return undefined
+        current = (current as Record<string, unknown>)[name]
+    }
+    return current
+}
+
+/** A copy of an item with a value at a path, or without the name at the path where the value is `DROP`. */
+const DROP = Symbol('drop')
+const writeAt = (item: Item, path: string, value: unknown): Item => {
+    const [head, ...rest] = path.split('.') as [string, ...string[]]
+    const { [head]: below, ...others } = item
+    if (rest.length === 0)
+        return value === DROP ? others : { ...others, [head]: value }
+    const inner = typeof below === 'object' && below !== null ? below : {}
+    return { ...others, [head]: writeAt(inner as Item, rest.join('.'), value) }
+}
+
 /**
  * The parts of a spec for an item, as a second reading of the spec: the components cut to the
  * depth, up to and including the first component that the builder refuses. A component is absent
@@ -114,9 +144,15 @@ const partsOf = (
     for (const component of depth === undefined
         ? components
         : components.slice(0, depth)) {
-        const [name, transform, fallback] =
+        const [name, second, fallback] =
             typeof component === 'string' ? [component] : component
-        const value = item[name] ?? fallback
+        const transform = typeof second === 'function' ? second : undefined
+        const tag =
+            typeof second === 'object' && second !== null
+                ? second.tag
+                : undefined
+        const printed = (name.split('.').pop() ?? name).toUpperCase()
+        const value = readAt(item, name) ?? fallback
         let part: KeyPart
         if (transform !== undefined && value !== undefined) {
             const out = transform(value)
@@ -129,16 +165,15 @@ const partsOf = (
             } else {
                 part = {
                     kind: 'named',
-                    name: name.toUpperCase(),
+                    name: printed,
                     value: segment(out),
                 }
             }
         } else if (value !== undefined && value !== null && value !== '') {
-            part = {
-                kind: 'named',
-                name: name.toUpperCase(),
-                value: segment(value),
-            }
+            part =
+                tag === undefined
+                    ? { kind: 'named', name: printed, value: segment(value) }
+                    : { kind: 'shaped', tag, value: segment(value) }
         } else {
             parts.push(undefined)
             break
@@ -199,7 +234,14 @@ const isLawful = (row: KeyRow): boolean => {
     )
 }
 
-const base: Item = { a: '1', b: '2', c: '3', n: 7, kind: 'x' }
+const base: Item = {
+    a: '1',
+    b: '2',
+    c: '3',
+    n: 7,
+    kind: 'x',
+    meta: { a: '1', b: '2', n: 7, kind: 'x' },
+}
 
 type Case = {
     readonly name: string
@@ -273,6 +315,36 @@ const cases: readonly Case[] = [
             },
         },
     },
+    { name: 'path', spec: ['meta.a', 'b'] },
+    { name: 'pathTag', spec: [['meta.a', { tag: 'PRICE' }], 'b'] },
+    { name: 'tagOnly', spec: [['a', { tag: 'PRICE' }], 'b'] },
+    { name: 'pathTransform', spec: [['meta.n', doubled], 'meta.b'] },
+    { name: 'pathDefault', spec: [['meta.c', tagged, 'dflt'], 'a'] },
+    {
+        name: 'pathDiscriminator',
+        spec: {
+            discriminator: 'meta.kind',
+            spec: { x: ['meta.a'], y: 'meta.b', z: null },
+        },
+    },
+    {
+        name: 'nestedPath',
+        spec: {
+            discriminator: 'kind',
+            spec: {
+                x: {
+                    discriminator: 'meta.kind',
+                    spec: {
+                        p: [['meta.a', { tag: 'T' }]],
+                        q: 'meta.b',
+                        r: null,
+                    },
+                },
+                y: ['a', 'meta.b'],
+                z: null,
+            },
+        },
+    },
     { name: 'dashPlain', spec: ['a', 'b'], separator: '-' },
     { name: 'dashTagless', spec: [['a', tagless], 'b'], separator: '-' },
 ]
@@ -321,7 +393,7 @@ const readNames = (arm: Arm): string[] =>
 /** The printed attributes of the item that the tree reads. */
 const itemOf = (spec: Spec, item: Item): KeyRow['item'] =>
     [...new Set(readNames(spec))].flatMap((name) => {
-        const value = item[name]
+        const value = readAt(item, name)
         return value === undefined || value === null
             ? []
             : [[name, String(value)] as const]
@@ -397,29 +469,33 @@ const prototypeNames = [
  */
 const itemsOf = (one: Case): Item[] => {
     const sep = one.separator ?? '#'
+    const reach = (prefix: Path): Item =>
+        Object.entries(prefix).reduce(
+            (item, [path, literal]) => writeAt(item, path, literal),
+            base,
+        )
     const onPaths = pathsOf(one.spec).flatMap((path) => {
-        const start: Item = { ...base, ...path }
+        const start = reach(path)
         const items: Item[] = [start]
         for (const name of namesOf(one.spec)) {
-            const { [name]: _dropped, ...without } = start
             items.push(
-                without,
-                { ...start, [name]: '' },
-                { ...start, [name]: null },
+                writeAt(start, name, DROP),
+                writeAt(start, name, ''),
+                writeAt(start, name, null),
+                writeAt(start, name, `x${sep}y`),
             )
-            items.push({ ...start, [name]: `x${sep}y` })
+            if (name.includes('.'))
+                items.push(writeAt(start, name.split('.')[0] ?? name, DROP))
         }
         return items
     })
     const atMatches = stopsOf(one.spec).flatMap(({ prefix, discriminator }) => {
-        const start: Item = { ...base, ...prefix }
-        const { [discriminator]: _gone, ...absent } = start
+        const start = reach(prefix)
         return [
-            absent,
-            ...['w', '', null, ...prototypeNames].map((value) => ({
-                ...start,
-                [discriminator]: value,
-            })),
+            writeAt(start, discriminator, DROP),
+            ...['w', '', null, ...prototypeNames].map((value) =>
+                writeAt(start, discriminator, value),
+            ),
         ]
     })
     return [...onPaths, ...atMatches]

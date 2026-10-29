@@ -305,7 +305,9 @@ arms are a function of the literal (`KeyMatch.select`). A nested match selects t
 match selects at the path of the literals (`KeyMatch.select_eq_flat`). Two arms with one leaf give
 one key to two items, and no function of the key gives back the literal (`KeyMatch.not_decodable`).
 The key rows select the arm before they build, nested matches included. The run-time builder
-selects the arm by recursion, and reads each arm as an own property of the match.
+selects the arm by recursion, and reads each arm as an own property of the match. A component and
+a discriminator read a path of names, and the key input is the deep pick of the paths that the key
+reads.
 `item(codec)`, `at(codec, path)` and `extract(codec, pattern)` give the codec of an item, of a path,
 and of the options of a union that a pattern names.
 

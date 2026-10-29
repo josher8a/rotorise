@@ -163,11 +163,11 @@ describe('the type of a nested key match', () => {
                 discriminator: 'tag',
                 spec: {
                     OBJECT: ['name'],
-                    // @ts-expect-error `breed` exists only on a dog
                     ANIMAL: {
                         discriminator: 'specie',
                         spec: {
                             CAT: null,
+                            // @ts-expect-error `breed` exists only on a dog
                             HORSE: ['breed'],
                             DOG: ['name'],
                         },
@@ -184,9 +184,9 @@ describe('the type of a nested key match', () => {
                 discriminator: 'tag',
                 spec: {
                     OBJECT: ['name'],
-                    // @ts-expect-error `HORSE` has no arm
                     ANIMAL: {
                         discriminator: 'specie',
+                        // @ts-expect-error `HORSE` has no arm
                         spec: { CAT: null, DOG: ['name'] },
                     },
                 },
@@ -200,8 +200,8 @@ describe('the type of a nested key match', () => {
             SK: {
                 discriminator: 'tag',
                 spec: {
+                    // @ts-expect-error `specie` does not exist on an object
                     OBJECT: {
-                        // @ts-expect-error `specie` does not exist on an object
                         discriminator: 'specie',
                         spec: { CAT: null },
                     },

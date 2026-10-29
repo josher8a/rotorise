@@ -10,6 +10,25 @@ import {
 } from './Rotorise'
 import type { Exact, NonEmptyArray, show } from './utils'
 
+// The constraint of a key spec admits any path and any match on a path, whatever the entity holds,
+// and `ValidatePaths` reads the paths that a spec holds. The pins below state the two shapes.
+type AnyPathPin = `${string}.${string}`
+type PathComponents =
+    | AnyPathPin
+    | [AnyPathPin, { readonly tag: string }]
+    // biome-ignore lint/suspicious/noExplicitAny: the constraint types the parameter of a path transform as any
+    | [AnyPathPin, (key: any) => TransformShape, unknown?]
+type PathMatchPin = {
+    discriminator: AnyPathPin
+    spec: {
+        [literal: string]:
+            | unknown[]
+            | string
+            | null
+            | { discriminator: string; spec: { [literal: string]: unknown } }
+    }
+}
+
 describe('Exact<> with discriminated unions', () => {
     type Example<T extends 'A' | 'B' | 'C' = 'A' | 'B' | 'C'> = {
         base: string
@@ -479,7 +498,9 @@ describe('DynamoDB Utils', () => {
         // inside the tolerance, so no single change moved the pin out of it
         // 2378 -> 2388: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([2388, 'instantiations'])
+        // 2388 -> 2875: the constraint of a key spec admits a path and a match on a path, and the
+        // pin of the parameter type states both
+        attest.instantiations([2875, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -504,8 +525,10 @@ describe('DynamoDB Utils', () => {
                           | ['b', (key: 1n | 2) => TransformShape]
                           | ['c', (key: true | 0) => TransformShape]
                           | ['z', (key: 'never') => TransformShape]
+                          | PathComponents
                       >
                     | null
+                    | PathMatchPin
                     | {
                           discriminator: 'a'
                           spec: {
@@ -526,8 +549,10 @@ describe('DynamoDB Utils', () => {
                                               'z',
                                               (key: 'never') => TransformShape,
                                           ]
+                                        | PathComponents
                                     >
                                   | null
+                                  | PathMatchPin
                               a2:
                                   | 'a'
                                   | 'b'
@@ -545,8 +570,10 @@ describe('DynamoDB Utils', () => {
                                               'z',
                                               (key: 'never') => TransformShape,
                                           ]
+                                        | PathComponents
                                     >
                                   | null
+                                  | PathMatchPin
                           }
                       }
                     | {
@@ -577,8 +604,10 @@ describe('DynamoDB Utils', () => {
                                               'z',
                                               (key: 'never') => TransformShape,
                                           ]
+                                        | PathComponents
                                     >
                                   | null
+                                  | PathMatchPin
                                   | {
                                         discriminator: 'a'
                                         spec: {
@@ -616,8 +645,10 @@ describe('DynamoDB Utils', () => {
                                                                 key: 'never',
                                                             ) => TransformShape,
                                                         ]
+                                                      | PathComponents
                                                   >
                                                 | null
+                                                | PathMatchPin
                                             a2:
                                                 | 'a'
                                                 | 'b'
@@ -652,8 +683,10 @@ describe('DynamoDB Utils', () => {
                                                                 key: 'never',
                                                             ) => TransformShape,
                                                         ]
+                                                      | PathComponents
                                                   >
                                                 | null
+                                                | PathMatchPin
                                         }
                                     }
                           }
@@ -844,7 +877,9 @@ describe('DynamoDB Utils', () => {
         // inside the tolerance, so no single change moved the pin out of it
         // 15565 -> 15628: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([15628, 'instantiations'])
+        // 15628 -> 19066: the constraint of a key spec admits a path and a match on a path, and each
+        // pin of the parameter type states both
+        attest.instantiations([19066, 'instantiations'])
     })
 
     test('real world example', () => {
@@ -1161,8 +1196,10 @@ describe('DynamoDB Utils', () => {
                           | 'b'
                           | ['a', (key: 'a1' | 'a2') => TransformShape]
                           | ['b', (key: 1n | 2) => TransformShape]
+                          | PathComponents
                       >
                     | null
+                    | PathMatchPin
                     | {
                           discriminator: 'a'
                           spec: {
@@ -1180,8 +1217,10 @@ describe('DynamoDB Utils', () => {
                                               'extra',
                                               (key: 'extra') => TransformShape,
                                           ]
+                                        | PathComponents
                                     >
                                   | null
+                                  | PathMatchPin
                               a2:
                                   | 'a'
                                   | 'b'
@@ -1190,8 +1229,10 @@ describe('DynamoDB Utils', () => {
                                         | 'b'
                                         | ['a', (key: 'a2') => TransformShape]
                                         | ['b', (key: 2) => TransformShape]
+                                        | PathComponents
                                     >
                                   | null
+                                  | PathMatchPin
                           }
                       }
                 >,

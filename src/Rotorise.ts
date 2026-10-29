@@ -62,7 +62,36 @@ type TransformOverride<
       ? I
       : Fallback
 
-export type CompositeKeyParamsImpl<
+/** The names of a spec that no attribute of the entity has: the paths that the entity holds. */
+type PathHeads<Entity, Heads> = Heads extends string
+    ? Heads extends keyof Entity
+        ? never
+        : [ValueAt<Entity, Heads>] extends [never]
+          ? never
+          : Heads
+    : never
+
+/** The deep pick of paths: each path as the objects above one value, joined into one type. */
+type DeepPick<
+    Entity,
+    Spec extends InputSpecShape,
+    Paths,
+    Optional extends boolean,
+> = (
+    Paths extends string
+        ? (
+              x: AtPath<
+                  Paths,
+                  TransformOverride<Spec, Paths, ValueAt<Entity, Paths>>,
+                  Optional
+              >,
+          ) => void
+        : never
+) extends (x: infer Joined) => void
+    ? Joined
+    : never
+
+type PlainKeyParams<
     Entity,
     InputSpec extends InputSpecShape,
     skip extends number = 1,
@@ -83,6 +112,53 @@ export type CompositeKeyParamsImpl<
       >
     : never
 
+type PathKeyParams<
+    Entity,
+    InputSpec extends InputSpecShape,
+    skip extends number = 1,
+    Required_ = extractHeadOrPass<
+        SliceFromStart<InputSpec, number extends skip ? 1 : skip>[number]
+    >,
+    All = extractHeadOrPass<InputSpec[number]>,
+> = Entity extends unknown
+    ? show<
+          {
+              [K in Required_ & keyof Entity]: TransformOverride<
+                  InputSpec,
+                  K,
+                  Entity[K]
+              >
+          } & {
+              [K in All & keyof Entity]?: TransformOverride<
+                  InputSpec,
+                  K,
+                  Entity[K]
+              >
+          } & ([PathHeads<Entity, All>] extends [never]
+                  ? unknown
+                  : DeepPick<
+                        Entity,
+                        InputSpec,
+                        PathHeads<Entity, Required_>,
+                        false
+                    > &
+                        DeepPick<
+                            Entity,
+                            InputSpec,
+                            PathHeads<Entity, All>,
+                            true
+                        >)
+      >
+    : never
+
+export type CompositeKeyParamsImpl<
+    Entity,
+    InputSpec extends InputSpecShape,
+    skip extends number = 1,
+> = HoldsPath<InputSpec> extends true
+    ? PathKeyParams<Entity, InputSpec, skip>
+    : PlainKeyParams<Entity, InputSpec, skip>
+
 export type CompositeKeyParams<
     Entity extends Record<string, unknown>,
     FullSpec extends InputSpec<MergeIntersectionObject<Entity>>[],
@@ -97,20 +173,35 @@ type CompositeKeyBuilderImpl<
     isPartial extends boolean = false,
     Boundary extends boolean = false,
 > = Entity extends unknown
-    ? CompositeKeyStringBuilder<
-          Entity,
-          [Deep] extends [never]
-              ? Spec
-              : number extends Deep
-                ? Spec
-                : SliceFromStart<Spec, Deep>,
-          Separator,
-          boolean extends isPartial ? false : isPartial,
-          '',
-          never,
-          Boundary,
-          Boundary extends true ? StopsBeforeLast<Spec, Deep> : false
-      >
+    ? HoldsPath<Spec> extends true
+        ? CompositeKeyStringBuilderPath<
+              Entity,
+              [Deep] extends [never]
+                  ? Spec
+                  : number extends Deep
+                    ? Spec
+                    : SliceFromStart<Spec, Deep>,
+              Separator,
+              boolean extends isPartial ? false : isPartial,
+              '',
+              never,
+              Boundary,
+              Boundary extends true ? StopsBeforeLast<Spec, Deep> : false
+          >
+        : CompositeKeyStringBuilder<
+              Entity,
+              [Deep] extends [never]
+                  ? Spec
+                  : number extends Deep
+                    ? Spec
+                    : SliceFromStart<Spec, Deep>,
+              Separator,
+              boolean extends isPartial ? false : isPartial,
+              '',
+              never,
+              Boundary,
+              Boundary extends true ? StopsBeforeLast<Spec, Deep> : false
+          >
     : never
 
 /**
@@ -212,6 +303,85 @@ type CompositeKeyStringBuilder<
                     : Acc
                 : Acc)
 
+/**
+ * The pair of a component that reads a path: a name that the item holds as an attribute prints
+ * whole, and a path prints its last name. A tag in an options object prints in place of the name.
+ */
+type ExtractPathPair<Entity, Spec> = Spec extends [
+    infer Key extends string,
+    // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
+    (...key: any[]) => infer Value,
+    ...unknown[],
+]
+    ? ExtractHelper<NameOf<Entity, Key>, Value>
+    : Spec extends [
+            infer Key extends string,
+            { readonly tag: infer Tag extends string },
+        ]
+      ? [Tag, ValueOfKey<Entity, Key> & joinable]
+      : Spec extends string
+        ? [NameOf<Entity, Spec>, ValueOfKey<Entity, Spec> & joinable]
+        : never
+
+/** Whether a spec holds a component that reads a path. */
+type HoldsPath<Spec> = [
+    Extract<
+        extractHeadOrPass<
+            Spec extends readonly unknown[] ? Spec[number] : never
+        >,
+        `${string}.${string}`
+    >,
+] extends [never]
+    ? false
+    : true
+
+type CompositeKeyStringBuilderPath<
+    Entity,
+    Spec,
+    Separator extends string,
+    KeepIntermediate extends boolean,
+    Acc extends string = '',
+    AllAcc extends string = never,
+    Boundary extends boolean = false,
+    Stops extends boolean = false,
+> = Spec extends [infer Head, ...infer Tail]
+    ? ExtractPathPair<Entity, Head> extends [
+          infer Key extends joinable,
+          infer Value extends joinable,
+      ]
+        ? CompositeKeyStringBuilderPath<
+              Entity,
+              Tail,
+              Separator,
+              KeepIntermediate,
+              Acc extends ''
+                  ? [Key] extends [never]
+                      ? `${Value}`
+                      : `${Key}${Separator}${Value}`
+                  : [Key] extends [never]
+                    ? `${Acc}${Separator}${Value}`
+                    : `${Acc}${Separator}${Key}${Separator}${Value}`,
+              KeepIntermediate extends true
+                  ?
+                        | AllAcc
+                        | (Acc extends ''
+                              ? never
+                              : Boundary extends true
+                                ? `${Acc}${Separator}`
+                                : Acc)
+                  : never,
+              Boundary,
+              Stops
+          >
+        : never
+    :
+          | AllAcc
+          | (Boundary extends true
+                ? Stops extends true
+                    ? `${Acc}${Separator}`
+                    : Acc
+                : Acc)
+
 type DiscriminatedSchemaShape = {
     discriminator: PropertyKey
     spec: {
@@ -221,7 +391,10 @@ type DiscriminatedSchemaShape = {
 
 type InputSpecShape =
     // biome-ignore lint/suspicious/noExplicitAny: key type is erased at runtime, any is needed for structural matching
-    ([PropertyKey, (key: any) => unknown, ...unknown[]] | PropertyKey)[]
+    (
+        | [PropertyKey, ((key: any) => unknown) | TagOptions, ...unknown[]]
+        | PropertyKey
+    )[]
 
 export type TransformShape =
     | {
@@ -244,7 +417,10 @@ type ComputeTableKeyType<
         : Spec extends DiscriminatedSchemaShape
           ? ComputeTableKeyType<
                 Entity,
-                ValueOf<Spec['spec'], ValueOf<Entity, Spec['discriminator']>>,
+                ValueOf<
+                    Spec['spec'],
+                    ValueOfKey<Entity, Spec['discriminator']>
+                >,
                 Separator,
                 NullAs
             >
@@ -262,7 +438,7 @@ type TableEntryImpl<
                         Entity,
                         ValueOf<
                             Schema[Key]['spec'],
-                            ValueOf<Entity, Schema[Key]['discriminator']>
+                            ValueOfKey<Entity, Schema[Key]['discriminator']>
                         >,
                         Separator
                     >
@@ -290,17 +466,103 @@ export type TableEntry<
 // Partial<T> for objects so narrowed transform defaults pass the InputSpec constraint.
 type DefaultOf<T> = T extends Record<string, unknown> ? Partial<T> : T
 
-type InputSpec<E> = {
-    [key in keyof E]:
-        | (undefined extends E[key]
-              ? [
-                    key,
-                    (key: Exclude<E[key], undefined>) => TransformShape,
-                    DefaultOf<Exclude<E[key], undefined>>,
-                ]
-              : [key, (key: E[key]) => TransformShape])
-        | (undefined extends E[key] ? never : null extends E[key] ? never : key)
-}[keyof E]
+/** The tag of a component, which prints in place of the name. */
+type TagOptions = { readonly tag: string }
+
+/**
+ * The value at a path, through objects and unions of objects. An option that lacks a name adds
+ * nothing. An optional name above the value adds `undefined`.
+ */
+type ValueAt<E, P extends string> = E extends unknown
+    ? P extends keyof E
+        ? E[P]
+        : P extends `${infer Head}.${infer Tail}`
+          ? Head extends keyof E
+              ?
+                    | ValueAt<NonNullable<E[Head]>, Tail>
+                    | (null extends E[Head]
+                          ? undefined
+                          : undefined extends E[Head]
+                            ? undefined
+                            : never)
+              : never
+          : never
+    : never
+
+/** The value of a name that the item holds as an attribute, or at a path. */
+type ValueOfKey<E, P> = [ValueOf<E, P>] extends [never]
+    ? P extends string
+        ? ValueAt<E, P>
+        : never
+    : ValueOf<E, P>
+
+/** The last name of a path. */
+type LastName<P extends string> = P extends `${string}.${infer Tail}`
+    ? LastName<Tail>
+    : P
+
+/** The name that a component prints: the whole name of an attribute, or the last name of a path. */
+type NameOf<E, P extends string> = P extends `${string}.${string}`
+    ? [P] extends [keyof E]
+        ? Uppercase<P>
+        : Uppercase<LastName<P>>
+    : Uppercase<P>
+
+/** The object that holds one value at a path. */
+type AtPath<
+    P extends string,
+    V,
+    Optional extends boolean = false,
+> = P extends `${infer Head}.${infer Tail}`
+    ? Optional extends true
+        ? { [K in Head]?: AtPath<Tail, V, true> }
+        : { [K in Head]: AtPath<Tail, V> }
+    : Optional extends true
+      ? { [K in P]?: V }
+      : { [K in P]: V }
+
+/**
+ * Any path: names joined by `.`.
+ *
+ * The constraint of a key spec is shallow on purpose. It admits a path and reads no path of the
+ * entity, because a walk of the paths on every `tableEntry` costs far more than a spec that reads a
+ * path costs: the walk measured +355% on the instantiation pin of the largest test, and a filter of
+ * the names that can hold an object still measured +20% to +37%. {@link ValidatePaths} reads the
+ * paths that a spec holds against the entity, and only a spec that holds one.
+ */
+type AnyPath = `${string}.${string}`
+
+/**
+ * A component that reads a path: the path, the path with a tag, or the path with a transform.
+ *
+ * The limit: the parameter of the transform has no contextual type. The constraint types it as
+ * `any`, and the transforms of the other components give the parameter more than one type, so a
+ * parameter without an annotation is an implicit `any` and the checker refuses it. Annotate the
+ * parameter. {@link ValidatePaths} refuses an annotation that the value at the path does not fit.
+ */
+type PathComponent =
+    | AnyPath
+    | [AnyPath, TagOptions]
+    // biome-ignore lint/suspicious/noExplicitAny: the value at a path is read by ValidatePaths, not by the constraint
+    | [AnyPath, (key: any) => TransformShape, unknown?]
+
+type InputSpec<E> =
+    | {
+          [key in keyof E]:
+              | (undefined extends E[key]
+                    ? [
+                          key,
+                          (key: Exclude<E[key], undefined>) => TransformShape,
+                          DefaultOf<Exclude<E[key], undefined>>,
+                      ]
+                    : [key, (key: E[key]) => TransformShape])
+              | (undefined extends E[key]
+                    ? never
+                    : null extends E[key]
+                      ? never
+                      : key)
+      }[keyof E]
+    | PathComponent
 
 // --- 3-tuple default validation ---
 // InputSpec uses DefaultOf so narrowed defaults pass the constraint.
@@ -356,6 +618,93 @@ type ValidateSchema<Schema> = [NeedsValidation<Schema[keyof Schema]>] extends [
               ? ValidateMatch<Schema[K]>
               : ValidateInputSpec<Schema[K]>
       }
+
+/**
+ * The paths that a spec holds, anywhere in it: a component, a discriminator or an attribute-name
+ * arm. The walk stops at four matches, so a loose arm that names itself ends it.
+ */
+type DottedIn<S, Depth extends unknown[] = []> = S extends string
+    ? S extends `${infer Head}.${string}`
+        ? string extends Head // the pattern of the constraint, which names no path
+            ? never
+            : S
+        : never
+    : S extends readonly unknown[]
+      ? DottedIn<S[number], Depth>
+      : S extends { discriminator: infer D; spec: infer Arms }
+        ? Depth['length'] extends 4
+            ? never
+            : DottedIn<D, Depth> | DottedIn<Arms[keyof Arms], [...Depth, 0]>
+        : never
+
+type DefaultSlot<V> = [DefaultOf<Exclude<V, undefined>>]
+
+/** What a name can be where the value is `V`: an optional value needs a transform with a default. */
+type NameOfValue<N, V> = [V] extends [never]
+    ? ErrorMessage<`'${N & string}' is no name or path of the entity`>
+    : undefined extends V
+      ? ErrorMessage<`'${N & string}' can be absent: give a transform with a default`>
+      : null extends V
+        ? ErrorMessage<`'${N & string}' can be null: give a transform with a default`>
+        : N
+
+/** One component of a spec, against the options of the entity that its arm reads. */
+type ValidateComponent<E, C> = C extends string
+    ? NameOfValue<C, ValueOfKey<E, C>>
+    : C extends readonly [infer P extends string, infer Second, ...infer Rest]
+      ? [ValueOfKey<E, P>] extends [never]
+          ? ErrorMessage<`'${P}' is no name or path of the entity`>
+          : Second extends (...args: never[]) => unknown
+            ? [
+                  P,
+                  (key: Exclude<ValueOfKey<E, P>, undefined>) => TransformShape,
+                  ...(Rest extends [unknown]
+                      ? DefaultSlot<ValueOfKey<E, P>>
+                      : []),
+              ]
+            : [P, Second]
+      : C
+
+/** A spec against the options of the entity that it reads. */
+type ValidateSpec<E, S> = S extends string
+    ? NameOfValue<S, ValueOfKey<E, S>>
+    : S extends readonly unknown[]
+      ? { [I in keyof S]: ValidateComponent<E, S[I]> }
+      : S extends { discriminator: infer D extends string; spec: infer Arms }
+        ? ValidateMatchPaths<E, D, Arms>
+        : S
+
+/**
+ * A match: the arms name the literals of the value at the discriminator and no other, and each arm
+ * is a spec of the options that its literal selects.
+ */
+type ValidateMatchPaths<E, D extends string, Arms> = {
+    discriminator: D
+    spec: {
+        [Literal in ValueOfKey<E, D> & PropertyKey]: Literal extends keyof Arms
+            ? ValidateSpec<Extract<E, Tagged<D, Literal>>, Arms[Literal]>
+            : ErrorMessage<`'${D}' has the literal '${Literal & string}', and this match has no arm for it`>
+    }
+} & {
+    spec: {
+        [Literal in Exclude<
+            keyof Arms,
+            ValueOfKey<E, D>
+        >]: ErrorMessage<`'${D}' never holds '${Literal & string}'`>
+    }
+}
+
+/**
+ * Reads each path that a schema holds against the entity. A wrong path, a path that no option
+ * holds, a transform whose parameter does not fit the value, a path whose value can be absent, and a
+ * match that lacks a literal are each refused on the element that is wrong. Short-circuits to
+ * `unknown` when the schema holds no path, so a schema with no path pays nothing.
+ */
+type ValidatePaths<Schema, E> = string extends keyof Schema // the constraint, before a schema is inferred
+    ? unknown
+    : [DottedIn<Schema[keyof Schema]>] extends [never]
+      ? unknown
+      : { [K in keyof Schema]: ValidateSpec<E, Schema[K]> }
 
 type extractHeadOrPass<T> = T extends readonly unknown[] ? T[0] : T
 
@@ -413,13 +762,32 @@ type DiscriminatedSchema<Entity, E, Used extends PropertyKey = never> = {
         : never
 }[OpenKeys<E, Used>]
 
+/**
+ * A match on a path: the discriminator is a path below the top level. The constraint is shallow,
+ * for the reason at {@link ObjectKeys}: each arm is a loose spec, and {@link ValidatePaths} reads
+ * the literals of the value at the path, the arms against the options that each literal selects, and
+ * the names that each arm reads.
+ */
+type PathMatch = {
+    discriminator: AnyPath
+    spec: { [literal: string]: LooseArm }
+}
+
+type LooseArm =
+    | unknown[]
+    | string
+    | null
+    | { discriminator: string; spec: { [literal: string]: unknown } }
+
 type NestedKeySpec<Entity, Used extends PropertyKey> =
     | FullKeySpecSimple<Entity>
     | DiscriminatedSchema<Entity, MergeIntersectionObject<Entity>, Used>
+    | PathMatch
 
 type FullKeySpec<Entity> =
     | FullKeySpecSimple<Entity>
     | DiscriminatedSchema<Entity, MergeIntersectionObject<Entity>>
+    | PathMatch
 
 type FullKeySpecShape = FullKeySpecSimpleShape | DiscriminatedSchemaShape
 
@@ -447,6 +815,87 @@ const chainableNoOpProxy: unknown = new Proxy(() => chainableNoOpProxy, {
     get: () => chainableNoOpProxy,
 })
 
+/**
+ * The segments of a key path: names joined by `.`, which read into objects only. A position in
+ * brackets and an empty name are refused, because a key does not read into a list.
+ */
+const pathSegments = (path: string): string[] => {
+    const segments = path.split('.')
+    if (segments.some((segment) => segment === '' || /[[\]]/.test(segment))) {
+        throw new RotoriseError(
+            `'${path}' is no key path: a key path joins names with '.', and holds no empty name and no position`,
+        )
+    }
+    return segments
+}
+
+/**
+ * The value of an attribute name or of a path. A name that holds no `.` is an attribute of the
+ * item, as it was before paths. An item that holds the whole name as an attribute gives that
+ * attribute. Otherwise the path reads into objects, one own property for each segment, and a
+ * missing segment gives `undefined`.
+ */
+const valueAt = (attributes: object, path: string): unknown => {
+    const record = attributes as Record<string, unknown>
+    if (!path.includes('.') || Object.hasOwn(record, path)) return record[path]
+    let current: unknown = attributes
+    for (const segment of pathSegments(path)) {
+        if (
+            typeof current !== 'object' ||
+            current === null ||
+            !Object.hasOwn(current, segment)
+        ) {
+            return undefined
+        }
+        current = (current as Record<string, unknown>)[segment]
+    }
+    return current
+}
+
+/** The name that a component prints: the whole name of an attribute, or the last name of a path. */
+const printedName = (attributes: object, path: string): string =>
+    (Object.hasOwn(attributes, path) ? path : (path.split('.').pop() ?? path))
+        .toString()
+        .toUpperCase()
+
+/**
+ * Two key paths are related when one is the other, or one is a prefix of the other at a name. A
+ * write to a path changes each key that reads a related path.
+ */
+const related = (a: string, b: string): boolean =>
+    a === b || a.startsWith(`${b}.`) || b.startsWith(`${a}.`)
+
+/** Whether an item that holds these names holds the path: it holds the path, or a path above it. */
+const holdsPath = (path: string, names: Iterable<string>): boolean => {
+    for (const name of names) {
+        if (path === name || path.startsWith(`${name}.`)) return true
+    }
+    return false
+}
+
+/** Whether a path is related to any of the names. */
+const relatedToAny = (path: string, names: Iterable<string>): boolean => {
+    for (const name of names) if (related(path, name)) return true
+    return false
+}
+
+/** Refuses each name or path of a schema that is no key path, once, where the schema is read. */
+const checkPaths = (schema: Record<string, unknown>): void => {
+    const visit = (spec: unknown): void => {
+        if (typeof spec === 'string') {
+            pathSegments(spec)
+        } else if (Array.isArray(spec)) {
+            for (const entry of spec) {
+                visit(Array.isArray(entry) ? entry[0] : entry)
+            }
+        } else if (isMatch(spec)) {
+            pathSegments(String(spec.discriminator))
+            for (const arm of Object.values(spec.spec)) visit(arm)
+        }
+    }
+    for (const spec of Object.values(schema)) visit(spec)
+}
+
 /** A key spec that matches: a discriminator and one arm for each literal. */
 const isMatch = (
     value: unknown,
@@ -459,11 +908,11 @@ const isMatch = (
 
 /** The match that the run-time builders accept: the type level checks each arm against its variant. */
 type ErasedMatch<Entity> = {
-    discriminator: keyof Entity
+    discriminator: string
     spec: {
         [val in string]:
             | InputSpec<MergeIntersectionObject<Entity>>[]
-            | keyof Entity
+            | string
             | ErasedMatch<Entity>
     }
 }
@@ -481,133 +930,157 @@ const key =
     >(
         schema: Schema,
         separator: Separator = '#' as Separator,
-    ) =>
-    <
-        const Key extends keyof Schema,
-        const Config extends {
-            depth?: number
-            allowPartial?: boolean
-            enforceBoundary?: boolean
-        },
-        const Attributes extends Partial<Entity>,
-    >(
-        key: Key,
-        attributes: Attributes,
-        config?: Config,
-    ): string | undefined => {
-        const case_ = schema[key]
+    ) => {
+        checkPaths(schema)
+        return <
+            const Key extends keyof Schema,
+            const Config extends {
+                depth?: number
+                allowPartial?: boolean
+                enforceBoundary?: boolean
+            },
+            const Attributes extends Partial<Entity>,
+        >(
+            key: Key,
+            attributes: Attributes,
+            config?: Config,
+        ): string | undefined => {
+            const case_ = schema[key]
 
-        if (case_ === undefined) {
-            throw new RotoriseError(`Key ${key.toString()} not found in schema`)
-        }
-        let structure: InputSpec<MergeIntersectionObject<Entity>>[]
-
-        if (Array.isArray(case_)) {
-            structure = case_
-        } else if (typeof case_ === 'object') {
-            // a match selects an arm by the value of its discriminator, and the arm can be a match.
-            // The arm is read as an own property, so a literal that names a property of the
-            // prototype names no arm. An error names the discriminator and holds no value.
-            let arm: unknown = case_
-            while (isMatch(arm)) {
-                const discriminatorName = arm.discriminator
-                const discriminator =
-                    attributes[discriminatorName as keyof Attributes]
-                if (discriminator === undefined) {
-                    throw new RotoriseError(
-                        `Discriminator ${String(discriminatorName)} not found in the attributes`,
-                    )
-                }
-                const literal = String(discriminator)
-                arm = Object.hasOwn(arm.spec, literal)
-                    ? arm.spec[literal]
-                    : undefined
-                if (arm === undefined) {
-                    throw new RotoriseError(
-                        `Discriminator value of ${String(discriminatorName)} not found in the spec`,
-                    )
-                }
-            }
-            if (arm === null) {
-                return undefined
-            }
-
-            if (!Array.isArray(arm)) {
-                return attributes[arm as keyof Attributes] as never
-            }
-
-            structure = arm as typeof structure
-        } else {
-            const value = attributes[case_ as keyof Attributes]
-            if (value == null) return undefined as never
-
-            return value as never
-        }
-
-        const fullLength = structure.length
-
-        if (config?.depth !== undefined) {
-            structure = structure.slice(0, config.depth) as typeof structure
-        }
-        const composite: joinable[] = []
-        let printed = 0
-
-        // A segment that holds the separator reads back as two. The refusal names the component,
-        // and never the value that it printed.
-        const push = (component: string, segment: joinable) => {
-            if (
-                segment !== undefined &&
-                segment !== null &&
-                String(segment).includes(separator)
-            ) {
+            if (case_ === undefined) {
                 throw new RotoriseError(
-                    `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
+                    `Key ${key.toString()} not found in schema`,
                 )
             }
-            composite.push(segment)
-        }
+            let structure: InputSpec<MergeIntersectionObject<Entity>>[]
 
-        for (const keySpec of structure) {
-            const [key, transform, Default] = Array.isArray(keySpec)
-                ? keySpec
-                : [keySpec]
-
-            const value = attributes[key as keyof Attributes] ?? Default
-
-            if (transform && value !== undefined) {
-                const transformed = transform(value as never)
-                if (typeof transformed === 'object' && transformed !== null) {
-                    if (transformed.tag !== undefined)
-                        push(`the tag of ${key.toString()}`, transformed.tag)
-                    push(key.toString(), transformed.value)
-                } else {
-                    push(
-                        `the name ${key.toString()}`,
-                        key.toString().toUpperCase(),
+            if (Array.isArray(case_)) {
+                structure = case_
+            } else if (typeof case_ === 'object') {
+                // a match selects an arm by the value of its discriminator, and the arm can be a match.
+                // The arm is read as an own property, so a literal that names a property of the
+                // prototype names no arm. An error names the discriminator and holds no value.
+                let arm: unknown = case_
+                while (isMatch(arm)) {
+                    const discriminatorName = arm.discriminator
+                    const discriminator = valueAt(
+                        attributes,
+                        String(discriminatorName),
                     )
-                    push(key.toString(), transformed)
+                    if (discriminator === undefined) {
+                        throw new RotoriseError(
+                            `Discriminator ${String(discriminatorName)} not found in the attributes`,
+                        )
+                    }
+                    const literal = String(discriminator)
+                    arm = Object.hasOwn(arm.spec, literal)
+                        ? arm.spec[literal]
+                        : undefined
+                    if (arm === undefined) {
+                        throw new RotoriseError(
+                            `Discriminator value of ${String(discriminatorName)} not found in the spec`,
+                        )
+                    }
                 }
-            } else if (value !== undefined && value !== null && value !== '') {
-                push(`the name ${key.toString()}`, key.toString().toUpperCase())
-                push(key.toString(), value as joinable)
-            } else if (config?.allowPartial) {
-                break
+                if (arm === null) {
+                    return undefined
+                }
+
+                if (!Array.isArray(arm)) {
+                    return valueAt(attributes, String(arm)) as never
+                }
+
+                structure = arm as typeof structure
             } else {
-                throw new RotoriseError(
-                    `buildCompositeKey: Attribute ${key.toString()} not found in ${JSON.stringify(attributes)}`,
-                )
+                const value = valueAt(attributes, String(case_))
+                if (value == null) return undefined as never
+
+                return value as never
             }
-            printed++
-        }
 
-        // A component prints one or two segments: a transform that gives a value with no tag prints
-        // one. So the components are counted, and not the segments. If the print stops before the
-        // last component (a partial key), append a trailing separator.
-        if (config?.enforceBoundary && printed < fullLength) {
-            composite.push('')
-        }
+            const fullLength = structure.length
 
-        return composite.join(separator) as never
+            if (config?.depth !== undefined) {
+                structure = structure.slice(0, config.depth) as typeof structure
+            }
+            const composite: joinable[] = []
+            let printed = 0
+
+            // A segment that holds the separator reads back as two. The refusal names the component,
+            // and never the value that it printed.
+            const push = (component: string, segment: joinable) => {
+                if (
+                    segment !== undefined &&
+                    segment !== null &&
+                    String(segment).includes(separator)
+                ) {
+                    throw new RotoriseError(
+                        `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
+                    )
+                }
+                composite.push(segment)
+            }
+
+            for (const keySpec of structure) {
+                const [key, transform, Default] = Array.isArray(keySpec)
+                    ? keySpec
+                    : [keySpec]
+                const path = String(key)
+                // a second slot that is an object gives the tag, and shapes no value
+                const tag =
+                    typeof transform === 'object' && transform !== null
+                        ? (transform as { tag: string }).tag
+                        : undefined
+                const shape =
+                    typeof transform === 'function' ? transform : undefined
+                const name = printedName(attributes, path)
+
+                const value = valueAt(attributes, path) ?? Default
+
+                if (shape && value !== undefined) {
+                    const transformed = shape(value as never)
+                    if (
+                        typeof transformed === 'object' &&
+                        transformed !== null
+                    ) {
+                        if (transformed.tag !== undefined)
+                            push(`the tag of ${path}`, transformed.tag)
+                        push(path, transformed.value)
+                    } else {
+                        push(`the name ${path}`, name)
+                        push(path, transformed)
+                    }
+                } else if (
+                    value !== undefined &&
+                    value !== null &&
+                    value !== ''
+                ) {
+                    push(
+                        tag === undefined
+                            ? `the name ${path}`
+                            : `the tag of ${path}`,
+                        tag ?? name,
+                    )
+                    push(path, value as joinable)
+                } else if (config?.allowPartial) {
+                    break
+                } else {
+                    throw new RotoriseError(
+                        `buildCompositeKey: Attribute ${path} not found`,
+                    )
+                }
+                printed++
+            }
+
+            // A component prints one or two segments: a transform that gives a value with no tag prints
+            // one. So the components are counted, and not the segments. If the print stops before the
+            // last component (a partial key), append a trailing separator.
+            if (config?.enforceBoundary && printed < fullLength) {
+                composite.push('')
+            }
+
+            return composite.join(separator) as never
+        }
     }
 
 const toEntry =
@@ -729,6 +1202,33 @@ type SpecConfigShape = {
     enforceBoundary?: boolean
 }
 
+/** The object that holds the literal of a discriminator, which is an attribute or a path. */
+type Tagged<K extends PropertyKey, V extends PropertyKey> = K extends string
+    ? AtPath<K, V>
+    : { [k in K]: V }
+
+/** A variant of a match on a path: the options that hold the literal at the path. */
+type ProcessPathVariant<
+    Entity,
+    K extends string,
+    V extends PropertyKey,
+    Spec extends DiscriminatedSchemaShape,
+    Config extends SpecConfigShape,
+    VariantSpec = Spec['spec'][V & keyof Spec['spec']],
+> = [
+    VariantSpec extends null | undefined
+        ? unknown
+        : ProcessSpecType<
+              [Entity] extends [never] ? never : Extract<Entity, AtPath<K, V>>,
+              VariantSpec,
+              Config
+          >,
+] extends [infer Processed]
+    ? [Processed] extends [never]
+        ? AtPath<K, V>
+        : Processed & AtPath<K, V>
+    : never
+
 // Pre-compute discriminated variant types
 type ExtractVariant<Entity, K extends PropertyKey, V extends PropertyKey> = [
     Entity,
@@ -761,17 +1261,29 @@ type ProcessVariant<
 // Optimized attribute processing
 type OptimizedAttributes<Entity, Spec, Config extends SpecConfigShape> = show<
     Spec extends DiscriminatedSchemaShape
-        ? {
-              [K in Spec['discriminator']]: {
-                  [V in keyof Spec['spec']]: ProcessVariant<
-                      Entity,
-                      K,
-                      V,
-                      Spec,
-                      Config
-                  >
-              }[keyof Spec['spec']]
-          }[Spec['discriminator']]
+        ? Spec['discriminator'] extends `${string}.${string}`
+            ? {
+                  [K in Spec['discriminator']]: {
+                      [V in keyof Spec['spec']]: ProcessPathVariant<
+                          Entity,
+                          K,
+                          V,
+                          Spec,
+                          Config
+                      >
+                  }[keyof Spec['spec']]
+              }[Spec['discriminator']]
+            : {
+                  [K in Spec['discriminator']]: {
+                      [V in keyof Spec['spec']]: ProcessVariant<
+                          Entity,
+                          K,
+                          V,
+                          Spec,
+                          Config
+                      >
+                  }[keyof Spec['spec']]
+              }[Spec['discriminator']]
         : ProcessSpecType<Entity, Spec, Config>
 >
 
@@ -800,7 +1312,10 @@ type ProcessKey<
           : Spec extends DiscriminatedSchemaShape
             ? ProcessKey<
                   Entity,
-                  ValueOf<Spec['spec'], ValueOf<Entity, Spec['discriminator']>>,
+                  ValueOf<
+                      Spec['spec'],
+                      ValueOfKey<Entity, Spec['discriminator']>
+                  >,
                   Separator,
                   NullAs,
                   Config,
@@ -821,7 +1336,7 @@ type OptimizedBuiltKey<
                     Entity,
                     ValueOf<
                         Spec['spec'],
-                        ValueOf<Entity, Spec['discriminator']>
+                        ValueOfKey<Entity, Spec['discriminator']>
                     >,
                     Separator,
                     undefined,
@@ -1165,6 +1680,29 @@ export type TableKeys<Schema> = {
 }[keyof Schema]
 
 /**
+ * The components that a write to one of the names changes: a component is related to a name when
+ * the two are one path, or one is a prefix of the other at a name.
+ */
+type TouchedBy<Components, Names> = Components extends string
+    ? Names extends string
+        ? Components extends Names | `${Names}.${string}`
+            ? Components
+            : Names extends `${Components}.${string}`
+              ? Components
+              : never
+        : never
+    : never
+
+/** The components that an item with these names holds: a name, or a name above the path. */
+type HeldBy<Components, Names> = Components extends string
+    ? Names extends string
+        ? Components extends Names | `${Names}.${string}`
+            ? Components
+            : never
+        : never
+    : never
+
+/**
  * The table keys a change would move the item out of.
  *
  * Not something to rebuild — something to refuse. Rewriting the address is a delete and a create,
@@ -1173,7 +1711,7 @@ export type TableKeys<Schema> = {
  */
 export type MovesTheItem<Schema, Changed> = {
     [K in TableKeys<Schema>]: [
-        Extract<KeyComponents<Schema[K]>, keyof Changed>,
+        TouchedBy<KeyComponents<Schema[K]>, keyof Changed>,
     ] extends [never]
         ? never
         : K
@@ -1243,9 +1781,9 @@ export type MissingComponents<
     Given = Changed,
 > = {
     [K in keyof Schema]: KeyComponents<Schema[K], Given> extends infer Of
-        ? [Extract<Of, Exclude<keyof Changed, Known>>] extends [never]
+        ? [TouchedBy<Of, Exclude<keyof Changed, Known>>] extends [never]
             ? never
-            : Exclude<Of, keyof Changed | Known>
+            : Exclude<Of, HeldBy<Of, keyof Changed | Known>>
         : never
 }[keyof Schema]
 
@@ -1259,7 +1797,7 @@ export type MissingComponents<
  */
 type BlockOf<Schema, Given, Known, Block> = {
     [K in keyof Schema]: KeyComponents<Schema[K], Given> extends infer Of
-        ? [Extract<Of, Block>] extends [never]
+        ? [TouchedBy<Of, Block>] extends [never]
             ? never
             : Exclude<Of, Known>
         : never
@@ -1276,7 +1814,7 @@ type BlockOf<Schema, Given, Known, Block> = {
  */
 type FrozenBy<Schema, Given, Block> = {
     [K in TableKeys<Schema>]: [
-        Extract<KeyComponents<Schema[K], Given>, Block>,
+        TouchedBy<KeyComponents<Schema[K], Given>, Block>,
     ] extends [never]
         ? never
         : K
@@ -1309,8 +1847,8 @@ type KeyRefusal<Schema, Changed, Known, Given> = [
             Exclude<keyof Changed, Known>
         > extends infer Block
       ? [FrozenBy<Schema, Given, Block>] extends [never]
-          ? ErrorMessage<`[keyUpdates] this change touches a key and lacks '${Exclude<Block, keyof Changed | Known> & string}', which the keys tie to what it writes. Write the whole block`>
-          : ErrorMessage<`[keyUpdates] '${FrozenBy<Schema, Given, Block> & string}' is a table key that holds '${Extract<KeyComponents<Schema[FrozenBy<Schema, Given, Block> & keyof Schema], Given>, Block> & string}', and the block of this change is frozen: a rewrite would move the item. DynamoDB cannot update a key attribute`>
+          ? ErrorMessage<`[keyUpdates] this change touches a key and lacks '${Exclude<Block, HeldBy<Block, keyof Changed | Known>> & string}', which the keys tie to what it writes. Write the whole block`>
+          : ErrorMessage<`[keyUpdates] '${FrozenBy<Schema, Given, Block> & string}' is a table key that holds '${TouchedBy<KeyComponents<Schema[FrozenBy<Schema, Given, Block> & keyof Schema], Given>, Block> & string}', and the block of this change is frozen: a rewrite would move the item. DynamoDB cannot update a key attribute`>
       : never
 
 /**
@@ -1569,7 +2107,7 @@ const componentsOf = (
 
         // the discriminant chooses which list applies, so when its value is known only that
         // variant's components are needed — the others describe an item this is not
-        const chosen = given[discriminator]
+        const chosen = valueAt(given, discriminator)
         if (chosen === undefined) {
             for (const variant of Object.values(variants ?? {})) walk(variant)
             return
@@ -1640,7 +2178,9 @@ export const tableEntry =
         const CodecRest = undefined,
         Separator extends string = '#',
     >(
-        schema: Schema & ValidateSchema<Schema>,
+        schema: Schema &
+            ValidateSchema<Schema> &
+            ValidatePaths<Schema, KeyedBy>,
         ...[options]: [Separator] extends ['']
             ? [ErrorMessage<'Separator must not be an empty string'>]
             : [
@@ -1805,7 +2345,9 @@ export const tableEntry =
             changed: Record<string, unknown>,
         ) =>
             [...components].filter(
-                (component) => component in changed && !(component in decided),
+                (component) =>
+                    relatedToAny(component, Object.keys(changed)) &&
+                    !(component in decided),
             )
 
         /**
@@ -1826,7 +2368,8 @@ export const tableEntry =
                 for (const key of keys) {
                     const components =
                         key.fixed ?? componentsOf(key.spec, given).components
-                    if (![...components].some((c) => block.has(c))) continue
+                    if (![...components].some((c) => relatedToAny(c, block)))
+                        continue
                     for (const component of components) {
                         if (component in decided || block.has(component))
                             continue
@@ -1849,14 +2392,19 @@ export const tableEntry =
                 if (!key.ofTable) continue
                 const components =
                     key.fixed ?? componentsOf(key.spec, given).components
-                const held = [...components].filter((c) => block.has(c))
+                const held = [...components].filter((c) =>
+                    relatedToAny(c, block),
+                )
                 if (held.length === 0) continue
                 return new RotoriseError(
                     `'${key.name}' is the table's own key and is built from ${quoted(components)}. This change writes ${quoted(Object.keys(changed))}. The keys tie it to ${quoted(block)}, and the block holds ${quoted(held)} of '${key.name}'. A table key freezes its block, because rewriting the block would move the item and DynamoDB cannot update a key attribute. Write the new item and delete the old one.`,
                 )
             }
-            const missing = [...touched.components].filter((c) => !(c in given))
-            const needed = [...block].filter((c) => !(c in given))
+            const givenNames = Object.keys(given)
+            const missing = [...touched.components].filter(
+                (c) => !holdsPath(c, givenNames),
+            )
+            const needed = [...block].filter((c) => !holdsPath(c, givenNames))
             return new RotoriseError(
                 `'${touched.name}' is built from ${quoted(touched.components)} and this change touches ${quoted(touchedIn(touched.components, changed))}, so it has to be rebuilt, but ${quoted(missing)} ${missing.length === 1 ? 'is' : 'are'} not given. The keys tie ${quoted(block)} together. Write ${quoted(needed)} in the change.`,
             )
@@ -1880,6 +2428,8 @@ export const tableEntry =
         const keyUpdates = (changed: Record<string, unknown>): AttributeMap => {
             const out: Record<string, AttributeValue> = {}
             const given = { ...decided, ...changed }
+            const changedNames = Object.keys(changed)
+            const givenNames = Object.keys(given)
 
             // the codec admits one value for a decided attribute, so any other value is not a write
             // of that attribute. The message names the constant and never the written value
@@ -1911,9 +2461,12 @@ export const tableEntry =
                 let touches = false
                 let lacks = false
                 for (const component of components) {
-                    if (component in changed && !(component in decided))
+                    if (
+                        relatedToAny(component, changedNames) &&
+                        !(component in decided)
+                    )
                         touches = true
-                    else if (!(component in given)) lacks = true
+                    else if (!holdsPath(component, givenNames)) lacks = true
                 }
                 if (!touches) continue
 
