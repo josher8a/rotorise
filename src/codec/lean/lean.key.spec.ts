@@ -6,7 +6,7 @@
  * each row in the kernel against `DerivedKey.build` and `DerivedKey.join`. The pool holds the shapes
  * that the builder reads: a plain component, a transform that gives a tag and a value, a tagless
  * transform, a transform with a default, a discriminated spec, a `null` arm, and an arm that names
- * one attribute. An item can lack the discriminator or hold a literal that names no arm. A value
+ * one attribute, and a match that nests inside an arm. An item can lack the discriminator or hold a literal that names no arm. A value
  * that holds the separator is a row where the segment list is not usable as a key.
  *
  * The parts of a row come from {@link partsOf}, a second reading of the spec. The test joins the
@@ -30,10 +30,9 @@ type Transform = (value: unknown) => unknown
 type Component = string | readonly [string, Transform, unknown?]
 type Discriminated = {
     readonly discriminator: string
-    readonly spec: Readonly<
-        Record<string, readonly Component[] | string | null>
-    >
+    readonly spec: Readonly<Record<string, Arm>>
 }
+type Arm = readonly Component[] | string | null | Discriminated
 type Spec = readonly Component[] | Discriminated
 type Item = Readonly<Record<string, unknown>>
 type Config = {
@@ -240,100 +239,166 @@ const cases: readonly Case[] = [
         name: 'attributeOnly',
         spec: { discriminator: 'kind', spec: { x: 'b', y: 'c' } },
     },
+    {
+        name: 'nested',
+        spec: {
+            discriminator: 'tag',
+            spec: {
+                OBJECT: ['a'],
+                ANIMAL: {
+                    discriminator: 'specie',
+                    spec: {
+                        CAT: null,
+                        HORSE: [['a', tagged]],
+                        DOG: {
+                            discriminator: 'breed',
+                            spec: { LAB: ['a', 'b'], PUG: 'c' },
+                        },
+                    },
+                },
+            },
+        },
+    },
+    {
+        name: 'nestedFlat',
+        spec: {
+            discriminator: 'kind',
+            spec: {
+                x: {
+                    discriminator: 'sub',
+                    spec: { p: ['a'], q: 'b', r: null },
+                },
+                y: ['a', 'b'],
+                z: null,
+            },
+        },
+    },
     { name: 'dashPlain', spec: ['a', 'b'], separator: '-' },
     { name: 'dashTagless', spec: [['a', tagless], 'b'], separator: '-' },
 ]
 
-const isDiscriminated = (spec: Spec): spec is Discriminated =>
-    !Array.isArray(spec)
+const isDiscriminated = (arm: Arm): arm is Discriminated =>
+    typeof arm === 'object' && arm !== null && !Array.isArray(arm)
 
-/** The arm of a spec as a tree, with the parts that the host evaluated for the item. */
-const armTree = (
-    arm: readonly Component[] | string | null,
-    item: Item,
-    depth: number | undefined,
-    separator: string,
-): KeyTree => ({
-    kind: 'arm',
-    arm:
-        arm === null
-            ? { kind: 'null' }
-            : typeof arm === 'string'
-              ? { kind: 'attr', name: arm }
-              : {
-                    kind: 'leaf',
-                    full: arm.length,
-                    parts: partsOf(arm, item, depth, separator),
-                },
-})
-
-/** The tree of a spec for an item: each arm is evaluated, and the item selects one. */
+/** The tree of an arm for an item: each arm is evaluated, and the item selects one. */
 const treeOf = (
-    spec: Spec,
+    arm: Arm,
     item: Item,
     depth: number | undefined,
     separator: string,
 ): KeyTree =>
-    isDiscriminated(spec)
+    isDiscriminated(arm)
         ? {
               kind: 'match',
-              discriminator: spec.discriminator,
-              arms: Object.entries(spec.spec).map(
-                  ([literal, arm]) =>
-                      [literal, armTree(arm, item, depth, separator)] as const,
+              discriminator: arm.discriminator,
+              arms: Object.entries(arm.spec).map(
+                  ([literal, inner]) =>
+                      [literal, treeOf(inner, item, depth, separator)] as const,
               ),
           }
-        : armTree(spec, item, depth, separator)
+        : {
+              kind: 'arm',
+              arm:
+                  arm === null
+                      ? { kind: 'null' }
+                      : typeof arm === 'string'
+                        ? { kind: 'attr', name: arm }
+                        : {
+                              kind: 'leaf',
+                              full: arm.length,
+                              parts: partsOf(arm, item, depth, separator),
+                          },
+          }
 
-/** The printed attributes that the tree reads: each discriminator, and each attribute of an arm. */
-const itemOf = (spec: Spec, item: Item): KeyRow['item'] => {
-    const names = isDiscriminated(spec)
-        ? [
-              spec.discriminator,
-              ...Object.values(spec.spec).filter(
-                  (arm): arm is string => typeof arm === 'string',
-              ),
-          ]
-        : []
-    return [...new Set(names)].flatMap((name) => {
+/** The attributes that a tree reads: each discriminator, and each attribute that an arm names. */
+const readNames = (arm: Arm): string[] =>
+    isDiscriminated(arm)
+        ? [arm.discriminator, ...Object.values(arm.spec).flatMap(readNames)]
+        : typeof arm === 'string'
+          ? [arm]
+          : []
+
+/** The printed attributes of the item that the tree reads. */
+const itemOf = (spec: Spec, item: Item): KeyRow['item'] =>
+    [...new Set(readNames(spec))].flatMap((name) => {
         const value = item[name]
         return value === undefined || value === null
             ? []
             : [[name, String(value)] as const]
     })
-}
 
-const componentsOf = (spec: Spec): readonly (readonly Component[])[] =>
-    isDiscriminated(spec)
-        ? Object.values(spec.spec).flatMap((arm) =>
-              arm === null || typeof arm === 'string' ? [] : [arm],
-          )
-        : [spec]
+/** The components of each list arm of a spec, at each depth. */
+const componentsOf = (arm: Arm): readonly (readonly Component[])[] =>
+    isDiscriminated(arm)
+        ? Object.values(arm.spec).flatMap(componentsOf)
+        : Array.isArray(arm)
+          ? [arm as readonly Component[]]
+          : []
 
-const attributesOf = (spec: Spec): string[] =>
-    isDiscriminated(spec)
-        ? Object.values(spec.spec).filter(
-              (arm): arm is string => typeof arm === 'string',
-          )
-        : []
-
+/** The attributes that a spec reads, other than its discriminators: components and named attributes. */
 const namesOf = (spec: Spec): string[] => [
     ...new Set([
         ...componentsOf(spec)
             .flat()
             .map((c) => (typeof c === 'string' ? c : c[0])),
-        ...attributesOf(spec),
+        ...readNames(spec).filter(
+            (name) => !discriminatorsOf(spec).includes(name),
+        ),
     ]),
 ]
 
-/** The items of a case: the full item, and each used attribute absent, empty, null and with the separator. */
+const discriminatorsOf = (arm: Arm): string[] =>
+    isDiscriminated(arm)
+        ? [
+              arm.discriminator,
+              ...Object.values(arm.spec).flatMap(discriminatorsOf),
+          ]
+        : []
+
+type Path = Readonly<Record<string, string>>
+
+/** The assignments of discriminators that reach each arm that is not a match. */
+const pathsOf = (arm: Arm): Path[] =>
+    isDiscriminated(arm)
+        ? Object.entries(arm.spec).flatMap(([literal, inner]) =>
+              pathsOf(inner).map((path) => ({
+                  [arm.discriminator]: literal,
+                  ...path,
+              })),
+          )
+        : [{}]
+
+/** Each match of a spec, with the assignments that reach it. */
+const stopsOf = (
+    arm: Arm,
+    prefix: Path = {},
+): { prefix: Path; discriminator: string }[] =>
+    isDiscriminated(arm)
+        ? [
+              { prefix, discriminator: arm.discriminator },
+              ...Object.entries(arm.spec).flatMap(([literal, inner]) =>
+                  stopsOf(inner, { ...prefix, [arm.discriminator]: literal }),
+              ),
+          ]
+        : []
+
+/** The literals that name a property of `Object.prototype`, which name no arm. */
+const prototypeNames = [
+    'constructor',
+    'toString',
+    '__proto__',
+    'hasOwnProperty',
+]
+
+/**
+ * The items of a case: for each path of literals the full item, and each used attribute absent,
+ * empty, null and with the separator. At each match: an absent discriminator, an empty one, a null
+ * one, a literal that names no arm, and each literal that names a property of the prototype.
+ */
 const itemsOf = (one: Case): Item[] => {
     const sep = one.separator ?? '#'
-    const kinds = isDiscriminated(one.spec)
-        ? Object.keys(one.spec.spec)
-        : [base.kind]
-    const withKinds = kinds.flatMap((kind) => {
-        const start: Item = { ...base, kind }
+    const onPaths = pathsOf(one.spec).flatMap((path) => {
+        const start: Item = { ...base, ...path }
         const items: Item[] = [start]
         for (const name of namesOf(one.spec)) {
             const { [name]: _dropped, ...without } = start
@@ -346,15 +411,18 @@ const itemsOf = (one: Case): Item[] => {
         }
         return items
     })
-    return isDiscriminated(one.spec)
-        ? [
-              ...withKinds,
-              { ...base, kind: 'w' },
-              { ...base, kind: '' },
-              { ...base, kind: null },
-              (({ kind: _kind, ...rest }) => rest)(base),
-          ]
-        : withKinds
+    const atMatches = stopsOf(one.spec).flatMap(({ prefix, discriminator }) => {
+        const start: Item = { ...base, ...prefix }
+        const { [discriminator]: _gone, ...absent } = start
+        return [
+            absent,
+            ...['w', '', null, ...prototypeNames].map((value) => ({
+                ...start,
+                [discriminator]: value,
+            })),
+        ]
+    })
+    return [...onPaths, ...atMatches]
 }
 
 const depths: readonly (number | undefined)[] = [undefined, 0, 1, 2]
@@ -456,31 +524,35 @@ describe('the derived key rows, against the model of a key', () => {
         expect(attr.some((row) => row.outcome.kind === 'nothing')).toBe(true)
     })
 
-    // The builder reads `spec[literal]` through the prototype chain, so a literal that names a
-    // property of `Object.prototype` gives no key, where the model selects no arm and the builder
-    // throws for any other unknown literal. The row is not in the pool, because the kernel would
-    // refuse it. The test passes while the builder is wrong and fails at the fix, which then moves
-    // the row into the pool.
-    it.fails(
-        'refuses a literal that names a property of the prototype, as it refuses any literal that names no arm',
-        () => {
-            const run = builderOf(
-                { discriminator: 'kind', spec: { x: ['a'], z: null } },
-                '#',
+    // The builder reads an arm as an own property, so a literal that names a property of the
+    // prototype names no arm: the model selects `missing` and the builder throws, as for any other
+    // unknown literal.
+    it('refuses a literal that names a property of the prototype, at each level, as the model selects no arm', () => {
+        for (const name of prototypeNames) {
+            const drawn = rows.filter((row) =>
+                row.item.some(([, value]) => value === name),
             )
-            for (const kind of [
-                'constructor',
-                'toString',
-                '__proto__',
-                'hasOwnProperty',
-            ])
-                expect(() => run('K', { kind, a: '1' }, {}), kind).toThrow(
-                    RotoriseError,
-                )
-        },
-    )
+            expect(drawn.length, name).toBeGreaterThan(0)
+            for (const row of drawn)
+                expect(row.outcome, `${name} in ${row.name}`).toEqual({
+                    kind: 'refused',
+                })
+        }
+    })
 
-    it('emits a nested tree, which the host does not read yet', () => {
+    it('draws a nested match, and an item that the inner match selects', () => {
+        const nested = rows.filter(
+            (row) =>
+                row.tree.kind === 'match' &&
+                row.tree.arms.some(([, arm]) => arm.kind === 'match'),
+        )
+        expect(nested.length).toBeGreaterThan(0)
+        expect(nested.some((row) => row.outcome.kind === 'key')).toBe(true)
+        expect(nested.some((row) => row.outcome.kind === 'nothing')).toBe(true)
+        expect(nested.some((row) => row.outcome.kind === 'refused')).toBe(true)
+    })
+
+    it('emits a nested tree as a nested match', () => {
         const leaf: KeyTree = {
             kind: 'arm',
             arm: {

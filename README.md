@@ -181,6 +181,40 @@ ItemTable.key('PK', { kind: 'refund', orderId: 'o1', refundId: 'r1' })
 
 Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs that don't apply to all variants).
 
+An arm can be a discriminated spec of the variants that its literal selects, so a key follows a
+hierarchy of unions. An inner discriminator exists only on the variants of its arm. A literal that
+names no arm throws, at each level.
+
+```ts
+type Thing =
+  | { TAG: 'OBJECT'; id: string; material: string }
+  | { TAG: 'ANIMAL'; SPECIE: 'CAT'; id: string; color: string }
+  | { TAG: 'ANIMAL'; SPECIE: 'DOG'; BREED: 'LAB' | 'PUG'; id: string }
+
+const ThingTable = tableEntry<Thing>()({
+  PK: ['id'],
+  SK: {
+    discriminator: 'TAG',
+    spec: {
+      OBJECT: ['material', 'id'],
+      ANIMAL: {
+        discriminator: 'SPECIE',
+        spec: {
+          CAT: ['color', 'id'],
+          DOG: { discriminator: 'BREED', spec: { LAB: ['BREED', 'id'], PUG: null } },
+        },
+      },
+    },
+  },
+})
+
+ThingTable.key('SK', { TAG: 'OBJECT', id: '1', material: 'wood' })
+// => 'MATERIAL#wood#ID#1'
+
+ThingTable.key('SK', { TAG: 'ANIMAL', SPECIE: 'DOG', BREED: 'LAB', id: '4' })
+// => 'BREED#LAB#ID#4'
+```
+
 ### Preconditions of a Narrowed Path
 
 `at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.

@@ -241,7 +241,14 @@ type ComputeTableKeyType<
       ? Replace<Entity[Spec], null, undefined>
       : Spec extends null
         ? NullAs
-        : never
+        : Spec extends DiscriminatedSchemaShape
+          ? ComputeTableKeyType<
+                Entity,
+                ValueOf<Spec['spec'], ValueOf<Entity, Spec['discriminator']>>,
+                Separator,
+                NullAs
+            >
+          : never
 
 type TableEntryImpl<
     Entity,
@@ -314,6 +321,21 @@ type ValidateInputSpec<T> = {
 
 type Tuple3 = { length: 3 }
 
+// The arms of a match are validated one by one, and an arm that is a match validates its arms.
+type ValidateMatch<M> = M extends {
+    discriminator: unknown
+    spec: infer Spec
+}
+    ? {
+          discriminator: M['discriminator']
+          spec: {
+              [SV in keyof Spec]: Spec[SV] extends { discriminator: unknown }
+                  ? ValidateMatch<Spec[SV]>
+                  : ValidateInputSpec<Spec[SV]>
+          }
+      }
+    : never
+
 // True if any spec entry in V is a 3-tuple. Recurses into discriminated specs.
 type NeedsValidation<V> = V extends readonly unknown[]
     ? Extract<V[number], Tuple3>
@@ -329,14 +351,9 @@ type ValidateSchema<Schema> = [NeedsValidation<Schema[keyof Schema]>] extends [
     : {
           [K in keyof Schema]: Schema[K] extends {
               discriminator: unknown
-              spec: infer Spec
+              spec: unknown
           }
-              ? {
-                    discriminator: Schema[K]['discriminator']
-                    spec: {
-                        [SV in keyof Spec]: ValidateInputSpec<Spec[SV]>
-                    }
-                }
+              ? ValidateMatch<Schema[K]>
               : ValidateInputSpec<Schema[K]>
       }
 
@@ -359,23 +376,46 @@ type FullKeySpecSimple<Entity> =
 
 type FullKeySpecSimpleShape = InputSpecShape | string | null
 
-type DiscriminatedSchema<Entity, E> = {
-    [key in keyof E]: E[key] extends PropertyKey
+/**
+ * The attributes that a match can read. Below a match, an attribute that the variant holds as one
+ * literal has nothing to select, and an attribute that selected an arm above is used.
+ */
+type OpenKeys<E, Used extends PropertyKey> = {
+    [K in Exclude<keyof E, Used>]: [Used] extends [never]
+        ? K
+        : IsUnion<E[K]> extends true
+          ? K
+          : never
+}[Exclude<keyof E, Used>]
+
+/**
+ * A match: a discriminator and one arm for each literal of the attribute. An arm reads only the
+ * variant that its literal selects, and is a key spec of that variant, so an arm can be a match
+ * on an attribute that only that variant has. `Used` holds the discriminators above the match: an
+ * attribute that already selected an arm selects nothing again.
+ */
+type DiscriminatedSchema<Entity, E, Used extends PropertyKey = never> = {
+    [key in OpenKeys<E, Used>]: E[key] extends PropertyKey
         ? {
               discriminator: key
               spec: {
-                  [val in E[key]]: FullKeySpecSimple<
+                  [val in E[key]]: NestedKeySpec<
                       Extract<
                           Entity,
                           {
                               [k in key]: val
                           }
-                      >
+                      >,
+                      Used | key
                   >
               }
           }
         : never
-}[keyof E]
+}[OpenKeys<E, Used>]
+
+type NestedKeySpec<Entity, Used extends PropertyKey> =
+    | FullKeySpecSimple<Entity>
+    | DiscriminatedSchema<Entity, MergeIntersectionObject<Entity>, Used>
 
 type FullKeySpec<Entity> =
     | FullKeySpecSimple<Entity>
@@ -407,6 +447,27 @@ const chainableNoOpProxy: unknown = new Proxy(() => chainableNoOpProxy, {
     get: () => chainableNoOpProxy,
 })
 
+/** A key spec that matches: a discriminator and one arm for each literal. */
+const isMatch = (
+    value: unknown,
+): value is { discriminator: PropertyKey; spec: Record<string, unknown> } =>
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'discriminator' in value &&
+    'spec' in value
+
+/** The match that the run-time builders accept: the type level checks each arm against its variant. */
+type ErasedMatch<Entity> = {
+    discriminator: keyof Entity
+    spec: {
+        [val in string]:
+            | InputSpec<MergeIntersectionObject<Entity>>[]
+            | keyof Entity
+            | ErasedMatch<Entity>
+    }
+}
+
 const key =
     <const Entity>() =>
     <
@@ -414,14 +475,7 @@ const key =
             string,
             | InputSpec<MergeIntersectionObject<Entity>>[]
             | keyof Entity
-            | {
-                  discriminator: keyof Entity
-                  spec: {
-                      [val in string]:
-                          | InputSpec<MergeIntersectionObject<Entity>>[]
-                          | keyof Entity
-                  }
-              }
+            | ErasedMatch<Entity>
         >,
         Separator extends string = '#',
     >(
@@ -451,28 +505,38 @@ const key =
         if (Array.isArray(case_)) {
             structure = case_
         } else if (typeof case_ === 'object') {
-            const discriminator =
-                attributes[case_.discriminator as keyof Attributes]
-            if (discriminator === undefined) {
-                throw new RotoriseError(
-                    `Discriminator ${case_.discriminator.toString()} not found in ${JSON.stringify(attributes)}`,
-                )
+            // a match selects an arm by the value of its discriminator, and the arm can be a match.
+            // The arm is read as an own property, so a literal that names a property of the
+            // prototype names no arm. An error names the discriminator and holds no value.
+            let arm: unknown = case_
+            while (isMatch(arm)) {
+                const discriminatorName = arm.discriminator
+                const discriminator =
+                    attributes[discriminatorName as keyof Attributes]
+                if (discriminator === undefined) {
+                    throw new RotoriseError(
+                        `Discriminator ${String(discriminatorName)} not found in the attributes`,
+                    )
+                }
+                const literal = String(discriminator)
+                arm = Object.hasOwn(arm.spec, literal)
+                    ? arm.spec[literal]
+                    : undefined
+                if (arm === undefined) {
+                    throw new RotoriseError(
+                        `Discriminator value of ${String(discriminatorName)} not found in the spec`,
+                    )
+                }
             }
-            const val = case_.spec[discriminator as keyof typeof case_.spec]
-            if (val === undefined) {
-                throw new RotoriseError(
-                    `Discriminator value ${discriminator?.toString()} not found in ${JSON.stringify(attributes)}`,
-                )
-            }
-            if (val === null) {
+            if (arm === null) {
                 return undefined
             }
 
-            if (!Array.isArray(val)) {
-                return attributes[val as keyof Attributes] as never
+            if (!Array.isArray(arm)) {
+                return attributes[arm as keyof Attributes] as never
             }
 
-            structure = val
+            structure = arm as typeof structure
         } else {
             const value = attributes[case_ as keyof Attributes]
             if (value == null) return undefined as never
@@ -553,14 +617,7 @@ const toEntry =
             string,
             | InputSpec<MergeIntersectionObject<Entity>>[]
             | keyof Entity
-            | {
-                  discriminator: keyof Entity
-                  spec: {
-                      [val in string]:
-                          | InputSpec<MergeIntersectionObject<Entity>>[]
-                          | keyof Entity
-                  }
-              }
+            | ErasedMatch<Entity>
         >,
         Separator extends string = '#',
     >(
@@ -659,7 +716,9 @@ type ProcessSpecType<
         >
       : Spec extends null | undefined
         ? unknown
-        : ErrorMessage<'Invalid Spec: Expected string, InputSpecShape, null or undefined'>
+        : Spec extends DiscriminatedSchemaShape
+          ? OptimizedAttributes<Entity, Spec, Config>
+          : ErrorMessage<'Invalid Spec: Expected string, InputSpecShape, null, undefined or a match'>
 
 // Cache commonly used conditional types
 type SpecConfig<Spec> = Spec extends string ? never : SpecConfigShape
@@ -738,7 +797,16 @@ type ProcessKey<
           >
         : Spec extends null | undefined
           ? NullAs
-          : ErrorMessage<'Invalid Spec'>
+          : Spec extends DiscriminatedSchemaShape
+            ? ProcessKey<
+                  Entity,
+                  ValueOf<Spec['spec'], ValueOf<Entity, Spec['discriminator']>>,
+                  Separator,
+                  NullAs,
+                  Config,
+                  Attributes
+              >
+            : ErrorMessage<'Invalid Spec'>
 
 type OptimizedBuiltKey<
     Entity,
@@ -1506,7 +1574,9 @@ const componentsOf = (
             for (const variant of Object.values(variants ?? {})) walk(variant)
             return
         }
-        walk(variants?.[String(chosen)])
+        // an own property, so a value that names a property of the prototype names no variant
+        if (variants !== undefined && Object.hasOwn(variants, String(chosen)))
+            walk(variants[String(chosen)])
     }
 
     walk(spec)

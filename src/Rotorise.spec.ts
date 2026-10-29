@@ -579,6 +579,83 @@ describe('DynamoDB Utils', () => {
                                           ]
                                     >
                                   | null
+                                  | {
+                                        discriminator: 'a'
+                                        spec: {
+                                            a1:
+                                                | 'a'
+                                                | 'b'
+                                                | 'c'
+                                                | 'z'
+                                                | NonEmptyArray<
+                                                      | 'a'
+                                                      | 'b'
+                                                      | 'c'
+                                                      | 'z'
+                                                      | [
+                                                            'a',
+                                                            (
+                                                                key: 'a1',
+                                                            ) => TransformShape,
+                                                        ]
+                                                      | [
+                                                            'b',
+                                                            (
+                                                                key: 1n,
+                                                            ) => TransformShape,
+                                                        ]
+                                                      | [
+                                                            'c',
+                                                            (
+                                                                key: true,
+                                                            ) => TransformShape,
+                                                        ]
+                                                      | [
+                                                            'z',
+                                                            (
+                                                                key: 'never',
+                                                            ) => TransformShape,
+                                                        ]
+                                                  >
+                                                | null
+                                            a2:
+                                                | 'a'
+                                                | 'b'
+                                                | 'c'
+                                                | 'z'
+                                                | NonEmptyArray<
+                                                      | 'a'
+                                                      | 'b'
+                                                      | 'c'
+                                                      | 'z'
+                                                      | [
+                                                            'a',
+                                                            (
+                                                                key: 'a2',
+                                                            ) => TransformShape,
+                                                        ]
+                                                      | [
+                                                            'b',
+                                                            (
+                                                                key: 2,
+                                                            ) => TransformShape,
+                                                        ]
+                                                      | [
+                                                            'c',
+                                                            (
+                                                                key: 0,
+                                                            ) => TransformShape,
+                                                        ]
+                                                      | [
+                                                            'z',
+                                                            (
+                                                                key: 'never',
+                                                            ) => TransformShape,
+                                                        ]
+                                                  >
+                                                | null
+                                        }
+                                    }
                           }
                       }
                 >,
@@ -1302,7 +1379,9 @@ describe('DynamoDB Utils', () => {
         // inside the tolerance, so no single change moved the pin out of it
         // 7273 -> 7329: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([7329, 'instantiations'])
+        // 7329 -> 9028: an arm of a match is a key spec of its variant, so each arm of a discriminated
+        // key builds the type of a match that the variant allows, and the schema check reads it
+        attest.instantiations([9028, 'instantiations'])
     })
 
     test('NeedsValidation detects 3-tuples in mixed arrays', () => {

@@ -15,8 +15,8 @@ segments back exactly where the row says so. The host refuses a segment that hol
 because the join of that list is also the join of another list (`DerivedKey.join_collision`). So a
 row of a key holds no such segment, and a row of that refusal states that the model's segments hold
 the separator. The empty segment list is the one list that the host joins and the read does not
-give back. A tree can nest a match inside an arm. The host reads no nested arm yet, so no row of the
-pool holds one.
+give back. A tree can nest a match inside an arm, and the host builds one: the arm of a match is selected
+by recursion, as `KeyMatch.select` states.
 -/
 
 namespace Calculus
