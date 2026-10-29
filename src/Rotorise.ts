@@ -1,10 +1,10 @@
 import type {
-    Attribute,
     AttributeMap,
     AttributeValue,
+    Carrying,
     StoredItem,
 } from './codec/attribute'
-import { carrying } from './codec/attribute'
+import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     Closed,
@@ -19,12 +19,14 @@ import type {
 } from './codec/codec'
 import {
     andThen,
+    CodecError,
     constantOf,
     item as itemOf,
     object,
     orThrow,
     pathBuilder,
 } from './codec/codec'
+import { native } from './codec/native'
 import type { Field } from './codec/term'
 import type {
     DistributiveOmit,
@@ -1220,8 +1222,11 @@ const key =
                     return undefined
                 }
 
+                // an attribute arm holds the value of the attribute. `null` gives no key, as an
+                // attribute key gives none
                 if (!Array.isArray(arm)) {
-                    return valueAt(attributes, String(arm)) as never
+                    return (valueAt(attributes, String(arm)) ??
+                        undefined) as never
                 }
 
                 structure = arm as typeof structure
@@ -1764,17 +1769,22 @@ type EncodedItem<
                     Entry,
                     K,
                     false
-                >]: Attribute<'S'>
+                >]: KeyAttribute<Entry[K & keyof Entry]>
             } & {
                 [K in keyof Schema as NamedKey<
                     Schema,
                     Entry,
                     K,
                     true
-                >]?: Attribute<'S'>
+                >]?: KeyAttribute<Entry[K & keyof Entry]>
             }
         >
       : never
+
+/** The member that a key takes: a string is `S`, and a number is `N`. */
+type KeyAttribute<Value> = Carrying<
+    Value extends string ? 'S' : Value extends number | bigint ? 'N' : never
+>
 
 /**
  * A key the schema names, kept when whether it may be absent matches `Absent`.
@@ -2193,10 +2203,24 @@ type AgreedAttributes<Variants> = {
 /**
  * A built key, as the attribute that carries it.
  *
- * A composite key is a joined string, so `S` is the only member it can take — which is why it is
- * derived here rather than declared in the codec spec beside the attributes it is built from.
+ * A key attribute of DynamoDB is `S`, `N` or `B`. A composite key is a joined string, so it is `S`.
+ * A key of one attribute carries the value of that attribute: a string is `S`, and a number is `N`,
+ * so an `N` sort key orders by number. `native` writes the value, so a value that the store refuses
+ * is refused here too. The refusal names the key and never the value.
  */
-const asKey = (value: unknown): Attribute<'S'> => carrying('S', String(value))
+const asKey = (name: string, value: unknown): Carrying<'S' | 'N'> => {
+    const written = native.encode(value)
+    if (!(written instanceof CodecError)) {
+        const member = memberOf(written)
+        if (member === 'S' && typeof written.S === 'string')
+            return carrying('S', written.S)
+        if (member === 'N' && typeof written.N === 'string')
+            return carrying('N', written.N)
+    }
+    throw new RotoriseError(
+        `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string or a number that DynamoDB stores.`,
+    )
+}
 
 const isTableKey = (spec: unknown): spec is TableKeySpec<unknown> =>
     typeof spec === 'object' && spec !== null && tableKeys.has(spec)
@@ -2716,7 +2740,7 @@ export const tableEntry =
 
                 const built = buildKey(key.name as never, given as never)
                 if (built === undefined) remove.push(key.name)
-                else set[key.name] = asKey(built)
+                else set[key.name] = asKey(key.name, built)
             }
 
             return { set, remove }
@@ -2747,9 +2771,13 @@ export const tableEntry =
 
                 const out: Record<string, AttributeValue> = {}
                 for (const name of names) {
-                    out[name] = asKey(
-                        buildKey(name as never, attributes as never),
-                    )
+                    const built = buildKey(name as never, attributes as never)
+                    if (built === undefined) {
+                        throw new RotoriseError(
+                            `'${name}' gives no key for these attributes, so it cannot address the item`,
+                        )
+                    }
+                    out[name] = asKey(name, built)
                 }
                 return out
             },
@@ -2773,7 +2801,8 @@ export const tableEntry =
                     const built: Record<string, AttributeValue> = {}
                     for (const name of keyNames) {
                         const value = entry[name]
-                        if (value !== undefined) built[name] = asKey(value)
+                        if (value !== undefined)
+                            built[name] = asKey(name, value)
                     }
                     return { ...written, ...built }
                 },
