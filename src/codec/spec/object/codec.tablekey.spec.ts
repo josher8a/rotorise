@@ -7,8 +7,9 @@
  * one means writing a different item. The role is a fact of the table, so the `key` option names
  * the partition key and the sort key once, by name.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
+import type { Attribute } from '../../attribute'
 import { number, string } from '../../codec'
 
 type Adoption = {
@@ -203,5 +204,35 @@ describe('the key option names the keys of the table', () => {
         const Plain = tableEntry<Pet>()({ PK: ['petId'] })
         // @ts-expect-error no key option, so the schema does not say which keys address the table
         expect(() => Plain.keys({ petId: 'p1' })).toThrow(RotoriseError)
+    })
+})
+
+type Litter = { litterId: string; born: number; name: string }
+
+describe('the key option names the keys, and each spec keeps the type that the caller wrote', () => {
+    it('a table key of one attribute keeps the member of its attribute', () => {
+        const Litters = tableEntry<Litter>()(
+            { PK: 'litterId', SK: 'born' },
+            {
+                codec: { litterId: string, born: number, name: string },
+                key: { partition: 'PK', sort: 'SK' },
+            },
+        )
+        const written = Litters.toItem({ litterId: 'l1', born: 9, name: 'a' })
+        if (written instanceof Error) return expect.unreachable()
+        expect(written.SK).toEqual({ N: '9' })
+        expectTypeOf(written.PK).toEqualTypeOf<Attribute<'S'>>()
+        expectTypeOf(written.SK).toEqualTypeOf<Attribute<'N'>>()
+    })
+
+    it('roles with no sort key name the partition key alone, so another key is rebuilt', () => {
+        const Litters = tableEntry<Litter>()(
+            { PK: ['litterId'], SK: 'name' },
+            { key: { partition: 'PK' } },
+        )
+        expect(Litters.keyUpdates({ name: 'b' })).toEqual({
+            set: { SK: { S: 'b' } },
+            remove: [],
+        })
     })
 })

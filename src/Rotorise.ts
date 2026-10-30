@@ -1703,6 +1703,7 @@ type TableEntryDefinition<
     Separator extends string,
     CodecSpec = undefined,
     CodecRest = undefined,
+    Roles = undefined,
 > = {
     /**
      * Converts a raw entity into a complete table entry with all keys computed.
@@ -1777,7 +1778,7 @@ type TableEntryDefinition<
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
         changed: Changed &
-            KeyUpdateRefusal<Schema, Changed, DecidedValues<CodecSpec>>,
+            KeyUpdateRefusal<Schema, Roles, Changed, DecidedValues<CodecSpec>>,
     ) => KeyUpdate<AbsentKeyNames<Schema>>
 
     /**
@@ -1808,7 +1809,7 @@ type TableEntryDefinition<
 } & ([CodecSpec] extends [undefined]
     ? Record<never, never>
     : EntryCodecMethods<Entity, Schema, CodecSpec, CodecRest, Separator>) &
-    ([TableKeys<Schema>] extends [never]
+    ([TableKeys<Roles>] extends [never]
         ? Record<never, never>
         : {
               /**
@@ -1999,15 +2000,6 @@ type EncodedAttributes<CodecSpec, CodecRest> =
           : Encoded<CodecSpec>
 
 /**
- * Marks a key of the table at the type level.
- *
- * {@link Roled} writes the mark from the `key` option, so a spec that the caller wrote carries no
- * mark. {@link TableKeys} and {@link MovesTheItem} read it to decide what
- * {@link TableEntryDefinition.keyUpdates} may rebuild.
- */
-declare const tableKeyMark: unique symbol
-
-/**
  * The primary key of the table: the name of the partition key, and the name of the sort key.
  *
  * DynamoDB addresses an item by one partition key and at most one sort key, and cannot update
@@ -2018,19 +2010,18 @@ export type KeyRoles<Name extends string = string> = {
     readonly sort?: Name
 }
 
-/** The names that the roles give, in role order. */
-type RoleNames<Roles> = Roles extends KeyRoles
-    ? Roles['partition'] | Exclude<Roles['sort'], undefined>
+/**
+ * The keys that the `key` option names. Roles without a sort key name the partition key alone. The
+ * roles are a parameter of the entry and not a mark on a spec, so a spec keeps the type that the
+ * caller wrote.
+ */
+export type TableKeys<Roles> = Roles extends KeyRoles
+    ?
+          | Roles['partition']
+          | (Roles extends { readonly sort: infer Sort extends string }
+                ? Sort
+                : never)
     : never
-
-/** The schema with the mark on each key that a role names. */
-type Roled<Schema, Roles> = [RoleNames<Roles>] extends [never]
-    ? Schema
-    : {
-          [K in keyof Schema]: K extends RoleNames<Roles>
-              ? Schema[K] & { readonly [tableKeyMark]: true }
-              : Schema[K]
-      }
 
 /** Nothing, or why the sort key names the partition key. */
 type DistinctRoles<Roles> = Roles extends {
@@ -2050,13 +2041,6 @@ type DeepMutable<T> = T extends (...args: never[]) => unknown
     : T extends object
       ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
       : T
-
-/** The keys that the `key` option names. */
-export type TableKeys<Schema> = {
-    [K in keyof Schema]: Schema[K] extends { readonly [tableKeyMark]: true }
-        ? K
-        : never
-}[keyof Schema]
 
 /**
  * The components that a write to one of the names changes: a component is related to a name when
@@ -2088,13 +2072,13 @@ type HeldBy<Components, Names> = Components extends string
  * and an `UpdateItem` carrying a key attribute is rejected by the service anyway; catching it here
  * says why, which the service's error does not.
  */
-export type MovesTheItem<Schema, Changed> = {
-    [K in TableKeys<Schema>]: [
+export type MovesTheItem<Schema, Roles, Changed> = {
+    [K in TableKeys<Roles> & keyof Schema]: [
         TouchedBy<KeyComponents<Schema[K]>, keyof Changed>,
     ] extends [never]
         ? never
         : K
-}[TableKeys<Schema>]
+}[TableKeys<Roles> & keyof Schema]
 
 /** The `SET` and `REMOVE` clauses of the key part of an update. A key name is in one clause only. */
 type KeyUpdate<RemovableName extends string> = {
@@ -2218,13 +2202,13 @@ type BlockOf<Schema, Given, Known, Block> = {
  *
  * `never` when the block moves no item.
  */
-type FrozenBy<Schema, Given, Block> = {
-    [K in TableKeys<Schema>]: [
+type FrozenBy<Schema, Roles, Given, Block> = {
+    [K in TableKeys<Roles> & keyof Schema]: [
         TouchedBy<KeyComponents<Schema[K], Given>, Block>,
     ] extends [never]
         ? never
         : K
-}[TableKeys<Schema>]
+}[TableKeys<Roles> & keyof Schema]
 
 /**
  * Nothing, or why a change is not a union of blocks.
@@ -2234,16 +2218,17 @@ type FrozenBy<Schema, Given, Block> = {
  * of a table key, the message names the table key and says that the block is frozen. The block is
  * bound once with `infer`: naming it twice evaluates it twice.
  */
-type KeyUpdateRefusal<Schema, Changed, Decided> = KeyRefusal<
+type KeyUpdateRefusal<Schema, Roles, Changed, Decided> = KeyRefusal<
     Schema,
+    Roles,
     Changed,
     keyof Decided,
     Changed & Decided
 >
 
-type KeyRefusal<Schema, Changed, Known, Given> = [
+type KeyRefusal<Schema, Roles, Changed, Known, Given> = [
     | MissingComponents<Schema, Changed, Known, Given>
-    | MovesTheItem<Schema, Omit<Changed, Known & string>>,
+    | MovesTheItem<Schema, Roles, Omit<Changed, Known & string>>,
 ] extends [never]
     ? unknown
     : BlockOf<
@@ -2252,9 +2237,9 @@ type KeyRefusal<Schema, Changed, Known, Given> = [
             Known,
             Exclude<keyof Changed, Known>
         > extends infer Block
-      ? [FrozenBy<Schema, Given, Block>] extends [never]
+      ? [FrozenBy<Schema, Roles, Given, Block>] extends [never]
           ? ErrorMessage<`[keyUpdates] this change touches a key and lacks '${Exclude<Block, HeldBy<Block, keyof Changed | Known>> & string}', which the keys tie to what it writes. Write the whole block`>
-          : ErrorMessage<`[keyUpdates] '${FrozenBy<Schema, Given, Block> & string}' is a table key that holds '${TouchedBy<KeyComponents<Schema[FrozenBy<Schema, Given, Block> & keyof Schema], Given>, Block> & string}', and the block of this change is frozen: a rewrite would move the item. DynamoDB cannot update a key attribute`>
+          : ErrorMessage<`[keyUpdates] '${FrozenBy<Schema, Roles, Given, Block> & string}' is a table key that holds '${TouchedBy<KeyComponents<Schema[FrozenBy<Schema, Roles, Given, Block> & keyof Schema], Given>, Block> & string}', and the block of this change is frozen: a rewrite would move the item. DynamoDB cannot update a key attribute`>
       : never
 
 /**
@@ -2693,7 +2678,7 @@ export const tableEntry =
                         } & WritesRow<
                             Pinned,
                             Entity,
-                            Roled<ExpandCases<Schema>, Roles>,
+                            ExpandCases<Schema>,
                             CodecSpec,
                             CodecRest,
                             Separator
@@ -2701,10 +2686,11 @@ export const tableEntry =
               ]
     ): TableEntryDefinition<
         Entity,
-        Roled<ExpandCases<Schema>, Roles>,
+        ExpandCases<Schema>,
         Separator,
         CodecSpec,
-        CodecRest
+        CodecRest,
+        Roles
     > => {
         // a bare string is the separator; anything else carries it alongside the codec
         const {
