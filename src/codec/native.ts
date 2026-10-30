@@ -45,6 +45,7 @@ import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
 import { opaqueTerms, storedNumber, storedTooDeeply } from './denote'
+import { rendered } from './value'
 
 /**
  * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
@@ -261,7 +262,7 @@ const toNative = (
             : carrying('S', value)
     }
     return new CodecError(
-        `Unsupported type passed: ${String(value)}. Pass options.convertClassInstanceToMap=true to marshall typeof object as map attribute.`,
+        `Unsupported type passed: ${rendered(value)}. Pass options.convertClassInstanceToMap=true to marshall typeof object as map attribute.`,
     )
 }
 

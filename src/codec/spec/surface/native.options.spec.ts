@@ -130,6 +130,16 @@ describe('the two options a type cannot reflect', () => {
         ).toEqual({ M: { id: { S: 't' } } })
     })
 
+    it('refuses a class instance whose own rendering throws, rather than throwing with it', () => {
+        // the refusal names the value it rejects, and naming it runs the caller's toString
+        class Hostile {
+            toString(): string {
+                throw new Error('toString threw')
+            }
+        }
+        expect(encoded(new Hostile())).toBe('refused')
+    })
+
     it('and a boolean is a boolean regardless', () => {
         attest<[native.Encode<boolean>], [BOOL]>()
         expect(encoded(true)).toEqual({ BOOL: true })

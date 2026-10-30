@@ -157,41 +157,6 @@ asked to discharge the stronger one. That is a specification decision.
 
 ---
 
-## Known: a refusal renders the value it rejects, and one rendering path is unguarded
-
-**Observation.** Naming a value runs that value's own conversion, which is caller code. A value
-with no conversion, or one whose conversion throws, therefore throws from inside the refusal path
-— turning an expected failure into an exception at the one place whose job is to describe a
-failure.
-
-The codec paths are guarded. The renderer in `src/codec/value.ts` catches the conversion at the
-seam and falls back to a shape-only description, and the shape describer beside it composes the
-two, so a value that cannot render is named by its shape alone.
-
-**The marshaller port's fall-through refusal is not guarded.** It interpolates the value directly,
-which runs the same conversion outside any catch. Reproduced 2026-09-07 with a class whose
-conversion throws, marshalled with the class-instance option off:
-
-    native({}).encode(new Hostile())
-    THREW: toString threw
-
-It throws the caller's error out of the write half instead of returning the pair's own error.
-
-**Effect.** A caller who expects a refusal gets an exception, from the branch whose message exists
-to explain the refusal. The write half stops returning an error as a value exactly where the value
-is least well behaved.
-
-**What is mitigated.** Every ground codec and both literal forms route through the guarded seam,
-and a test pins it: it feeds a value built with no prototype to seven codecs and asserts each
-refuses rather than throws. What remains is the marshaller port's fall-through, reached by a class
-instance when the class-instance option is off.
-
-**No total renderer exists to write instead**, because a conversion is arbitrary user code. The
-repair is to route the remaining site through the same seam, not to write a renderer.
-
-
----
-
 ## Partially mitigated: the type level reads a key pinned through a ref as unpinned
 
 **Observation.** A pattern pins a key at the term only where the term holds a literal. The type
