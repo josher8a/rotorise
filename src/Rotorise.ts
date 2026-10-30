@@ -867,14 +867,22 @@ type MemberOf<A> = A extends unknown
       }[AttributeName]
     : never
 
-/** The member that `native` writes for a value: a string is `S`, and a number is `N`. */
+/** The members that DynamoDB stores a key attribute as. */
+type KeyMember = 'S' | 'N' | 'B'
+
+/**
+ * The member that `native` writes for a value: a string is `S`, a number is `N`, and a `Uint8Array`
+ * is `B`.
+ */
 type NativeMember<V> = [NonNullable<V>] extends [never]
     ? never
     : [NonNullable<V>] extends [string]
       ? 'S'
       : [NonNullable<V>] extends [number | bigint]
         ? 'N'
-        : never
+        : [NonNullable<V>] extends [Uint8Array]
+          ? 'B'
+          : never
 
 /**
  * The member that the codec writes at a top-level field, over the options of a tagged codec. `NULL`
@@ -922,7 +930,7 @@ type KeyMembers<E, Enc, Spec> = KeyLeaves<Spec> extends infer N
 
 /**
  * One attribute that is a key, against its member. A key attribute of DynamoDB is `S`, `N` or `B`,
- * and this library writes `S` and `N`, so an attribute of any other member cannot be a key. A key
+ * so an attribute of any other member cannot be a key. A key
  * attribute has one type, so the arms of one key give one member. The refusal names the key and the
  * attribute and holds no value.
  */
@@ -931,20 +939,20 @@ type ValidateLeaf<E, Enc, KeyName extends string, Name extends string, All> = [
 ] extends [infer Own]
     ? [Own] extends [never]
         ? NoKeyMember<KeyName, Name>
-        : [Exclude<Own, 'S' | 'N'>] extends [never]
+        : [Exclude<Own, KeyMember>] extends [never]
           ? IsUnion<Own> extends true
-              ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as S or as N. A key attribute has one type`>
+              ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as more than one type. A key attribute has one type`>
               : IsUnion<All> extends true
                 ? ErrorMessage<`[tableEntry] '${KeyName}' takes '${Name}' as ${Own & string}, and another arm of '${KeyName}' takes another type. A key attribute has one type, so the arms of a key give one member`>
                 : Name
           : NoKeyMember<KeyName, Name>
     : never
 
-/** The refusal of an attribute that is stored as neither `S` nor `N`. */
+/** The refusal of an attribute that is stored as none of `S`, `N` and `B`. */
 type NoKeyMember<
     KeyName extends string,
     Name extends string,
-> = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as neither S nor N. A key attribute of DynamoDB is S, N or B, and this library writes S and N`>
+> = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B`>
 
 /** A key spec against the members of its attributes. A list of components is `S` and needs no check. */
 type ValidateKeyCarrier<
@@ -1943,8 +1951,8 @@ type EncodedItem<
 
 /**
  * The member that a key takes. A key of one attribute takes the member of its attribute, which
- * `Members` holds. A composite key is a joined string, so it takes `S`: a string is `S`, and a number
- * is `N`.
+ * `Members` holds. A composite key is a joined string, so it takes `S`: a string is `S`, a number is
+ * `N`, and a `Uint8Array` is `B`.
  */
 type KeyAttribute<Value, Members = never> = [Members] extends [never]
     ? Carrying<
@@ -1952,7 +1960,9 @@ type KeyAttribute<Value, Members = never> = [Members] extends [never]
               ? 'S'
               : Value extends number | bigint
                 ? 'N'
-                : never
+                : Value extends Uint8Array
+                  ? 'B'
+                  : never
       >
     : Carrying<Members & AttributeName>
 
@@ -2367,30 +2377,37 @@ type AgreedAttributes<Variants> = {
  * A built key, as the attribute that carries it.
  *
  * A key attribute of DynamoDB is `S`, `N` or `B`. A composite key is a joined string, so it is `S`.
- * A key of one attribute carries the value of that attribute: a string is `S`, and a number is `N`,
- * so an `N` sort key orders by number. `native` writes the value, so a value that the store refuses
- * is refused here too. The refusal names the key and never the value.
+ * A key of one attribute carries the value of that attribute: a string is `S`, a number is `N`, and
+ * a `Uint8Array` is `B`, so an `N` sort key orders by number. `native` writes the value, so a value
+ * that the store refuses is refused here too. The refusal names the key and never the value.
  */
-const asKey = (name: string, value: unknown): Carrying<'S' | 'N'> =>
+const asKey = (name: string, value: unknown): Carrying<KeyMember> =>
     keyOfAttribute(name, native.encode(value))
 
 /**
- * A key as the attribute that an encoding wrote: `S` or `N`, and a refusal of any other member.
- * The refusal names the key and holds no value.
+ * A key as the attribute that an encoding wrote: `S`, `N` or `B`, and a refusal of any other member.
+ * DynamoDB refuses an empty `S` or `B` value at a key of a table or an index, so the empty value is
+ * refused here too. The refusal names the key and holds no value.
  */
 const keyOfAttribute = (
     name: string,
     written: AttributeValue | CodecError,
-): Carrying<'S' | 'N'> => {
+): Carrying<KeyMember> => {
     if (!(written instanceof CodecError)) {
         const member = memberOf(written)
-        if (member === 'S' && typeof written.S === 'string')
+        if (member === 'S' && typeof written.S === 'string' && written.S !== '')
             return carrying('S', written.S)
         if (member === 'N' && typeof written.N === 'string')
             return carrying('N', written.N)
+        if (
+            member === 'B' &&
+            written.B instanceof Uint8Array &&
+            written.B.length > 0
+        )
+            return carrying('B', written.B)
     }
     throw new RotoriseError(
-        `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string or a number that DynamoDB stores.`,
+        `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string, a number, or a non-empty Uint8Array.`,
     )
 }
 
@@ -2918,7 +2935,7 @@ export const tableEntry =
             item: Record<string, unknown>,
             value: unknown,
             written?: AttributeMap,
-        ): Carrying<'S' | 'N'> => {
+        ): Carrying<KeyMember> => {
             const field =
                 attributes === undefined
                     ? undefined

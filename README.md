@@ -406,13 +406,18 @@ A write with an empty precondition list needs no condition. Check the list befor
 
 A key attribute of DynamoDB is `S`, `N` or `B`. A list key joins its parts, so it is always `S`. A
 key of one attribute (`GSI1SK: 'age'`, or an attribute arm of a match) copies the attribute, so it
-takes the member of that attribute: a string is `S`, and a number is `N`. With a codec, the key
-takes the member that the codec writes for the field, so a decimal that the codec writes as `N` is
-an `N` key. An `N` sort key orders by number, where an `S` key orders `'10'` before `'9'`.
+takes the member of that attribute: a string is `S`, a number is `N`, and a `Uint8Array` is `B`.
+With a codec, the key takes the member that the codec writes for the field, so a decimal that the
+codec writes as `N` is an `N` key. An `N` sort key orders by number, where an `S` key orders `'10'`
+before `'9'`.
 
-- The type refuses a key of one attribute that is neither `S` nor `N`, such as a boolean.
+- The type refuses a key of one attribute that is none of `S`, `N` and `B`, such as a boolean.
 - One key name has one member, so the type refuses a match whose arms give `S` and `N`.
 - `null` and `undefined` give no key in every method.
+- DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `keys`, `toItem` and
+  `keyUpdates` throw a `RotoriseError` for one. The message names the key and not the value.
+- DynamoDB limits a partition key to 2048 bytes and a sort key to 1024 bytes. DynamoDB refuses a
+  write over the limit, and Rotorise does not check the length.
 
 ### Custom Separator
 
