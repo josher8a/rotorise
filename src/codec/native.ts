@@ -409,12 +409,11 @@ const configured = (
  * Callable *and* a codec, which is what lets `native.encode` and {@link native.Encode} keep the
  * same name — the same shape `opaque` takes for its own policies.
  */
-export const native: AttributeCodec<unknown> & {
-    (
+export const native: AttributeCodec<unknown> &
+    ((
         options?: native.Options,
         deviations?: native.Deviations,
-    ): AttributeCodec<unknown>
-} = Object.assign(
+    ) => AttributeCodec<unknown>) = Object.assign(
     (options: native.Options = {}, deviations: native.Deviations = {}) =>
         configured(options, deviations),
     configured(),
@@ -510,7 +509,10 @@ export namespace native {
      * `undefined` is not a member and never becomes one; an attribute that may be `undefined` is an
      * optional key of the map that holds it, which is where {@link ItemEncode} puts it.
      */
-    export type Encode<T, Of extends Options = {}> = EncodeWith<
+    export type Encode<
+        T,
+        Of extends Options = Record<never, never>,
+    > = EncodeWith<
         T,
         Of['convertEmptyValues'] extends true ? true : false,
         Of['removeUndefinedValues'] extends true ? true : false
@@ -605,7 +607,10 @@ export namespace native {
      * An attribute the entity may not have is an optional key here, because that is what
      * `removeUndefinedValues` produces and what the table then holds.
      */
-    export type ItemEncode<T, Of extends Options = {}> = ItemEncodeWith<
+    export type ItemEncode<
+        T,
+        Of extends Options = Record<never, never>,
+    > = ItemEncodeWith<
         T,
         Of['convertEmptyValues'] extends true ? true : false,
         Of['removeUndefinedValues'] extends true ? true : false

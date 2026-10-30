@@ -96,7 +96,10 @@ const buildFlat = (root: Term, other: Term = root): FlatResult => {
     // a term in place above every guard: an entry of a cycle is visited as an entry
     const keep = (t: Term): void => {
         if (cycles.has(t)) return
-        if (t.kind !== 'ref') return visit(t)
+        if (t.kind !== 'ref') {
+            visit(t)
+            return
+        }
         const target = targetOf(t)
         if (target !== undefined) keep(target)
     }
@@ -1151,15 +1154,21 @@ export const guardAt = (
         const refuse = (what: string) => {
             inexact ??= { segments, what }
         }
-        if (fuel === 0) return refuse('a recursion')
+        if (fuel === 0) {
+            refuse('a recursion')
+            return
+        }
         switch (at.kind) {
             case 'entry':
-                return walk(body(side, at.j), segments, fuel - 1)
+                walk(body(side, at.j), segments, fuel - 1)
+                return
             case 'free':
-                return refuse('a name that no scope binds')
+                refuse('a name that no scope binds')
+                return
             case 'refine':
                 if (belowTopAt(side, at.inner)) refuse('a refinement')
-                return walk(at.inner, segments, fuel)
+                walk(at.inner, segments, fuel)
+                return
         }
         const t = at.t
         switch (t.kind) {
@@ -1214,7 +1223,8 @@ export const guardAt = (
                 conjuncts.push({ segments, exists: true })
                 return
             case 'held':
-                return walk(closedAt(side, t.inner), segments, fuel)
+                walk(closedAt(side, t.inner), segments, fuel)
+                return
             case 'object': {
                 const { rest } = t.body
                 if (
@@ -1237,11 +1247,14 @@ export const guardAt = (
                 return
             }
             case 'list':
-                return refuse('a list')
+                refuse('a list')
+                return
             case 'set':
-                return refuse('a set')
+                refuse('a set')
+                return
             case 'never':
-                return refuse('`never`')
+                refuse('`never`')
+                return
             // the flat scope reads a `ref` as its target or as an entry, and a `refine` as a position
             case 'ref':
             case 'refine':

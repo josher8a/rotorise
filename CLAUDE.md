@@ -270,7 +270,7 @@ Name the command, and quote the output. A report without both is a claim.
 | --- | --- |
 | type checker clean | `npm run check`, which runs `tsc --noEmit` |
 | suite green in the real environment | `npx vitest --run`. `npm test` opens watch mode. A stubbed runner reports a false green |
-| formatter and import order clean | `npm run format:ci`, which runs `biome ci ./src`. The linter lints no file: `docs/defects.md` holds the entry |
+| formatter, import order and linter clean | `npm run format:ci`, which runs `biome ci --error-on-warnings ./src`. A lint warning fails the check. The spec and test files are not linted |
 | published name set | `bash scripts/surface-names.sh --build`, which compares the export set of the three entries against `scripts/surface/*.txt`. Name each move in the commit message |
 | type-level surface | the attest snapshots in `src/Rotorise.attest.test.ts`, against `.attest/assertions/typescript.json` |
 | the Lean side | `formal/scripts/gate.sh`, which gates on the exit code, and reports every check rather than the first failure |

@@ -50,14 +50,17 @@ type TransformOverride<
     Spec extends InputSpecShape,
     K,
     Fallback,
-    Matched = Extract<Spec[number], [K, (...args: any[]) => any, ...any[]]>,
+    Matched = Extract<
+        Spec[number],
+        [K, (...args: never[]) => unknown, ...unknown[]]
+    >,
 > = [Matched] extends [never]
     ? Fallback
     : // Contravariant inference: when the same key appears multiple times with
       // different transforms (e.g. Pick<Obj,'id'> and Pick<Obj,'name'>),
       // this intersects the parameter types rather than unioning them.
       (
-            Matched extends [any, (x: infer P) => any, ...any[]] // biome-ignore lint/suspicious/noExplicitAny: inference
+            Matched extends [unknown, (x: infer P) => unknown, ...unknown[]]
                 ? (x: P) => void
                 : never
         ) extends (x: infer I) => void
@@ -408,12 +411,10 @@ type DiscriminatedSchemaShape = {
     }
 }
 
-type InputSpecShape =
-    // biome-ignore lint/suspicious/noExplicitAny: key type is erased at runtime, any is needed for structural matching
-    (
-        | [PropertyKey, ((key: any) => unknown) | TagOptions, ...unknown[]]
-        | PropertyKey
-    )[]
+type InputSpecShape = (
+    | [PropertyKey, ((key: never) => unknown) | TagOptions, ...unknown[]]
+    | PropertyKey
+)[]
 
 export type TransformShape =
     | {
@@ -589,11 +590,10 @@ type InputSpec<E> =
 // the transform's param type. The `Schema & ValidateSchema<Schema>` intersection
 // then rejects defaults that don't match the transform param (e.g. `{}`).
 
-// biome-ignore lint/suspicious/noExplicitAny: structural matching
 type ValidateInputSpec<T> = {
     [I in keyof T]: T[I] extends readonly [
         unknown,
-        (arg: infer P) => any,
+        (arg: infer P) => unknown,
         unknown,
     ]
         ? [T[I][0], T[I][1], P]

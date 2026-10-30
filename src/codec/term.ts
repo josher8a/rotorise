@@ -653,7 +653,7 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
             return [baseMember[t.base]]
         case 'set': {
             const read = occA(t.elem)
-            return read && read.flatMap((one) => setMemberOf(one) ?? [])
+            return read?.flatMap((one) => setMemberOf(one) ?? [])
         }
         case 'list':
             return ['L']
@@ -1102,15 +1102,19 @@ export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
                 if (t.body.rest !== undefined) walk(t.body.rest)
                 return
             case 'union':
-                return t.options.forEach(walk)
+                t.options.forEach(walk)
+                return
             case 'set':
-                return walk(t.elem)
+                walk(t.elem)
+                return
             case 'held':
                 walk(t.inner)
-                return walk(t.outer)
+                walk(t.outer)
+                return
             case 'refine':
             case 'legacy':
-                return walk(t.inner)
+                walk(t.inner)
+                return
             default:
                 return
         }

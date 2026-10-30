@@ -15,32 +15,6 @@ moves and a declaration name does not.
 
 ---
 
-## Known: the linter of this repository lints no file
-
-**Observation.** The linter include list in `biome.json` reads "!/src/\*\*/\*.spec.ts" then "/src/\*\*". The
-leading `/` matches no path. Measured 2026-09-07:
-
-    npx biome lint src/codec/codec.ts
-    Checked 0 files.  i These paths were provided but ignored: - src/codec/codec.ts
-
-Every file of `src/` answers the same way. Dropping the leading slash makes the linter run and
-report 6 errors in that one file.
-
-**Effect.** `npm run format:ci` exits 0 and reports 71 files checked, measured 2026-09-23. Those 71
-are the formatter and the import sorter. The linter contributes nothing to any gate, so a lint class this repository has
-switched on is unenforced. Whole-tree counts the moment the glob is corrected: **15 errors and 13
-warnings** with the spec exemption intact, and **32 errors and 35 warnings** with the specs linted,
-13 spec files carrying diagnostics.
-
-**Pin.** None. No test asserts that the linter runs, which is why the glob could stop matching
-without any check moving. `biome lint <file>` is the instrument that answers; `biome ci` never
-reports that the linter did nothing.
-
-**Open.** Whether the linter should run is JH's decision, because reviving it turns the tree red by
-15 errors and the spec exemption is worth 17 more.
-
----
-
 ## Known: a citation anchored to a line has no guard, and most of them were already wrong
 
 **Observation.** Prose, docstrings and guard tables cite files by path, and some cite a path with a

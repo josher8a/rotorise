@@ -63,7 +63,7 @@
     "build": "tsup",
     "test": "vitest",
     "format": "biome format --write ./src ",
-    "format:ci": "biome ci ./src",
+    "format:ci": "biome ci --error-on-warnings ./src",
     "check": "tsc --noEmit"
   },
   "author": {

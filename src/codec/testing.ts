@@ -48,8 +48,15 @@
  */
 import type { AttributeMap, AttributeValue } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
-import type { AnyCodec, AttributeCodec, ItemCodec, Rng, Segment } from './codec'
-import { at, CodecError, codecOfTerm, failed, opaque, orThrow } from './codec'
+import type {
+    AnyCodec,
+    AttributeCodec,
+    ItemCodec,
+    opaque,
+    Rng,
+    Segment,
+} from './codec'
+import { at, CodecError, codecOfTerm, failed, orThrow } from './codec'
 import { accepts, holds } from './denote'
 import type { Term } from './term'
 import {
@@ -365,7 +372,7 @@ export const checkDecodesAreWritable = <T>(
             // a value the pair's own read produced is one (C) says it can write back
             if (throughRead && !refine) {
                 throw new CodecError(
-                    `(C) fails: a value the codec read cannot be encoded.\n` +
+                    '(C) fails: a value the codec read cannot be encoded.\n' +
                         `  seed     = ${seed}, case ${i}\n` +
                         `  value    = ${JSON.stringify(value)}\n` +
                         `  encoding it said: ${(error as Error).message}`,
@@ -388,7 +395,7 @@ export const checkDecodesAreWritable = <T>(
                 subject.unsafeEncode(read)
             } catch (error) {
                 throw new CodecError(
-                    `(C) fails: this attribute decodes and the value it yields cannot be encoded.\n` +
+                    '(C) fails: this attribute decodes and the value it yields cannot be encoded.\n' +
                         `  mutation = ${what}\n` +
                         `  seed     = ${seed}, case ${i}\n` +
                         `  item     = ${JSON.stringify(item)}\n` +

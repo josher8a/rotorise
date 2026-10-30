@@ -104,7 +104,6 @@ import type {
 import {
     clauseForm,
     componentsOf,
-    entryOrder,
     mapChildren,
     openRefusal,
     recursionUse,
@@ -649,7 +648,7 @@ const leanBinders = (bound: Bound): string => {
  * The entries of the scope are the entries of {@link flatOf}: the entries of each cycle of the term
  * graph, cycle by cycle in the order of {@link componentsOf}, then the root where no cycle holds it,
  * then each child of a container. A cycle comes after each cycle that it reaches, and the entries of
- * a cycle are in the order of {@link entryOrder}. So an entry reads an entry of an earlier cycle
+ * a cycle are in the order of `entryOrder` in `term.ts`. So an entry reads an entry of an earlier cycle
  * above every guard, and the scope needs no constant. A child of a container prints as the index of
  * its entry, and a term below a wall prints as a closed graph term. The top of each entry states its
  * indices, because the elaborator needs them before it reads a list of options. A term with no
@@ -1468,9 +1467,9 @@ export const leanSeparation = ({ name, left, right }: Separation): string => {
             `/-- \`${name}\` — \`src/\` accepts two options of one scope; the model proves them compatible -/`,
             `${head} (κ : Callers) :`,
             `    let s := ${l}`,
-            `    Lawful (s.meaning (libTable κ) s.left) → Lawful (s.meaning (libTable κ) s.right) →`,
-            `      Alg.Compat (s.meaning (libTable κ) s.left) (s.meaning (libTable κ) s.right) ∧`,
-            `        Alg.Compat (s.meaning (libTable κ) s.right) (s.meaning (libTable κ) s.left) :=`,
+            '    Lawful (s.meaning (libTable κ) s.left) → Lawful (s.meaning (libTable κ) s.right) →',
+            '      Alg.Compat (s.meaning (libTable κ) s.left) (s.meaning (libTable κ) s.right) ∧',
+            '        Alg.Compat (s.meaning (libTable κ) s.right) (s.meaning (libTable κ) s.left) :=',
             `  Closed.Shared.compat_of_compatPair (${reduce}) (libTable κ)`,
         ].join('\n')
     }
@@ -2784,15 +2783,19 @@ export const reachable = (root: Term): ReadonlySet<Term> => {
                 if (t.body.rest !== undefined) walk(t.body.rest)
                 return
             case 'union':
-                return t.options.forEach(walk)
+                t.options.forEach(walk)
+                return
             case 'set':
-                return walk(t.elem)
+                walk(t.elem)
+                return
             case 'held':
                 walk(t.inner)
-                return walk(t.outer)
+                walk(t.outer)
+                return
             case 'refine':
             case 'legacy':
-                return walk(t.inner)
+                walk(t.inner)
+                return
             default:
                 return
         }

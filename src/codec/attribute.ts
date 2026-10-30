@@ -238,7 +238,7 @@ export class DynamoNumber<S extends string = string> {
         return (
             typeof value === 'object' &&
             value !== null &&
-            DynamoNumber.prototype.isPrototypeOf(value)
+            Object.prototype.isPrototypeOf.call(DynamoNumber.prototype, value)
         )
     }
 

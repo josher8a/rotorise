@@ -172,12 +172,7 @@ type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
 // ── the body (`slotAtG`) ──
 type Block<W> = W extends ['some', infer T] ? T : ['never']
 type SlotAt<F, W, N> = N extends keyof F ? F[N] : ['optional', Block<W>]
-type SlotTerm<S> = S extends
-    | ['req', infer T]
-    | ['optional', infer T]
-    | ['fill', infer T]
-    ? T
-    : never
+type SlotTerm<S> = S extends ['req' | 'optional' | 'fill', infer T] ? T : never
 
 // ── `listChild` ──
 type At<L, I, C extends unknown[] = []> = L extends [infer H, ...infer R]
@@ -446,16 +441,15 @@ type MembersAt<T, Env, Seen extends unknown[]> = T extends ['never']
         ? 'wide'
         : T extends ['union', infer Os extends unknown[]]
           ? { [I in keyof Os]: MembersAt<Os[I], Env, Seen> }[number]
-          : T extends
-                  | ['held', unknown, infer I, ...unknown[]]
-                  | ['refine', infer I]
-                  | ['legacy', infer I]
+          : T extends ['held', unknown, infer I, ...unknown[]]
             ? MembersAt<I, Env, Seen>
-            : StoredMember<T, Env> extends infer M
-              ? M extends 'none'
-                  ? 'wide'
-                  : M
-              : never
+            : T extends ['refine' | 'legacy', infer I]
+              ? MembersAt<I, Env, Seen>
+              : StoredMember<T, Env> extends infer M
+                ? M extends 'none'
+                    ? 'wide'
+                    : M
+                : never
 
 type Opt<S> = S extends ['optional', unknown] ? true : false
 type FloatOf<S> = S extends `${infer N extends number}` ? N : number
@@ -646,27 +640,27 @@ type RowG<L, LE, R, RE, A extends unknown[]> = EntryOf<L, LE> extends [
       ? RightG<L, LE, R, RE, A, ['none']>
       : L extends ['never']
         ? true
-        : L extends
-                | ['held', unknown, infer I, ...unknown[]]
-                | ['refine', infer I]
+        : L extends ['held', unknown, infer I, ...unknown[]]
           ? RowG<I, LE, R, RE, A>
-          : L extends ['legacy', unknown] | ['opaq']
-            ? RightG<L, LE, R, RE, A, ['none']>
-            : L extends ['union', infer Os extends unknown[]]
-              ? false extends {
-                    [I in keyof Os]: RowG<Os[I], LE, R, RE, A>
-                }[number]
-                  ? false
-                  : true
-              : L extends ['prim', infer G]
-                ? RightG<L, LE, R, RE, A, ['prim', G]>
-                : L extends ['set', infer E]
-                  ? RightG<L, LE, R, RE, A, ['set', E, LE]>
-                  : L extends ['list', unknown, unknown, unknown]
-                    ? RightG<L, LE, R, RE, A, ['list']>
-                    : L extends ['object', ['mk', infer CF, infer CW]]
-                      ? RightG<L, LE, R, RE, A, ['obj', CF, CW, LE]>
-                      : false
+          : L extends ['refine', infer I]
+            ? RowG<I, LE, R, RE, A>
+            : L extends ['legacy', unknown] | ['opaq']
+              ? RightG<L, LE, R, RE, A, ['none']>
+              : L extends ['union', infer Os extends unknown[]]
+                ? false extends {
+                      [I in keyof Os]: RowG<Os[I], LE, R, RE, A>
+                  }[number]
+                    ? false
+                    : true
+                : L extends ['prim', infer G]
+                  ? RightG<L, LE, R, RE, A, ['prim', G]>
+                  : L extends ['set', infer E]
+                    ? RightG<L, LE, R, RE, A, ['set', E, LE]>
+                    : L extends ['list', unknown, unknown, unknown]
+                      ? RightG<L, LE, R, RE, A, ['list']>
+                      : L extends ['object', ['mk', infer CF, infer CW]]
+                        ? RightG<L, LE, R, RE, A, ['obj', CF, CW, LE]>
+                        : false
 /** The rows of the right operand alone (`rightC`), then the family `Fam` of the left row. */
 type RightG<L, LE, R, RE, A extends unknown[], Fam> = EntryOf<R, RE> extends [
     'some',
@@ -679,17 +673,17 @@ type RightG<L, LE, R, RE, A extends unknown[], Fam> = EntryOf<R, RE> extends [
       ? false
       : R extends ['never']
         ? true
-        : R extends
-                | ['held', unknown, infer I, ...unknown[]]
-                | ['refine', infer I]
+        : R extends ['held', unknown, infer I, ...unknown[]]
           ? RightG<L, LE, I, RE, A, Fam>
-          : R extends ['union', infer Os extends unknown[]]
-            ? false extends {
-                  [I in keyof Os]: RightG<L, LE, Os[I], RE, A, Fam>
-              }[number]
-                ? false
-                : true
-            : FamG<Fam, R, RE, A>
+          : R extends ['refine', infer I]
+            ? RightG<L, LE, I, RE, A, Fam>
+            : R extends ['union', infer Os extends unknown[]]
+              ? false extends {
+                    [I in keyof Os]: RightG<L, LE, Os[I], RE, A, Fam>
+                }[number]
+                  ? false
+                  : true
+              : FamG<Fam, R, RE, A>
 type FamG<Fam, R, RE, A extends unknown[]> = Fam extends ['prim', infer G]
     ? R extends ['prim', infer G2]
         ? PrimsApartT<G, G2>

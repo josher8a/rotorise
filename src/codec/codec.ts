@@ -3402,6 +3402,36 @@ type PathList<Element> = {
     at(index: number): PathOf<Element>
 }
 
+declare const pathValue: unique symbol
+
+/**
+ * Type-level only, for the same reason as {@link optionalMarker}. Wrapped in a tuple, because a
+ * reader infers an optional `never` as `string`.
+ */
+declare const itemTermMarker: unique symbol
+
+/** Type-level only, for the same reason as {@link optionalMarker}. */
+declare const locatedFrom: unique symbol
+
+/**
+ * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
+ * marker, and no other codec carries it: an object codec has a `spec` too, so `spec` does not tell
+ * a reading from a codec. Test a root with `itemMark in root`. The reading types state the same
+ * fact as `readonly [itemMark]: true`, and the type of a root reads it from there.
+ */
+export const itemMark = Symbol('item reading')
+
+/**
+ * Type-level only, and a function *pair* rather than a value, for one reason: invariance.
+ *
+ * A property whose type is `Written` is covariant, so a codec writing a subset of the pinned shape
+ * would be accepted — which is the whole thing the pin exists to refuse. Naming `Written` in both a
+ * parameter and a return position makes the comparison mutual, and mutual is what "the same shape"
+ * means. `in out` is not an alternative: it constrains instantiations of one generic against each
+ * other, and a `satisfies` compares two different types.
+ */
+declare const writesMarker: unique symbol
+
 /**
  * The end of a path, carrying what lives there as a phantom.
  *
@@ -3413,8 +3443,6 @@ export type PathTerminal<T> = {
     toString(): string
     readonly [pathValue]?: T
 }
-
-declare const pathValue: unique symbol
 
 /** The decoded type at the first frame of a place that resolves, and `never` elsewhere. */
 type TermPathValue<Fs> = KindOfFrames<Fs> extends 'resolved'
@@ -4106,12 +4134,6 @@ export type ItemCodec<T, Spec = unknown, Rest = undefined, Tm = OfParts> = {
     readonly [itemTermMarker]?: [Tm]
 }
 
-/**
- * Type-level only, for the same reason as {@link optionalMarker}. Wrapped in a tuple, because a
- * reader infers an optional `never` as `string`.
- */
-declare const itemTermMarker: unique symbol
-
 /** An {@link AttributeCodec} that also knows where it lives, and keeps the attribute it writes. */
 export type LocatedCodec<
     T,
@@ -4334,9 +4356,6 @@ type Reached = {
     readonly frontier: readonly AnyCodec[]
     readonly cycles: Cycles
 }
-
-/** Type-level only, for the same reason as {@link optionalMarker}. */
-declare const locatedFrom: unique symbol
 
 /**
  * **The document path of a located codec**, in DynamoDB expression syntax: the external form of
@@ -4564,14 +4583,6 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
     objectReadings.set(itemDef, self)
     return self
 }
-
-/**
- * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
- * marker, and no other codec carries it: an object codec has a `spec` too, so `spec` does not tell
- * a reading from a codec. Test a root with `itemMark in root`. The reading types state the same
- * fact as `readonly [itemMark]: true`, and the type of a root reads it from there.
- */
-export const itemMark = Symbol('item reading')
 
 type Marked = { readonly [itemMark]: true }
 
@@ -5739,17 +5750,6 @@ const recordPath = (steps: readonly Step[]): unknown => {
 }
 
 /**
- * Type-level only, and a function *pair* rather than a value, for one reason: invariance.
- *
- * A property whose type is `Written` is covariant, so a codec writing a subset of the pinned shape
- * would be accepted — which is the whole thing the pin exists to refuse. Naming `Written` in both a
- * parameter and a return position makes the comparison mutual, and mutual is what "the same shape"
- * means. `in out` is not an alternative: it constrains instantiations of one generic against each
- * other, and a `satisfies` compares two different types.
- */
-declare const writesMarker: unique symbol
-
-/**
  * The shape a codec puts in the table, asked of the codec itself.
  *
  * ```ts
@@ -6058,7 +6058,7 @@ const dissect = <T extends Record<string, unknown>>(
     // the key set is a `readonly string[]`, which cannot say it, and this is the gate
     if (ks.length === 0) {
         throw new CodecError(
-            `a discriminated union needs at least one discriminator, and this one has none — every value carries the empty assignment, so the first variant would answer for all of them`,
+            'a discriminated union needs at least one discriminator, and this one has none — every value carries the empty assignment, so the first variant would answer for all of them',
         )
     }
     // **An empty option list is a mistake, not the bottom.** `never` is the bottom and says so as
@@ -6067,7 +6067,7 @@ const dissect = <T extends Record<string, unknown>>(
     // too — what reaches here is a cast, plain JavaScript, or an erased path
     if (options.length === 0) {
         throw new CodecError(
-            `a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is \`never\``,
+            'a discriminated union needs at least one option, and this one has none — no tag reaches a variant, so nothing can be written or read. If a codec that admits no value is what you meant, that is \`never\`',
         )
     }
     // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
@@ -6076,7 +6076,7 @@ const dissect = <T extends Record<string, unknown>>(
         const node = resolvedTerm(termOf(option as unknown as AnyCodec))
         if (node?.kind !== 'ref' && !(node && objectNamed(node))) {
             throw new CodecError(
-                `every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass \`object(...)\` around it`,
+                'every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass `object(...)` around it',
             )
         }
     }
