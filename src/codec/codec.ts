@@ -78,6 +78,7 @@ import {
     resolvedTerm,
     sameAdapter,
     sameTerm,
+    standInEquals,
     targetOf,
     throughRefs,
     unanimous,
@@ -5436,8 +5437,8 @@ const aligned = (
  * - A name that a closed side does not declare pairs the absent row with a value without the key,
  *   which an `undefinable` side refuses, so the slot is required.
  * - Two `withLegacyRead` sides share the absent row where the two stand-ins are one value. The
- *   host compares no two stand-ins, as the model's `absentAgreeG` compares no two fills, so the
- *   pair is refused.
+ *   meet states no row for two stand-ins, so the pair is refused, as the model's `absentAgreeG`
+ *   admits two fills only where the constants are one value.
  *
  * `undefined` where a required slot meets at `never`, and the object holds no value.
  */
@@ -7841,7 +7842,7 @@ const absentBelow = (mine: Field, wanted: Field, order: Order): boolean => {
         case 'fallback':
             return (
                 m.mark === 'req' ||
-                (m.mark === 'fallback' && Object.is(m.v, w.v))
+                (m.mark === 'fallback' && standInEquals(m.v, w.v))
             )
         case 'undefinable':
             return m.mark === 'req' || m.mark === 'undefinable'

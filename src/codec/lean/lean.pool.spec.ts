@@ -14,10 +14,10 @@
  * pair has two readings: the guard reads the `ref` as the root of its option, and the other tests
  * read the open term.
  *
- * One route narrows the pool. **No separation vector for two fills at one name.** The model refuses
- * two fills at one name whatever their constants, because the constants of a fill have no decidable
- * equality. The host accepts two fills with equal constants. Such a pair goes to disjointness and
- * to a kernel row of its guard column, and no check reads a compatibility column for the pair.
+ * One route narrows the pool. **No separation vector for two fills at one name.** Such a pair goes
+ * to disjointness and to a kernel row of its guard column, and no check reads a compatibility
+ * column for the pair. The model and the host agree on two fills where the stand-ins are one value,
+ * and the corpus of `lean.spec.ts` pins that agreement.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

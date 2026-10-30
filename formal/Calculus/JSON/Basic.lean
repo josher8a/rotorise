@@ -1,4 +1,5 @@
 import Calculus.Lang.Universe
+import Calculus.JSON.Carrier
 
 /-!
 # A second universe: JSON
@@ -21,15 +22,6 @@ prism of an array, and the signature. Each of the four reads the carrier.
 -/
 
 namespace Calculus.JSON
-
-/-- A JSON value. A number is an integer. -/
-inductive Json where
-  | null
-  | bool (b : Bool)
-  | num (n : Int)
-  | str (s : String)
-  | arr (xs : List Json)
-  | obj (kvs : List (String × Json))
 
 /-- The kind of a JSON value: the member that (W) reads. -/
 inductive JMember where
@@ -111,6 +103,7 @@ abbrev jsonSig : Alg.Sig where
   decG _ := inferInstance
   R := Json → Option Json
   K := Json
+  decK := inferInstanceAs (DecidableEq Json)
 
 /-- **The JSON syntax**: the signature at the host orientation. -/
 abbrev jsonSyn : Alg.Syn := ⟨jsonSig, .host⟩

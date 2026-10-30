@@ -129,6 +129,7 @@ inductive SlotMode (B : Sig) where
   | req
   | opt
   | fill (v : B.K)
+  deriving DecidableEq
 
 /-- **The operations of the term**: one per constructor, with the constructor's data. -/
 inductive TOp (B : Sig) where

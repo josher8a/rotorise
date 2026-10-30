@@ -53,8 +53,11 @@ structure Sig where
   R : Type
   /-- The constants a `fill` reads at an absent name. -/
   K : Type
+  decK : DecidableEq K
 
 instance (B : Sig) (s : Bool) : DecidableEq (B.G s) := B.decG s
+
+instance (B : Sig) : DecidableEq B.K := B.decK
 
 /-- **The syntax of a universe**: a signature and an orientation. The dual universe keeps the
     signature and flips the orientation, so the dual term type is the term type. -/

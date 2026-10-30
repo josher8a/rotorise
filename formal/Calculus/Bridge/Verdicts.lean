@@ -25,7 +25,8 @@ not. That single fact is why this file exists: `aeq` never compares two function
 compares them **at every key of a key set that it has already checked is the same set**, and
 that is a decidable proposition the kernel is happy to settle.
 
-**No `DecidableEq Attr`.** `.m`'s function field is not comparable. `aeq` is therefore not a
+**No derived `DecidableEq Attr`.** `.m`'s function field is not comparable by the deriving handler.
+`Attr.decEq` decides equality by key set and value, and `aeq` is not that decision: `aeq` is not a
 decision procedure that was derived and then used; it is written by hand, and its agreement
 with equality is *proved* (`aeq_same`, `aeq_differ`) rather than assumed. Those two theorems
 are what a vector line is worth: without them `check … = .same` says only that a function

@@ -52,11 +52,10 @@ def cbaseG (x : Graph B NL) (y : Graph B NR) : Bool :=
       (viewG sR o y)
 
 /-- **Two slots answer alike at absence** where the orientation fills: a fill beside a required
-    slot, and no other slot beside a fill. Two fills are refused, because the constants have no
-    decidable equality. -/
+    slot, and two equal fills. No other slot agrees beside a fill. -/
 def absentAgreeG : SlotMode B → SlotMode B → Bool
   | .fill _, .req | .req, .fill _ => true
-  | .fill _, _ | _, .fill _ => false
+  | a@(.fill _), b | a, b@(.fill _) => decide (a = b)
   | _, _ => true
 
 /-- The open block of an object node as a term: the bottom where the object has no block. -/
@@ -416,8 +415,9 @@ theorem absentAgree_sound {m m' : SlotMode S.sig} {c c' : Mean.C S.sig} {y₁ y�
     (e2 : absentOf o (some (mkField m' c')) = some y₂) : y₁ = y₂ := by
   cases hc : o.c <;> cases m <;> cases m' <;>
     simp only [absentOf, mkField, hc, cond_true, cond_false, Option.some.injEq, reduceCtorEq,
-      absentAgreeG, Bool.not_true, Bool.not_false, Bool.true_or, Bool.false_or] at h e1 e2 <;>
-    exact e1.symm.trans e2
+      absentAgreeG.eq_def, Bool.not_true, Bool.not_false, Bool.true_or, Bool.false_or,
+      decide_eq_true_eq, SlotMode.fill.injEq] at h e1 e2 <;>
+    first | exact e1.symm.trans e2 | (subst h; exact e1.symm.trans e2)
 
 omit [Sem S] [Leaf S.sig] [Shapes S] [TopLaws S] in
 /-- A slot of an object node is the bottom or a child. -/

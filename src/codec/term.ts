@@ -16,7 +16,11 @@
  * The one place this language is **wider** than the model is `ref`, and the row says why.
  */
 
-import type { AttributeName, AttributeValue, DynamoNumber } from './attribute'
+import {
+    type AttributeName,
+    type AttributeValue,
+    DynamoNumber,
+} from './attribute'
 import type {
     LiteralBase,
     LiteralValue,
@@ -281,6 +285,62 @@ export type Field =
     | { readonly mark: 'fallback'; readonly t: Term; readonly v: unknown }
     /** The absence is in the row *and* in the value, and the key is still there. */
     | { readonly mark: 'undefinable'; readonly t: Term }
+
+/**
+ * **Whether two stand-ins are one value**, as the model reads them: the model states a stand-in as a
+ * `Value`, so two fills agree where their stand-ins print as one `Value`. A string, a boolean, a
+ * `DynamoNumber`, a byte array, a set, an array and a plain object compare by what they hold, a set
+ * without its order and an object without its names that hold `undefined`. `null` and `undefined`
+ * are one value. Any other value, a JS number among them, is no `Value`, and compares by `Object.is`.
+ */
+export const standInEquals = (a: unknown, b: unknown): boolean => {
+    if (Object.is(a, b)) return true
+    if (a === null || a === undefined) return b === null || b === undefined
+    if (a instanceof DynamoNumber)
+        return b instanceof DynamoNumber && a.equals(b)
+    if (a instanceof Uint8Array) {
+        return (
+            b instanceof Uint8Array &&
+            a.length === b.length &&
+            a.every((x, i) => x === b[i])
+        )
+    }
+    if (a instanceof Set) {
+        if (!(b instanceof Set) || a.size !== b.size) return false
+        const rest = [...b]
+        return [...a].every((x) => {
+            const at = rest.findIndex((y) => standInEquals(x, y))
+            if (at < 0) return false
+            rest.splice(at, 1)
+            return true
+        })
+    }
+    if (Array.isArray(a)) {
+        return (
+            Array.isArray(b) &&
+            a.length === b.length &&
+            a.every((x, i) => standInEquals(x, b[i]))
+        )
+    }
+    if (isPlain(a)) {
+        if (!isPlain(b)) return false
+        const names = (o: Record<string, unknown>) =>
+            Object.keys(o).filter((name) => o[name] !== undefined)
+        const mine = names(a)
+        return (
+            mine.length === names(b).length &&
+            mine.every((name) => standInEquals(a[name], b[name]))
+        )
+    }
+    return false
+}
+const isPlain = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Set) &&
+    !(value instanceof Uint8Array) &&
+    !(value instanceof DynamoNumber)
 
 /** Whether the row always carries this field's attribute. */
 export const alwaysWritten = (field: Field): boolean =>
@@ -1328,7 +1388,7 @@ export const sameAdapter = (
 /**
  * **Whether two terms are one term**: one structure, with each `ref` read as its target, and each
  * function that a term holds the same function object. A literal compares by its base, and a
- * stand-in by `Object.is`.
+ * stand-in by {@link standInEquals}.
  *
  * Two codecs built by two calls of one constructor are two objects and one term, and the model
  * reads only the term. A `ref` that closes a cycle makes the walk meet a pair again, and the walk
@@ -1405,7 +1465,7 @@ export const sameTerm = (x: Term, y: Term): boolean => {
                             one.mark === other.mark &&
                             (one.mark !== 'fallback' ||
                                 (other.mark === 'fallback' &&
-                                    Object.is(one.v, other.v))) &&
+                                    standInEquals(one.v, other.v))) &&
                             same(one.t, other.t)
                         )
                     }) &&

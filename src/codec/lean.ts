@@ -2114,8 +2114,7 @@ export const leanSeparationRowModule = (
         guardOnly.length === 0
             ? ''
             : ` A pair with a fill on each side carries the
-guard column alone, in the \`pairGuards\` lists: the model refuses two fills at one name whatever their
-constants, and \`src/\` accepts two fills with equal constants, so the pair has no separation verdict.`
+guard column alone, in the \`pairGuards\` lists, so the pair has no separation verdict.`
     return leanModule(`import Calculus.Bridge.Rows
 
 /-!
@@ -2353,7 +2352,7 @@ end Calculus
 
 /**
  * **An older reader, as the variable of the theorem with the answers of the host pinned.** `Attr`
- * has no decidable equality, so each pin tests `aeq` at the attribute that the host asked. Any
+ * derives no decidable equality, so each pin tests `aeq` at the attribute that the host asked. Any
  * other attribute goes to the variable, so the claim holds at every reader that gives these answers.
  */
 const pinned = (bound: Bound, r: unknown): string =>
@@ -3971,7 +3970,7 @@ export const leanVectorModule = (
  * The forms of the evaluation vectors. Each check is a `Bool` whose truth is the former statement:
  * `beq_iff_eq` makes `(v == w) = true` the equation `v = w` at `Verdict` and at `Bool`, and
  * `Option.isNone_iff_eq_none` makes `x.isNone = true` the equation `x = none`. `Attr` and `Value`
- * hold a function, so neither has decidable equality, and a `some` answer keeps `check` or `vcheck`.
+ * hold a function, so neither derives a decidable equality, and a `some` answer keeps `check` or `vcheck`.
  */
 const evaluationForms = {
     writes: {

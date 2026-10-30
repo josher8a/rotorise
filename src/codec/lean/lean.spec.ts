@@ -115,7 +115,7 @@ import {
 } from '../lean'
 import { CodecError, orThrow } from '../result'
 import type { RefSlot, Term } from '../term'
-import { cycleEntryOf, RecursionRefused } from '../term'
+import { cycleEntryOf, RecursionRefused, standInEquals } from '../term'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -817,6 +817,67 @@ describe('values and attributes', () => {
     })
 })
 
+describe('the equality of two stand-ins', () => {
+    /**
+     * **Two stand-ins agree where the model reads one `Value`.** The host decides `standInEquals`
+     * and the emitter prints `leanValueOf`, so the equality of the host is the equality of the
+     * printed `Value`, over each kind that the emitter reads.
+     */
+    it('two stand-ins agree where the model reads one Value', () => {
+        const number = (text: string) => orThrow(DynamoNumber.from(text))
+        const values: unknown[] = [
+            'rex',
+            'fido',
+            '',
+            true,
+            false,
+            null,
+            undefined,
+            number('1'),
+            number('1.50'),
+            number('2'),
+            new Uint8Array([1, 2]),
+            new Uint8Array([1, 3]),
+            new Set(['a', 'b']),
+            new Set(['a']),
+            new Set([number('1'), number('2')]),
+            [],
+            ['rex'],
+            ['rex', 'fido'],
+            ['fido', 'rex'],
+            {},
+            { nick: 'rex' },
+            { nick: 'rex', age: undefined },
+            { nick: 'fido' },
+            { nick: 'rex', tags: ['a'] },
+        ]
+        for (const one of values) {
+            for (const other of values) {
+                expect(
+                    standInEquals(one, other),
+                    `${String(one)} against ${String(other)}`,
+                ).toBe(leanValueOf(one) === leanValueOf(other))
+            }
+        }
+        // a `Finset` and a map have no order, and the printed text of each has one
+        expect(
+            standInEquals(
+                { nick: 'rex', tags: ['a'] },
+                { tags: ['a'], nick: 'rex' },
+            ),
+        ).toBe(true)
+        expect(standInEquals(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(
+            true,
+        )
+        expect(
+            standInEquals(
+                new Set([number('1'), number('2')]),
+                new Set([number('2'), number('1')]),
+            ),
+        ).toBe(true)
+    })
+})
+
 describe('a whole vector', () => {
     /**
      * The attribute is not an argument: it is read out of the library by running the encode the
@@ -1438,6 +1499,25 @@ const standIn = erase(
     object({ a: withLegacyRead({ current: string, whenMissing: 'stand-in' }) }),
 )
 /**
+ * A stand-in that one value states twice: a second codec with the text of `standIn`, a third with
+ * another text, and two with an object constant, equal at one value and apart at two objects.
+ */
+const standInAgain = erase(
+    object({ a: withLegacyRead({ current: string, whenMissing: 'stand-in' }) }),
+)
+const standInOther = erase(
+    object({ a: withLegacyRead({ current: string, whenMissing: 'other' }) }),
+)
+const nameOf = (nick: string) =>
+    erase(
+        object({
+            a: withLegacyRead({
+                current: object({ nick: string }),
+                whenMissing: { nick },
+            }),
+        }),
+    )
+/**
  * Two pairs that the generated pool found, each where the host and the model disagreed before a
  * fix. An `undefinable` field is the model's `optional`, so the field is apart from a required
  * field whose term is disjoint. A legacy read of `decimal` holds a `held`, and its caller view is
@@ -1501,6 +1581,14 @@ const fallbackPairs = <P>(
     make(`stand_in${sep}req_boolean`, standIn, erase(object({ a: boolean }))),
     make(`stand_in${sep}req_string`, standIn, erase(object({ a: string }))),
     make(`stand_in${sep}empty_object`, standIn, erase(object({}))),
+    make(`stand_in${sep}stand_in`, standIn, standInAgain),
+    make(`stand_in${sep}other_stand_in`, standIn, standInOther),
+    make(`object_stand_in${sep}object_stand_in`, nameOf('rex'), nameOf('rex')),
+    make(
+        `object_stand_in${sep}other_object_stand_in`,
+        nameOf('rex'),
+        nameOf('fido'),
+    ),
 ]
 
 const legacyPairs = <P>(
@@ -1730,13 +1818,6 @@ const disjointPairs = (): readonly DisjointPair[] => {
             left,
             right,
         })),
-        // two stand-ins at one name: compatibility refuses the pair, because the model has no
-        // equality of constants, so the pair is put to disjointness only
-        {
-            name: 'stand_in__disjoint__stand_in',
-            left: standIn,
-            right: standIn,
-        },
         {
             name: 'undefinable_boolean__disjoint__req_string',
             left: undefinableBoolean,
@@ -2442,7 +2523,36 @@ describe("the declaration guard, against the model's classifier", () => {
             accepted.length,
             acceptedShared.length,
             refused.length,
-        ]).toEqual([1015, 5, 43])
+        ]).toEqual([1017, 5, 45])
+    })
+
+    /**
+     * **Two fills agree at absence where the stand-ins are one value.** The model reads a stand-in as
+     * a `Value`, and the host reads it through `standInEquals`, so two options at one name are
+     * compatible exactly where their stand-ins are equal: at a text and at an object.
+     */
+    it('accepts two stand-ins that are one value and refuses two that are not, at a text and at an object', () => {
+        const pairs = separationPairs()
+        const emitted = (name: string) => {
+            const pair = pairs.find((one) => one.name === name)
+            if (pair === undefined) throw new Error(`no pair ${name}`)
+            return leanSeparation(pair)
+        }
+        for (const name of [
+            'stand_in__vs__stand_in',
+            'object_stand_in__vs__object_stand_in',
+        ]) {
+            expect(emitted(name), name).toContain(
+                'Closed.compat_of_compatPair (',
+            )
+        }
+        for (const name of [
+            'stand_in__vs__other_stand_in',
+            'object_stand_in__vs__other_object_stand_in',
+        ]) {
+            expect(emitted(name), name).toContain('Closed.compatPair (')
+            expect(emitted(name), name).toMatch(/= false :=/)
+        }
     })
 
     /**
@@ -2562,7 +2672,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(1051)
+        expect(pairs.length).toBe(1054)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),

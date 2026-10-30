@@ -1,4 +1,5 @@
 import Calculus.Lang.Term
+import Calculus.Dynamo.AttrEq
 import Calculus.Dynamo.Alg.Opaque
 import Mathlib.Data.Finset.Lattice.Fold
 
@@ -167,6 +168,7 @@ abbrev dynSig : Alg.Sig where
     | true => inferInstanceAs (DecidableEq Empty)
   R := Attr → Option Value
   K := Value
+  decK := inferInstanceAs (DecidableEq Value)
 
 /-- **The DynamoDB syntax**: the signature at the host orientation. -/
 abbrev dynSyn : Alg.Syn := ⟨dynSig, .host⟩

@@ -1060,8 +1060,12 @@ describe('a union over an open fragment defers its decision to the scope, so no 
     const open = () => ref('undeclared') as unknown as AnyCodec
 
     it('refuses the closed pair at compatibility, so the open pair has a verdict to defer', () => {
+        // two stand-ins that are two values: the stand-ins agree only where they are one value
         expect(() =>
-            union([fragment(string, {}), fragment(string, {})]),
+            union([
+                fragment(string, {}),
+                fragment(string, { a: { a: 'rex', b: 1 } }),
+            ]),
         ).toThrow(/are not shown compatible/)
     })
 

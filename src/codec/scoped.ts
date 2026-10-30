@@ -24,6 +24,7 @@ import {
     otherShape,
     primsApart,
     sameAdapter,
+    standInEquals,
     targetOf,
     unionAlternatives,
 } from './term'
@@ -1119,7 +1120,7 @@ const bodiesAgree = (
  */
 const standInsAgree = (a: Field, b: Field): boolean =>
     a.mark === 'fallback'
-        ? b.mark === 'req' || (b.mark === 'fallback' && Object.is(a.v, b.v))
+        ? b.mark === 'req' || (b.mark === 'fallback' && standInEquals(a.v, b.v))
         : b.mark !== 'fallback' || a.mark === 'req'
 
 /**
