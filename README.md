@@ -44,6 +44,7 @@ The double-call `<Entity>()(schema)` is required because TypeScript does not sup
 
 - **`separator`** — Joins the components of a key. Defaults to `'#'`.
 - **`key`** — The keys that address the item: `{ partition: 'PK', sort: 'SK' }`, or `{ partition: 'PK' }`. `keys` builds these with no names, and `keyUpdates` refuses a change that touches them. Construction refuses a name that is no key of the schema, and one key in the two roles.
+- **`indexes`** — The keys of each secondary index, by the name of the index: `{ GSI1: { partition: 'GSI1PK', sort: 'GSI1SK' } }`. `keyCondition` with the name of an index reads these. Construction refuses a name that is no key of the schema, and one key in the two roles of an index.
 - **`codec`** — The attributes of the item, which `toItem` and `fromItem` encode and decode.
 
 ### `.key(keyName, attributes, config?)`
@@ -131,6 +132,68 @@ PetTable.keys({ petId: 'p1', species: 'CAT' })
 
 PetTable.keys(['GSI1SK'], { age: 3 })
 // => { GSI1SK: { N: '3' } }
+```
+
+### `.keyCondition(index?, attributes)`
+
+Builds the condition of a query as names and encoded values. Without `index`, it reads the keys
+that the `key` option names. With `index`, it reads the keys of that index, and the result carries
+the name of the index.
+
+- The attributes give every component of the partition key. A query reads one whole partition, so
+  a missing component throws a `RotoriseError`.
+- Where the attributes give the whole sort key, the sort condition is `equals`.
+- Where the attributes give a leading part of a list sort key, the sort condition is `beginsWith`,
+  with a trailing separator. The separator keeps `STATUS#AVAILABLE` from selecting
+  `STATUS#AVAILABLE_SOON`.
+- Where the attributes hold no component of the sort key, the result has no sort condition.
+- A later component without the first, or a `null` arm, selects nothing and throws a `RotoriseError`.
+
+```ts
+const PetTable = tableEntry<Pet>()(
+  { PK: ['petId'], SK: ['species'], GSI1PK: ['shelterId'], GSI1SK: ['species', 'petId'] },
+  {
+    key: { partition: 'PK', sort: 'SK' },
+    indexes: { GSI1: { partition: 'GSI1PK', sort: 'GSI1SK' } },
+  },
+)
+
+PetTable.keyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
+// => { index: 'GSI1',
+//      partition: { name: 'GSI1PK', value: { S: 'SHELTERID#s1' } },
+//      sort: { name: 'GSI1SK', beginsWith: { S: 'SPECIES#CAT#' } } }
+```
+
+`BETWEEN` and the comparisons `<`, `<=`, `>` and `>=` are not built. An adapter to
+[Brushless](https://github.com/josher8a/Brushless) is a few lines:
+
+```ts
+import { AttributeName, AttributeValue, KeyCondition, Register } from 'brushless'
+import type { KeyCondition as Condition } from 'rotorise'
+
+const toBrushless = ({ partition, sort }: Condition) => ({
+  pk: {
+    name: AttributeName.make(partition.name),
+    value: AttributeValue.make({ value: partition.value, alias: partition.name }),
+  },
+  ...(sort && {
+    sk:
+      'equals' in sort
+        ? KeyCondition.equals(
+            AttributeName.make(sort.name),
+            AttributeValue.make({ value: sort.equals, alias: sort.name }),
+          )
+        : KeyCondition.beginsWith(
+            AttributeName.make(sort.name),
+            AttributeValue.make({ value: sort.beginsWith, alias: sort.name }),
+          ),
+  }),
+})
+
+const condition = PetTable.keyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
+const register = Register.make()
+KeyCondition.build(toBrushless(condition), register)
+// => '#GSI1PK = :GSI1PK AND begins_with(#GSI1SK, :GSI1SK)', and `IndexName` is `condition.index`
 ```
 
 ### `.keyUpdates(changed)`

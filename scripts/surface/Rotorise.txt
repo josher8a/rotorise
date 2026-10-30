@@ -39,6 +39,7 @@ IsUnion
 ItemCodec
 ItemSpec
 KeyComponents
+KeyCondition
 KeyRoles
 L
 ListOf
@@ -78,6 +79,7 @@ SetCapable
 SetOf
 SetSlot
 Shape
+SortCondition
 SpecsOf
 SpreadCodec
 SpreadOnce

@@ -1,4 +1,5 @@
 import type {
+    Attribute,
     AttributeMap,
     AttributeName,
     AttributeValue,
@@ -1704,6 +1705,7 @@ type TableEntryDefinition<
     CodecSpec = undefined,
     CodecRest = undefined,
     Roles = undefined,
+    Indexes = undefined,
 > = {
     /**
      * Converts a raw entity into a complete table entry with all keys computed.
@@ -1822,6 +1824,27 @@ type TableEntryDefinition<
               keys(
                   attributes: Partial<Entity> & Record<string, unknown>,
               ): AttributeMap
+
+              /**
+               * The condition of a query on the table. The attributes give every component of the
+               * partition key. They give the sort key whole for `equals`, a leading part of a list
+               * for `beginsWith`, or none of it for no sort condition.
+               */
+              keyCondition(
+                  attributes: Partial<Entity> & Record<string, unknown>,
+              ): KeyCondition<Extract<Roles, KeyRoles>>
+          }) &
+    ([Indexes] extends [undefined]
+        ? Record<never, never>
+        : {
+              /**
+               * The condition of a query on an index that the `indexes` option names, with the
+               * rules of the condition on the table.
+               */
+              keyCondition<const Index extends keyof Indexes & string>(
+                  index: Index,
+                  attributes: Partial<Entity> & Record<string, unknown>,
+              ): KeyCondition<Extract<Indexes[Index], KeyRoles>, Index>
           })
 
 /**
@@ -2034,6 +2057,44 @@ type DistinctRoles<Roles> = Roles extends {
           }
         : unknown
     : unknown
+
+/** Nothing, or why the roles of an index name one key in two roles. */
+type DistinctIndexes<Indexes> = Indexes extends undefined
+    ? unknown
+    : { readonly [Index in keyof Indexes]: DistinctRoles<Indexes[Index]> }
+
+/**
+ * The condition of a query on a sort key: one arm for each condition that the attributes give.
+ *
+ * The arms map one to one to the sort conditions of a key condition expression: `equals` to `=`,
+ * and `beginsWith` to `begins_with`. A prefix is a joined string, so it is `S`.
+ */
+export type SortCondition<Name extends string = string> =
+    | { readonly name: Name; readonly equals: Carrying<KeyMember> }
+    | { readonly name: Name; readonly beginsWith: Attribute<'S'> }
+
+/**
+ * The condition of a query, as names and encoded values: the partition key, and the condition on
+ * the sort key where the attributes give one. A query on an index carries the name of the index,
+ * and a query on the table carries none. Rotorise builds no expression string.
+ */
+export type KeyCondition<
+    Roles extends KeyRoles = KeyRoles,
+    Index extends string = never,
+> = show<
+    ([Index] extends [never] ? unknown : { readonly index: Index }) & {
+        readonly partition: {
+            readonly name: Roles['partition']
+            readonly value: Carrying<KeyMember>
+        }
+    } & ('sort' extends keyof Roles
+            ? {
+                  readonly sort?: SortCondition<
+                      Exclude<Roles['sort'], undefined> & string
+                  >
+              }
+            : unknown)
+>
 
 /** The cases of a grouped match hold lists in lists, and `const` infers each as a readonly tuple. */
 type DeepMutable<T> = T extends (...args: never[]) => unknown
@@ -2618,6 +2679,9 @@ export const tableEntry =
         const Roles extends
             | KeyRoles<keyof Schema & string>
             | undefined = undefined,
+        const Indexes extends
+            | Readonly<Record<string, KeyRoles<keyof Schema & string>>>
+            | undefined = undefined,
     >(
         schema: Schema &
             ValidateSchema<Schema> &
@@ -2675,6 +2739,13 @@ export const tableEntry =
                              * builds these.
                              */
                             readonly key?: Roles & DistinctRoles<Roles>
+                            /**
+                             * The keys of each secondary index, by the name of the index: the
+                             * partition key and the sort key. `keyCondition` with the name of an
+                             * index builds the condition of a query on that index.
+                             */
+                            readonly indexes?: Indexes &
+                                DistinctIndexes<Indexes>
                         } & WritesRow<
                             Pinned,
                             Entity,
@@ -2690,19 +2761,27 @@ export const tableEntry =
         Separator,
         CodecSpec,
         CodecRest,
-        Roles
+        Roles,
+        Indexes
     > => {
         // a bare string is the separator; anything else carries it alongside the codec
         const {
             codec: codecSpec,
             separator,
             key: roles,
+            indexes,
         } = typeof options === 'string'
-            ? { codec: undefined, separator: options, key: undefined }
+            ? {
+                  codec: undefined,
+                  separator: options,
+                  key: undefined,
+                  indexes: undefined,
+              }
             : ((options ?? {}) as {
                   codec?: unknown
                   separator?: Separator
                   key?: KeyRoles
+                  indexes?: Readonly<Record<string, KeyRoles>>
               })
 
         const sep = separator ?? ('#' as Separator)
@@ -2717,26 +2796,31 @@ export const tableEntry =
             ]),
         )
 
-        // the roles in role order. A role that names no key, or one key in two roles, addresses no
-        // item, so construction refuses it as the type does
-        const tableKeyNames =
-            roles === undefined
-                ? []
-                : roles.sort === undefined
-                  ? [roles.partition]
-                  : [roles.partition, roles.sort]
-        for (const name of tableKeyNames) {
-            if (!Object.hasOwn(expanded, name)) {
+        // the names that roles give, in role order. A role that names no key, or one key in two
+        // roles, addresses no item, so construction refuses it as the type does
+        const namesOf = (where: string, given: KeyRoles): string[] => {
+            const names =
+                given.sort === undefined
+                    ? [given.partition]
+                    : [given.partition, given.sort]
+            for (const name of names) {
+                if (!Object.hasOwn(expanded, name)) {
+                    throw new RotoriseError(
+                        `${where} names '${name}', which is no key of the schema`,
+                    )
+                }
+            }
+            if (given.sort !== undefined && given.sort === given.partition) {
                 throw new RotoriseError(
-                    `the key option names '${name}', which is no key of the schema`,
+                    `${where} names '${given.sort}' as the sort key and the partition key`,
                 )
             }
+            return names
         }
-        if (roles?.sort !== undefined && roles.sort === roles.partition) {
-            throw new RotoriseError(
-                `the key option names '${roles.sort}' as the sort key and the partition key`,
-            )
-        }
+        const tableKeyNames =
+            roles === undefined ? [] : namesOf('the key option', roles)
+        for (const [index, given] of Object.entries(indexes ?? {}))
+            namesOf(`the index '${index}'`, given)
 
         const buildEntry = toEntry()(expanded as never, sep) as (
             item: never,
@@ -2744,6 +2828,7 @@ export const tableEntry =
         const buildKey = key()(expanded as never, sep) as (
             name: never,
             attributes: never,
+            config?: never,
         ) => unknown
 
         /**
@@ -3013,6 +3098,54 @@ export const tableEntry =
         /** The names the schema computes, as opposed to the attributes the codec declares. */
         const keyNames = keys.map((key) => key.name)
 
+        /** A key that addresses an item, encoded, or a refusal where the attributes build no key. */
+        const address = (
+            name: string,
+            attributes: Record<string, unknown>,
+        ): Carrying<KeyMember> => {
+            const built = buildKey(name as never, attributes as never)
+            if (built === undefined) {
+                throw new RotoriseError(
+                    `'${name}' gives no key for these attributes, so it cannot address the item`,
+                )
+            }
+            return carried(name, attributes, built)
+        }
+
+        /**
+         * The condition on a sort key that the attributes give. Attributes that hold no component of
+         * the key give no condition. Attributes that give every component give `equals`. Attributes
+         * that give a leading part of a list give `beginsWith` with the boundary, so the prefix
+         * selects no key whose component only starts with the last value. A `null` arm and a list
+         * whose first component is absent select nothing, and are refused.
+         */
+        const sortCondition = (
+            name: string,
+            attributes: Record<string, unknown>,
+        ): SortCondition | undefined => {
+            const { components } = componentsOf(expanded[name], attributes)
+            if (![...components].some((c) => valueAt(attributes, c) != null))
+                return undefined
+            const printed = buildKey(
+                name as never,
+                attributes as never,
+                { allowPartial: true } as never,
+            )
+            if (printed === undefined || printed === '') {
+                throw new RotoriseError(
+                    `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
+                )
+            }
+            const bounded = buildKey(
+                name as never,
+                attributes as never,
+                { allowPartial: true, enforceBoundary: true } as never,
+            )
+            return printed === bounded
+                ? { name, equals: carried(name, attributes, printed) }
+                : { name, beginsWith: carrying('S', String(bounded)) }
+        }
+
         const definition = {
             keyUpdates,
             keys: (
@@ -3030,16 +3163,42 @@ export const tableEntry =
                 }
 
                 const out: Record<string, AttributeValue> = {}
-                for (const name of names) {
-                    const built = buildKey(name as never, attributes as never)
-                    if (built === undefined) {
-                        throw new RotoriseError(
-                            `'${name}' gives no key for these attributes, so it cannot address the item`,
-                        )
-                    }
-                    out[name] = carried(name, attributes, built)
-                }
+                for (const name of names) out[name] = address(name, attributes)
                 return out
+            },
+            keyCondition: (
+                first: string | Record<string, unknown>,
+                second?: Record<string, unknown>,
+            ): KeyCondition => {
+                const [index, attributes] =
+                    typeof first === 'string'
+                        ? [first, second ?? {}]
+                        : [undefined, first]
+                const given =
+                    index === undefined
+                        ? roles
+                        : indexes !== undefined && Object.hasOwn(indexes, index)
+                          ? indexes[index]
+                          : undefined
+                if (given === undefined) {
+                    throw new RotoriseError(
+                        index === undefined
+                            ? 'the entry declares no `key` option, so the schema does not say which keys address the table'
+                            : `the indexes option declares no index '${index}'`,
+                    )
+                }
+                const sort =
+                    given.sort === undefined
+                        ? undefined
+                        : sortCondition(given.sort, attributes)
+                return {
+                    ...(index === undefined ? {} : { index }),
+                    partition: {
+                        name: given.partition,
+                        value: address(given.partition, attributes),
+                    },
+                    ...(sort === undefined ? {} : { sort }),
+                }
             },
             toEntry: buildEntry as never,
             fromEntry: fromEntry(expanded) as never,
