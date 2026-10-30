@@ -594,8 +594,8 @@ describe('a clause key no member pins extracts never', () => {
     /**
      * **A union option that a `ref` names pins its literal once the scope binds the name.** The
      * union reads the literals of each option through the `ref`, so the clause keeps the member.
-     * The key is a union that holds a `ref` and is no bare `ref`, so the type reads no literal mark
-     * through the `ref`, cannot decide the fit, and keeps the member.
+     * The scope closes the `ref` of the option, so the type reads the same literals as the run time,
+     * and a clause that no literal of the union meets drops the member.
      */
     it('reads a key whose union option is a ref, because the union then pins its literals', () => {
         const { Large } = scope({
@@ -626,6 +626,21 @@ describe('a clause key no member pins extracts never', () => {
                 colour: { S: 'blue' },
             },
         })
+    })
+
+    it('drops at the type a member whose key is pinned through a ref inside a union, as the runtime drops the member', () => {
+        const { Large } = scope({
+            Large: object({
+                kind: string('pet'),
+                size: string('large'),
+                colour: union([ref('Red'), string('blue')]),
+            }),
+            Red: string('red'),
+        })
+        const viaOption = mdunion(['kind', 'size'], [pet, Large])
+        const kept = extract(viaOption, object({ colour: string('green') }))
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+        expect(kept.def.kind).toBe('never')
     })
 })
 

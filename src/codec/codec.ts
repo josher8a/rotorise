@@ -2505,23 +2505,43 @@ type ClosedRef<Defs, N extends keyof Defs> = AttributeCodec<
 > &
     TermMark<ScopeTerm<Defs, N>>
 /**
- * A slot of an object, with a bare `ref` closed in the scope `Defs`: the `ref` itself, or the codec
- * that an `optional`, an `undefinable` or a fill marks. Any other slot is the slot.
+ * A slot of an object, with each `ref` closed in the scope `Defs` that the slot reads: a bare `ref`,
+ * the codec that an `optional` or an `undefinable` marks, each option of a union, and each slot of
+ * an object, at any depth of those nodes. A fill closes only a bare `ref`. Any other slot is the slot.
  */
-type SlotInScope<S, Defs> = S extends { readonly codec: infer C }
-    ? TermOf<C> extends ['ref', infer N extends keyof Defs]
-        ? S extends { readonly [fallbackMarker]: infer T }
-            ? MissingCodec<
-                  T,
-                  AttributeOf<ClosedRef<Defs, N>> & AttributeValue,
-                  ClosedRef<Defs, N>
-              > &
-                  TermMark<['fill', ScopeTerm<Defs, N>]>
-            : MarkLike<S, ClosedRef<Defs, N>>
-        : S
-    : TermOf<S> extends ['ref', infer N extends keyof Defs]
-      ? ClosedRef<Defs, N>
-      : S
+type SlotInScope<S, Defs> = [FreeOf<S>] extends [never]
+    ? S
+    : S extends { readonly codec: infer C }
+      ? TermOf<C> extends ['ref', infer N extends keyof Defs]
+          ? S extends { readonly [fallbackMarker]: infer T }
+              ? MissingCodec<
+                    T,
+                    AttributeOf<ClosedRef<Defs, N>> & AttributeValue,
+                    ClosedRef<Defs, N>
+                > &
+                    TermMark<['fill', ScopeTerm<Defs, N>]>
+              : MarkLike<S, ClosedRef<Defs, N>>
+          : S extends { readonly [fallbackMarker]: unknown }
+            ? S
+            : Deep<C, Defs> extends infer D extends AnyCodec
+              ? MarkLike<S, D>
+              : S
+      : Deep<S, Defs>
+/** A codec with each `ref` of its union options and object slots closed in the scope `Defs`. */
+type Deep<C, Defs> = TermOf<C> extends ['ref', infer N extends keyof Defs]
+    ? ClosedRef<Defs, N>
+    : C extends UnionCodec<infer _T, infer Os extends readonly unknown[]>
+      ? UnionInScope<{ [I in keyof Os]: SlotInScope<Os[I], Defs> }>
+      : C extends ObjectCodec<
+              infer Spec extends Record<string, ObjectSlot>,
+              infer Rest extends AnyCodec | undefined
+          >
+        ? ObjectCodec<SpecInScope<Spec, Defs>, Rest>
+        : C
+type UnionInScope<Os extends readonly unknown[]> = UnionCodec<
+    DecodeTerm<['union', TermsOf<Os>]>,
+    Os
+>
 /** The spec of an object, with each bare `ref` of a slot closed in the scope `Defs`. */
 type SpecInScope<Spec extends Record<string, ObjectSlot>, Defs> = {
     [K in keyof Spec]: SlotInScope<Spec[K], Defs>
@@ -7077,8 +7097,8 @@ type HeldFitNode<TA, NP> = NP extends ['opaq']
  * Whether a member's term reads a `ref` with no scope in the term, or a union that holds one. The
  * type reads no literal mark through such a `ref`, and the run time resolves the `ref`, so the
  * type cannot decide the fit. An entry of a scope holds its scope in the term, and so does a bare
- * `ref` slot of an entry ({@link ClosedRef}). A slot that holds a `ref` deeper, such as an option
- * of a union, holds no scope.
+ * `ref` slot of an entry ({@link ClosedRef}), and so does each option of a union slot and each slot
+ * of an object slot of an entry ({@link SlotInScope}). A `ref` below any other node holds no scope.
  */
 type ReadsRef<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
     ? N extends ['ref', unknown]

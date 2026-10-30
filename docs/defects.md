@@ -61,34 +61,25 @@ asked to discharge the stronger one. That is a specification decision.
 
 ---
 
-## Partially mitigated: the type level reads a key pinned through a ref as unpinned
+## Suspected: the type level reads a ref below a list, a set or an adapter of a scope entry as unbound
 
 **Observation.** A pattern pins a key at the term only where the term holds a literal. The type
 level reads the literal from the term of the codec, as the run time does, and a refinement in a
-pattern is refused at the type and at run time. A bare `ref` slot of an entry of a scope, and a bare
-`ref` under `optional`, `undefinable(...)` or a fill, reads as the entry that the name binds, and
-each option of a union reads under the scope of the union. One case remains. A slot that holds a
-`ref` deeper, such as an option of a union inside a field, holds no scope in the term. The type
-cannot decide whether the member fits, so the type keeps the member:
+pattern is refused at the type and at run time. A slot of an entry of a scope closes each `ref` of
+the slot in the scope: a bare `ref`, a `ref` under `optional`, `undefinable(...)` or a fill, and a
+`ref` at any depth of the union options and the object slots of the slot. A `ref` below a node of
+another kind, such as a list, a set or an adapter, holds no scope in the term of the field codec.
 
-    a key pinned through `union([ref('Red'), string('blue')])`, where the scope binds the name Red
-      type checker: the member is kept
-      runtime:      the key is pinned, and the member is kept
+**Effect.** Not established. The type bridge holds no `extract(...)` refuse id, measured 2026-10-30
+with `formal/scripts/gate.sh`. A probe with a `ref` in a union below `refine(...)` gives the same
+verdict at the type and at run time. Where the type cannot decide a fit through such a `ref`, the
+type keeps the member, so the type stays wider than the value and never narrower.
 
-**Effect.** The result type of extract keeps a member that the run time can drop. Every value fits
-the type, and the type is wider than the value. The type bridge holds the case as `extract(...)`
-refuse ids on two roots of the pool, one for each one-name clause that the pool draws and for three
-union-pattern clauses: the run time drops the member, and the type keeps it. The type bridge prints a
-`ref` that closes no cycle as a `ref` under a scope, so the type and the run time read one codec.
-Measured 2026-10-28 with `formal/scripts/gate.sh`.
-
-**Open.** A slot closed in its scope at any depth closes the case.
-
-**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the type keeps a member pinned through a
-`ref(...)`, the type drops a member whose `ref` binds a base, an optional key, or an entry with a
-union option that names a `ref`, and the slice that keeps a member pinned through an adapter.
+**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the type drops a member whose key is pinned
+through a `ref` inside a union, the type keeps a member pinned through a `ref(...)`, the type drops a
+member whose `ref` binds a base, an optional key, or an entry with a union option that names a
+`ref`, and the slice that keeps a member pinned through an adapter.
 `src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
-`formal/scripts/type_bridge_baseline.txt`: the `extract(...)` refuse ids of the two roots.
 
 ---
 
