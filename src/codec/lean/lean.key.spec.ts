@@ -61,13 +61,13 @@ const doubled: Transform = (x) => ({ tag: 'N', value: Number(x) * 2 })
 const entryOf = (spec: Spec, separator: string) => {
     const make = tableEntry<Record<string, unknown>>() as unknown as (
         schema: unknown,
-        separator: string,
+        options: { readonly separator: string },
     ) => {
         readonly key: (name: string, item: object, config?: object) => unknown
         readonly toEntry: (item: object) => Record<string, unknown>
         readonly fromEntry: (entry: object) => unknown
     }
-    return make({ K: spec }, separator)
+    return make({ K: spec }, { separator })
 }
 
 /** The builder of `src/`, reached through the table entry. */

@@ -108,7 +108,10 @@ describe('tableEntry with a codec', () => {
      * separator would have had to pass `undefined` before it — which is why it is a named slot.
      */
     it('keeps the separator working as a bare second argument', () => {
-        const dashed = tableEntry<Pet>()({ PK: ['userId'], SK: ['salt'] }, '-')
+        const dashed = tableEntry<Pet>()(
+            { PK: ['userId'], SK: ['salt'] },
+            { separator: '-' },
+        )
         expect(dashed.toEntry(pet).PK).toBe('USERID-u1')
     })
 
@@ -137,7 +140,10 @@ describe('tableEntry with a codec', () => {
      * Two properties are two inference sites, and these are the assertions that say so.
      */
     it('does not invent a codec from the separator', () => {
-        const dashed = tableEntry<Pet>()({ PK: ['userId'], SK: ['salt'] }, '-')
+        const dashed = tableEntry<Pet>()(
+            { PK: ['userId'], SK: ['salt'] },
+            { separator: '-' },
+        )
         expect(dashed).not.toHaveProperty('toItem')
         expect(dashed).not.toHaveProperty('codec')
         // @ts-expect-error a separator is not a codec, so there is nothing to encode an item with
@@ -174,16 +180,44 @@ describe('the law, over generated pets', () => {
     })
 })
 
-describe('the separator of an entry with object options', () => {
-    it('joins with the default at run time, and the type reads the separator as string', () => {
-        // pins a known defect: object options widen the separator to string, so the type of a
-        // composite key is wider than its value. A fix makes this assertion fail
+describe('the separator is a slot of the options, and the default is in the type', () => {
+    it('an entry whose options name no separator joins with the default, in the value and the type', () => {
         const Pets = tableEntry<{ petId: string }>()(
             { PK: ['petId'] },
             { codec: { petId: string } },
         )
         const entry = Pets.toEntry({ petId: 'p1' } as const)
         expect(entry.PK).toBe('PETID#p1')
-        expectTypeOf(entry.PK).toEqualTypeOf<`PETID${string}p1`>()
+        expectTypeOf(entry.PK).toEqualTypeOf<'PETID#p1'>()
+    })
+
+    it('the separator that the options name is in the value and the type', () => {
+        const Pets = tableEntry<{ petId: string }>()(
+            { PK: ['petId'] },
+            { separator: '-' },
+        )
+        const entry = Pets.toEntry({ petId: 'p1' } as const)
+        expect(entry.PK).toBe('PETID-p1')
+        expectTypeOf(entry.PK).toEqualTypeOf<'PETID-p1'>()
+    })
+
+    it('refuses a bare string separator, which would otherwise join with the default', () => {
+        const untyped = tableEntry<{ petId: string }>() as unknown as (
+            schema: object,
+            options: string,
+        ) => unknown
+        expect(() => untyped({ PK: ['petId'] }, '-')).toThrow(
+            'tableEntry takes the separator in the options',
+        )
+    })
+
+    it('refuses an empty separator, because the key could not be read back', () => {
+        expect(() =>
+            tableEntry<{ petId: string }>()(
+                { PK: ['petId'] },
+                // @ts-expect-error an empty separator joins no segments apart
+                { separator: '' },
+            ),
+        ).toThrow('Separator must not be an empty string')
     })
 })

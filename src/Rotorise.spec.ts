@@ -298,7 +298,7 @@ describe('DynamoDB Utils', () => {
                 PK: ['a', 'b', 'c'],
                 SK: 'b', // raw numeric key is only allowed for sorting propuse where other mechanism is not available (arbitrary precision numbers), either way it should use a regular composite key.
             } as const,
-            '-',
+            { separator: '-' },
         )
 
         expect(testTableEntry.fromEntry).toBeDefined()
@@ -475,7 +475,7 @@ describe('DynamoDB Utils', () => {
                 PK: ['a', 'b', 'c'],
                 SK: ['c'],
             },
-            '-',
+            { separator: '-' },
         )
 
         expect(testTableEntry.path().data.type.toString()).toBe('data.type')
@@ -747,7 +747,7 @@ describe('DynamoDB Utils', () => {
                     },
                 },
             },
-            '-',
+            { separator: '-' },
         )
 
         type entries = show<
@@ -1132,7 +1132,7 @@ describe('DynamoDB Utils', () => {
                     },
                 },
             },
-            '-',
+            { separator: '-' },
         )
 
         type entries = show<

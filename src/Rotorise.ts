@@ -2438,6 +2438,16 @@ type AgreedAttributes<Variants> = {
 const asKey = (name: string, value: unknown): Carrying<KeyMember> =>
     keyOfAttribute(name, native.encode(value))
 
+/**
+ * The refusal of a separator passed as the bare second argument. The type refuses the form, and a
+ * caller without the type would otherwise get keys joined with the default.
+ */
+const refuseBareSeparator = (): never => {
+    throw new RotoriseError(
+        'tableEntry takes the separator in the options: pass { separator }, not a bare string',
+    )
+}
+
 /** The refusal of a key value that DynamoDB cannot store. It names the key and holds no value. */
 const notAKey = (name: string): RotoriseError =>
     new RotoriseError(
@@ -2703,69 +2713,60 @@ export const tableEntry =
             ? [ErrorMessage<'Separator must not be an empty string'>]
             : [
                   /**
-                   * The separator on its own, or everything else this entry needs.
+                   * Everything else this entry needs, each in a named slot.
                    *
-                   * A bare string is the separator, which is the only shape this argument has ever
-                   * had and still means what it meant.
-                   *
-                   * The codec is a *named* slot rather than a second positional, and it has to be:
-                   * a parameter typed `Separator | CodecSpec` gives the two one inference site, and
-                   * `tableEntry(schema, '-')` then infers a `CodecSpec` from the separator — so the
-                   * type hands back `toItem` and `codec` that the implementation never built, and
-                   * calling one is a `TypeError` that compiled. Two properties are two sites.
+                   * The separator is a slot and not a bare string. A parameter typed
+                   * `Separator | {...}` makes the object a candidate for `Separator`, the candidate
+                   * fails the constraint, and the inference falls back to `string`: every key of an
+                   * entry with options then typed as `${string}` in place of the default `'#'`. One
+                   * shape gives `Separator` one inference site, so a missing separator takes the
+                   * default.
                    */
-                  options?:
-                      | Separator
-                      | ({
-                            /**
-                             * The attributes, as a spec or as a codec already built from one.
-                             *
-                             * A spec is the short form and takes the defaults. Pass a built codec
-                             * where a default is not what you want — `item` is where a rest policy
-                             * is chosen, and anything else it grows is reached the same way,
-                             * without this signature needing to learn about it.
-                             *
-                             * Where the entity is a union this must be a codec `union` built with
-                             * a discriminator, for the reason `item` refuses one: a single map of
-                             * attributes names one variant's, and the type would let the others
-                             * through it. That is worse here than it is there, because a
-                             * discriminant is usually a key component, so the mis-description lands
-                             * in an index rather than in a field.
-                             */
-                            readonly codec?: IsUnion<Entity> extends true
-                                ? TaggedCodec<Entity, CodecSpec>
-                                :
-                                      | CodecSpec
-                                      | (ItemCodec<
-                                            Entity,
-                                            CodecSpec,
-                                            CodecRest
-                                        > &
-                                            Closed)
-                            readonly separator?: Separator
-                            /**
-                             * The keys that address the item: the partition key and the sort key.
-                             *
-                             * `keyUpdates` refuses a change that touches either, because DynamoDB
-                             * cannot update a key attribute of the table. `keys` with no names
-                             * builds these.
-                             */
-                            readonly key?: Roles & DistinctRoles<Roles>
-                            /**
-                             * The keys of each secondary index, by the name of the index: the
-                             * partition key and the sort key. `keyCondition` with the name of an
-                             * index builds the condition of a query on that index.
-                             */
-                            readonly indexes?: Indexes &
-                                DistinctIndexes<Indexes>
-                        } & WritesRow<
-                            Pinned,
-                            Entity,
-                            ExpandCases<Schema>,
-                            CodecSpec,
-                            CodecRest,
-                            Separator
-                        >),
+                  options?: {
+                      /**
+                       * The attributes, as a spec or as a codec already built from one.
+                       *
+                       * A spec is the short form and takes the defaults. Pass a built codec
+                       * where a default is not what you want — `item` is where a rest policy
+                       * is chosen, and anything else it grows is reached the same way,
+                       * without this signature needing to learn about it.
+                       *
+                       * Where the entity is a union this must be a codec `union` built with
+                       * a discriminator, for the reason `item` refuses one: a single map of
+                       * attributes names one variant's, and the type would let the others
+                       * through it. That is worse here than it is there, because a
+                       * discriminant is usually a key component, so the mis-description lands
+                       * in an index rather than in a field.
+                       */
+                      readonly codec?: IsUnion<Entity> extends true
+                          ? TaggedCodec<Entity, CodecSpec>
+                          :
+                                | CodecSpec
+                                | (ItemCodec<Entity, CodecSpec, CodecRest> &
+                                      Closed)
+                      readonly separator?: Separator
+                      /**
+                       * The keys that address the item: the partition key and the sort key.
+                       *
+                       * `keyUpdates` refuses a change that touches either, because DynamoDB
+                       * cannot update a key attribute of the table. `keys` with no names
+                       * builds these.
+                       */
+                      readonly key?: Roles & DistinctRoles<Roles>
+                      /**
+                       * The keys of each secondary index, by the name of the index: the
+                       * partition key and the sort key. `keyCondition` with the name of an
+                       * index builds the condition of a query on that index.
+                       */
+                      readonly indexes?: Indexes & DistinctIndexes<Indexes>
+                  } & WritesRow<
+                      Pinned,
+                      Entity,
+                      ExpandCases<Schema>,
+                      CodecSpec,
+                      CodecRest,
+                      Separator
+                  >,
               ]
     ): TableEntryDefinition<
         Entity,
@@ -2776,25 +2777,21 @@ export const tableEntry =
         Roles,
         Indexes
     > => {
-        // a bare string is the separator; anything else carries it alongside the codec
         const {
             codec: codecSpec,
             separator,
             key: roles,
             indexes,
-        } = typeof options === 'string'
-            ? {
-                  codec: undefined,
-                  separator: options,
-                  key: undefined,
-                  indexes: undefined,
-              }
-            : ((options ?? {}) as {
-                  codec?: unknown
-                  separator?: Separator
-                  key?: KeyRoles
-                  indexes?: Readonly<Record<string, KeyRoles>>
-              })
+        } = (
+            typeof options === 'string'
+                ? refuseBareSeparator()
+                : (options ?? {})
+        ) as {
+            codec?: unknown
+            separator?: Separator
+            key?: KeyRoles
+            indexes?: Readonly<Record<string, KeyRoles>>
+        }
 
         const sep = separator ?? ('#' as Separator)
         if (sep === '' || typeof sep !== 'string') {

@@ -40,7 +40,7 @@ Entry point for defining a DynamoDB table schema. Returns an object with the met
 
 The double-call `<Entity>()(schema)` is required because TypeScript does not support partial type parameter inference — `Entity` is explicit while `Schema` is inferred from arguments.
 
-`options` is the separator as a string, or an object:
+`options` is an object:
 
 - **`separator`** — Joins the components of a key. Defaults to `'#'`.
 - **`key`** — The keys that address the item: `{ partition: 'PK', sort: 'SK' }`, or `{ partition: 'PK' }`. `keys` builds these with no names, and `keyUpdates` refuses a change that touches them. Construction refuses a name that is no key of the schema, and one key in the two roles.
@@ -485,9 +485,12 @@ before `'9'`.
 ### Custom Separator
 
 ```ts
-const Table = tableEntry<User>()(schema, '-')
+const Table = tableEntry<User>()(schema, { separator: '-' })
 // Keys use '-' instead of '#': 'ORGID-acme-ID-123'
 ```
+
+The separator is a slot of `options`, so the type of a key holds the default `'#'` where `options`
+names no separator. A bare string as the second argument is refused.
 
 ## Error Handling
 

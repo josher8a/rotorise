@@ -99,7 +99,10 @@ describe('a key build', () => {
     })
 
     it('builds the key of a value that holds a part of a longer separator', () => {
-        const Dashed = tableEntry<User>()({ PK: ['orgId'] }, '::')
+        const Dashed = tableEntry<User>()(
+            { PK: ['orgId'] },
+            { separator: '::' },
+        )
         expect(Dashed.key('PK', { orgId: 'a:b' })).toBe('ORGID::a:b')
         expect(() => Dashed.key('PK', { orgId: 'a::b' })).toThrow(/orgId/)
     })
