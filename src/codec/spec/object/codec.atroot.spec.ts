@@ -280,3 +280,27 @@ describe('the item of a union', () => {
         expect(path(kept)).toBe('v')
     })
 })
+
+describe('the preconditions of an empty clause', () => {
+    const Pet = object({
+        id: string,
+        tag: union([object({ chip: string }), string]),
+    })
+
+    it('refuses an empty clause below the root, because no key states that the attribute is a map', () => {
+        // the clause drops the option `string`, and a write at `tag` is safe only on a map
+        const below = narrow(at(Pet, ['tag']), object({}))
+        const refused = preconditions(below)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect(String(refused)).toMatch(
+            /the clause at 'tag' names no key, so no precondition states that the attribute is a map/,
+        )
+    })
+
+    it('accepts an empty clause at the root, because the item of a row is always a map', () => {
+        const Tags = itemOf(
+            union([object({ chip: string }), object({ id: string })]),
+        )
+        expect(preconditions(narrow(at(Tags, []), object({})))).toEqual([])
+    })
+})

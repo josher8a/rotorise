@@ -143,18 +143,6 @@ union option that names a `ref`, and the slice that keeps a member pinned throug
 
 ---
 
-## Known: the refusal of an empty clause below the root has no test
-
-**Observation.** `Closed.preconditionOfC` refuses a clause with no name below the root: the clause
-admits each map there, and the empty conjunction admits each attribute. No test puts the same
-clause to `preconditions(at(...))`.
-
-**Effect.** A host that drifts from that refusal passes the suite.
-
-**Pin.** None.
-
----
-
 ## Known: the type of exclude keeps a member that a binary literal clause drops at run time
 
 **Observation.** The run time compares the bytes of a binary literal clause with the bytes of each
