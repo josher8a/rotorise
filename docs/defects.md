@@ -343,3 +343,20 @@ refuses the value.
 
 **Pin.** `src/codec/spec/object/codec.rest.spec.ts`: the type admits a declared field type at an
 undeclared name, and the run time refuses the value.
+
+## Known: object options widen the separator of an entry to string
+
+**Observation.** `tableEntry` infers `Separator` from `options`. A bare string, and an object that
+names `separator`, infer the literal. An object without `separator` infers `string`, where the
+default `'#'` applies at run time. Measured 2026-10-30: with `{ codec: { petId: string } }`,
+`toEntry({ petId: 'p1' }).PK` is `'PETID#p1'`, and its type is `` `PETID${string}p1` ``. The `key`
+and `indexes` options widen it the same way.
+
+**Effect.** The type of a composite key is sound and wider than its value. A caller that compares
+a key against a literal type loses the check. Three rewrites of the option type were measured and
+refused: `Separator & string` widens the same way, `NoInfer<Separator>` loses the inference from a
+bare string, and `` `${Separator}` `` infers `''` and so refuses every object option. A fix probably
+derives the separator from the options instead of inferring it.
+
+**Pin.** The test "joins with the default at run time, and the type reads the separator as string"
+in `src/codec/spec/object/codec.entry.spec.ts` asserts the wide type. A fix fails it.

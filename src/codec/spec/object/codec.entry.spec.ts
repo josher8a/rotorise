@@ -4,7 +4,7 @@
  * A typical repository file carries a handful of marshaller calls, a cast per read, and a
  * hand-written `getKeys` — every one of them `tableEntry` and a codec each doing half the job.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import { decimal, optional, string } from '../../codec'
 import {
@@ -171,5 +171,19 @@ describe('the law, over generated pets', () => {
             },
             [Pet.unsafeToItem(pet)],
         )
+    })
+})
+
+describe('the separator of an entry with object options', () => {
+    it('joins with the default at run time, and the type reads the separator as string', () => {
+        // pins a known defect: object options widen the separator to string, so the type of a
+        // composite key is wider than its value. A fix makes this assertion fail
+        const Pets = tableEntry<{ petId: string }>()(
+            { PK: ['petId'] },
+            { codec: { petId: string } },
+        )
+        const entry = Pets.toEntry({ petId: 'p1' } as const)
+        expect(entry.PK).toBe('PETID#p1')
+        expectTypeOf(entry.PK).toEqualTypeOf<`PETID${string}p1`>()
     })
 })
