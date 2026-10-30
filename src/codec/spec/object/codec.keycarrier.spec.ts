@@ -180,6 +180,19 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
         )
     })
 
+    it('toEntry refuses an empty key, which a marshaller writes as a key that DynamoDB refuses', () => {
+        expect(() =>
+            Tags.toEntry({ tagId: new Uint8Array([1]), petId: 'p1', nick: '' }),
+        ).toThrow(
+            "'SK' is built from a value that DynamoDB cannot store as a key",
+        )
+        expect(() =>
+            Tags.toEntry({ tagId: new Uint8Array(), petId: 'p1', nick: 'Rex' }),
+        ).toThrow(
+            "'PK' is built from a value that DynamoDB cannot store as a key",
+        )
+    })
+
     it('toItem refuses an empty key, where the item has no key that DynamoDB stores', () => {
         expect(() =>
             Tags.toItem({ tagId: new Uint8Array([1]), petId: 'p1', nick: '' }),

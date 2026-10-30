@@ -1507,6 +1507,14 @@ const toEntry =
 
         for (const key_ in schema) {
             const val = buildKey(key_, item)
+            // a key of one attribute holds the value of the attribute, which can be a Uint8Array.
+            // DynamoDB refuses an empty S or B value at a key of a table or an index
+            const held: unknown = val
+            if (
+                held === '' ||
+                (held instanceof Uint8Array && held.length === 0)
+            )
+                throw notAKey(key_)
             if (val !== undefined) {
                 entry[key_] = val satisfies string as never
             }
@@ -2430,6 +2438,12 @@ type AgreedAttributes<Variants> = {
 const asKey = (name: string, value: unknown): Carrying<KeyMember> =>
     keyOfAttribute(name, native.encode(value))
 
+/** The refusal of a key value that DynamoDB cannot store. It names the key and holds no value. */
+const notAKey = (name: string): RotoriseError =>
+    new RotoriseError(
+        `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string, a number, or a non-empty Uint8Array.`,
+    )
+
 /**
  * A key as the attribute that an encoding wrote: `S`, `N` or `B`, and a refusal of any other member.
  * DynamoDB refuses an empty `S` or `B` value at a key of a table or an index, so the empty value is
@@ -2452,9 +2466,7 @@ const keyOfAttribute = (
         )
             return carrying('B', written.B)
     }
-    throw new RotoriseError(
-        `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string, a number, or a non-empty Uint8Array.`,
-    )
+    throw notAKey(name)
 }
 
 /**

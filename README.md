@@ -477,8 +477,8 @@ before `'9'`.
 - The type refuses a key of one attribute that is none of `S`, `N` and `B`, such as a boolean.
 - One key name has one member, so the type refuses a match whose arms give `S` and `N`.
 - `null` and `undefined` give no key in every method.
-- DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `keys`, `toItem` and
-  `keyUpdates` throw a `RotoriseError` for one. The message names the key and not the value.
+- DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `toEntry`, `keys`, `toItem`
+  and `keyUpdates` throw a `RotoriseError` for one. The message names the key and not the value.
 - DynamoDB limits a partition key to 2048 bytes and a sort key to 1024 bytes. DynamoDB refuses a
   write over the limit, and Rotorise does not check the length.
 
