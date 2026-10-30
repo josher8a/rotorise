@@ -21,8 +21,8 @@
  *    the printed predicate at `Value.arr …` is `false`. The emitter confines itself to inner terms that write
  *    nothing but `Value.str`, where the gap is unobservable, and refuses otherwise.
  * 2. **`refine`'s two halves are not symmetric here, and are in the model.** This library's
- *    `refine` does *not* run `is` on encode (`src/codec/codec.ts:1466` says why: the argument is already
- *    typed), while `Codec.restrict`'s `e` is `if q v then c.e v else none`. So a value the
+ *    `refine` does *not* run `is` on encode, because the argument of `encode` is already a
+ *    `Narrow`, while `Codec.restrict`'s `e` is `if q v then c.e v else none`. So a value the
  *    predicate rejects is written by the library and refused by the model. That divergence is
  *    real, it is now *emittable*, and a vector built on such a value will fail the Lean build
  *    rather than pass — which is the differential test working, not the emitter mis-emitting.
@@ -69,7 +69,7 @@ const refusal = (emit: () => unknown): LeanUnemittable => {
 describe('the predicates this library ships', () => {
     /**
      * `isStoredNumeral` is what DynamoDB hands back, and `Numeral.Stored` is the same set —
-     * `src/codec/attribute.ts:138` claims it and the two were checked against each other in the kernel
+     * the docstring of `isStoredNumeral` claims it and the two were checked against each other in the kernel
      * over a corpus of numeral spellings before this emission was allowed. The emitter writes
      * `Numeral.Stored` at the text carrier, because a refinement over `decimal` tests the caller's
      * text. The model's `isStored` decides a `.num`, and is false at every text.

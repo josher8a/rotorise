@@ -415,16 +415,16 @@ export type M<
 /**
  * How deep DynamoDB nests document types.
  *
- * `docs/dynamo-datatypes.md:130`: *"The document types are list and map. These data types can be
- * nested within each other, to represent complex data structures up to 32 levels deep."* So this
- * counts **`L` and `M` only** — a scalar or a set is not a document type and cannot contain one, so
- * neither adds a level, and a set at the deepest legal level is legal.
+ * `docs/dynamo-datatypes.md#HowItWorks.DataTypes.Document`: *"The document types are list and map.
+ * These data types can be nested within each other, to represent complex data structures up to 32
+ * levels deep."* So this counts **`L` and `M` only** — a scalar or a set is not a document type and
+ * cannot contain one, so neither adds a level, and a set at the deepest legal level is legal.
  *
  * The other two limits in that reference are not this one and are not checkable here. Element count
- * is unbounded (`:132`, `:185` — *"There is no limit on the number of values in a list or a map"*),
- * so a wide attribute is exact rather than lucky. Item size (400 KB) is a sum over every attribute
- * name and value in a row, so it is checkable where an *item* is assembled and nowhere inside one
- * attribute's codec.
+ * is unbounded (the same section, and the section on sets — *"There is no limit on the number of
+ * values in a list or a map"*), so a wide attribute is exact rather than lucky. Item size (400 KB)
+ * is a sum over every attribute name and value in a row, so it is checkable where an *item* is
+ * assembled and nowhere inside one attribute's codec.
  *
  * **The boundary is the one thing the reference does not settle.** Its sentence does not say
  * whether a scalar sitting inside 32 lists is the 32nd level or the 33rd. This takes the reading

@@ -1,12 +1,12 @@
 /**
  * **The nesting bound, at every codec that writes a list or a map.**
  *
- * `docs/dynamo-datatypes.md:130` allows document types nested up to 32 levels. Nothing in this
- * library checked it, so `opaque` and `native` would encode a 100-level document without complaint
- * and DynamoDB would reject the row on write — a C1 violation of the same shape as the
- * `⟨N, "5e-324"⟩` one that `number`, `literal` and `opaque` were each gated for. The model
- * over-approximates `𝔸` in depth and only in depth, so this is the host checking what the model
- * has not yet said.
+ * `docs/dynamo-datatypes.md#HowItWorks.DataTypes.Document` allows document types nested up to 32
+ * levels. Nothing in this library checked it, so `opaque` and `native` would encode a 100-level
+ * document without complaint and DynamoDB would reject the row on write — a C1 violation of the
+ * same shape as the `⟨N, "5e-324"⟩` one that `number`, `literal` and `opaque` were each gated for.
+ * The model over-approximates `𝔸` in depth and only in depth, so this is the host checking what the
+ * model has not yet said.
  *
  * Two limits in that reference are deliberately *not* checked here, and the reasons differ.
  * Element count is unbounded — the reference says so twice — so a wide attribute is exact rather

@@ -163,10 +163,10 @@ SECTION = re.compile(r"§(\d+)")
 # A backticked token naming a file rather than a declaration. `NOISE` keeps these out of the name
 # pass, where they would be nonsense; `dangling_paths` is what checks them.
 PATHISH = re.compile(r"\.(md|py|ts|lean|json|toml|sh|yml|yaml|tex)$")
-# A Lean path with a line suffix. A line is what an edit moves and a declaration name is not,
-# and `Calculus/` is what these guards already hold to their names, so a citation names the
-# declaration. Refused as a class rather than resolved.
-LINE_ANCHOR = re.compile(r"^[A-Za-z0-9_./-]+\.lean:[0-9]+$")
+# A Lean, TypeScript or Markdown path with a line suffix. A line is what an edit moves and a
+# declaration name is not, so a citation names the declaration, or the anchor of a Markdown
+# section. Refused as a class rather than resolved.
+LINE_ANCHOR = re.compile(r"^[A-Za-z0-9_./-]+\.(lean|ts|md):[0-9]+$")
 # What the tree produces rather than holds. One entry per producer, and no more: a prefix here
 # exempts every path under it, so a fourth entry would need a fourth producer.
 GENERATED = ("dist/",      # npm run build
@@ -421,7 +421,7 @@ def path_resolves(tok, full, base):
 
 
 def line_anchored(paths):
-    """Every backticked `<lean file>:<line>` citation, by path and line."""
+    """Every backticked `<lean, ts or md file>:<line>` citation, by path and line."""
     out = {}
     for path in paths:
         if not os.path.exists(path):
@@ -619,7 +619,7 @@ def main():
     if anchored:
         failed = True
         total = sum(len(v) for v in anchored.values())
-        print(f"\n  {total} citation{'' if total == 1 else 's'} anchored to a Lean line rather "
+        print(f"\n  {total} citation{'' if total == 1 else 's'} anchored to a line rather "
               f"than to a declaration name")
         for path in sorted(anchored):
             for lineno, tok in anchored[path]:

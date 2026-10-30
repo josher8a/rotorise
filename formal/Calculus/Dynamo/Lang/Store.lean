@@ -18,8 +18,9 @@ normalisation `η`. This module holds the instances at DynamoDB:
 The ideal algebra has no depth limit. DynamoDB has one, and this module instantiates the
 parameter of `Attr.Storable` at the store's number.
 
-`docs/dynamo-datatypes.md:130`: *"The document types are list and map. These data types can
-be nested within each other, to represent complex data structures up to 32 levels deep."*
+`docs/dynamo-datatypes.md#HowItWorks.DataTypes.Document`: *"The document types are list and
+map. These data types can be nested within each other, to represent complex data structures up to
+32 levels deep."*
 -/
 
 namespace Calculus.DynamoDB

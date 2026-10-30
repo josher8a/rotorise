@@ -15,36 +15,6 @@ moves and a declaration name does not.
 
 ---
 
-## Known: a citation anchored to a line has no guard, and most of them were already wrong
-
-**Observation.** Prose, docstrings and guard tables cite files by path, and some cite a path with a
-line number. `scripts/name_drift.py` resolves the plain form: a backticked path is checked against
-the files the tree holds, with a short list of prefixes for what the tree produces rather than
-holds. It also refuses a `<lean file>:<line>` token as a class, because a Lean line is what an edit
-moves and a declaration name is not. What has no guard is the same form aimed at a `.ts` file or a
-Markdown file.
-
-**Effect.** Six citations carry a line number that nothing checks: `docs/dynamo-datatypes.md:130`
-from `Calculus/Dynamo/Lang/Store.lean`, `src/codec/attribute.ts` and `src/codec/spec/laws/codec.depth.spec.ts`;
-`src/codec/spec/literal/codec.set.spec.ts:76` from `Calculus/Dynamo/Alg/Products.lean`; and
-`src/codec/attribute.ts:138` and `src/codec/codec.ts:1466` from
-`src/codec/lean/lean.predicates.spec.ts`. Any edit above one of those lines moves it, and every
-check stays green.
-
-**And the rot is not hypothetical.** Of the 29 line-anchored citations this repository held before
-the guard landed, **19 pointed at something that was not a declaration**: a blank line, a tactic
-step, a match arm, or a different concept entirely. In the combinator algebra, line 174 was cited
-as `funImage` and read `· exact nomatch h`; line 409 was cited as `isStored` and read a
-`funext`/`simp only` line; line 2292 was cited as a store-survival theorem for number, since retired, and was blank. The 23
-aimed at Lean files are rewritten to declaration names; these six are what the class leaves behind.
-
-**Pin.** The Lean form is pinned by `name_drift.py`, which fails on it. The six above are pinned by
-this entry and by nothing else. The reason they are not rewritten with the rest: three of them
-point at a row of a table in `docs/dynamo-datatypes.md`, which has no declaration to name, and a
-guard that refused them would demand a name that does not exist.
-
----
-
 ## Known: the model refuses two stand-ins at one name where the host accepts two equal ones
 
 **Observation.** The host's stand-in test accepts two fields that read a map without the name to
