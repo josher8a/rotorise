@@ -1082,16 +1082,60 @@ from the complement. The graph is lawful in both orientations. The premises are 
 lawful, and the write of `c` is a row that holds no key name. The key function has no law.
 
 The derived item is the graph with a second reader, the read of `c` on the complement. A row with a
-stale key, a row with no key, and a row with an attribute other than `S` at a key name read as the
-item. The two readers agree wherever both read, so the read is the order-free union of the two. The
-read adds no constructor: it is `Codec.extendRead`.
+stale key, a row with no key, and a row with another member at a key name read as the item. The
+two readers agree wherever both read, so the read is the order-free union of the two. The read adds
+no constructor: it is `Codec.extendRead`.
 
-At the DynamoDB row, the key names are a finite set, and the key part is the string at each key name.
-The carrier of the row has no decidable equality, and the key part has one. An object codec with no
-fill, lawful fields, a rest policy that refuses, and no declared key name meets the premises.
+At the DynamoDB row, the key names are a finite set. A key attribute of DynamoDB is `S`, `N` or `B`,
+and the model holds `S` and `N`. The member of a key is a fact of the key name, so the model takes the
+member as data: a function from a key name to `S` or `N`. A composite key is a joined string, so its
+member is `S`. A key of one attribute has the member of its attribute. The key part of a row is the
+value at each key name, or no value where the row lacks the name. The value is a string at an `S` key
+and a numeral at an `N` key, so a key part holds no text that its member refuses. The key part has
+decidable equality, because the key names are finite and each carrier has decidable equality. The
+carrier of the row has none.
+
+A row that holds another member at a key name has no key part. The strict read of the graph refuses
+that row, and the read that deletes the key names reads the outside part, because that read removes
+each key name whatever attribute the name holds. A stale row has the member of its key name and the
+value of another item. The strict read accepts that row, and the derived item reads it as its item.
+
+An object codec with no fill, lawful fields, a rest policy that refuses, and no declared key name
+meets the premises.
 
 A leaf of a key spec holds its parts, and a part holds the name that the part reads and the print of
 the value at that name. Two items that agree on the names that a spec reads give one key.
+
+The footprint of a key spec depends on the item. A match reads the discriminator. Where the item
+holds the discriminator, the match reads the names under the arm that the discriminator selects.
+Where the item lacks the discriminator, the match reads the names under every arm. An item that
+knows more reads fewer names. Two items that agree on the names that the first item reads give one
+key. The static footprint is the footprint at the item that holds nothing, so the static rule is a
+corollary of this rule.
+
+A key update is a function of the keys of the schema, the values that the codec decides, and a
+change. The update reads each key at the change over the decided values. A key is touched where its
+footprint holds a written name that the codec does not decide. A touched key of the table is a
+refusal. A touched key that lacks a component at that item is a refusal. Any other touched key gives
+its key at that item, or no key at a `null` arm. The result is a refusal, or a patch. The patch maps
+each touched key to the text that the key prints, or to no text. The member of a key is static, so the
+patch holds no member. The SET clause of an update writes the text as the attribute of the member of
+the key: a string at an `S` key, and a numeral at an `N` key. No text goes to the REMOVE clause.
+
+The update commutes with encode. Let `x` be an item that agrees with the decided values. Let `y` be
+`x` with the change applied. A key of the patch is the key of `y`. A key outside the patch has one
+key at `x` and at `y`. The law has four premises. The change agrees with the decided values, and the
+update checks this first. The item agrees with the decided values, and the codec supplies this,
+because the update never reads the item. The names of the keys differ, and the keys of an object
+give this. The footprint that the update computes is the footprint of the spec, and the vector rows
+check this.
+
+The refusal of a touched key that lacks a component says that the change cuts a block. Two names
+are tied where one key reads both at that item and the codec decides neither. A block is the set of
+names that the ties reach from one name. The refusal rule is: the change off the decided names is a
+union of blocks, and no touched key is a key of the table. The shorter rule, that the change is a
+union of blocks, is false. A change that writes only the name of a table key is a block by itself,
+and the update refuses the change.
 
 ## What is deliberately not modelled
 
