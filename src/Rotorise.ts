@@ -1,5 +1,6 @@
 import type {
     AttributeMap,
+    AttributeName,
     AttributeValue,
     Carrying,
     StoredItem,
@@ -859,6 +860,160 @@ type ValidateCasesMatch<E, D extends string, C> = {
 }
 
 /**
+ * The member that an attribute is stored as. A union of members is each member.
+ */
+type MemberOf<A> = A extends unknown
+    ? {
+          [M in AttributeName]: [A] extends [{ readonly [K in M]: unknown }]
+              ? M
+              : never
+      }[AttributeName]
+    : never
+
+/** The member that `native` writes for a value: a string is `S`, and a number is `N`. */
+type NativeMember<V> = [NonNullable<V>] extends [never]
+    ? never
+    : [NonNullable<V>] extends [string]
+      ? 'S'
+      : [NonNullable<V>] extends [number | bigint]
+        ? 'N'
+        : never
+
+/**
+ * The member that the codec writes at a top-level field, over the options of a tagged codec. `NULL`
+ * is the member of a value that gives no key, so it is no member of a key.
+ */
+type CodecMember<Enc, Name extends string> = Enc extends unknown
+    ? Name extends keyof Enc
+        ? Exclude<MemberOf<Enc[Name]>, 'NULL'>
+        : never
+    : never
+
+/**
+ * The member that a key of one attribute takes. A key of a top-level attribute of an entry with a
+ * codec takes the member that the codec writes for that field. Any other key of one attribute takes
+ * the member that `native` writes for the value. A path below the top level has no field of the
+ * codec, so it takes the second rule.
+ */
+type MemberOfName<E, Enc, Name extends string> = [Enc] extends [never]
+    ? NativeMember<ValueOfKey<E, Name>>
+    : Name extends `${string}.${string}`
+      ? NativeMember<ValueOfKey<E, Name>>
+      : [CodecMember<Enc, Name>] extends [never]
+        ? NativeMember<ValueOfKey<E, Name>>
+        : CodecMember<Enc, Name>
+
+/** The attributes that a key spec gives as the key itself: a bare name, at any depth of a match. */
+type KeyLeaves<Spec> = string extends Spec
+    ? never
+    : Spec extends string
+      ? Spec
+      : Spec extends readonly unknown[]
+        ? never
+        : Spec extends { spec: infer Arms }
+          ? KeyLeaves<Arms[keyof Arms]>
+          : Spec extends { cases: infer C }
+            ? KeyLeaves<ArmOfCases<C>>
+            : never
+
+/** The members that the attributes of a key spec give. */
+type KeyMembers<E, Enc, Spec> = KeyLeaves<Spec> extends infer N
+    ? N extends string
+        ? MemberOfName<E, Enc, N>
+        : never
+    : never
+
+/**
+ * One attribute that is a key, against its member. A key attribute of DynamoDB is `S`, `N` or `B`,
+ * and this library writes `S` and `N`, so an attribute of any other member cannot be a key. A key
+ * attribute has one type, so the arms of one key give one member. The refusal names the key and the
+ * attribute and holds no value.
+ */
+type ValidateLeaf<E, Enc, KeyName extends string, Name extends string, All> = [
+    MemberOfName<E, Enc, Name>,
+] extends [infer Own]
+    ? [Own] extends [never]
+        ? NoKeyMember<KeyName, Name>
+        : [Exclude<Own, 'S' | 'N'>] extends [never]
+          ? IsUnion<Own> extends true
+              ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as S or as N. A key attribute has one type`>
+              : IsUnion<All> extends true
+                ? ErrorMessage<`[tableEntry] '${KeyName}' takes '${Name}' as ${Own & string}, and another arm of '${KeyName}' takes another type. A key attribute has one type, so the arms of a key give one member`>
+                : Name
+          : NoKeyMember<KeyName, Name>
+    : never
+
+/** The refusal of an attribute that is stored as neither `S` nor `N`. */
+type NoKeyMember<
+    KeyName extends string,
+    Name extends string,
+> = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as neither S nor N. A key attribute of DynamoDB is S, N or B, and this library writes S and N`>
+
+/** A key spec against the members of its attributes. A list of components is `S` and needs no check. */
+type ValidateKeyCarrier<
+    E,
+    Enc,
+    KeyName extends string,
+    Spec,
+    All = KeyMembers<E, Enc, Spec>,
+> = Spec extends string
+    ? ValidateLeaf<E, Enc, KeyName, Spec, All>
+    : Spec extends readonly unknown[]
+      ? Spec
+      : Spec extends { discriminator: infer D; spec: infer Arms }
+        ? {
+              discriminator: D
+              spec: {
+                  [L in keyof Arms]: ValidateKeyCarrier<
+                      E,
+                      Enc,
+                      KeyName,
+                      Arms[L],
+                      All
+                  >
+              }
+          }
+        : Spec extends { discriminator: infer D; cases: infer C }
+          ? {
+                discriminator: D
+                cases: {
+                    [I in keyof C]: C[I] extends readonly [
+                        infer Literals,
+                        infer Arm,
+                    ]
+                        ? [
+                              Literals,
+                              ValidateKeyCarrier<E, Enc, KeyName, Arm, All>,
+                          ]
+                        : C[I]
+                }
+            }
+          : Spec
+
+/**
+ * Reads each key of one attribute against the member that the attribute is stored as. A boolean, an
+ * object, a list, and an attribute that holds a string and a number are each refused on the
+ * attribute that is wrong, and so are the arms of a match that give `S` in one arm and `N` in
+ * another. Short-circuits to `unknown` when the schema holds no attribute as a key, so a schema of
+ * lists pays nothing.
+ */
+type ValidateCarriers<Schema, E, CodecSpec, CodecRest> =
+    string extends keyof Schema
+        ? unknown
+        : [KeyLeaves<Schema[keyof Schema]>] extends [never]
+          ? unknown
+          : {
+                [K in keyof Schema]: ValidateKeyCarrier<
+                    E,
+                    [CodecSpec] extends [undefined]
+                        ? never
+                        : EncodedAttributes<CodecSpec, CodecRest>,
+                    K & string,
+                    Schema[K]
+                >
+            }
+
+/**
  * Reads each path that a schema holds against the entity. A wrong path, a path that no option
  * holds, a transform whose parameter does not fit the value, a path whose value can be absent, and a
  * match that lacks a literal are each refused on the element that is wrong. Short-circuits to
@@ -1476,17 +1631,21 @@ type OptimizedAttributes<Entity, Spec, Config extends SpecConfigShape> = show<
         : ProcessSpecType<Entity, Spec, Config>
 >
 
+/**
+ * The key that a call builds, from the attributes of the call. A key of one attribute is the value
+ * of that attribute in the call, and `null` gives no key. The call holds every attribute that the
+ * key reads, so the value is read at the name of the spec and not from the call as a whole.
+ */
 type ProcessKey<
     Entity,
     Spec,
     Separator extends string,
     NullAs extends never | undefined = never,
     Config extends SpecConfigShape = SpecConfigShape,
-    Attributes = Pick<Entity, Spec & keyof Entity>,
 > = [Entity] extends [never]
     ? never
     : Spec extends keyof Entity
-      ? Replace<ValueOf<Attributes>, null, undefined>
+      ? Replace<Entity[Spec], null, undefined>
       : Spec extends InputSpecShape
         ? CompositeKeyBuilderImpl<
               Entity,
@@ -1507,8 +1666,7 @@ type ProcessKey<
                   >,
                   Separator,
                   NullAs,
-                  Config,
-                  Attributes
+                  Config
               >
             : ErrorMessage<'Invalid Spec'>
 
@@ -1517,7 +1675,6 @@ type OptimizedBuiltKey<
     Spec,
     Separator extends string,
     Config extends SpecConfigShape,
-    Attributes,
 > = Entity extends unknown
     ? show<
           Spec extends DiscriminatedSchemaShape
@@ -1529,17 +1686,9 @@ type OptimizedBuiltKey<
                     >,
                     Separator,
                     undefined,
-                    Config,
-                    Attributes
+                    Config
                 >
-              : ProcessKey<
-                    Entity,
-                    Spec,
-                    Separator,
-                    undefined,
-                    Config,
-                    Attributes
-                >
+              : ProcessKey<Entity, Spec, Separator, undefined, Config>
       >
     : never
 
@@ -1595,7 +1744,7 @@ type TableEntryDefinition<
         key: Key,
         attributes: Attributes,
         config?: Config,
-    ) => OptimizedBuiltKey<Attributes, Spec, Separator, Config_, Attributes>
+    ) => OptimizedBuiltKey<Attributes, Spec, Separator, Config_>
 
     /**
      * The keys a change to these attributes invalidates, rebuilt.
@@ -1769,22 +1918,46 @@ type EncodedItem<
                     Entry,
                     K,
                     false
-                >]: KeyAttribute<Entry[K & keyof Entry]>
+                >]: KeyAttribute<
+                    Entry[K & keyof Entry],
+                    KeyMembers<
+                        Entity,
+                        EncodedAttributes<CodecSpec, CodecRest>,
+                        Schema[K]
+                    >
+                >
             } & {
                 [K in keyof Schema as NamedKey<
                     Schema,
                     Entry,
                     K,
                     true
-                >]?: KeyAttribute<Entry[K & keyof Entry]>
+                >]?: KeyAttribute<
+                    Entry[K & keyof Entry],
+                    KeyMembers<
+                        Entity,
+                        EncodedAttributes<CodecSpec, CodecRest>,
+                        Schema[K]
+                    >
+                >
             }
         >
       : never
 
-/** The member that a key takes: a string is `S`, and a number is `N`. */
-type KeyAttribute<Value> = Carrying<
-    Value extends string ? 'S' : Value extends number | bigint ? 'N' : never
->
+/**
+ * The member that a key takes. A key of one attribute takes the member of its attribute, which
+ * `Members` holds. A composite key is a joined string, so it takes `S`: a string is `S`, and a number
+ * is `N`.
+ */
+type KeyAttribute<Value, Members = never> = [Members] extends [never]
+    ? Carrying<
+          Value extends string
+              ? 'S'
+              : Value extends number | bigint
+                ? 'N'
+                : never
+      >
+    : Carrying<Members & AttributeName>
 
 /**
  * A key the schema names, kept when whether it may be absent matches `Absent`.
@@ -2208,8 +2381,17 @@ type AgreedAttributes<Variants> = {
  * so an `N` sort key orders by number. `native` writes the value, so a value that the store refuses
  * is refused here too. The refusal names the key and never the value.
  */
-const asKey = (name: string, value: unknown): Carrying<'S' | 'N'> => {
-    const written = native.encode(value)
+const asKey = (name: string, value: unknown): Carrying<'S' | 'N'> =>
+    keyOfAttribute(name, native.encode(value))
+
+/**
+ * A key as the attribute that an encoding wrote: `S` or `N`, and a refusal of any other member.
+ * The refusal names the key and holds no value.
+ */
+const keyOfAttribute = (
+    name: string,
+    written: AttributeValue | CodecError,
+): Carrying<'S' | 'N'> => {
     if (!(written instanceof CodecError)) {
         const member = memberOf(written)
         if (member === 'S' && typeof written.S === 'string')
@@ -2220,6 +2402,26 @@ const asKey = (name: string, value: unknown): Carrying<'S' | 'N'> => {
     throw new RotoriseError(
         `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string or a number that DynamoDB stores.`,
     )
+}
+
+/**
+ * The top-level attribute that a key of one attribute reads at an item: the bare name of the spec,
+ * or of the arm that a match selects. A list of components, a `null` arm and a path below the top
+ * level read no field of the codec, so they give none.
+ */
+const attributeOf = (
+    spec: unknown,
+    item: Record<string, unknown>,
+): string | undefined => {
+    let arm: unknown = spec
+    while (isMatch(arm)) {
+        const literal = valueAt(item, String(arm.discriminator))
+        arm =
+            literal !== undefined && Object.hasOwn(arm.spec, String(literal))
+                ? arm.spec[String(literal)]
+                : undefined
+    }
+    return typeof arm === 'string' && !arm.includes('.') ? arm : undefined
 }
 
 const isTableKey = (spec: unknown): spec is TableKeySpec<unknown> =>
@@ -2427,7 +2629,8 @@ export const tableEntry =
     >(
         schema: Schema &
             ValidateSchema<Schema> &
-            ValidatePaths<Schema, KeyedBy>,
+            ValidatePaths<Schema, KeyedBy> &
+            ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest>,
         ...[options]: [Separator] extends ['']
             ? [ErrorMessage<'Separator must not be an empty string'>]
             : [
@@ -2683,6 +2886,45 @@ export const tableEntry =
                 constant !== null &&
                 String(written) === String(constant))
 
+        /**
+         * A built key as the attribute that carries it.
+         *
+         * A key of one top-level attribute of an entry with a codec takes the attribute that the
+         * codec writes for that field, as the row holds it: a decimal that the codec writes as `N`
+         * is an `N` key. Any other key takes the member that `native` writes. A codec that is not an
+         * item codec has no `encodePartial`, so its keys take the second rule.
+         */
+        const carried = (
+            name: string,
+            item: Record<string, unknown>,
+            value: unknown,
+            written?: AttributeMap,
+        ): Carrying<'S' | 'N'> => {
+            const field =
+                attributes === undefined
+                    ? undefined
+                    : attributeOf(expanded[name], item)
+            if (field === undefined) return asKey(name, value)
+            let encoded: AttributeValue | CodecError | undefined =
+                written?.[field]
+            if (
+                encoded === undefined &&
+                attributes !== undefined &&
+                isItemCodec(attributes)
+            ) {
+                const map = attributes.encodePartial({
+                    [field]: item[field],
+                } as never)
+                encoded =
+                    map instanceof CodecError
+                        ? map
+                        : (map as AttributeMap)[field]
+            }
+            return encoded === undefined
+                ? asKey(name, value)
+                : keyOfAttribute(name, encoded)
+        }
+
         const keyUpdates = (
             changed: Record<string, unknown>,
         ): KeyUpdate<string> => {
@@ -2740,7 +2982,7 @@ export const tableEntry =
 
                 const built = buildKey(key.name as never, given as never)
                 if (built === undefined) remove.push(key.name)
-                else set[key.name] = asKey(key.name, built)
+                else set[key.name] = carried(key.name, given, built)
             }
 
             return { set, remove }
@@ -2777,7 +3019,7 @@ export const tableEntry =
                             `'${name}' gives no key for these attributes, so it cannot address the item`,
                         )
                     }
-                    out[name] = asKey(name, built)
+                    out[name] = carried(name, attributes, built)
                 }
                 return out
             },
@@ -2802,7 +3044,7 @@ export const tableEntry =
                     for (const name of keyNames) {
                         const value = entry[name]
                         if (value !== undefined)
-                            built[name] = asKey(name, value)
+                            built[name] = carried(name, item, value, written)
                     }
                     return { ...written, ...built }
                 },
