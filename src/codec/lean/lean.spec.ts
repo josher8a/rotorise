@@ -979,6 +979,11 @@ export const sampleVectors: readonly Vector[] = [
     },
     { name: 'scalar_null', codec: erase(nullValue), value: null },
     {
+        name: 'scalar_number',
+        codec: erase(dynamoNumber),
+        value: orThrow(DynamoNumber.from('1.5')),
+    },
+    {
         name: 'literal_alternatives',
         codec: erase(string('A', 'B')),
         value: 'B',
@@ -1274,7 +1279,6 @@ export const sampleVectors: readonly Vector[] = [
  */
 const refusalCodecs: readonly (readonly [string, AnyCodec])[] = [
     ...sampleVectors.map((v) => [v.name, v.codec] as const),
-    ['scalar_number', erase(dynamoNumber)] as const,
     ['never', erase(never)] as const,
     // a refusal vector states the term and no value, so a codec whose *term* the model cannot
     // spell states nothing here either. The read-side test pins that the corpus holds none
@@ -1524,7 +1528,6 @@ const legacyPairs = <P>(
 const separationPairs = (): readonly Separation[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(dynamoNumber)] as const,
         ['never', erase(never)] as const,
     ]
     const out: Separation[] = []
@@ -1677,7 +1680,6 @@ const separationPairs = (): readonly Separation[] => {
 const disjointPairs = (): readonly DisjointPair[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(dynamoNumber)] as const,
         ['never', erase(never)] as const,
     ]
     const out: DisjointPair[] = []
@@ -1772,7 +1774,6 @@ const readDecisions: readonly (readonly [string, AnyCodec])[] = [
 const readVerdicts = (): readonly ReadVerdict[] => {
     const codecs: readonly (readonly [string, AnyCodec])[] = [
         ...sampleVectors.map((v) => [v.name, v.codec] as const),
-        ['scalar_number', erase(dynamoNumber)] as const,
         ...readDecisions,
     ]
     const attributes: [string, AttributeValue][] = []
@@ -2059,10 +2060,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 430 write pairs and every one of 461 read pairs', () => {
-        expect(writeResolutions().length).toBe(430)
+    it('offers 440 write pairs and every one of 471 read pairs', () => {
+        expect(writeResolutions().length).toBe(440)
         const reads = readResolutions()
-        expect(reads.length).toBe(461)
+        expect(reads.length).toBe(471)
         /**
          * **Every pair is stated, and no filter decides otherwise.** A read value with no Lean
          * form makes `leanValueOf` throw, so a pair becoming unstatable fails the emission rather
@@ -2157,7 +2158,7 @@ describe('union resolution, model against library', () => {
             itemReads(),
         )
         expect(module).toContain('import Calculus.Bridge.Rows')
-        expect(module).toContain('461 on the read side')
+        expect(module).toContain('471 on the read side')
         expect(module).toContain('vcheck')
     })
 })
@@ -2312,7 +2313,7 @@ describe('the legacy read gate, against the model', () => {
 
     it('emits them for the gate to elaborate', () => {
         const reads = legacyReads()
-        expect(reads.length).toBe(2200)
+        expect(reads.length).toBe(2295)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.legacyreads.lean'),
@@ -2338,11 +2339,11 @@ describe("the read side, against the model's read row", () => {
      * a concrete numeral `.n` by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 2650 pairs, and asserts every one', () => {
+    it('offers 2700 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(2650)
+        expect(verdicts.length).toBe(2700)
         const rows = readVerdictRows(verdicts).rows(leanShapes(() => 'f'))
-        expect(rows.length).toBe(2650)
+        expect(rows.length).toBe(2700)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
             'scalar_number__reads__literal_decimal',
@@ -2400,7 +2401,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadRowModule(readVerdicts())
         expect(module).toContain('import Calculus.Bridge.Rows')
-        expect(module).toContain('All 2650 pairs are asserted here.')
+        expect(module).toContain('All 2700 pairs are asserted here.')
     })
 })
 
@@ -2656,7 +2657,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
                 readVectorIsUnstatable(one) === undefined && emittable(one),
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(43)
+        expect(statable.length).toBe(44)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)

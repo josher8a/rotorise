@@ -45,27 +45,6 @@ guard that refused them would demand a name that does not exist.
 
 ---
 
-## Partially mitigated: the corpus pins a numeric set and no scalar numeric value
-
-**Observation.** `Value.num` carries a `WFNumeral`, which is a closed term, and `leanValueOf` emits
-`Value.num (WFNumeral.of "1.5")` for a `DynamoNumber`. The set half is in the corpus: a set vector
-at `dynamoNumber.set()` is in `sampleVectors`. Measured 2026-09-23 with `grep -o 'Value.numSet'`,
-`Value.numSet` appears once in each committed sample, 36 times in `.vectors.full.lean`, once in
-`.readvectors.lean` and 11 times in `.resolutions.lean`.
-
-**Effect, and it is the scalar half.** Measured the same way, `Value.num` appears zero times in each
-of the eight gate artifacts. The numeric entry in the four corpus lists that cross codecs against
-each other is `dynamoNumber`, and it is not in `sampleVectors`, so no write vector carries a scalar
-numeric value. The read side is covered: `Attr.n` appears 185 times in `.readverdicts.lean`. So one
-direction of one shape is unpinned. The `decimal` vector carries `Value.str "1.5"`, which is
-correct, because `decimal` is `held` over `number` with the text pair, so its value is text.
-
-**Pin.** The set half is pinned by the set vector in `sampleVectors`, which the gate elaborates.
-The scalar half has no pin, and closing it means putting a scalar `dynamoNumber` vector in
-`sampleVectors` rather than only in the crossing lists.
-
----
-
 ## Known: the model refuses two stand-ins at one name where the host accepts two equal ones
 
 **Observation.** The host's stand-in test accepts two fields that read a map without the name to

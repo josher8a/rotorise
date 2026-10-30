@@ -66,6 +66,13 @@ theorem scalar_null :
         (Value.null))
       (some (Attr.null)) = .same := kernel_rfl%
 
+/-- `scalar_number` -/
+theorem scalar_number :
+    check 1
+      ((Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.number : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
+        (Value.num (numeral0)))
+      (some (Attr.n (numeral0))) = .same := kernel_rfl%
+
 /-- `literal_alternatives` -/
 theorem literal_alternatives :
     check 1
@@ -416,8 +423,8 @@ theorem mutual_scope__reads :
 
 /-! ## Refusals — neither side writes anything for these
 
-44 of 1764 shown; `scripts/gate.sh` elaborates all
-1764. One `kernel_rfl%` each, no comparator and no fuel: the answer is `none`,
+44 of 1807 shown; `scripts/gate.sh` elaborates all
+1807. One `kernel_rfl%` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -444,6 +451,11 @@ theorem scalar_binary__refuses__scalar_string :
 /-- `scalar_null__refuses__scalar_string` — refused on both sides -/
 theorem scalar_null__refuses__scalar_string :
     (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.null : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
+      (Value.str "hello") = none := kernel_rfl%
+
+/-- `scalar_number__refuses__scalar_string` — refused on both sides -/
+theorem scalar_number__refuses__scalar_string :
+    (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.number : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
       (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_alternatives__refuses__scalar_string` — refused on both sides -/
@@ -629,11 +641,6 @@ theorem recursive_category__refuses__scalar_string :
 /-- `recursive_tree_optional__refuses__scalar_string` — refused on both sides -/
 theorem recursive_tree_optional__refuses__scalar_string :
     (Closed.meaning (libTable noCallers) (⟨3, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.object (Scoped.Body.mk {"name", "children"} (fun k => if k.1 = "name" then Scoped.ObjectSlot.req (1) else Scoped.ObjectSlot.optional (2)) none) : Scoped.Term 3 0) | ⟨1, _⟩ => (Scoped.Term.string : Scoped.Term 3 1) | ⟨2, _⟩ => (Scoped.Term.array (0) : Scoped.Term 3 2) | ⟨_ + 3, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
-      (Value.str "hello") = none := kernel_rfl%
-
-/-- `scalar_number__refuses__scalar_string` — refused on both sides -/
-theorem scalar_number__refuses__scalar_string :
-    (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.number : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
       (Value.str "hello") = none := kernel_rfl%
 
 /-- `never__refuses__scalar_string` — refused on both sides -/
