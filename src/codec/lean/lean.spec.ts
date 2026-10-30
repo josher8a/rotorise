@@ -983,6 +983,12 @@ export const sampleVectors: readonly Vector[] = [
         codec: erase(dynamoNumber),
         value: orThrow(DynamoNumber.from('1.5')),
     },
+    // a shipped predicate, so the model names it, and a stored numeral, so the predicate holds
+    {
+        name: 'refine_stored_numeral',
+        codec: erase(refine(decimal, isStoredNumeral as never)),
+        value: '1.5',
+    },
     {
         name: 'literal_alternatives',
         codec: erase(string('A', 'B')),
@@ -2060,10 +2066,10 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 440 write pairs and every one of 471 read pairs', () => {
-        expect(writeResolutions().length).toBe(440)
+    it('offers 450 write pairs and every one of 481 read pairs', () => {
+        expect(writeResolutions().length).toBe(450)
         const reads = readResolutions()
-        expect(reads.length).toBe(471)
+        expect(reads.length).toBe(481)
         /**
          * **Every pair is stated, and no filter decides otherwise.** A read value with no Lean
          * form makes `leanValueOf` throw, so a pair becoming unstatable fails the emission rather
@@ -2158,7 +2164,7 @@ describe('union resolution, model against library', () => {
             itemReads(),
         )
         expect(module).toContain('import Calculus.Bridge.Rows')
-        expect(module).toContain('471 on the read side')
+        expect(module).toContain('481 on the read side')
         expect(module).toContain('vcheck')
     })
 })
@@ -2313,7 +2319,7 @@ describe('the legacy read gate, against the model', () => {
 
     it('emits them for the gate to elaborate', () => {
         const reads = legacyReads()
-        expect(reads.length).toBe(2295)
+        expect(reads.length).toBe(2392)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.legacyreads.lean'),
@@ -2339,11 +2345,11 @@ describe("the read side, against the model's read row", () => {
      * a concrete numeral `.n` by `rfl`, so the filter excluded pairs the row answers. The filter is
      * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
      */
-    it('offers 2700 pairs, and asserts every one', () => {
+    it('offers 2805 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()
-        expect(verdicts.length).toBe(2700)
+        expect(verdicts.length).toBe(2805)
         const rows = readVerdictRows(verdicts).rows(leanShapes(() => 'f'))
-        expect(rows.length).toBe(2700)
+        expect(rows.length).toBe(2805)
         for (const name of [
             'scalar_number__reads__scalar_decimal',
             'scalar_number__reads__literal_decimal',
@@ -2401,7 +2407,7 @@ describe("the read side, against the model's read row", () => {
         }
         const module = leanReadRowModule(readVerdicts())
         expect(module).toContain('import Calculus.Bridge.Rows')
-        expect(module).toContain('All 2700 pairs are asserted here.')
+        expect(module).toContain('All 2805 pairs are asserted here.')
     })
 })
 
@@ -2436,7 +2442,7 @@ describe("the declaration guard, against the model's classifier", () => {
             accepted.length,
             acceptedShared.length,
             refused.length,
-        ]).toEqual([979, 5, 34])
+        ]).toEqual([1015, 5, 43])
     })
 
     /**
@@ -2457,7 +2463,7 @@ describe("the declaration guard, against the model's classifier", () => {
         const refused = emitted.filter((one) =>
             one.endsWith('= false :=\n  of_decide_eq_true kernel_rfl%'),
         )
-        expect([byDecision.length, refused.length]).toEqual([170, 3])
+        expect([byDecision.length, refused.length]).toEqual([173, 4])
         expect(byDecision.length + refused.length).toBe(recursive.length)
         const verdict = (left: AnyCodec, right: AnyCodec) =>
             leanSeparation({ name: 'probe', left, right })
@@ -2556,7 +2562,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(1006)
+        expect(pairs.length).toBe(1051)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),
@@ -2657,7 +2663,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
                 readVectorIsUnstatable(one) === undefined && emittable(one),
         )
         expect(statable.length).toBe(sampleVectors.length)
-        expect(statable.length).toBe(44)
+        expect(statable.length).toBe(45)
         // each asserts the model's `p`, through the comparator that crosses `Value.map`'s binder
         for (const one of statable) {
             const vector = leanReadVector(one)

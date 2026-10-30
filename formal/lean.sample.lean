@@ -106,6 +106,13 @@ theorem scalar_number :
     = some (Attr.n (numeral0)) := by
   vector
 
+/-- `refine_stored_numeral` -/
+theorem refine_stored_numeral :
+    (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.refine ((Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) () : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
+      (Value.str "1.5")
+    = some (Attr.n (numeral0)) := by
+  vector
+
 /-- `literal_alternatives` -/
 theorem literal_alternatives :
     (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.union [Scoped.Term.literal GroundKind.string "A", Scoped.Term.literal GroundKind.string "B"] : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
@@ -379,8 +386,8 @@ theorem mutual_scope__guarded :
 
 /-! ## Refusals — neither side writes anything for these
 
-44 of 1807 shown; `scripts/gate.sh` elaborates all
-1807. One `kernel_rfl%` each, no comparator and no fuel: the answer is `none`,
+45 of 1887 shown; `scripts/gate.sh` elaborates all
+1887. One `kernel_rfl%` each, no comparator and no fuel: the answer is `none`,
 which carries no function for the funext gap to open under.
 -/
 
@@ -412,6 +419,11 @@ theorem scalar_null__refuses__scalar_string :
 /-- `scalar_number__refuses__scalar_string` — refused on both sides -/
 theorem scalar_number__refuses__scalar_string :
     (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.number : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
+      (Value.str "hello") = none := kernel_rfl%
+
+/-- `refine_stored_numeral__refuses__scalar_string` — refused on both sides -/
+theorem refine_stored_numeral__refuses__scalar_string :
+    (Closed.meaning (libTable noCallers) (⟨1, (fun i => match i with | ⟨0, _⟩ => (Scoped.Term.refine ((Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])) (Pred.closure (fun v => match v with | .str s => Numeral.Stored s | _ => false)) () : Scoped.Term 1 0) | ⟨_ + 1, h⟩ => absurd h (Nat.not_lt_of_le (Nat.le_add_left _ _))), 0⟩ : Closed)).e
       (Value.str "hello") = none := kernel_rfl%
 
 /-- `literal_alternatives__refuses__scalar_string` — refused on both sides -/
