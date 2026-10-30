@@ -203,8 +203,8 @@ export type Term =
            * caller said about a codec. Absent is the honest answer for an adapter nobody has
            * declared, and the derivation stands there.
            */
-          readonly arbitrary?: (rng: Rng, size: number) => unknown
-          readonly shrink?: (value: never) => readonly unknown[]
+          readonly arbitrary?: ((rng: Rng, size: number) => unknown) | undefined
+          readonly shrink?: ((value: never) => readonly unknown[]) | undefined
       }
     /**
      * The rule `(refine)`. The model carries `q : Value → Bool`; this carries the caller's closure,

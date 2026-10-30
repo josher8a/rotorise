@@ -124,26 +124,26 @@ describe('Exact<> with discriminated unions', () => {
 
 describe('DynamoDB Utils', () => {
     it('CompositeKeyParams', () => {
-        attest<{ a: string; b?: number; c?: boolean }>(
+        attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
             null as any as CompositeKeyParams<
                 { a: string; b: number; c: boolean },
                 ['a', 'b', 'c']
             >,
         )
-        attest<{ a: string; b?: number; c?: boolean }>(
+        attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
             null as any as CompositeKeyParams<
                 { a: string; b: number; c: boolean },
                 ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']]
             >,
         )
-        attest<{ a: string; b: number; c?: boolean }>(
+        attest<{ a: string; b: number; c?: boolean | undefined }>(
             null as any as CompositeKeyParams<
                 { a: string; b: number; c: boolean },
                 ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']],
                 2
             >,
         )
-        attest<{ a: string; b?: number; c?: boolean }>(
+        attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
             null as any as CompositeKeyParams<
                 { a: string; b: number; c: boolean },
                 ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']],

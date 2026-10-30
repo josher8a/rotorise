@@ -1297,10 +1297,12 @@ const pinnedByEach = (
 /** The conjuncts of a guard, and the first position where the conjunction admits more. */
 export type Guard = {
     readonly conjuncts: readonly Precondition[]
-    readonly inexact?: {
-        readonly segments: readonly (string | number)[]
-        readonly what: string
-    }
+    readonly inexact?:
+        | {
+              readonly segments: readonly (string | number)[]
+              readonly what: string
+          }
+        | undefined
 }
 
 /** The member of each ground base, which a `type` precondition tests. */

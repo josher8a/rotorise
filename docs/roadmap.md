@@ -390,3 +390,19 @@ form at the base. Where a form is worse, a pass makes it cheaper before the form
 
 **What decides it.** The measurement at the base, taken before the constructive form lands. That
 figure is the threshold.
+
+---
+
+## The encode of an object codec admits an explicit undefined where the run time takes one
+
+**The future state.** A codec carries an input type beside its decoded type. The encode of
+`object(...)`, of `item(...)` and of a patch admits `{ k: undefined }` at an `optional(...)` slot,
+because the run time writes no attribute for that key. The decoded type stays exact, because decode
+writes no undefined value at an `optional(...)` slot. A consumer with exactOptionalPropertyTypes then
+passes the value that a consumer without the flag passes. `opaque(...)` refuses that key on a write,
+so the input of `opaque(...)` stays exact.
+
+**What decides it.** The cost of an input parameter across the codec family in
+`src/codec/codec.ts`, where every concrete codec sets the input equal to the output today. The pass
+lands where the parameter deletes the widened encode in
+`src/codec/spec/object/codec.undefinable.spec.ts` and the attest snapshots show no growth.

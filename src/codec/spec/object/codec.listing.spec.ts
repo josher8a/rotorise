@@ -251,8 +251,6 @@ const listing: ListingEntry = {
     ownerId: 'u1',
     storeId: 'a1',
     handle: 'ana',
-    displayName: undefined,
-    channel: undefined,
     description: 'a friendly beagle',
     createdAt: '2026-01-01T00:00:00.000Z',
     status: ListingStatus.LISTED,

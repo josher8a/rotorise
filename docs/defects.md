@@ -45,25 +45,6 @@ guard that refused them would demand a name that does not exist.
 
 ---
 
-## Known: the exact-optional-property flag is off, and turning it on does not typecheck
-
-**Observation.** `tsconfig.json` switches on strict mode and unchecked-indexed-access and leaves the
-exact-optional-property flag off. Measured 2026-09-07:
-
-    npx tsc --noEmit --exactOptionalPropertyTypes
-    9 errors
-
-Four are in library source, three in `src/codec/codec.ts` and one in `src/Rotorise.ts`. Five are in
-specs. By diagnostic code: three at 2379, two at 2375, two at 2345, one at 2344, one at 2322.
-
-**Effect.** An optional property accepts an explicit undefined value where the declaration means the
-property may be absent. The distinction matters at the boundary this library writes, because an
-attribute that is absent and an attribute holding an undefined value are different wire shapes.
-
-**Pin.** None. The flag is off, so no check fails.
-
----
-
 ## Partially mitigated: the corpus pins a numeric set and no scalar numeric value
 
 **Observation.** `Value.num` carries a `WFNumeral`, which is a closed term, and `leanValueOf` emits

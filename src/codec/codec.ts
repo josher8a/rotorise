@@ -896,8 +896,8 @@ export type Attributes = Readonly<Record<string, AnyCodec>>
 export type Refinement = {
     readonly is: (value: never) => boolean
     readonly what: string
-    readonly arbitrary?: (rng: Rng, size: number) => unknown
-    readonly onThinSearch?: (what: string, rate: number) => void
+    readonly arbitrary?: ((rng: Rng, size: number) => unknown) | undefined
+    readonly onThinSearch?: ((what: string, rate: number) => void) | undefined
 }
 
 // ── scalars ─────────────────────────────────────────────────────────

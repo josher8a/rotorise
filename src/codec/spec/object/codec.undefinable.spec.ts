@@ -143,16 +143,25 @@ describe('the laws', () => {
         expect(Pet.unsafeEncode(Pet.unsafeDecode(row))).toEqual(row)
     })
 
-    /** `{ k: undefined }` is a legal value of `{ k?: T }`, and `optional` loses the key on it. */
+    /**
+     * Without exactOptionalPropertyTypes, `{ k: undefined }` is a legal value of `{ k?: T }`, and
+     * `optional` loses the key on it.
+     */
     it('round-trips the value optional cannot', () => {
         const entity = { id: 'p1', nickname: undefined, chipped: undefined }
         const back = Pet.unsafeDecode(Pet.unsafeEncode(entity))
         expect(back).toEqual(entity)
         expect(Object.keys(back).sort()).toEqual(Object.keys(entity).sort())
 
-        // the same value through `optional`, for contrast: the key does not survive
+        // the same value through `optional`, for contrast: the key does not survive. The encode is
+        // typed as a consumer without exactOptionalPropertyTypes sees it, because that type admits
+        // `{ k: undefined }` and the flag on this suite refuses the value that the run time takes
+        const encodeLoose = Loose.unsafeEncode as (value: {
+            readonly id: string
+            readonly nickname?: string | undefined
+        }) => ReturnType<typeof Loose.unsafeEncode>
         const loose = { id: 'p1', nickname: undefined }
-        const looseBack = Loose.unsafeDecode(Loose.unsafeEncode(loose))
+        const looseBack = Loose.unsafeDecode(encodeLoose(loose))
         expect(Object.keys(looseBack)).toEqual(['id'])
         expect(Object.keys(looseBack)).not.toEqual(Object.keys(loose))
     })

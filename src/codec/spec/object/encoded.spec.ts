@@ -307,10 +307,12 @@ describe('a patch types the attributes it names', () => {
         written.weight
     })
 
-    it('keeps a patched attribute optional only where the patch admits undefined', () => {
+    it('keeps a patched attribute optional only where the patch may lack it', () => {
         const maybe: string | undefined = undefined
-        const written = Pet.unsafeEncodePartial({ note: maybe })
-        // `note` may or may not be written, because the value given may be absent
+        const patch: { note?: string } =
+            maybe === undefined ? {} : { note: maybe }
+        const written = Pet.unsafeEncodePartial(patch)
+        // `note` may or may not be written, because the patch may lack it
         expect(written.note?.S).toBeUndefined()
     })
 })

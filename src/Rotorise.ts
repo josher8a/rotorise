@@ -111,8 +111,9 @@ type PlainKeyParams<
               > &
                   keyof Entity]: TransformOverride<InputSpec, K, Entity[K]>
           } & {
-              [K in extractHeadOrPass<InputSpec[number]> &
-                  keyof Entity]?: TransformOverride<InputSpec, K, Entity[K]>
+              [K in extractHeadOrPass<InputSpec[number]> & keyof Entity]?:
+                  | TransformOverride<InputSpec, K, Entity[K]>
+                  | undefined
           }
       >
     : never
@@ -134,11 +135,9 @@ type PathKeyParams<
                   Entity[K]
               >
           } & {
-              [K in All & keyof Entity]?: TransformOverride<
-                  InputSpec,
-                  K,
-                  Entity[K]
-              >
+              [K in All & keyof Entity]?:
+                  | TransformOverride<InputSpec, K, Entity[K]>
+                  | undefined
           } & ([PathHeads<Entity, All>] extends [never]
                   ? unknown
                   : DeepPick<
@@ -535,10 +534,10 @@ type AtPath<
     Optional extends boolean = false,
 > = P extends `${infer Head}.${infer Tail}`
     ? Optional extends true
-        ? { [K in Head]?: AtPath<Tail, V, true> }
+        ? { [K in Head]?: AtPath<Tail, V, true> | undefined }
         : { [K in Head]: AtPath<Tail, V> }
     : Optional extends true
-      ? { [K in P]?: V }
+      ? { [K in P]?: V | undefined }
       : { [K in P]: V }
 
 /**
@@ -1555,9 +1554,9 @@ type ProcessSpecType<
 type SpecConfig<Spec> = Spec extends string ? never : SpecConfigShape
 
 type SpecConfigShape = {
-    depth?: number
-    allowPartial?: boolean
-    enforceBoundary?: boolean
+    depth?: number | undefined
+    allowPartial?: boolean | undefined
+    enforceBoundary?: boolean | undefined
 }
 
 /** The object that holds the literal of a discriminator, which is an attribute or a path. */

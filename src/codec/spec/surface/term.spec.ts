@@ -518,7 +518,7 @@ describe('a reader during construction reads the term, where a scope binds a nam
         const { t, slot } = open()
         const root: Term = {
             kind: 'object',
-            body: { fields: { next: { mark: 'req', t } }, rest: undefined },
+            body: { fields: { next: { mark: 'req', t } } },
         }
         expect(componentsOf([root])).toEqual([])
         slot.bound = { T: root }
@@ -529,7 +529,7 @@ describe('a reader during construction reads the term, where a scope binds a nam
 describe('the flat scope of a root', () => {
     const rootOver = (t: Term): Term => ({
         kind: 'object',
-        body: { fields: { x: { mark: 'req', t } }, rest: undefined },
+        body: { fields: { x: { mark: 'req', t } } },
     })
 
     /** The readers that run after a scope closes each read one flat scope of the root. */

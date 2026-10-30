@@ -555,7 +555,7 @@ type Bound = {
 
 /** The position of the printer, and the functions that the theorem binds where the vector is quantified. */
 type At = {
-    readonly bound?: Bound
+    readonly bound?: Bound | undefined
     readonly placed: Placed
 }
 
