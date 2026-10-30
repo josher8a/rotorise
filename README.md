@@ -34,13 +34,17 @@ const UserTable = tableEntry<User>()({
 
 ## API
 
-### `tableEntry<Entity>()(schema, separator?)`
+### `tableEntry<Entity>()(schema, options?)`
 
 Entry point for defining a DynamoDB table schema. Returns an object with the methods below.
 
 The double-call `<Entity>()(schema)` is required because TypeScript does not support partial type parameter inference — `Entity` is explicit while `Schema` is inferred from arguments.
 
-The optional `separator` defaults to `'#'`.
+`options` is the separator as a string, or an object:
+
+- **`separator`** — Joins the components of a key. Defaults to `'#'`.
+- **`key`** — The keys that address the item: `{ partition: 'PK', sort: 'SK' }`, or `{ partition: 'PK' }`. `keys` builds these with no names, and `keyUpdates` refuses a change that touches them. Construction refuses a name that is no key of the schema, and one key in the two roles.
+- **`codec`** — The attributes of the item, which `toItem` and `fromItem` encode and decode.
 
 ### `.key(keyName, attributes, config?)`
 
@@ -104,6 +108,67 @@ const user = UserTable.fromEntry(item)
 ```
 
 `fromEntry` cannot fail. `fromItem` returns a `Result`, because the decode of the item can fail.
+
+### `.keys(names?, attributes)`
+
+Builds the named keys as DynamoDB attributes, which is the shape of the `Key` of a request.
+Without `names`, it builds the keys that the `key` option names, the partition key first.
+It throws a `RotoriseError` where the attributes build no value for a named key, because a request
+cannot address an item with a key that does not exist.
+
+```ts
+import { tableEntry } from 'rotorise'
+
+type Pet = { petId: string; species: 'CAT' | 'DOG'; shelterId: string; age: number }
+
+const PetTable = tableEntry<Pet>()(
+  { PK: ['petId'], SK: ['species'], GSI1PK: ['shelterId'], GSI1SK: 'age' },
+  { key: { partition: 'PK', sort: 'SK' } },
+)
+
+PetTable.keys({ petId: 'p1', species: 'CAT' })
+// => { PK: { S: 'PETID#p1' }, SK: { S: 'SPECIES#CAT' } }
+
+PetTable.keys(['GSI1SK'], { age: 3 })
+// => { GSI1SK: { N: '3' } }
+```
+
+### `.keyUpdates(changed)`
+
+Rebuilds the keys that a change touches, as the `SET` and `REMOVE` clauses of an
+`UpdateExpression`. A key that the item writes after the change is in `set`. A key that the item
+omits after the change, for example at a `null` arm, is in `remove`. A key is in one of the two.
+
+```ts
+PetTable.keyUpdates({ shelterId: 's2' })
+// => { set: { GSI1PK: { S: 'SHELTERID#s2' } }, remove: [] }
+```
+
+A change must give every component of each key that it touches. The keys tie their components
+together, so the type and the run time refuse a change that writes part of a block, and the
+message names the whole block. A change that touches a key that the `key` option names is refused,
+because DynamoDB cannot update a key attribute of the table: write the new item and delete the old one.
+
+### `.toItem(item)` and `.fromItem(row)`
+
+With the `codec` option, the entry writes and reads DynamoDB attributes. `toItem` encodes the item
+and adds its keys. `fromItem` deletes the keys and decodes the rest. Each returns a `Result`: the
+value, or a `CodecError`.
+
+```ts
+import { number, string, tableEntry } from 'rotorise'
+
+type Pet = { petId: string; age: number; name: string }
+
+const PetTable = tableEntry<Pet>()(
+  { PK: ['petId'], GSI1SK: 'age' },
+  { codec: { petId: string, age: number, name: string }, key: { partition: 'PK' } },
+)
+
+PetTable.toItem({ petId: 'p1', age: 3, name: 'Rex' })
+// => { petId: { S: 'p1' }, age: { N: '3' }, name: { S: 'Rex' },
+//      PK: { S: 'PETID#p1' }, GSI1SK: { N: '3' } }
+```
 
 ### `.infer`
 
@@ -337,6 +402,18 @@ C.build(conditionOf(guards, () => `v${n++}`), register)
 
 A write with an empty precondition list needs no condition. Check the list before the fold.
 
+### A Key of One Attribute
+
+A key attribute of DynamoDB is `S`, `N` or `B`. A list key joins its parts, so it is always `S`. A
+key of one attribute (`GSI1SK: 'age'`, or an attribute arm of a match) copies the attribute, so it
+takes the member of that attribute: a string is `S`, and a number is `N`. With a codec, the key
+takes the member that the codec writes for the field, so a decimal that the codec writes as `N` is
+an `N` key. An `N` sort key orders by number, where an `S` key orders `'10'` before `'9'`.
+
+- The type refuses a key of one attribute that is neither `S` nor `N`, such as a boolean.
+- One key name has one member, so the type refuses a match whose arms give `S` and `N`.
+- `null` and `undefined` give no key in every method.
+
 ### Custom Separator
 
 ```ts
@@ -346,7 +423,7 @@ const Table = tableEntry<User>()(schema, '-')
 
 ## Error Handling
 
-All runtime errors throw `RotoriseError` (exported), so you can distinguish library errors from your own.
+The key builders throw `RotoriseError` (exported), so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. A key that cannot be built throws `RotoriseError` in every method.
 
 ```ts
 import { RotoriseError } from 'rotorise'
