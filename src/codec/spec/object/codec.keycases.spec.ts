@@ -288,16 +288,18 @@ describe('the construction of a grouped match', () => {
         ).toBeUndefined()
     })
 
-    it('keeps the mark of `table(...)` on a grouped key', async () => {
-        const { table } = await import('../../../Rotorise')
+    it('gives a grouped key the role that the key option names', () => {
         const Marked = tableEntry<
             { s: 'A'; id: string } | { s: 'B'; id: string }
-        >()({
-            PK: table({
-                discriminator: 's',
-                cases: [[['A', 'B'], ['id']]],
-            }),
-        })
+        >()(
+            {
+                PK: {
+                    discriminator: 's',
+                    cases: [[['A', 'B'], ['id']]],
+                },
+            },
+            { key: { partition: 'PK' } },
+        )
         expect(Marked.keys({ s: 'A', id: 'x' })).toEqual({
             PK: { S: 'ID#x' },
         })

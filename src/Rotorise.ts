@@ -773,10 +773,7 @@ type ExpandCases<Schema> = string extends keyof Schema
     ? Schema
     : 'cases' extends NeedsExactCheck<Schema[keyof Schema]>
       ? {
-            [K in keyof Schema]: ExpandSpec<Schema[K]> &
-                (Schema[K] extends { readonly [tableKeyMark]: true }
-                    ? { readonly [tableKeyMark]: true }
-                    : unknown)
+            [K in keyof Schema]: ExpandSpec<Schema[K]>
         }
       : Schema
 
@@ -1809,9 +1806,9 @@ type TableEntryDefinition<
               /**
                * The table's keys, encoded — together they are the `Key` of a request.
                *
-               * The no-names form of {@link TableEntryDefinition.keys}. Absent unless the schema
-               * marks a key with {@link table}, because until it does the schema does not know
-               * which keys address the table.
+               * The no-names form of {@link TableEntryDefinition.keys}, in role order. Absent
+               * unless the entry declares the `key` option, because until it does the schema does
+               * not know which keys address the table.
                */
               keys(
                   attributes: Partial<Entity> & Record<string, unknown>,
@@ -1992,57 +1989,50 @@ type EncodedAttributes<CodecSpec, CodecRest> =
           : Encoded<CodecSpec>
 
 /**
- * Marks a table key.
+ * Marks a key of the table at the type level.
  *
- * Type-level only. Which keys address the table is held in a {@link tableKeys} set at runtime, so
- * nothing is added to the spec at all — where a marked property had to be defined non-enumerably
- * and then *hoped* not to surface in the walks that read the spec to build a key from it. The
- * declaration stays because the type needs a brand: {@link TableKeys} and {@link MovesTheItem} read
- * it to decide what {@link TableEntryDefinition.keyUpdates} may rebuild.
+ * {@link Roled} writes the mark from the `key` option, so a spec that the caller wrote carries no
+ * mark. {@link TableKeys} and {@link MovesTheItem} read it to decide what
+ * {@link TableEntryDefinition.keyUpdates} may rebuild.
  */
 declare const tableKeyMark: unique symbol
 
 /**
- * The specs {@link table} marked.
+ * The primary key of the table: the name of the partition key, and the name of the sort key.
  *
- * Keyed on the spec object rather than written into it, which is what leaves the spec exactly the
- * data the caller wrote. Weak, so a schema declared and dropped is collectable.
+ * DynamoDB addresses an item by one partition key and at most one sort key, and cannot update
+ * either. The role is a fact of the table, not of a spec, so it is declared once, by name.
  */
-const tableKeys = new WeakSet<object>()
-
-/** A key spec marked as belonging to the table itself rather than to an index. */
-export type TableKeySpec<Spec> = Spec & { readonly [tableKeyMark]: true }
-
-/**
- * Marks a key as the table's own, rather than an index's.
- *
- * DynamoDB will not update a key attribute — it is the item's address. An index key is an ordinary
- * attribute, so {@link TableEntryDefinition.keyUpdates} rebuilds those and must never emit these.
- * The schema is the only place that difference is visible: `['petId']` looks the same either way.
- *
- * @example
- * ```ts
- * tableEntry<Pet>()({
- *     PK: table(['petId']),
- *     SK: table(['petId']),
- *     GSI1PK: ['ownerId'],
- * })
- * ```
- */
-export const table = <const Spec extends object>(
-    spec: Spec,
-): TableKeySpec<Mutable<Spec>> => {
-    // a copy, so that marking what is returned does not also mark a spec the caller holds and may
-    // reuse for an index key
-    const marked: object = Array.isArray(spec) ? [...spec] : { ...spec }
-    tableKeys.add(marked)
-    return marked as TableKeySpec<Mutable<Spec>>
+export type KeyRoles<Name extends string = string> = {
+    readonly partition: Name
+    readonly sort?: Name
 }
 
-/** `const` infers a readonly tuple; the schema wants the mutable one. */
-type Mutable<T> = {
-    -readonly [K in keyof T]: K extends 'cases' ? DeepMutable<T[K]> : T[K]
+/** The names that the roles give, in role order. */
+type RoleNames<Roles> = Roles extends KeyRoles
+    ? Roles['partition'] | Exclude<Roles['sort'], undefined>
+    : never
+
+/** The schema with the mark on each key that a role names. */
+type Roled<Schema, Roles> = [RoleNames<Roles>] extends [never]
+    ? Schema
+    : {
+          [K in keyof Schema]: K extends RoleNames<Roles>
+              ? Schema[K] & { readonly [tableKeyMark]: true }
+              : Schema[K]
+      }
+
+/** Nothing, or why the sort key names the partition key. */
+type DistinctRoles<Roles> = Roles extends {
+    readonly partition: infer P
+    readonly sort: infer S
 }
+    ? [P] extends [S]
+        ? {
+              readonly sort: ErrorMessage<'the sort key and the partition key are one key'>
+          }
+        : unknown
+    : unknown
 
 /** The cases of a grouped match hold lists in lists, and `const` infers each as a readonly tuple. */
 type DeepMutable<T> = T extends (...args: never[]) => unknown
@@ -2051,7 +2041,7 @@ type DeepMutable<T> = T extends (...args: never[]) => unknown
       ? { -readonly [K in keyof T]: DeepMutable<T[K]> }
       : T
 
-/** The keys marked with {@link table}. */
+/** The keys that the `key` option names. */
 export type TableKeys<Schema> = {
     [K in keyof Schema]: Schema[K] extends { readonly [tableKeyMark]: true }
         ? K
@@ -2424,9 +2414,6 @@ const attributeOf = (
     return typeof arm === 'string' && !arm.includes('.') ? arm : undefined
 }
 
-const isTableKey = (spec: unknown): spec is TableKeySpec<unknown> =>
-    typeof spec === 'object' && spec !== null && tableKeys.has(spec)
-
 /**
  * The named members are present and callable.
  *
@@ -2626,6 +2613,9 @@ export const tableEntry =
             | undefined = undefined,
         const CodecRest = undefined,
         Separator extends string = '#',
+        const Roles extends
+            | KeyRoles<keyof Schema & string>
+            | undefined = undefined,
     >(
         schema: Schema &
             ValidateSchema<Schema> &
@@ -2675,10 +2665,18 @@ export const tableEntry =
                                         > &
                                             Closed)
                             readonly separator?: Separator
+                            /**
+                             * The keys that address the item: the partition key and the sort key.
+                             *
+                             * `keyUpdates` refuses a change that touches either, because DynamoDB
+                             * cannot update a key attribute of the table. `keys` with no names
+                             * builds these.
+                             */
+                            readonly key?: Roles & DistinctRoles<Roles>
                         } & WritesRow<
                             Pinned,
                             Entity,
-                            ExpandCases<Schema>,
+                            Roled<ExpandCases<Schema>, Roles>,
                             CodecSpec,
                             CodecRest,
                             Separator
@@ -2686,19 +2684,23 @@ export const tableEntry =
               ]
     ): TableEntryDefinition<
         Entity,
-        ExpandCases<Schema>,
+        Roled<ExpandCases<Schema>, Roles>,
         Separator,
         CodecSpec,
         CodecRest
     > => {
         // a bare string is the separator; anything else carries it alongside the codec
-        const { codec: codecSpec, separator } =
-            typeof options === 'string'
-                ? { codec: undefined, separator: options }
-                : ((options ?? {}) as {
-                      codec?: unknown
-                      separator?: Separator
-                  })
+        const {
+            codec: codecSpec,
+            separator,
+            key: roles,
+        } = typeof options === 'string'
+            ? { codec: undefined, separator: options, key: undefined }
+            : ((options ?? {}) as {
+                  codec?: unknown
+                  separator?: Separator
+                  key?: KeyRoles
+              })
 
         const sep = separator ?? ('#' as Separator)
         if (sep === '' || typeof sep !== 'string') {
@@ -2706,15 +2708,32 @@ export const tableEntry =
         }
 
         const expanded = Object.fromEntries(
-            Object.entries(schema).map(([name, spec]) => {
-                const grouped = expandCases(spec)
-                // the mark of `table(...)` is on the object that the caller built, so a copy carries it
-                if (grouped !== spec && isTableKey(spec)) {
-                    tableKeys.add(grouped as object)
-                }
-                return [name, grouped]
-            }),
+            Object.entries(schema).map(([name, spec]) => [
+                name,
+                expandCases(spec),
+            ]),
         )
+
+        // the roles in role order. A role that names no key, or one key in two roles, addresses no
+        // item, so construction refuses it as the type does
+        const tableKeyNames =
+            roles === undefined
+                ? []
+                : roles.sort === undefined
+                  ? [roles.partition]
+                  : [roles.partition, roles.sort]
+        for (const name of tableKeyNames) {
+            if (!Object.hasOwn(expanded, name)) {
+                throw new RotoriseError(
+                    `the key option names '${name}', which is no key of the schema`,
+                )
+            }
+        }
+        if (roles?.sort !== undefined && roles.sort === roles.partition) {
+            throw new RotoriseError(
+                `the key option names '${roles.sort}' as the sort key and the partition key`,
+            )
+        }
 
         const buildEntry = toEntry()(expanded as never, sep) as (
             item: never,
@@ -2792,7 +2811,7 @@ export const tableEntry =
             return {
                 name,
                 spec,
-                ofTable: isTableKey(spec),
+                ofTable: tableKeyNames.includes(name),
                 fixed: narrows ? undefined : components,
             }
         })
@@ -2988,10 +3007,6 @@ export const tableEntry =
             return { set, remove }
         }
 
-        const tableKeyNames = keys
-            .filter((key) => key.ofTable)
-            .map((key) => key.name)
-
         /** The names the schema computes, as opposed to the attributes the codec declares. */
         const keyNames = keys.map((key) => key.name)
 
@@ -3007,7 +3022,7 @@ export const tableEntry =
 
                 if (names.length === 0) {
                     throw new RotoriseError(
-                        'no key is marked with `table(...)`, so the schema does not say which keys address the table',
+                        'the entry declares no `key` option, so the schema does not say which keys address the table',
                     )
                 }
 

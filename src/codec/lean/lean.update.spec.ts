@@ -14,7 +14,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { keyComponents, RotoriseError, table, tableEntry } from '../../Rotorise'
+import { keyComponents, RotoriseError, tableEntry } from '../../Rotorise'
 import { string } from '../codec'
 import {
     leanUpdateModule,
@@ -108,12 +108,16 @@ const entryOf = (schema: Schema): Host => {
         }),
     )
     const keys = Object.fromEntries(
-        schema.keys.map((key) => [
-            key.name,
-            key.ofTable ? table(specOf(key.tree) as never) : specOf(key.tree),
-        ]),
+        schema.keys.map((key) => [key.name, specOf(key.tree)]),
     )
-    return make(keys, { codec })
+    // the first key of the table is the partition key, and the second is the sort key
+    const [partition, sort] = schema.keys
+        .filter((key) => key.ofTable)
+        .map((key) => key.name)
+    return make(keys, {
+        codec,
+        ...(partition === undefined ? {} : { key: { partition, sort } }),
+    })
 }
 
 /** What `keyUpdates` gave, with the keys of the patch in the order of the schema. */

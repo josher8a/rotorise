@@ -15,7 +15,7 @@
  * somebody changes an attribute.
  */
 import { describe, expect, it } from 'vitest'
-import { table, tableEntry } from '../../../Rotorise'
+import { tableEntry } from '../../../Rotorise'
 import type {
     AttributeMap,
     B,
@@ -322,8 +322,8 @@ describe('a patch types the attributes it names', () => {
  */
 describe('an entry types the row it writes', () => {
     const Entry = tableEntry<Pet>()(
-        { PK: table(['id']), GSI1PK: ['TAG'] },
-        { codec: spec },
+        { PK: ['id'], GSI1PK: ['TAG'] },
+        { codec: spec, key: { partition: 'PK' } },
     )
 
     it('carries the declared attributes and the computed keys', () => {
@@ -506,8 +506,8 @@ describe('an entry pins the row it writes', () => {
 
     it('accepts an entry that writes it', () => {
         const Entry = tableEntry<Row, RowItem>()(
-            { PK: table(['id']), GSI1PK: ['TAG'] },
-            { codec: rowSpec },
+            { PK: ['id'], GSI1PK: ['TAG'] },
+            { codec: rowSpec, key: { partition: 'PK' } },
         )
         const written = Entry.unsafeToItem(row)
         expect(written.PK).toEqual({ S: 'ID#p' })
@@ -518,9 +518,12 @@ describe('an entry pins the row it writes', () => {
     it('refuses one whose attribute has drifted', () => {
         const _wrong = () =>
             tableEntry<Row, RowItem>()(
-                { PK: table(['id']), GSI1PK: ['TAG'] },
+                { PK: ['id'], GSI1PK: ['TAG'] },
                 // @ts-expect-error `price` writes S here, where the row pins N
-                { codec: { ...rowSpec, price: string } },
+                {
+                    codec: { ...rowSpec, price: string },
+                    key: { partition: 'PK' },
+                },
             )
         expect(typeof _wrong).toBe('function')
     })
@@ -529,9 +532,9 @@ describe('an entry pins the row it writes', () => {
     it('refuses one that stopped computing a key', () => {
         const _wrong = () =>
             tableEntry<Row, RowItem>()(
-                { PK: table(['id']) },
+                { PK: ['id'] },
                 // @ts-expect-error the row pins `GSI1PK`, and this schema does not compute it
-                { codec: rowSpec },
+                { codec: rowSpec, key: { partition: 'PK' } },
             )
         expect(typeof _wrong).toBe('function')
     })

@@ -39,6 +39,7 @@ IsUnion
 ItemCodec
 ItemSpec
 KeyComponents
+KeyRoles
 L
 ListOf
 ListWrites
@@ -83,7 +84,6 @@ SpreadOnce
 StoredItem
 StringCodec
 TableEntry
-TableKeySpec
 TableKeys
 Tagged
 TaggedCodec
@@ -139,7 +139,6 @@ scope
 shapeOf
 spread
 string
-table
 tableEntry
 tooDeeplyNested
 undefinable

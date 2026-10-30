@@ -1,13 +1,14 @@
 /**
  * Saying which keys address the table.
  *
- * A key is `['adoptionId']` whether it addresses the table or an index, so nothing in a schema
- * distinguishes them — and the difference decides whether a key may be rewritten at all. DynamoDB
+ * A key is `['adoptionId']` whether it addresses the table or an index, so nothing in a spec
+ * distinguishes them, and the difference decides whether a key may be rewritten at all. DynamoDB
  * will not update a key attribute: the partition and sort key are the item's address, and changing
- * one means writing a different item.
+ * one means writing a different item. The role is a fact of the table, so the `key` option names
+ * the partition key and the sort key once, by name.
  */
 import { describe, expect, it } from 'vitest'
-import { RotoriseError, table, tableEntry } from '../../../Rotorise'
+import { RotoriseError, tableEntry } from '../../../Rotorise'
 import { number, string } from '../../codec'
 
 type Adoption = {
@@ -20,8 +21,8 @@ type Adoption = {
 
 const Adoption = tableEntry<Adoption>()(
     {
-        PK: table(['adoptionId']),
-        SK: table(['adoptionId']),
+        PK: ['adoptionId'],
+        SK: ['adoptionId'],
         GSI1PK: ['userId'],
         GSI1SK: ['status', 'updatedAt'],
         GSI2PK: ['status'],
@@ -34,6 +35,7 @@ const Adoption = tableEntry<Adoption>()(
             updatedAt: string,
             currentLegIndex: number,
         },
+        key: { partition: 'PK', sort: 'SK' },
     },
 )
 
@@ -89,11 +91,14 @@ describe('index keys are still rebuilt', () => {
 
 describe('a block that holds a component of a table key', () => {
     type Order = { TAG: string; id: string; buyerId: string; note: string }
-    const Orders = tableEntry<Order>()({
-        PK: table(['TAG', 'id']),
-        SK: table(['TAG', 'id']),
-        GSI1PK: ['TAG', 'buyerId'],
-    })
+    const Orders = tableEntry<Order>()(
+        {
+            PK: ['TAG', 'id'],
+            SK: ['TAG', 'id'],
+            GSI1PK: ['TAG', 'buyerId'],
+        },
+        { key: { partition: 'PK', sort: 'SK' } },
+    )
 
     it('is frozen, so a write of one attribute of the block is refused', () => {
         // buyerId is tied to TAG by GSI1PK, and TAG is a component of PK
@@ -156,5 +161,47 @@ describe('a schema that marks nothing', () => {
             set: { PK: { S: 'ADOPTIONID#q2' } },
             remove: [],
         })
+    })
+})
+
+describe('the key option names the keys of the table', () => {
+    type Pet = { petId: string; species: 'CAT' | 'DOG'; shelterId: string }
+
+    it('builds the keys of the table in role order, not in the order of the schema', () => {
+        const Pets = tableEntry<Pet>()(
+            { SK: ['species'], GSI1PK: ['shelterId'], PK: ['petId'] },
+            { key: { partition: 'PK', sort: 'SK' } },
+        )
+        expect(Object.keys(Pets.keys({ petId: 'p1', species: 'CAT' }))).toEqual(
+            ['PK', 'SK'],
+        )
+    })
+
+    it('refuses a role that names no key of the schema', () => {
+        expect(() =>
+            tableEntry<Pet>()(
+                { PK: ['petId'] },
+                // @ts-expect-error 'SK' is no key of the schema
+                { key: { partition: 'PK', sort: 'SK' } },
+            ),
+        ).toThrow("the key option names 'SK', which is no key of the schema")
+    })
+
+    it('refuses one key in the two roles', () => {
+        expect(() =>
+            tableEntry<Pet>()(
+                { PK: ['petId'] },
+                // @ts-expect-error the sort key and the partition key are one key
+                { key: { partition: 'PK', sort: 'PK' } },
+            ),
+        ).toThrow(
+            "the key option names 'PK' as the sort key and the partition key",
+        )
+    })
+
+    it('offers keys with no names only where the entry declares the key option', () => {
+        const Plain = tableEntry<Pet>()({ PK: ['petId'] })
+        // @ts-expect-error no key option, so the schema does not say which keys address the table
+        expect(() => Plain.keys({ petId: 'p1' })).toThrow(RotoriseError)
     })
 })
