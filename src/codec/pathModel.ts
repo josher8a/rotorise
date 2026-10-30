@@ -172,7 +172,12 @@ type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
 // ── the body (`slotAtG`) ──
 type Block<W> = W extends ['some', infer T] ? T : ['never']
 type SlotAt<F, W, N> = N extends keyof F ? F[N] : ['optional', Block<W>]
-type SlotTerm<S> = S extends ['req' | 'optional' | 'fill', infer T] ? T : never
+type SlotTerm<S> = S extends [
+    'req' | 'optional' | 'undefinable' | 'fill',
+    infer T,
+]
+    ? T
+    : never
 
 // ── `listChild` ──
 type At<L, I, C extends unknown[] = []> = L extends [infer H, ...infer R]
@@ -575,6 +580,10 @@ type DecodeTuple<L extends unknown[], Env extends unknown[]> = {
  * An empty half is no `{}`. A `{}` in the intersection makes an object of optional names
  * no weak type, and a weak type is what keeps two members of a union apart.
  */
+/** The value of a name: an `undefinable` name stays present and can hold `undefined`. */
+type SlotValue<S, Env extends unknown[]> = S extends ['undefinable', infer T]
+    ? DecodeT<T, Env> | undefined
+    : DecodeT<SlotTerm<S>, Env>
 type ReqNames<Fd> = {
     [K in keyof Fd]: Opt<Fd[K]> extends true ? never : K
 }[keyof Fd]
@@ -587,7 +596,7 @@ type DecodeObject<Fd, W, Env extends unknown[]> = ([ReqNames<Fd>] extends [
     ? [OptNames<Fd>] extends [never]
         ? Record<never, never>
         : unknown
-    : { readonly [K in ReqNames<Fd>]: DecodeT<SlotTerm<Fd[K]>, Env> }) &
+    : { readonly [K in ReqNames<Fd>]: SlotValue<Fd[K], Env> }) &
     ([OptNames<Fd>] extends [never]
         ? unknown
         : { readonly [K in OptNames<Fd>]?: DecodeT<SlotTerm<Fd[K]>, Env> }) &
@@ -597,7 +606,7 @@ type DecodeObject<Fd, W, Env extends unknown[]> = ([ReqNames<Fd>] extends [
               readonly [name: string]:
                   | DecodeT<R, Env>
                   | {
-                        [K in keyof Fd]: DecodeT<SlotTerm<Fd[K]>, Env>
+                        [K in keyof Fd]: SlotValue<Fd[K], Env>
                     }[keyof Fd]
                   | ([OptNames<Fd>] extends [never] ? never : undefined)
           }

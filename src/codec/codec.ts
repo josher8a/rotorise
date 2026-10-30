@@ -2738,7 +2738,7 @@ export const optional = <const C extends AnyCodec>(
 export const undefinable = <const C extends AnyCodec>(
     inner: C,
 ): UndefinableCodec<Decoded<C>, AttributeOf<C>, C> &
-    TermMark<['optional', TermOf<C>]> =>
+    TermMark<['undefinable', TermOf<C>]> =>
     ({
         codec: inner,
         def: { mark: 'undefinable', t: termOf(inner) },
@@ -7450,7 +7450,7 @@ type MarkLike<Opt, C extends AnyCodec> = Opt extends {
     readonly [undefinableMarker]: true
 }
     ? UndefinableCodec<Decoded<C>, AttributeOf<C>, C> &
-          TermMark<['optional', TermOf<C>]>
+          TermMark<['undefinable', TermOf<C>]>
     : OptionalCodec<Decoded<C>, AttributeOf<C>, C> &
           TermMark<['optional', TermOf<C>]>
 

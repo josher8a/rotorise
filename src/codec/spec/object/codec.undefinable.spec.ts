@@ -6,13 +6,15 @@
  * while here the round trip is an equality.
  */
 import { describe, expect, it } from 'vitest'
-import type { Encoded } from '../../codec'
+import type { Decoded, Encoded } from '../../codec'
 import {
     boolean,
     CodecError,
     item,
     object,
     optional,
+    ref,
+    scope,
     string,
     undefinable,
 } from '../../codec'
@@ -175,6 +177,28 @@ describe('the types', () => {
         const bare: Row = { id: { S: 'p1' } }
         const full: Row = { id: { S: 'p1' }, nickname: { S: 'Rex' } }
         expect([bare, full]).toHaveLength(2)
+    })
+
+    it('keeps the key required and admits undefined through a scope, which reads the type from the term', () => {
+        const Pets = scope({
+            At: ref('Pet'),
+            Pet: object({ id: string, nickname: undefinable(string) }),
+        })
+        const entity: Pet = {
+            id: 'p1',
+            nickname: undefined,
+            chipped: undefined,
+        }
+        const back: {
+            readonly id: string
+            readonly nickname: string | undefined
+        } = Pets.At.unsafeDecode({ M: { id: { S: 'p1' } } })
+        expect(Object.keys(back)).toEqual(['id', 'nickname'])
+        expect(back.nickname).toBe(entity.nickname)
+
+        // @ts-expect-error the key is required: a scope entry reads the mark the codec carries
+        const _missing: Decoded<typeof Pets.At> = { id: 'p1' }
+        expect(_missing).toBeDefined()
     })
 })
 
