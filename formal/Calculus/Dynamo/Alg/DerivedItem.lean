@@ -5,11 +5,11 @@ import Calculus.Dynamo.Alg.Frontier
 # The item with derived keys, at the DynamoDB row
 
 A row of an item is the top-level map that an object codec writes: an attribute `M`. The key names
-are a finite set `KS`. A key attribute of DynamoDB is `S`, `N` or `B`, and the model holds `S` and
-`N`. The member of a key is a fact of the key name, so the model takes the member as data: a function
-`mem` from a key name to `S` or `N`. The key part of a row is the value at each key name, or no value
-where the row lacks the name. The value is a string at an `S` key and a numeral at an `N` key, so a
-key part holds no text that the member refuses. A row that holds another member at a key name has no
+are a finite set `KS`. A key attribute of DynamoDB is `S`, `N` or `B`. The member of a key is a fact
+of the key name, so the model takes the member as data: a function `mem` from a key name to `S`, `N`
+or `B`. The key part of a row is the value at each key name, or no value where the row lacks the
+name. The value is a string at an `S` key, a numeral at an `N` key, and bytes at a `B` key, so a key
+part holds no value that the member refuses. A row that holds another member at a key name has no
 key part, so `keep` gives `none` there, and the strict read of the graph refuses the row. The read
 that deletes the keys still reads the row, because `drop` removes each key name whatever attribute
 the name holds. A stale row has the member of its key name and the value of another item, and the
@@ -25,31 +25,31 @@ namespace DerivedItem
 
 open Alg
 
-/-- The member of a key attribute: a string or a number. -/
+/-- The member of a key attribute: a string, a number, or bytes. -/
 inductive Member where
   | s
   | n
+  | b
   deriving DecidableEq
 
-/-- The value of a key at a member: a string at `S`, and a well-formed numeral at `N`. -/
+/-- The value of a key at a member: a string at `S`, a well-formed numeral at `N`, and bytes at
+    `B`. -/
 abbrev Member.Carrier : Member → Type
   | .s => String
   | .n => WFNumeral
+  | .b => Bytes
 
 instance (m : Member) : DecidableEq m.Carrier :=
   match m with
   | .s => inferInstanceAs (DecidableEq String)
   | .n => inferInstanceAs (DecidableEq WFNumeral)
+  | .b => inferInstanceAs (DecidableEq Bytes)
 
 /-- The attribute that carries a key value at its member. -/
 def Member.attr : (m : Member) → m.Carrier → Attr
   | .s, v => .s v
   | .n, v => .n v
-
-/-- The text that a key value prints: the string, or the numeral. -/
-def Member.print : (m : Member) → m.Carrier → String
-  | .s, v => v
-  | .n, v => v.1
+  | .b, v => .b v
 
 variable (KS : Finset String) (mem : {k // k ∈ KS} → Member)
 
@@ -68,6 +68,7 @@ def keyAt : (m : Member) → Option Attr → Option (Option m.Carrier)
   | _, none => some none
   | .s, some (.s v) => some (some v)
   | .n, some (.n v) => some (some v)
+  | .b, some (.b v) => some (some v)
   | _, some _ => none
 
 /-- **A key value written at its member reads back.** -/

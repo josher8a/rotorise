@@ -1086,12 +1086,12 @@ stale key, a row with no key, and a row with another member at a key name read a
 two readers agree wherever both read, so the read is the order-free union of the two. The read adds
 no constructor: it is `Codec.extendRead`.
 
-At the DynamoDB row, the key names are a finite set. A key attribute of DynamoDB is `S`, `N` or `B`,
-and the model holds `S` and `N`. The member of a key is a fact of the key name, so the model takes the
-member as data: a function from a key name to `S` or `N`. A composite key is a joined string, so its
-member is `S`. A key of one attribute has the member of its attribute. The key part of a row is the
-value at each key name, or no value where the row lacks the name. The value is a string at an `S` key
-and a numeral at an `N` key, so a key part holds no text that its member refuses. The key part has
+At the DynamoDB row, the key names are a finite set. A key attribute of DynamoDB is `S`, `N` or `B`.
+The member of a key is a fact of the key name, so the model takes the member as data: a function
+from a key name to `S`, `N` or `B`. A composite key is a joined string, so its member is `S`. A key
+of one attribute has the member of its attribute. The key part of a row is the value at each key
+name, or no value where the row lacks the name. The value is a string at an `S` key, a numeral at an
+`N` key, and bytes at a `B` key, so a key part holds no value that its member refuses. The key part has
 decidable equality, because the key names are finite and each carrier has decidable equality. The
 carrier of the row has none.
 
