@@ -63,6 +63,29 @@ member whose `ref` binds a base, an optional key, or an entry with a union optio
 
 ---
 
+## Known: the meet refuses two fills at one name even where the stand-ins are one value
+
+**Observation.** `meet(...)` refuses a shared name that both factors read through
+`withLegacyRead(...)`, whatever the two stand-ins are. Two stand-ins share the absent row exactly
+where they are one value, and the compatibility test decides that with `standInEquals(a, b)` in
+`src/codec/term.ts`. Measured 2026-10-30 with `npx vitest --run`:
+
+    meet(object({ a: withLegacyRead({ current: string('x', 'y'), whenMissing: 'x' }) }),
+         object({ a: withLegacyRead({ current: string('x', 'z'), whenMissing: 'x' }) }))
+      runtime: refused, both factors read 'a' through withLegacyRead
+
+**Effect.** A meet of two factors with one stand-in at a name throws, where the fill with that
+stand-in is the meet. The refusal is safe: the meet builds no codec with a wrong value, and the
+caller loses a meet that exists.
+
+**Pin.** `src/codec/spec/object/codec.meet.spec.ts`: the refusal of a shared name that both factors
+read through `withLegacyRead(...)`.
+
+**Open.** The meet of two fills with one stand-in is the fill, and `standInEquals(a, b)` decides
+that the two stand-ins are one value.
+
+---
+
 ## Known: the type of exclude keeps a member that a binary literal clause drops at run time
 
 **Observation.** The run time compares the bytes of a binary literal clause with the bytes of each

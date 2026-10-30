@@ -229,8 +229,9 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * Two stand-ins share the absent row only where they are one value, and the host compares no
-     * two stand-ins, as the model compares no two fills. The refusal names the name.
+     * Two stand-ins share the absent row only where they are one value, and the meet compares no
+     * two stand-ins, so the meet refuses the name even where the stand-ins are one value. The
+     * refusal names the name.
      */
     it('refuses a shared name that both factors read through withLegacyRead', () => {
         expect(() =>
