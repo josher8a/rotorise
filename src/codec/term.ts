@@ -948,16 +948,14 @@ export const resolvedTerm = (t: Term): Term | undefined => {
 /**
  * **Whether a term holds no value**: the model's empty held set, at each form whose emptiness the
  * term decides. The model gives `never` the held set `HNever`, and a union the union of the held
- * sets of its options. So `never`, and a union whose every option holds no value (`union([])` among
- * them), hold no value.
+ * sets of its options. A `held` holds the values of its stored side, as the model's `held` does, so
+ * a `held` over a term that holds no value holds none. So `never`, a union whose every option holds
+ * no value (`union([])` among them), and a `held` whose inner term holds no value, hold no value.
  *
- * Four forms stay out. A `refine` holds no value where its predicate admits nothing, and no
+ * Three forms stay out. A `refine` holds no value where its predicate admits nothing, and no
  * function decides that of a closure. A `withLegacyRead` has no held set in the model, and its older
  * reader reads values that the inner term does not hold. A list, an object or a set over a term
  * that holds no value holds none either, but the judgment refuses each of them where it is built.
- * A `held` over a term that holds no value holds none in the model either, and the host admits it
- * in a declared position: the vectors of a legacy read beside itself use that `held` as a position
- * that admits no value, so that only the write half refuses the pair.
  *
  * A `ref` that no scope binds holds a value for this reader, and the scope reads the closed copy.
  * A node that the read already passed is a cycle with no container, which the guard refuses, so the
@@ -980,6 +978,8 @@ export const holdsNoValue = (
             return false
         case 'union':
             return at.options.every((one) => holdsNoValue(one, inside))
+        case 'held':
+            return holdsNoValue(at.inner, inside)
         default:
             return false
     }

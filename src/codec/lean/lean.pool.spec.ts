@@ -1893,12 +1893,12 @@ describe('the generated pool, against the model', () => {
         }).toMatchInlineSnapshot(`
           {
             "dropped": {
-              "a constructor refused the draw": 69,
+              "a constructor refused the draw": 70,
               "path: a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form": 1,
               "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 73,
               "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 17,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1632,
-              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 587,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1660,
+              "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 603,
             },
             "seeds": [
               {
@@ -1916,16 +1916,16 @@ describe('the generated pool, against the model', () => {
               },
               {
                 "assignments": 26,
-                "clauses": 3315,
+                "clauses": 3525,
                 "codecsPathed": 171,
-                "disjoints": 1048,
+                "disjoints": 1023,
                 "guards": 0,
-                "pairs": 1048,
-                "paths": 1740,
+                "pairs": 1023,
+                "paths": 1760,
                 "seed": 1,
-                "separations": 1048,
-                "slices": 69,
-                "whenPaths": 5357,
+                "separations": 1023,
+                "slices": 73,
+                "whenPaths": 5225,
               },
               {
                 "assignments": 39,
@@ -2221,21 +2221,17 @@ describe('fits is the order of the meet', () => {
             '20261004.648 lr',
             '20261004.969 rl',
             '20261004.972 rl',
-            '1.97 lr',
-            '1.224 lr',
-            '1.247 lr',
-            '1.295 lr',
-            '1.394 lr',
-            '1.467 rl',
-            '1.468 rl',
-            '1.470 rl',
-            '1.471 rl',
-            '1.472 rl',
-            '1.473 rl',
-            '1.544 lr',
-            '1.666 lr',
-            '1.816 lr',
-            '1.950 lr',
+            '1.198 lr',
+            '1.428 rl',
+            '1.429 rl',
+            '1.431 rl',
+            '1.433 rl',
+            '1.434 rl',
+            '1.435 rl',
+            '1.456 lr',
+            '1.561 rl',
+            '1.681 lr',
+            '1.925 lr',
             '4.590 rl',
             '4.604 lr',
             '4.605 lr',
@@ -2246,7 +2242,7 @@ describe('fits is the order of the meet', () => {
             '4.901 lr',
             '4.928 rl',
         ])
-        const missed = rows.find((row) => row.key === '1.950 lr')
+        const missed = rows.find((row) => row.key === '1.925 lr')
         expect(missed).toBeDefined()
         if (missed === undefined) return
         const stored = { M: { a: { N: '1' }, m: { N: '1' } } }

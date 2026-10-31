@@ -1469,24 +1469,12 @@ describe('the `check` protocol', () => {
 
 /**
  * A string that an older encoding also read. The older reader is caller code, so a verdict binds it
- * as a variable; the corpus pairs it with the bottom, a disjoint scalar, its own scalar, itself,
- * and a caller's number held over the bottom.
+ * as a variable; the corpus pairs it with the bottom, a disjoint scalar, its own scalar, and itself.
  */
 const migratedString = erase(
     withLegacyRead({
         current: string,
         older: { decode: () => 'older' as string },
-    }),
-)
-/**
- * A caller's number held over the bottom: the adapter writes nothing and reads nothing. Beside a
- * migrated string the two options are orthogonal, because the caller view of `withLegacyRead` is
- * the view of its inner term.
- */
-const numberOverNever = erase(
-    held(never, number, {
-        encode: () => new CodecError('nothing is stored'),
-        decode: () => new CodecError('nothing is stored'),
     }),
 )
 /**
@@ -1524,19 +1512,6 @@ const nameOf = (nick: string) =>
  * the view of `decimal`, so a required boolean keeps the two views apart.
  */
 const undefinableBoolean = erase(object({ a: undefinable(boolean) }))
-/**
- * One codec with a legacy read beside itself, which the pool found: the model reads a legacy read
- * by the base test alone, so the union is refused even when both options are one codec (bbe84d6).
- */
-const sharedLegacy = erase(
-    list(
-        withLegacyRead({ current: string, older: string }),
-        held(never, boolean, {
-            encode: () => new CodecError('nothing is stored'),
-            decode: () => new CodecError('nothing is stored'),
-        }),
-    ),
-)
 /**
  * Two options that share a node, which two scopes refuse and one scope accepts: one adapter under
  * two objects, under two lists, and one entry through two `ref`s. The two options sit in one term,
@@ -1602,16 +1577,6 @@ const legacyPairs = <P>(
         `migrated_string${sep}migrated_string`,
         migratedString,
         migratedString,
-    ),
-    make(
-        `migrated_string${sep}number_over_never`,
-        migratedString,
-        numberOverNever,
-    ),
-    make(
-        `array_migrated_string${sep}array_number_over_never`,
-        erase(array(migratedString)),
-        erase(array(numberOverNever)),
     ),
 ]
 
@@ -1724,11 +1689,6 @@ const separationPairs = (): readonly Separation[] => {
             name: 'two_fields__vs__legacy_decimal_rest_number',
             left: twoFields,
             right: legacyDecimalRestNumber,
-        },
-        {
-            name: 'shared_legacy__vs__shared_legacy',
-            left: sharedLegacy,
-            right: sharedLegacy,
         },
         {
             name: 'object_over_shared_node__vs__object_over_shared_node',
@@ -2300,7 +2260,6 @@ const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
             ),
         ],
         ['migrated_string', migratedString],
-        ['shared_legacy', sharedLegacy],
         ['legacy_decimal_rest_number', legacyDecimalRestNumber],
         ...sampleVectors
             .filter((v) => cycleEntryOf([v.codec.def]) === undefined)
@@ -2523,7 +2482,7 @@ describe("the declaration guard, against the model's classifier", () => {
             accepted.length,
             acceptedShared.length,
             refused.length,
-        ]).toEqual([1017, 5, 45])
+        ]).toEqual([1015, 4, 45])
     })
 
     /**
@@ -2672,7 +2631,7 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it("puts every corpus pair to the model's disjointness test", () => {
         const pairs = disjointPairs()
-        expect(pairs.length).toBe(1054)
+        expect(pairs.length).toBe(1052)
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(
                 join(process.cwd(), 'formal', '.disjoints.lean'),

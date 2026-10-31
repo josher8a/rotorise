@@ -15,6 +15,7 @@ import {
     discriminatedUnion,
     exclude,
     extract,
+    held,
     item,
     list,
     meet,
@@ -251,6 +252,28 @@ describe('a term that holds no value is refused where never is', () => {
     it('admits a position at a refinement whose predicate admits nothing', () => {
         const none = refine(string, (_: string): _ is string => false)
         expect(() => list(string, none)).not.toThrow()
+    })
+
+    /**
+     * A `held` holds the values of its stored side, so a `held` over a term that holds no value holds
+     * none. The adapter of such a `held` could never run, and the position is refused as `never` is.
+     */
+    it('refuses a list position and a field at a held over never, as never is', () => {
+        const nothing = {
+            encode: () => new CodecError('nothing is stored'),
+            decode: () => new CodecError('nothing is stored'),
+        }
+        // @ts-expect-error the type reads through the held to its stored side
+        expect(() => list(string, held(never, boolean, nothing))).toThrow(
+            /nothing fills it/,
+        )
+        // @ts-expect-error the type reads through the held to its stored side
+        expect(() => object({ a: held(never, boolean, nothing) })).toThrow(
+            /declared at `never`/,
+        )
+        expect(() =>
+            object({ a: optional(held(never, boolean, nothing)) }),
+        ).not.toThrow()
     })
 
     /**

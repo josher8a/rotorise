@@ -19,7 +19,6 @@ import {
     held,
     item,
     list,
-    never,
     number,
     object,
     optional,
@@ -610,19 +609,17 @@ describe('the held side is the write occupancy of a union option', () => {
     })
 
     /**
-     * **A legacy read is decided by the base test alone**, because its older reader is caller code
-     * and the model reads that reader as opaque. On the write half the two legacy reads hold one
-     * text, and no base row separates them, so two declarations of one codec are refused. One
-     * codec twice is one scope, and one entry agrees with itself. The `held` over the bottom
-     * stores nothing, so only the write half refuses.
+     * **A caller adapter is code, so two declarations of a codec hold two adapters.** The model
+     * cannot tell two caller adapters apart, so a pair of two declarations is refused whatever
+     * the adapters do. One codec twice is one scope, and one entry agrees with itself.
      */
-    it('refuses two declarations of a codec with a legacy read, because the older reader is opaque', () => {
+    it('refuses two declarations of a codec with a caller adapter, and accepts one declaration twice', () => {
         const pairOf = () =>
             list(
-                withLegacyRead({ current: string, older: string }),
-                held(never, boolean, {
-                    encode: () => new CodecError('nothing is stored'),
-                    decode: () => new CodecError('nothing is stored'),
+                string,
+                held(boolean, boolean, {
+                    encode: (value: boolean) => value,
+                    decode: (value: boolean) => value,
                 }),
             )
         expect(() => declare([pairOf(), pairOf()])).toThrow(CodecError)

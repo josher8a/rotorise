@@ -121,23 +121,20 @@ the pair of one type with two results, and the older reading.
 
 ## Partially mitigated: a term that holds no value escapes the never rules where the term does not decide it
 
-**Observation.** The predicate in `src/codec/term.ts` that decides that a term holds no value answers `true` for `never` and for a union
-whose every option holds no value. The list position rule, the field rule, the meet
-and `nullable` read it. Two forms hold no value in the model and answer `false`:
+**Observation.** The predicate in `src/codec/term.ts` that decides that a term holds no value answers `true` for `never`, for a union
+whose every option holds no value, and for a `held` whose inner term holds none. The list position
+rule, the field rule, the meet and `nullable` read it. One form holds no value in the model and
+answers `false`:
 
     list(string, refine(string, (_: string): _ is string => false))   // builds
-    list(string, held(never, boolean, adapter))                       // builds
 
-**Effect.** Each such list or object holds no value and builds. A refinement stays out because no
-function decides that a closure admits nothing. The `held` stays out because two pinned vectors
-declare that `held` in a list position.
+**Effect.** Such a list or object holds no value and builds. A refinement stays out because no
+function decides that a closure admits nothing.
 
-**What is mitigated.** `union([])`, a union of empty options, and each of these through a `ref`
-are refused where `never` is, in the type and at run time.
+**What is mitigated.** `union([])`, a union of empty options, a `held` over each of these, and each
+of these through a `ref` are refused where `never` is, in the type and at run time.
 
-**Pin.** `src/codec/spec/surface/codec.resolution.spec.ts` pins the refinement. The `held` is
-declared by the shared legacy read vector of `src/codec/lean/lean.spec.ts` and by the legacy read test of
-`src/codec/spec/laws/codec.held.spec.ts`.
+**Pin.** `src/codec/spec/surface/codec.resolution.spec.ts` pins the refinement and the `held`.
 
 ---
 
