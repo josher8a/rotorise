@@ -24,6 +24,7 @@ import {
     extract,
     held,
     item,
+    list,
     mdunion,
     narrow,
     never,
@@ -37,6 +38,7 @@ import {
     withLegacyRead,
 } from '../../codec'
 import { failed, orThrow } from '../../result'
+import type { Term } from '../../term'
 
 const pet = object({ kind: string('pet'), size: string('small'), toy: string })
 const dog = object({ kind: string('pet'), size: string('large'), pen: string })
@@ -878,5 +880,159 @@ describe('a clause at a literal whose carrier is no primitive', () => {
         // the run time drops the member at other bytes; the type admits it, as it cannot compare bytes
         const coarse: Parameters<typeof kept.encode>[0] = { k: 'b', b: cd }
         expect(failed(kept.encode(coarse))).toBe(true)
+    })
+})
+
+/**
+ * **An object pattern reads through a `ref` to an object.** The run time resolves the `ref` and
+ * compares the object that the entry names. The type reads the spec of that entry through the
+ * closed `ref`, so a member whose `ref` names a cat is kept by a pattern that pins a cat, and is
+ * dropped by a pattern that pins a dog. The `ref` stands bare in a slot, below a `list`, or below
+ * an `array`.
+ */
+describe('an object pattern reads the object that a ref names, at the type as at run time', () => {
+    const shelter = scope({
+        Cat: object({ kind: string('cat') }),
+        Dog: object({ kind: string('dog') }),
+        Basket: object({ tag: string('basket'), pet: ref('Cat') }),
+        Crate: object({ tag: string('crate'), pet: ref('Dog') }),
+        Kennel: object({ tag: string('kennel'), pets: list(ref('Cat')) }),
+        Run: object({ tag: string('run'), pets: list(ref('Dog')) }),
+        Herd: object({ tag: string('herd'), pets: array(ref('Cat')) }),
+        Pack: object({ tag: string('pack'), pets: array(ref('Dog')) }),
+    })
+    const cat = { M: { kind: { S: 'cat' } } }
+    const dog = { M: { kind: { S: 'dog' } } }
+    const catPattern = object({ kind: string('cat') })
+    const optionsIn = (codec: { readonly def: Term }): number =>
+        codec.def.kind === 'union' ? codec.def.options.length : 0
+
+    it('keeps in the extraction the member whose ref names the pattern, and drops the other', () => {
+        const bare = extract(
+            union([shelter.Basket, shelter.Crate]),
+            object({ pet: catPattern }),
+        )
+        expectTypeOf<Decoded<typeof bare>>().toEqualTypeOf<
+            Decoded<typeof shelter.Basket>
+        >()
+        expect(
+            failed(bare.decode({ M: { tag: { S: 'basket' }, pet: cat } })),
+        ).toBe(false)
+        expect(
+            failed(bare.decode({ M: { tag: { S: 'crate' }, pet: dog } })),
+        ).toBe(true)
+        const below = extract(
+            union([shelter.Kennel, shelter.Run]),
+            object({ pets: list(catPattern) }),
+        )
+        expectTypeOf<Decoded<typeof below>>().toEqualTypeOf<
+            Decoded<typeof shelter.Kennel>
+        >()
+        expect(
+            failed(
+                below.decode({
+                    M: { tag: { S: 'kennel' }, pets: { L: [cat] } },
+                }),
+            ),
+        ).toBe(false)
+        expect(
+            failed(
+                below.decode({ M: { tag: { S: 'run' }, pets: { L: [dog] } } }),
+            ),
+        ).toBe(true)
+        const many = extract(
+            union([shelter.Herd, shelter.Pack]),
+            object({ pets: array(catPattern) }),
+        )
+        expectTypeOf<Decoded<typeof many>>().toEqualTypeOf<
+            Decoded<typeof shelter.Herd>
+        >()
+        expect(
+            failed(
+                many.decode({
+                    M: { tag: { S: 'herd' }, pets: { L: [cat, cat] } },
+                }),
+            ),
+        ).toBe(false)
+        expect(
+            failed(
+                many.decode({ M: { tag: { S: 'pack' }, pets: { L: [dog] } } }),
+            ),
+        ).toBe(true)
+    })
+
+    it('keeps in the exclusion the member whose ref names another object', () => {
+        const bare = exclude(
+            union([shelter.Basket, shelter.Crate]),
+            object({ pet: catPattern }),
+        )
+        expectTypeOf<Decoded<typeof bare>>().toEqualTypeOf<
+            Decoded<typeof shelter.Crate>
+        >()
+        expect(
+            failed(bare.decode({ M: { tag: { S: 'crate' }, pet: dog } })),
+        ).toBe(false)
+        expect(
+            failed(bare.decode({ M: { tag: { S: 'basket' }, pet: cat } })),
+        ).toBe(true)
+        const below = exclude(
+            union([shelter.Kennel, shelter.Run]),
+            object({ pets: list(catPattern) }),
+        )
+        expectTypeOf<Decoded<typeof below>>().toEqualTypeOf<
+            Decoded<typeof shelter.Run>
+        >()
+        const many = exclude(
+            union([shelter.Herd, shelter.Pack]),
+            object({ pets: array(catPattern) }),
+        )
+        expectTypeOf<Decoded<typeof many>>().toEqualTypeOf<
+            Decoded<typeof shelter.Pack>
+        >()
+        expect(
+            failed(
+                many.decode({ M: { tag: { S: 'pack' }, pets: { L: [dog] } } }),
+            ),
+        ).toBe(false)
+        expect(
+            failed(
+                many.decode({
+                    M: { tag: { S: 'herd' }, pets: { L: [cat] } },
+                }),
+            ),
+        ).toBe(true)
+    })
+
+    it('reads a recursive entry as far as the pattern goes, and agrees with the run time', () => {
+        const litter = scope({
+            Mother: object({
+                tag: string('mother'),
+                kits: list(ref('Mother')),
+            }),
+            Stray: object({ tag: string('stray'), kits: list(ref('Stray')) }),
+        })
+        const kits = object({
+            kits: list(object({ tag: string('mother') })),
+        })
+        const kept = extract(union([litter.Mother, litter.Stray]), kits)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof litter.Mother>
+        >()
+        expect(optionsIn(kept)).toBe(1)
+        const deeper = extract(
+            union([litter.Mother, litter.Stray]),
+            object({
+                kits: list(
+                    object({
+                        tag: string('mother'),
+                        kits: list(object({ tag: string('mother') })),
+                    }),
+                ),
+            }),
+        )
+        expectTypeOf<Decoded<typeof deeper>>().toEqualTypeOf<
+            Decoded<typeof litter.Mother>
+        >()
+        expect(optionsIn(deeper)).toBe(1)
     })
 })

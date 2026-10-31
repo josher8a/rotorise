@@ -918,6 +918,71 @@ const typeOnlySlices: readonly Slice[] = (() => {
     }))
 })()
 
+/**
+ * **The roots whose member reads an object through a `ref`**, bare in a slot, below a `list`, below an
+ * `array`, and in a recursive entry. Each cat and dog names its basket back through an optional
+ * slot, so the `ref` closes a cycle and the print keeps it. The patterns are the shapes that the
+ * square puts to the roots: an object pattern, a `list` pattern and an `array` pattern of one
+ * object.
+ */
+const refObjects: readonly Slice[] = (() => {
+    const kind = (name: string) => erase(object({ kind: string(name) }))
+    const tagged = (name: string) => erase(object({ tag: string(name) }))
+    const roots = (
+        slot: (name: string) => AnyCodec,
+        key: string,
+        shape: (c: AnyCodec) => AnyCodec,
+        [a, b]: readonly [string, string],
+    ): Slice => {
+        const entries = scope({
+            Cat: object({ kind: string('cat'), home: optional(ref(a)) }),
+            Dog: object({ kind: string('dog'), home: optional(ref(b)) }),
+            [a]: object({ tag: string(a), [key]: slot('Cat') }),
+            [b]: object({ tag: string(b), [key]: slot('Dog') }),
+        } as never) as unknown as Record<string, AnyCodec>
+        return {
+            name: `through_ref_${key}`,
+            codec: sliceableOf(erase(union([entries[a], entries[b]] as never))),
+            clauses: [],
+            shapes: [
+                { [key]: shape(kind('cat')) },
+                { [key]: shape(kind('dog')) },
+            ],
+        }
+    }
+    const one = (c: AnyCodec) => c
+    const first = (name: string) => erase(ref(name))
+    const many = (name: string) => erase(list(ref(name)))
+    const each = (name: string) => erase(array(ref(name)))
+    const { Mother, Stray } = scope({
+        Mother: object({ tag: string('mother'), kits: list(ref('Mother')) }),
+        Stray: object({ tag: string('stray'), kits: list(ref('Stray')) }),
+    })
+    return [
+        roots(first, 'pet', one, ['Basket', 'Crate']),
+        roots(many, 'pets', (c) => erase(list(c)), ['Kennel', 'Run']),
+        roots(each, 'herd', (c) => erase(array(c)), ['Herd', 'Pack']),
+        {
+            name: 'through_ref_cycle',
+            codec: sliceableOf(erase(union([Mother, Stray]))),
+            clauses: [],
+            shapes: [
+                { kits: erase(list(tagged('mother'))) },
+                {
+                    kits: erase(
+                        list(
+                            object({
+                                tag: string('mother'),
+                                kits: list(tagged('mother')),
+                            }),
+                        ),
+                    ),
+                },
+            ],
+        },
+    ]
+})()
+
 /** A path with no clause. */
 const plainPath = (path: readonly PathStep[]): boolean =>
     path.every((step) => typeof step !== 'object')
@@ -1995,6 +2060,7 @@ describe('the generated pool, against the model', () => {
             slices: [
                 ...perSeed.flatMap((one) => one.slices),
                 ...typeOnlySlices,
+                ...refObjects,
             ],
             paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
             meets: pairs,

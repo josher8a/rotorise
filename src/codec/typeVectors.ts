@@ -878,6 +878,16 @@ const sliceRoot = (
         spelledAlready.add(q.argument)
         patterns.push(q)
     }
+    for (const shape of slice.shapes ?? []) {
+        const argument = `{ ${Object.entries(shape)
+            .map(([name, c]) => `${keyText(name)}: ${p.clause(c)}`)
+            .join(', ')} }`
+        patterns.push({
+            argument,
+            source: `object(${argument})`,
+            codec: object(shape),
+        })
+    }
     for (const pattern of patterns)
         for (const op of ['extract', 'exclude'] as const) {
             const text = `${op}(${pattern.argument})`
@@ -1108,7 +1118,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { at, binary, boolean, decimal, dynamoNumber, exclude, extract, meet, narrow, number, object, string, union } from '${library}/codec'`,
+    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, list, meet, narrow, number, object, string, union } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",

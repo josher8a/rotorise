@@ -41,25 +41,37 @@ asked to discharge the stronger one. That is a specification decision.
 
 ---
 
-## Suspected: the type level reads a ref below a list, a set or an adapter of a scope entry as unbound
+## Known: the type of extract drops a member whose ref names a union of objects
 
-**Observation.** A pattern pins a key at the term only where the term holds a literal. The type
-level reads the literal from the term of the codec, as the run time does, and a refinement in a
-pattern is refused at the type and at run time. A slot of an entry of a scope closes each `ref` of
-the slot in the scope: a bare `ref`, a `ref` under `optional`, `undefinable(...)` or a fill, and a
-`ref` at any depth of the union options and the object slots of the slot. A `ref` below a node of
-another kind, such as a list, a set or an adapter, holds no scope in the term of the field codec.
+**Observation.** The run time resolves a `ref` and compares the object that the entry names. The
+type reads that object through the closed `ref` only where the entry is an object: the closed `ref`
+carries the spec of the entry, and a union has no spec. So a member whose `ref` names a union entry
+reads as no object, and the fit is `'f'`. Measured 2026-10-31 with `tsc --noEmit` and
+`npx vitest --run`:
 
-**Effect.** Not established. The type bridge holds no `extract(...)` refuse id, measured 2026-10-30
-with `formal/scripts/gate.sh`. A probe with a `ref` in a union below `refine(...)` gives the same
-verdict at the type and at run time. Where the type cannot decide a fit through such a `ref`, the
-type keeps the member, so the type stays wider than the value and never narrower.
+    const s = scope({
+      Cat: object({ kind: string('cat') }), Dog: object({ kind: string('dog') }),
+      Pets: union([ref('Cat'), ref('Dog')]),
+      Basket: object({ tag: string('basket'), pet: ref('Pets') }),
+      Crate: object({ tag: string('crate'), pet: ref('Dog') }),
+    })
+    const p = object({ pet: union([object({ kind: string('cat') }), object({ kind: string('dog') })]) })
+    extract(union([s.Basket, s.Crate]), p)
+      runtime: keeps Basket and Crate
+      type:    Decoded keeps Crate only
+    exclude(union([s.Basket, s.Crate]), p)
+      runtime: keeps no member
+      type:    Decoded keeps Basket
 
-**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: the type drops a member whose key is pinned
-through a `ref` inside a union, the type keeps a member pinned through a `ref(...)`, the type drops a
-member whose `ref` binds a base, an optional key, or an entry with a union option that names a
-`ref`, and the slice that keeps a member pinned through an adapter.
-`src/codec/spec/union/codec.slice.pattern.spec.ts`: the refusal of a refinement.
+**Effect.** The type of `extract(...)` is narrower than the value: a value that the run time gives
+does not fit the type. The type of `exclude(...)` is wider. A `ref` to an object below a bare slot, a
+`list`, an `array` or a recursive entry reads exactly, and so does a `ref` below `held(...)`. A `ref`
+that names a base entry is not probed.
+
+**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: an object pattern reads the object that a `ref`
+names, bare, below a `list` and below an `array`, and in a recursive entry. The pool of
+`src/codec/lean/lean.pool.spec.ts` states the same roots to the type bridge. No test pins the union
+entry.
 
 ---
 

@@ -152,6 +152,13 @@ type OptionsMark<Os> = { readonly [optionsMarker]?: Os }
  */
 declare const elementsMarker: unique symbol
 type ElementsMark<Cs> = { readonly [elementsMarker]?: Cs }
+/**
+ * **The element codec of an `array` or a `spread`.** The term keeps the term of the element and the
+ * type drops the codec, so a scope that closes a `ref` below the element rebuilds the node from the
+ * codec that the mark keeps. Optional and type-level only.
+ */
+declare const elementMarker: unique symbol
+type ElementMark<C> = { readonly [elementMarker]?: C }
 /** The declared positions of a list with no spread, or `never`. */
 type FixedElements<C> = C extends {
     readonly [elementsMarker]?: infer Cs extends readonly unknown[]
@@ -1504,11 +1511,7 @@ const set = <const C extends AnyCodec>(
  * `never` element is admitted rather than refused: the spread is not a slot, so an array of
  * nothing is the empty list, which is a value.
  */
-export const array = <const C extends AnyCodec>(
-    element: C,
-): AttributeCodec<readonly Decoded<C>[], L<AttributeOf<C>>> &
-    TermMark<['list', [], ['some', TermOf<C>], []]> &
-    Free<FreeOf<C>> => {
+export const array = <const C extends AnyCodec>(element: C): ArrayOver<C> => {
     type T = Decoded<C>
     return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
         kind: 'list',
@@ -1517,6 +1520,15 @@ export const array = <const C extends AnyCodec>(
         suf: [],
     })
 }
+
+/** The codec that {@link array} returns, and the one that a scope rebuilds below a `ref`. */
+type ArrayOver<C extends AnyCodec> = AttributeCodec<
+    readonly Decoded<C>[],
+    L<AttributeOf<C>>
+> &
+    TermMark<['list', [], ['some', TermOf<C>], []]> &
+    Free<FreeOf<C>> &
+    ElementMark<C>
 
 /**
  * A declaration that fills a **slot** with a term holding no value.
@@ -1770,11 +1782,7 @@ export type SpreadOnce<Cs extends readonly unknown[]> = Split<Cs> extends {
  * list(spread(string))                    // readonly string[], stored as L with no minimum
  * ```
  */
-export const spread = <const C extends AnyCodec>(
-    element: C,
-): SpreadCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
-    TermMark<TermOf<C>> &
-    Free<FreeOf<C>> =>
+export const spread = <const C extends AnyCodec>(element: C): SpreadOver<C> =>
     ({ spread: element as unknown as AnyCodec }) as unknown as SpreadCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
@@ -1807,6 +1815,15 @@ export type SpreadCodec<T, A extends AttributeValue = AttributeValue> = {
     readonly [spreadMarker]: true
     readonly spread: AttributeCodec<T, A>
 }
+
+/** The marker that {@link spread} returns, and the one that a scope rebuilds below a `ref`. */
+type SpreadOver<C extends AnyCodec> = SpreadCodec<
+    Decoded<C>,
+    AttributeOf<C> & AttributeValue
+> &
+    TermMark<TermOf<C>> &
+    Free<FreeOf<C>> &
+    ElementMark<C>
 
 // ── narrowing ───────────────────────────────────────────────────────
 
@@ -2504,7 +2521,15 @@ type ClosedRef<Defs, N extends keyof Defs> = AttributeCodec<
     DecodeTerm<ScopeTerm<Defs, N>>,
     AttributeOf<DefOf<Defs, Defs[N]>> & AttributeValue
 > &
-    TermMark<ScopeTerm<Defs, N>>
+    TermMark<ScopeTerm<Defs, N>> &
+    SpecOfEntry<Defs, DefOf<Defs, Defs[N]>>
+/** The spec of the object that an entry names, so a fit reads the object through the `ref`. */
+type SpecOfEntry<Defs, C> = C extends ObjectCodec<
+    infer Spec extends Record<string, ObjectSlot>,
+    AnyCodec | undefined
+>
+    ? { readonly spec: SpecInScope<Spec, Defs> }
+    : unknown
 /**
  * A slot of an object, with each `ref` closed in the scope `Defs` that the slot reads: a bare `ref`,
  * the codec that an `optional` or an `undefinable` marks, each option of a union, and each slot of
@@ -2538,7 +2563,25 @@ type Deep<C, Defs> = TermOf<C> extends ['ref', infer N extends keyof Defs]
               infer Rest extends AnyCodec | undefined
           >
         ? ObjectCodec<SpecInScope<Spec, Defs>, Rest>
-        : C
+        : C extends ElementsMark<infer Cs extends readonly unknown[]>
+          ? [readonly unknown[]] extends [Cs]
+              ? C
+              : ListCodec<{
+                    [I in keyof Cs]: Cs[I] extends AnySpread
+                        ? SpreadInScope<Cs[I], Defs>
+                        : SlotInScope<Cs[I], Defs>
+                }>
+          : C extends ElementMark<infer E>
+            ? Deep<E, Defs> extends infer D extends AnyCodec
+                ? ArrayOver<D>
+                : C
+            : C
+/** A spread with each `ref` of its element closed in the scope `Defs`. */
+type SpreadInScope<S, Defs> = S extends ElementMark<infer E>
+    ? Deep<E, Defs> extends infer D extends AnyCodec
+        ? SpreadOver<D>
+        : S
+    : S
 type UnionInScope<Os extends readonly unknown[]> = UnionCodec<
     DecodeTerm<['union', TermsOf<Os>]>,
     Os

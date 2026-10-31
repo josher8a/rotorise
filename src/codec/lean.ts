@@ -2480,6 +2480,8 @@ export type Slice = {
     readonly codec: Sliceable
     readonly clauses: readonly Readonly<Record<string, AnyCodec>>[]
     readonly keys?: readonly string[]
+    /** Patterns that only the type square puts: the model's clause rows do not read them. */
+    readonly shapes?: readonly Readonly<Record<string, AnyCodec>>[]
 }
 
 /**
