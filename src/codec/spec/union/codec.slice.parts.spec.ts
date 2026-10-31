@@ -22,6 +22,7 @@ import {
     refine,
     string,
     union,
+    withLegacyRead,
 } from '../../codec'
 import type { Term } from '../../term'
 
@@ -277,5 +278,43 @@ describe('a dissection reads a union pattern by the parts of each option, as a p
         // @ts-expect-error the covered option is no longer in the exclusion
         const covered: Decoded<typeof rest> = { k: 'a', x: 'a' }
         expect(covered.k).toBe('a')
+    })
+})
+
+describe('a withLegacyRead field splits at its literals, as the plain field does', () => {
+    const filled = object({
+        status: withLegacyRead({
+            current: string('AVAILABLE', 'ADOPTED'),
+            whenMissing: 'AVAILABLE',
+        }),
+    })
+    const unknownPet = object({ chip: string })
+    const pets = union([filled, unknownPet])
+    const pattern = union([
+        object({ status: string('AVAILABLE') }),
+        object({ status: string('ADOPTED') }),
+    ])
+
+    it('keeps in the extraction the member whose literals the pattern covers, as the run time keeps it', () => {
+        const kept = extract(pets, pattern)
+        expect(optionsOf(kept)).toHaveLength(1)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof filled>
+        >()
+        expect(kept.decode({ M: {} })).toEqual({ status: 'AVAILABLE' })
+        expect(kept.decode({ M: { status: { S: 'ADOPTED' } } })).toEqual({
+            status: 'ADOPTED',
+        })
+    })
+
+    it('drops from the exclusion the member whose literals the pattern covers, as the run time drops it', () => {
+        const rest = exclude(pets, pattern)
+        expect(optionsOf(rest)).toHaveLength(1)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof unknownPet>
+        >()
+        expect(rest.decode({ M: { chip: { S: 'c1' } } })).toEqual({
+            chip: 'c1',
+        })
     })
 })

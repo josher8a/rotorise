@@ -6802,7 +6802,7 @@ type SplitSlot<C, PC, Lit extends boolean = false> = [
 ] extends [never]
     ? [FieldSpecList<C>] extends [never]
         ? Lit extends true
-            ? LiteralParts<C>
+            ? LiteralParts<Marks<C>>
             : false
         : MapObjects<
               InnerSpecs<FieldSpecList<C>, FieldSpecList<PC>[number], Lit>

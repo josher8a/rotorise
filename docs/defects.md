@@ -63,30 +63,6 @@ member whose `ref` binds a base, an optional key, or an entry with a union optio
 
 ---
 
-## Known: the type of a slice drops a withLegacyRead member whose literals a pattern splits
-
-**Observation.** The run time keeps a member of a union where the pattern covers each value of the
-member. The type drops a member that reads a name through `withLegacyRead(...)` where two options
-of the pattern split the literals of that name. The type keeps the same member where one option of
-the pattern covers the literals, and the type keeps a plain member under the split pattern.
-Measured 2026-10-31 with `tsc --noEmit` and `npx vitest --run`, the same at 3a547b06:
-
-    const fill = object({ a: withLegacyRead({ current: string('x', 'y'), whenMissing: 'x' }) })
-    const r = extract(union([fill, object({ b: string })]),
-      union([object({ a: string('x') }), object({ a: string('y') })]))
-      runtime: r.decode({ M: {} }) gives { a: 'x' }
-      type:    Decoded<typeof r> is never
-
-**Effect.** The type of `extract(...)` is narrower than the value: a value that the run time gives
-does not fit the type. The type of `exclude(...)` keeps the member that the run time drops, so that
-type is wider than the value.
-
-**Pin.** The pool of `src/codec/lean/lean.pool.spec.ts` states no slice for its pairs of two fills,
-and the comment at that gate gives this reason. With the slice, the type bridge prints 3
-`extract|accept` ids and 3 `exclude|refuse` ids.
-
----
-
 ## Known: the type of exclude keeps a member that a binary literal clause drops at run time
 
 **Observation.** The run time compares the bytes of a binary literal clause with the bytes of each

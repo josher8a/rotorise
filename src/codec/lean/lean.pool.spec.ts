@@ -698,8 +698,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         }
     }
     const pairs: PoolPair[] = []
-    // a pair that is `sliced` also states its union to the slice and the path vectors
-    const add = (a: Entry, b: Entry, sliced = true) => {
+    const add = (a: Entry, b: Entry) => {
         offered.push(a.codec, b.codec)
         const name = `pool_${first + pairs.length}`
         const bound = {
@@ -724,7 +723,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         try {
             const u = erase(union([a.codec, b.codec] as never))
             declared = openRefusal(u.def) === undefined
-            if (declared && sliced) unions.push({ codec: u, keys: [] })
+            if (declared) unions.push({ codec: u, keys: [] })
         } catch {
             declared = false
         }
@@ -761,9 +760,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
             }
         }
     }
-    // The fill pairs state no slice: the type of a slice gives `never` for a `withLegacyRead` member
-    // whose literals a pattern splits, where the run time keeps the member
-    if (seed === SEEDS[0]) for (const [a, b] of fills) add(a, b, false)
+    if (seed === SEEDS[0]) for (const [a, b] of fills) add(a, b)
     for (const [a, b] of declared) add(a, b)
     return pairs
 }
@@ -1794,13 +1791,13 @@ describe('the generated pool, against the model', () => {
               "path: a wall reaches a cycle: a wall reads its term at any depth, so the term has no scoped form": 1,
               "path: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 73,
               "slice term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 17,
-              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1628,
+              "slice: the clause is a \`number\` literal: the host reads the literal under the float adapter of \`number\`, and the model names no float adapter": 1632,
               "term: an open fragment: a thunk names a codec not yet declared, so the term has no scoped form": 587,
             },
             "seeds": [
               {
                 "assignments": 33,
-                "clauses": 4350,
+                "clauses": 4380,
                 "codecsPathed": 241,
                 "disjoints": 1152,
                 "guards": 0,
@@ -1808,7 +1805,7 @@ describe('the generated pool, against the model', () => {
                 "paths": 2043,
                 "seed": 20261004,
                 "separations": 1152,
-                "slices": 93,
+                "slices": 95,
                 "whenPaths": 7012,
               },
               {
