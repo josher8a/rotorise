@@ -5004,14 +5004,20 @@ type Overlap<A, B> = A &
         Decoded<A> & Decoded<B>,
         AttributeOf<A> & AttributeOf<B> & AttributeValue
     >
-/** The literal terms of a literal or of a union of literals with no adapter, or `never`. */
-type PlainLits<T> = T extends ['prim', ['literal', PlainBase, unknown]]
-    ? [T]
-    : T extends ['union', infer Os extends unknown[]]
-      ? [Os[number]] extends [['prim', ['literal', PlainBase, unknown]]]
-          ? Os
-          : never
-      : never
+/**
+ * The literal terms of a literal or of a union of literals with no adapter, or `never`. A wide
+ * literal ({@link TermWide}) names no value that two terms can share, so it is `never`, and the
+ * meet is the overlap.
+ */
+type PlainLits<T> = TermWide<T> extends true
+    ? never
+    : T extends ['prim', ['literal', PlainBase, unknown]]
+      ? [T]
+      : T extends ['union', infer Os extends unknown[]]
+        ? [Os[number]] extends [['prim', ['literal', PlainBase, unknown]]]
+            ? Os
+            : never
+        : never
 type PlainBase = 'string' | 'number' | 'boolean'
 /** The literals of `As` that `Bs` holds too: the same base and the same stored value. */
 type CommonLits<As extends unknown[], Bs extends unknown[]> = As extends [
@@ -6382,6 +6388,56 @@ type TermPins<T, R extends boolean, Env = []> = Norm<T, Env> extends [
     : false
 
 /**
+ * **Whether a term holds a literal whose value type is not one value**: a union, a template
+ * literal, or a whole base, as `string(u)` gives for `u: 'a' | 'b'`, and as a spread that is no
+ * tuple gives. The constructor keeps such an argument. The value at run time is one value, or the
+ * values of the list, and the type names a set that holds it. So the type cannot say which
+ * alternative the term pins, and the fit of the term is `'u'` ({@link FitsCodec}). A `binary` is
+ * no such term: its value type is `string` for every literal, and {@link UnnamedValues} reads it.
+ */
+type TermWide<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
+    ? N extends ['prim', ['literal', infer K, infer V]]
+        ? WideValue<K, V>
+        : N extends ['union', infer Os extends unknown[]]
+          ? true extends {
+                [I in keyof Os]: Norm<Os[I], E>[0] extends [
+                    'prim',
+                    ['literal', infer K, infer V],
+                ]
+                    ? WideValue<K, V>
+                    : false
+            }[number]
+              ? true
+              : false
+          : N extends ['refine', infer I]
+            ? TermWide<I, E>
+            : [LibraryInner<N>] extends [never]
+              ? false
+              : TermWide<LibraryInner<N>, E>
+    : false
+/** The fit that a `held` part or a wide literal decides, or `'n'`, no answer. */
+type DecidedFit<A, P> = HeldFit<A, P> extends 'n'
+    ? WideFit<A, P>
+    : HeldFit<A, P>
+/** `'u'` where the pattern holds a wide literal, or the codec does and the pattern pins a literal. */
+type WideFit<A, P> = TermWide<TermOf<MarkedCodec<P>>> extends true
+    ? 'u'
+    : PatternPins<MarkedCodec<P>> extends true
+      ? TermWide<TermOf<MarkedCodec<A>>> extends true
+          ? 'u'
+          : 'n'
+      : 'n'
+type WideValue<K, V> = K extends 'binary'
+    ? false
+    : IsUnion<V> extends true
+      ? true
+      : [V] extends [PropertyKey]
+        ? Record<never, never> extends Record<V, 1>
+            ? true
+            : false
+        : false
+
+/**
  * Whether a decoded type is a literal type rather than a base. `'a'` and `'a' | 'b'` answer `true`;
  * `string`, `number` and `boolean` answer `false`, each excluded by its own row, because a base is
  * assignable *from* its literals and `extends` alone cannot tell the two apart.
@@ -7081,13 +7137,14 @@ type MapObjects<Specs extends readonly unknown[]> = {
  * them inside some object of the pattern ({@link SpecFits}). Where the pattern is a union of
  * objects, each part of the codec fits some object ({@link EveryFitsParts}). Any other pattern is
  * met by a codec whose decoded and stored types lie inside the pattern's. A literal whose
- * alternatives the type cannot name ({@link UnnamedValues}) is `'u'`. A slot that the bound cut
- * ({@link OverflowCodec}) is `'u'`.
+ * alternatives the type cannot name ({@link UnnamedValues}) is `'u'`. A literal that is not one
+ * value ({@link TermWide}) is `'u'`, in the pattern, or in the codec against a pattern that pins a
+ * literal. A slot that the bound cut ({@link OverflowCodec}) is `'u'`.
  */
 type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = IsOverflow<A> extends true
     ? 'u'
-    : HeldFit<A, P> extends infer HF extends Fit
+    : DecidedFit<A, P> extends infer HF extends Fit
       ? HF
       : PatternPins<MarkedCodec<P>> extends true
         ? PinsALiteral<MarkedCodec<A>> extends true
