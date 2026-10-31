@@ -1036,3 +1036,126 @@ describe('an object pattern reads the object that a ref names, at the type as at
         expect(optionsIn(deeper)).toBe(1)
     })
 })
+
+/**
+ * **An object pattern reads each option of a union entry that a `ref` names.** The run time resolves
+ * the `ref` to the union and reads it option by option: a member whose `ref` names the options that
+ * the pattern covers is kept whole, and a member that the pattern covers in part keeps the covered
+ * options. The closed `ref` carries the specs of the options, an option that names another union
+ * entry reads as the options of that entry, and a base entry pins its literals.
+ */
+describe('an object pattern reads each option of a union entry that a ref names, at the type as at run time', () => {
+    const shelter = scope({
+        Cat: object({ kind: string('cat') }),
+        Dog: object({ kind: string('dog') }),
+        Bird: object({ kind: string('bird') }),
+        Pets: union([ref('Cat'), ref('Dog')]),
+        Zoo: union([ref('Pets'), ref('Bird')]),
+        Name: string('rex', 'tom'),
+        Basket: object({ tag: string('basket'), pet: ref('Pets') }),
+        Crate: object({ tag: string('crate'), pet: ref('Dog') }),
+        Cage: object({ tag: string('cage'), pet: ref('Zoo') }),
+        Collar: object({ tag: string('collar'), nick: ref('Name') }),
+        Tag: object({ tag: string('tag'), nick: string('max') }),
+    })
+    const cat = object({ kind: string('cat') })
+    const dog = object({ kind: string('dog') })
+    const row = (tag: string, kind: string) => ({
+        M: { tag: { S: tag }, pet: { M: { kind: { S: kind } } } },
+    })
+    const optionsIn = (codec: { readonly def: Term }): number =>
+        codec.def.kind === 'union' ? codec.def.options.length : 0
+
+    it('keeps in the extraction each member whose union entry the pattern covers, and none in the exclusion', () => {
+        const pattern = object({ pet: union([cat, dog]) })
+        const kept = extract(union([shelter.Basket, shelter.Crate]), pattern)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof shelter.Basket> | Decoded<typeof shelter.Crate>
+        >()
+        expect(optionsIn(kept)).toBe(2)
+        expect(failed(kept.decode(row('basket', 'cat')))).toBe(false)
+        const rest = exclude(union([shelter.Basket, shelter.Crate]), pattern)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<never>()
+        expect(rest.def.kind).toBe('never')
+    })
+
+    it('keeps the covered options of a member that the pattern covers in part', () => {
+        const kept = extract(
+            union([shelter.Basket, shelter.Crate]),
+            object({ pet: dog }),
+        )
+        expectTypeOf<Decoded<typeof kept>['pet']>().toEqualTypeOf<{
+            readonly kind: 'dog'
+        }>()
+        expect(failed(kept.decode(row('basket', 'dog')))).toBe(false)
+        expect(failed(kept.decode(row('basket', 'cat')))).toBe(true)
+        const rest = exclude(
+            union([shelter.Basket, shelter.Crate]),
+            object({ pet: dog }),
+        )
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<{
+            readonly tag: 'basket'
+            readonly pet: { readonly kind: 'cat' }
+        }>()
+        expect(failed(rest.decode(row('basket', 'cat')))).toBe(false)
+        expect(failed(rest.decode(row('basket', 'dog')))).toBe(true)
+    })
+
+    it('reads an option that names another union entry as the options of that entry', () => {
+        const pattern = object({
+            pet: union([cat, dog, object({ kind: string('bird') })]),
+        })
+        const kept = extract(union([shelter.Cage, shelter.Crate]), pattern)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof shelter.Cage> | Decoded<typeof shelter.Crate>
+        >()
+        const rest = exclude(union([shelter.Cage, shelter.Crate]), pattern)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<never>()
+        expect(rest.def.kind).toBe('never')
+    })
+
+    it('reads an option that is an entry of another scope, as the options of a union entry in one scope', () => {
+        const kennel = scope({
+            Run: object({ tag: string('run'), pet: ref('Dog') }),
+            Dog: object({ kind: string('dog'), home: optional(ref('Run')) }),
+        })
+        const yard = scope({
+            Cat: object({ kind: string('cat'), home: optional(ref('Pen')) }),
+            Pets: union([ref('Cat'), kennel.Dog]),
+            Pen: object({ tag: string('pen'), pet: ref('Pets') }),
+        })
+        const pattern = object({ pet: union([cat, dog]) })
+        const kept = extract(union([yard.Pen, kennel.Run]), pattern)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof yard.Pen> | Decoded<typeof kennel.Run>
+        >()
+        expect(optionsIn(kept)).toBe(2)
+        const rest = exclude(union([yard.Pen, kennel.Run]), pattern)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<never>()
+        expect(rest.def.kind).toBe('never')
+    })
+
+    it('reads the literals of a base entry that a ref names', () => {
+        const pattern = object({ nick: string('rex', 'tom') })
+        const kept = extract(union([shelter.Collar, shelter.Tag]), pattern)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof shelter.Collar>
+        >()
+        const rest = exclude(union([shelter.Collar, shelter.Tag]), pattern)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof shelter.Tag>
+        >()
+        expect(
+            failed(
+                kept.decode({
+                    M: { tag: { S: 'collar' }, nick: { S: 'rex' } },
+                }),
+            ),
+        ).toBe(false)
+        expect(
+            failed(
+                rest.decode({ M: { tag: { S: 'tag' }, nick: { S: 'max' } } }),
+            ),
+        ).toBe(false)
+    })
+})

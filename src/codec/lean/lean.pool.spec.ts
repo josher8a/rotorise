@@ -958,8 +958,49 @@ const refObjects: readonly Slice[] = (() => {
         Mother: object({ tag: string('mother'), kits: list(ref('Mother')) }),
         Stray: object({ tag: string('stray'), kits: list(ref('Stray')) }),
     })
+    const unions = (nested: boolean): Slice => {
+        const entries = scope({
+            Cat: object({ kind: string('cat'), home: optional(ref('Basket')) }),
+            Dog: object({ kind: string('dog'), home: optional(ref('Crate')) }),
+            Bird: object({
+                kind: string('bird'),
+                home: optional(ref('Basket')),
+            }),
+            Pets: union([ref('Cat'), ref('Dog')]),
+            Zoo: union([ref('Pets'), ref('Bird')]),
+            Basket: object({
+                tag: string('basket'),
+                pet: ref(nested ? 'Zoo' : 'Pets'),
+            }),
+            Crate: object({ tag: string('crate'), pet: ref('Dog') }),
+        })
+        return {
+            name: `through_ref_${nested ? 'zoo' : 'pets'}`,
+            codec: sliceableOf(erase(union([entries.Basket, entries.Crate]))),
+            clauses: [],
+            shapes: [
+                { pet: erase(union([kind('cat'), kind('dog')])) },
+                { pet: kind('dog') },
+                ...(nested
+                    ? [
+                          {
+                              pet: erase(
+                                  union([
+                                      kind('cat'),
+                                      kind('dog'),
+                                      kind('bird'),
+                                  ]),
+                              ),
+                          },
+                      ]
+                    : []),
+            ],
+        }
+    }
     return [
         roots(first, 'pet', one, ['Basket', 'Crate']),
+        unions(false),
+        unions(true),
         roots(many, 'pets', (c) => erase(list(c)), ['Kennel', 'Run']),
         roots(each, 'herd', (c) => erase(array(c)), ['Herd', 'Pack']),
         {

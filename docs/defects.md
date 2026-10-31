@@ -41,37 +41,34 @@ asked to discharge the stronger one. That is a specification decision.
 
 ---
 
-## Known: the type of extract drops a member whose ref names a union of objects
+## Known: the type of extract drops a member whose pattern splits below a union slot of a recursive union entry
 
-**Observation.** The run time resolves a `ref` and compares the object that the entry names. The
-type reads that object through the closed `ref` only where the entry is an object: the closed `ref`
-carries the spec of the entry, and a union has no spec. So a member whose `ref` names a union entry
-reads as no object, and the fit is `'f'`. Measured 2026-10-31 with `tsc --noEmit` and
-`npx vitest --run`:
+**Observation.** The run time reads a `ref` to a union entry option by option, and keeps a member
+where one option of the entry fits the pattern. The type reads a union entry through the specs of
+its options, and reads a union slot of `ref`s through the split of its parts. A pattern that needs
+the split below a union slot of `ref`s, where one of the `ref`s names a recursive union entry,
+reads as no fit. Measured 2026-10-31 with `tsc --noEmit` and `npx vitest --run`, the same before
+and after the pass that reads a union entry:
 
     const s = scope({
-      Cat: object({ kind: string('cat') }), Dog: object({ kind: string('dog') }),
-      Pets: union([ref('Cat'), ref('Dog')]),
-      Basket: object({ tag: string('basket'), pet: ref('Pets') }),
-      Crate: object({ tag: string('crate'), pet: ref('Dog') }),
+      Leaf: object({ kind: string('leaf') }),
+      Branch: object({ kind: string('branch'), kids: union([ref('Leaf'), ref('Tree')]) }),
+      Tree: union([ref('Leaf'), ref('Branch')]),
+      Holder: object({ tag: string('holder'), tree: ref('Tree') }),
+      Other: object({ tag: string('other'), tree: ref('Leaf') }),
     })
-    const p = object({ pet: union([object({ kind: string('cat') }), object({ kind: string('dog') })]) })
-    extract(union([s.Basket, s.Crate]), p)
-      runtime: keeps Basket and Crate
-      type:    Decoded keeps Crate only
-    exclude(union([s.Basket, s.Crate]), p)
-      runtime: keeps no member
-      type:    Decoded keeps Basket
+    const p = object({ tree: object({ kind: string('branch'), kids: object({ kind: string('leaf') }) }) })
+    extract(union([s.Holder, s.Other]), p)
+      runtime: keeps Holder
+      type:    Decoded is never
 
 **Effect.** The type of `extract(...)` is narrower than the value: a value that the run time gives
-does not fit the type. The type of `exclude(...)` is wider. A `ref` to an object below a bare slot, a
-`list`, an `array` or a recursive entry reads exactly, and so does a `ref` below `held(...)`. A `ref`
-that names a base entry is not probed.
+does not fit the type. The pattern that names the branch entry alone reads exactly, and so does a
+pattern that names the leaf entry and the branch entry as a union.
 
-**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: an object pattern reads the object that a `ref`
-names, bare, below a `list` and below an `array`, and in a recursive entry. The pool of
-`src/codec/lean/lean.pool.spec.ts` states the same roots to the type bridge. No test pins the union
-entry.
+**Pin.** `src/codec/spec/union/codec.slice.spec.ts`: an object pattern reads each option of a union
+entry that a `ref` names, an option that names another union entry, an option that is an entry of
+another scope, and a base entry. No test pins the recursive case above.
 
 ---
 

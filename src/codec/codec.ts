@@ -2529,7 +2529,34 @@ type SpecOfEntry<Defs, C> = C extends ObjectCodec<
     AnyCodec | undefined
 >
     ? { readonly spec: SpecInScope<Spec, Defs> }
-    : unknown
+    : C extends UnionCodec<infer _T, infer Os extends readonly unknown[]>
+      ? { readonly spec: OptionSpecs<Defs, Os> }
+      : unknown
+/**
+ * The specs of the options of a union entry, one for each object, or `false` where an option is no
+ * object. An option that names a union entry reads as the options of that entry.
+ */
+type OptionSpecs<Defs, Os extends readonly unknown[]> = Os extends readonly [
+    infer H,
+    ...infer R extends readonly unknown[],
+]
+    ? OptionSpec<Defs, DefOf<Defs, H>> extends infer S extends
+          readonly unknown[]
+        ? OptionSpecs<Defs, R> extends infer T extends readonly unknown[]
+            ? [...S, ...T]
+            : false
+        : false
+    : []
+type OptionSpec<Defs, D> = D extends ObjectCodec<
+    infer Spec extends Record<string, ObjectSlot>,
+    AnyCodec | undefined,
+    infer _T,
+    infer _Tm
+>
+    ? [SpecInScope<Spec, Defs>]
+    : D extends UnionCodec<infer _T, infer Os extends readonly unknown[]>
+      ? OptionSpecs<Defs, Os>
+      : false
 /**
  * A slot of an object, with each `ref` closed in the scope `Defs` that the slot reads: a bare `ref`,
  * the codec that an `optional` or an `undefinable` marks, each option of a union, and each slot of
@@ -2610,7 +2637,9 @@ type OptionInScope<O, Defs> = O extends ObjectCodec<
  */
 type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
     infer Spec extends Record<string, ObjectSlot>,
-    infer Rest extends AnyCodec | undefined
+    infer Rest extends AnyCodec | undefined,
+    infer _T,
+    infer _Tm
 >
     ? ObjectCodec<SpecInScope<Spec, Defs>, Rest, DecodeTerm<Tm>, Tm>
     : C extends UnionCodec<infer _T, infer Options extends readonly unknown[]>
