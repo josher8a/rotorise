@@ -229,11 +229,80 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * Two stand-ins share the absent row only where they are one value, and the meet compares no
-     * two stand-ins, so the meet refuses the name even where the stand-ins are one value. The
-     * refusal names the name.
+     * **Two stand-ins share the absent row where they are one value**, and the meet of the two
+     * fills is the fill with that stand-in over the meet of the two codecs: the absent row decodes
+     * to the stand-in on both sides, so it decodes to the stand-in in the meet. A stand-in that is
+     * an object is one value at two objects of the same members.
      */
-    it('refuses a shared name that both factors read through withLegacyRead', () => {
+    it('meets two fills of one stand-in as that stand-in over the meet of the two codecs', () => {
+        const both = meet(
+            object({
+                a: withLegacyRead({
+                    current: string('x', 'y'),
+                    whenMissing: 'x',
+                }),
+            }),
+            object({
+                a: withLegacyRead({
+                    current: string('x', 'z'),
+                    whenMissing: 'x',
+                }),
+            }),
+        )
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<{
+            readonly a: 'x'
+        }>()
+        expect(both.def).toEqual(
+            object({
+                a: withLegacyRead({ current: string('x'), whenMissing: 'x' }),
+            }).def,
+        )
+        expect(both.decode({ M: {} })).toEqual({ a: 'x' })
+        expect(failed(both.decode({ M: { a: { S: 'y' } } }))).toBe(true)
+
+        const named = (nick: string) =>
+            object({
+                a: withLegacyRead({
+                    current: object({ nick: string }),
+                    whenMissing: { nick },
+                }),
+            })
+        const objects = meet(named('rex'), named('rex'))
+        expect(objects.decode({ M: {} })).toEqual({ a: { nick: 'rex' } })
+    })
+
+    /**
+     * **The meet of two fills writes the stand-in**, because each factor writes it, and the meet of
+     * two codecs writes each value that both write. Each current here is wider than the meet.
+     */
+    it('writes the stand-in through a meet that is narrower than each current', () => {
+        const both = meet(
+            object({
+                a: withLegacyRead({
+                    current: string('x', 'y', 'w'),
+                    whenMissing: 'x',
+                }),
+            }),
+            object({
+                a: withLegacyRead({
+                    current: string('x', 'z', 'w'),
+                    whenMissing: 'x',
+                }),
+            }),
+        )
+        expect(orThrow(both.encode({ a: 'x' }))).toEqual({
+            M: { a: { S: 'x' } },
+        })
+        expect(both.decode({ M: {} })).toEqual({ a: 'x' })
+        expect(failed(both.decode({ M: { a: { S: 'y' } } }))).toBe(true)
+        expect(failed(both.decode({ M: { a: { S: 'z' } } }))).toBe(true)
+    })
+
+    /**
+     * Two stand-ins that are two values share no pair at the absent row, because the two sides
+     * decode that row to two values. The refusal names the name and says that the stand-ins differ.
+     */
+    it('refuses a shared name whose two fills hold stand-ins that differ', () => {
         expect(() =>
             meet(
                 object({
@@ -244,12 +313,12 @@ describe('the meet of two objects at a shared name', () => {
                 }),
                 object({
                     a: withLegacyRead({
-                        current: string('x', 'z'),
-                        whenMissing: 'x',
+                        current: string('x', 'y'),
+                        whenMissing: 'y',
                     }),
                 }),
             ),
-        ).toThrow(/'a'.*withLegacyRead.*stand-ins/)
+        ).toThrow(/'a'.*withLegacyRead.*stand-ins differ/)
     })
 
     /**

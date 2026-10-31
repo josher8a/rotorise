@@ -638,6 +638,49 @@ const covers: readonly Entry[] = (() => {
     }))
 })()
 
+/**
+ * **The fills: two stand-ins at one name, equal and apart.** The random draw gives each fill a
+ * stand-in of its own, so it rarely draws two equal ones. Each pair is two objects that declare
+ * one name through `withLegacyRead`: two equal texts, two texts that differ, and two equal objects.
+ * The meet of the first and of the third pair is the fill, and the meet of the second is refused.
+ */
+const fills: readonly (readonly [Entry, Entry])[] = (() => {
+    const build = object as unknown as (spec: unknown) => AnyCodec
+    const text = (current: AnyCodec, whenMissing: string) =>
+        erase(
+            build({
+                a: withLegacyRead({
+                    current: current as never,
+                    whenMissing: whenMissing as never,
+                }),
+            }),
+        )
+    const named = (nick: string) =>
+        erase(
+            object({
+                a: withLegacyRead({
+                    current: object({ nick: string }),
+                    whenMissing: { nick },
+                }),
+            }),
+        )
+    const entry = (name: string, codec: AnyCodec): Entry => ({ name, codec })
+    return [
+        [
+            entry('object{a~x:x|y}', text(string('x', 'y'), 'x')),
+            entry('object{a~x:x|z}', text(string('x', 'z'), 'x')),
+        ],
+        [
+            entry('object{a~x:x|y}', text(string('x', 'y'), 'x')),
+            entry('object{a~y:x|y}', text(string('x', 'y'), 'y')),
+        ],
+        [
+            entry('object{a~{rex}}', named('rex')),
+            entry('object{a~{rex}}', named('rex')),
+        ],
+    ]
+})()
+
 /** The pairs of one seed. The names continue after `first`, so the seeds share one name space. */
 const pool = (seed: number, first: number): readonly PoolPair[] => {
     rng = rngFrom(seed)
@@ -655,7 +698,8 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         }
     }
     const pairs: PoolPair[] = []
-    const add = (a: Entry, b: Entry) => {
+    // a pair that is `sliced` also states its union to the slice and the path vectors
+    const add = (a: Entry, b: Entry, sliced = true) => {
         offered.push(a.codec, b.codec)
         const name = `pool_${first + pairs.length}`
         const bound = {
@@ -680,7 +724,7 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
         try {
             const u = erase(union([a.codec, b.codec] as never))
             declared = openRefusal(u.def) === undefined
-            if (declared) unions.push({ codec: u, keys: [] })
+            if (declared && sliced) unions.push({ codec: u, keys: [] })
         } catch {
             declared = false
         }
@@ -717,6 +761,9 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
             }
         }
     }
+    // The fill pairs state no slice: the type of a slice gives `never` for a `withLegacyRead` member
+    // whose literals a pattern splits, where the run time keeps the member
+    if (seed === SEEDS[0]) for (const [a, b] of fills) add(a, b, false)
     for (const [a, b] of declared) add(a, b)
     return pairs
 }
@@ -1754,13 +1801,13 @@ describe('the generated pool, against the model', () => {
               {
                 "assignments": 33,
                 "clauses": 4350,
-                "codecsPathed": 237,
-                "disjoints": 1149,
+                "codecsPathed": 241,
+                "disjoints": 1152,
                 "guards": 0,
-                "pairs": 1149,
-                "paths": 2033,
+                "pairs": 1152,
+                "paths": 2043,
                 "seed": 20261004,
-                "separations": 1149,
+                "separations": 1152,
                 "slices": 93,
                 "whenPaths": 7012,
               },

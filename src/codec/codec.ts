@@ -4866,7 +4866,8 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
 /**
  * **The meet of two slots at one name, at the type level**: the meet of the two absences, as the
  * run time reads them, over the meet of the two codecs. A side that admits no absence, required or
- * `withLegacyRead`, makes the slot the meet of the two codecs. An `optional` side and an
+ * `withLegacyRead`, makes the slot the meet of the two codecs, and two `withLegacyRead` sides with
+ * one stand-in keep that fill over the meet. An `optional` side and an
  * `undefinable` side meet at `undefinable`. Two sides of one absence keep that absence.
  */
 type MeetSlot<A, B> = [A] extends [{ readonly [optionalMarker]: true }]
@@ -4876,10 +4877,8 @@ type MeetSlot<A, B> = [A] extends [{ readonly [optionalMarker]: true }]
             : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>> extends infer M
               ? UndefinableCodec<Decoded<M>, AttributeOf<M> & AttributeValue, M>
               : never
-        : MeetCodecs<MarkedCodec<A>, B>
-    : [B] extends [{ readonly [optionalMarker]: true }]
-      ? MeetCodecs<A, MarkedCodec<B>>
-      : MeetCodecs<A, B>
+        : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>>
+    : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>>
 
 /** Whether two slots that admit absence are both `undefinable`, or both `optional`. */
 type SameAbsence<A, B> = [A] extends [{ readonly [undefinableMarker]: true }]
@@ -5436,9 +5435,10 @@ const aligned = (
  *   TypeScript reads `{ k?: X } & { k: X | undefined }`.
  * - A name that a closed side does not declare pairs the absent row with a value without the key,
  *   which an `undefinable` side refuses, so the slot is required.
- * - Two `withLegacyRead` sides share the absent row where the two stand-ins are one value. The
- *   meet states no row for two stand-ins, so the pair is refused, as the model's `absentAgreeG`
- *   admits two fills only where the constants are one value.
+ * - Two `withLegacyRead` sides share the absent row where the two stand-ins are one value
+ *   ({@link standInEquals}), as the model's `absentAgreeG` admits two fills only there. The slot is
+ *   the stand-in over the meet of the two codecs, which writes the stand-in because both codecs
+ *   write it. The meet refuses two stand-ins that differ.
  *
  * `undefined` where a required slot meets at `never`, and the object holds no value.
  */
@@ -5468,9 +5468,17 @@ const meetSlots = (
               : 'optional'
     const marks = new Set([absence(left, mine), absence(right, theirs)])
     if (marks.size === 1 && marks.has('fallback')) {
-        throw new CodecError(
-            `[meet] both factors read '${name}' through \`withLegacyRead\`, and the host compares no two stand-ins: the absent row has a meet only where the two stand-ins are one value`,
-        )
+        const [mine, theirs] = [fieldOf(left), fieldOf(right)]
+        if (
+            mine.mark !== 'fallback' ||
+            theirs.mark !== 'fallback' ||
+            !standInEquals(mine.v, theirs.v)
+        ) {
+            throw new CodecError(
+                `[meet] both factors read '${name}' through \`withLegacyRead\`, and the stand-ins differ: the absent row has a meet only where the two stand-ins are one value`,
+            )
+        }
+        return withMissing(held, mine.v as Decoded<typeof held>)
     }
     if (
         marks.has('req') ||

@@ -63,26 +63,27 @@ member whose `ref` binds a base, an optional key, or an entry with a union optio
 
 ---
 
-## Known: the meet refuses two fills at one name even where the stand-ins are one value
+## Known: the type of a slice drops a withLegacyRead member whose literals a pattern splits
 
-**Observation.** `meet(...)` refuses a shared name that both factors read through
-`withLegacyRead(...)`, whatever the two stand-ins are. Two stand-ins share the absent row exactly
-where they are one value, and the compatibility test decides that with `standInEquals(a, b)` in
-`src/codec/term.ts`. Measured 2026-10-30 with `npx vitest --run`:
+**Observation.** The run time keeps a member of a union where the pattern covers each value of the
+member. The type drops a member that reads a name through `withLegacyRead(...)` where two options
+of the pattern split the literals of that name. The type keeps the same member where one option of
+the pattern covers the literals, and the type keeps a plain member under the split pattern.
+Measured 2026-10-31 with `tsc --noEmit` and `npx vitest --run`, the same at 3a547b06:
 
-    meet(object({ a: withLegacyRead({ current: string('x', 'y'), whenMissing: 'x' }) }),
-         object({ a: withLegacyRead({ current: string('x', 'z'), whenMissing: 'x' }) }))
-      runtime: refused, both factors read 'a' through withLegacyRead
+    const fill = object({ a: withLegacyRead({ current: string('x', 'y'), whenMissing: 'x' }) })
+    const r = extract(union([fill, object({ b: string })]),
+      union([object({ a: string('x') }), object({ a: string('y') })]))
+      runtime: r.decode({ M: {} }) gives { a: 'x' }
+      type:    Decoded<typeof r> is never
 
-**Effect.** A meet of two factors with one stand-in at a name throws, where the fill with that
-stand-in is the meet. The refusal is safe: the meet builds no codec with a wrong value, and the
-caller loses a meet that exists.
+**Effect.** The type of `extract(...)` is narrower than the value: a value that the run time gives
+does not fit the type. The type of `exclude(...)` keeps the member that the run time drops, so that
+type is wider than the value.
 
-**Pin.** `src/codec/spec/object/codec.meet.spec.ts`: the refusal of a shared name that both factors
-read through `withLegacyRead(...)`.
-
-**Open.** The meet of two fills with one stand-in is the fill, and `standInEquals(a, b)` decides
-that the two stand-ins are one value.
+**Pin.** The pool of `src/codec/lean/lean.pool.spec.ts` states no slice for its pairs of two fills,
+and the comment at that gate gives this reason. With the slice, the type bridge prints 3
+`extract|accept` ids and 3 `exclude|refuse` ids.
 
 ---
 
