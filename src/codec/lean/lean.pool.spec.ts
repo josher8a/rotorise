@@ -13,11 +13,6 @@
  * A `ref` that no scope binds is an unknown term, and each host check takes its worst case, so a
  * pair has two readings: the guard reads the `ref` as the root of its option, and the other tests
  * read the open term.
- *
- * One route narrows the pool. **No separation vector for two fills at one name.** Such a pair goes
- * to disjointness and to a kernel row of its guard column, and no check reads a compatibility
- * column for the pair. The model and the host agree on two fills where the stand-ins are one value,
- * and the corpus of `lean.spec.ts` pins that agreement.
  */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -91,7 +86,6 @@ import {
     leanSlice,
     leanSliceModule,
     leanValueOf,
-    pairGuardRefusal,
     reachable,
     sliceableOf,
     unionAt,
@@ -578,55 +572,6 @@ const draw = (depth: number): Entry => {
     }
 }
 
-/** The field names at which a term holds a fill, at any depth. */
-const fillNames = (root: Term): Set<string> => {
-    const names = new Set<string>()
-    const seen = new Set<Term>()
-    const walk = (t: Term): void => {
-        if (seen.has(t)) return
-        seen.add(t)
-        switch (t.kind) {
-            case 'set':
-                return walk(t.elem)
-            case 'list':
-                t.pre.forEach(walk)
-                t.suf.forEach(walk)
-                if (t.spread !== undefined) walk(t.spread)
-                return
-            case 'held':
-                walk(t.inner)
-                return walk(t.outer)
-            case 'refine':
-            case 'legacy':
-                return walk(t.inner)
-            case 'ref': {
-                const target = targetOf(t)
-                if (target !== undefined) walk(target)
-                return
-            }
-            case 'object':
-                for (const [name, field] of Object.entries(t.body.fields)) {
-                    if (field.mark === 'fallback') names.add(name)
-                    walk(field.t)
-                }
-                if (t.body.rest !== undefined) walk(t.body.rest)
-                return
-            case 'union':
-                return t.options.forEach(walk)
-            default:
-                return
-        }
-    }
-    walk(root)
-    return names
-}
-
-/** Whether the two terms hold a fill at one field name: the narrowing of the model. */
-const fillsMeet = (x: Term, y: Term): boolean => {
-    const there = fillNames(y)
-    return [...fillNames(x)].some((name) => there.has(name))
-}
-
 /** One pair of the pool, with the host verdicts and the two terms that the model reads. */
 type PoolPair = {
     readonly name: string
@@ -635,8 +580,6 @@ type PoolPair = {
     readonly right: AnyCodec
     /** The host verdicts, in the column order of `poolRow`: disjoint, views, agrees, guard, union. */
     readonly host: string
-    /** A fill at one field name on each side: the pair goes to disjointness and to a guard row. */
-    readonly fills: boolean
     readonly l: string
     readonly r: string
     readonly closures: readonly string[]
@@ -757,7 +700,6 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
             left: a.codec,
             right: b.codec,
             host,
-            fills: fillsMeet(x, y),
             l,
             r,
             closures: [...bound.closures.values()],
@@ -779,14 +721,10 @@ const pool = (seed: number, first: number): readonly PoolPair[] => {
     return pairs
 }
 
-/**
- * The pairs that each kernel module states; a refusal of the emitter drops the pair by reason. A
- * pair with a fill on each side has no separation vector, so the kernel states its guard column alone.
- */
+/** The pairs that each kernel module states; a refusal of the emitter drops the pair by reason. */
 const kernelPairs = (pairs: readonly PoolPair[]) => {
     const disjoints: DisjointPair[] = []
     const separations: Separation[] = []
-    const fillGuards: Separation[] = []
     for (const p of pairs) {
         const one = { name: p.name, left: p.left, right: p.right }
         try {
@@ -796,12 +734,6 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
             if (!(error instanceof LeanUnemittable)) throw error
             drop(`disjoint: ${error.reason}`)
         }
-        if (p.fills) {
-            const refusal = pairGuardRefusal(one)
-            if (refusal === undefined) fillGuards.push(one)
-            else drop(`pairGuard: ${refusal}`)
-            continue
-        }
         try {
             leanSeparation(one)
             separations.push(one)
@@ -810,7 +742,7 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
             drop(`separation: ${error.reason}`)
         }
     }
-    return { disjoints, separations, fillGuards }
+    return { disjoints, separations }
 }
 
 /** The guard verdicts of one seed. The names continue after `first`, so the seeds share one name space. */
@@ -1624,7 +1556,6 @@ const poolModules = (
         leanSeparationRowModule(
             perSeed.flatMap((one) => one.separations),
             'pool',
-            perSeed.flatMap((one) => one.fillGuards),
         ),
     ],
     [
@@ -1792,7 +1723,6 @@ describe('the generated pool, against the model', () => {
             seeds: perSeed.map((one) => ({
                 seed: one.seed,
                 pairs: one.pairs.length,
-                fills: one.pairs.filter((p) => p.fills).length,
                 disjoints: one.disjoints.length,
                 separations: one.separations.length,
                 slices: one.slices.length,
@@ -1826,12 +1756,11 @@ describe('the generated pool, against the model', () => {
                 "clauses": 4350,
                 "codecsPathed": 237,
                 "disjoints": 1149,
-                "fills": 5,
                 "guards": 0,
                 "pairs": 1149,
                 "paths": 2033,
                 "seed": 20261004,
-                "separations": 1144,
+                "separations": 1149,
                 "slices": 93,
                 "whenPaths": 7012,
               },
@@ -1840,12 +1769,11 @@ describe('the generated pool, against the model', () => {
                 "clauses": 3315,
                 "codecsPathed": 171,
                 "disjoints": 1048,
-                "fills": 6,
                 "guards": 0,
                 "pairs": 1048,
                 "paths": 1740,
                 "seed": 1,
-                "separations": 1042,
+                "separations": 1048,
                 "slices": 69,
                 "whenPaths": 5357,
               },
@@ -1854,12 +1782,11 @@ describe('the generated pool, against the model', () => {
                 "clauses": 4545,
                 "codecsPathed": 175,
                 "disjoints": 1078,
-                "fills": 11,
                 "guards": 0,
                 "pairs": 1078,
                 "paths": 2149,
                 "seed": 4,
-                "separations": 1067,
+                "separations": 1078,
                 "slices": 93,
                 "whenPaths": 10108,
               },
@@ -1978,34 +1905,18 @@ describe('the generated pool, against the model', () => {
     })
 
     /**
-     * **No column of a pair is checked by `#eval` alone.** A pair with a fill on each side has no
-     * separation vector, so the kernel states its guard column in a row of its own. **A pair over
-     * an open fragment states no row**: a scope judges the closed copy of the union, so the host
-     * decides nothing on the pair. The scoped print refuses an open fragment, so no such
+     * **A pair over an open fragment states no row**: a scope judges the closed copy of the union,
+     * so the host decides nothing on the pair. The scoped print refuses an open fragment, so no such
      * pair enters the pool, and the refusal is asserted on a pair that reads `ref('undeclared')`.
      */
-    it('states the guard column of each pair of two fills in the kernel, and refuses a pair over an open fragment', () => {
-        const fills = pairs.filter((p) => p.fills)
-        expect(fills).toHaveLength(22)
-        expect(fills.filter((p) => pairGuardRefusal(p) !== undefined)).toEqual(
-            [],
-        )
-        expect(
-            pairGuardRefusal({
+    it('refuses a pair over an open fragment', () => {
+        expect(() =>
+            leanSeparation({
                 name: 'open',
                 left: erase(array(undeclared)),
                 right: erase(string),
             }),
-        ).toContain('no scope binds')
-        const module = new Map(poolModules(perSeed)).get(
-            '.pool.separations.lean',
-        )
-        for (const { name } of fills) {
-            expect(module).toMatch(
-                new RegExp(`\\("${name}", \\([^\\n]*, (true|false)\\)\\)`),
-            )
-        }
-        expect(module).toContain('failing pairGuardOk (pairGuards0 ρ π) = []')
+        ).toThrow(/no scope binds/)
     })
 
     it('emits the kernel vectors for the gate', () => {

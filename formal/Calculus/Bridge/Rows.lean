@@ -119,15 +119,6 @@ def refusedOk (p : Closed × Closed) : Bool := !p.1.compatPair p.2
 /-- A pair refused at the guard: the graph guard refuses a graph. -/
 def guardRefusedOk (p : Graph × Graph) : Bool := !(p.1.guarded && p.2.guarded)
 
-/-- The guard column of a pair: the guard on the two graphs gives the answer of `src/`. -/
-def pairGuardOk (p : Graph × Graph × Bool) : Bool :=
-  (p.1.guarded && p.2.1.guarded) == p.2.2
-
-/-- The law of `pairGuardOk`: the guard on the pair equals the answer. -/
-theorem pairGuardOk_iff (p : Graph × Graph × Bool) :
-    pairGuardOk p = true ↔ (p.1.guarded && p.2.1.guarded) = p.2.2 :=
-  beq_iff_eq
-
 /-- **An accepted pair, at each row.** At every caller table, the two meanings of two lawful
     options are `Compat` in each order, which is the obligation of the union. -/
 theorem accepted_of_rows {rows : List (String × Closed × Closed)}

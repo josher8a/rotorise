@@ -2039,49 +2039,6 @@ export const separationRows = (
 })
 
 /**
- * **A pair over an open fragment states no guard row.** A union over a `ref` that no scope binds
- * is judged on the closed copy of a scope, so the host decides no guard and no compatibility on
- * the pair, and no caller observes a verdict on the open term. The term has no graph to print
- * either. The rule is the rule of {@link separationForm}. The answer is the reason, or nothing.
- */
-export const pairGuardRefusal = ({
-    left,
-    right,
-}: Separation): string | undefined =>
-    [left, right].some((option) => openRefusal(option.def) !== undefined)
-        ? 'the union reads a `ref` that no scope binds, so the host decides the pair at the scope'
-        : undefined
-
-/**
- * **The guard column of a pair, alone**: the two graphs, and whether `src/`'s guard accepts both
- * options. A pair with a fill on each side has no separation verdict, and this row states the
- * column of the pair that the model decides. A pair over an open fragment states no row
- * ({@link pairGuardRefusal}).
- */
-export const pairGuardRows = (
-    pairs: readonly Separation[],
-): RowFile<'pairGuards'> => ({
-    forms: {
-        pairGuards: { type: '(Graph × Graph × Bool)', ok: 'pairGuardOk' },
-    },
-    rows: (shapes) =>
-        pairs.flatMap((one) => {
-            if (pairGuardRefusal(one) !== undefined) return []
-            const { l, r } = shapes.pair(one.left, one.right, one.name, 'graph')
-            const guarded = [one.left, one.right].every(
-                (option) => recursionUse(option.def) < 2,
-            )
-            return [
-                {
-                    name: leanIdent(one.name),
-                    form: 'pairGuards' as const,
-                    row: `(${l}, ${r}, ${guarded})`,
-                },
-            ]
-        }),
-})
-
-/**
  * The declaration verdicts in the row form: one row list per {@link SeparationForm}. Each list
  * carries the checker, and the verdict of {@link leanSeparation} at each row, lifted from the
  * checker.
@@ -2091,11 +2048,9 @@ export const pairGuardRows = (
 export const leanSeparationRowModule = (
     separations: readonly Separation[],
     subject: Subject = 'pool',
-    guardOnly: readonly Separation[] = [],
 ): string => {
     const shapes = kernelShapes()
     const separated = kernelLists(separationRows(separations), shapes)
-    const guarded = kernelLists(pairGuardRows(guardOnly), shapes)
     const lists = [
         ...separated.map(({ form, name, text }) => {
             const { caller, verdict, lift } = separationLists[form]
@@ -2108,13 +2063,7 @@ export const leanSeparationRowModule = (
                 `  ${lift(name)}`,
             ].join('\n')
         }),
-        ...guarded.map((one) => one.text),
     ]
-    const guardText =
-        guardOnly.length === 0
-            ? ''
-            : ` A pair with a fill on each side carries the
-guard column alone, in the \`pairGuards\` lists, so the pair has no separation verdict.`
     return leanModule(`import Calculus.Bridge.Rows
 
 /-!
@@ -2125,7 +2074,7 @@ that \`src/\`'s \`union\` accepts holds two closed codecs, which exist only for 
 carries the model's proof that the pair is compatible. A pair that \`src/\` refuses at
 compatibility holds two closed codecs and carries \`Closed.compatPair x y = false\`. A pair that
 \`src/\` refuses at the guard holds two graphs and carries the guard's refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
-of each row.${guardText}
+of each row.
 
 ${rowForm(subject)}
 -/
@@ -2140,7 +2089,7 @@ ${shapes.defs()}
 
 ${lists.join('\n\n')}
 
-${leanDiagnostic([...separated, ...guarded])}
+${leanDiagnostic(separated)}
 
 end Calculus
 `)
