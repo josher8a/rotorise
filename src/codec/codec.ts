@@ -4989,10 +4989,27 @@ type MeetCodecs<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
  * with no adapter: the type reads no bytes of a `binary` literal. A side of another form is {@link Overlap}.
  */
 type MeetLiterals<A, B> = [PlainLits<TermOf<A>>] extends [never]
-    ? Overlap<A, B>
+    ? [PlainLits<TermOf<B>>] extends [never]
+        ? Overlap<A, B>
+        : MeetInexact<A, B>
     : [PlainLits<TermOf<B>>] extends [never]
-      ? Overlap<A, B>
+      ? MeetInexact<B, A>
       : CommonCodec<CommonLits<PlainLits<TermOf<A>>, PlainLits<TermOf<B>>>, A>
+/**
+ * The meet of an inexact literal `W` with a literal `E` that is exact: the literals of `E` that
+ * the decoded type of `W` holds, as the same codec in both orders.
+ */
+type MeetInexact<W, E> = Inexact<TermOf<W>> extends true
+    ? CommonCodec<WithinLits<PlainLits<TermOf<E>>, Decoded<W>>, E>
+    : Overlap<W, E>
+type WithinLits<Ls extends unknown[], D> = Ls extends [
+    infer Head,
+    ...infer Rest extends unknown[],
+]
+    ? [DecodeTerm<Head>] extends [D]
+        ? [Head, ...WithinLits<Rest, D>]
+        : WithinLits<Rest, D>
+    : []
 /**
  * The intersection of two codecs that overlap, with the decoded type of the values that both
  * decode to. The last member decides the decoded type of an intersection of codecs, so a member
@@ -5005,11 +5022,10 @@ type Overlap<A, B> = A &
         AttributeOf<A> & AttributeOf<B> & AttributeValue
     >
 /**
- * The literal terms of a literal or of a union of literals with no adapter, or `never`. A wide
- * literal ({@link TermWide}) names no value that two terms can share, so it is `never`, and the
- * meet is the overlap.
+ * The literal terms of a literal or of a union of literals with no adapter, or `never`. An inexact
+ * literal ({@link Inexact}) names no value that two terms can share, so it is `never`.
  */
-type PlainLits<T> = TermWide<T> extends true
+type PlainLits<T> = Inexact<T> extends true
     ? never
     : T extends ['prim', ['literal', PlainBase, unknown]]
       ? [T]
@@ -6388,55 +6404,66 @@ type TermPins<T, R extends boolean, Env = []> = Norm<T, Env> extends [
     : false
 
 /**
- * **Whether a term holds a literal whose value type is not one value**: a union, a template
- * literal, or a whole base, as `string(u)` gives for `u: 'a' | 'b'`, and as a spread that is no
- * tuple gives. The constructor keeps such an argument. The value at run time is one value, or the
- * values of the list, and the type names a set that holds it. So the type cannot say which
- * alternative the term pins, and the fit of the term is `'u'` ({@link FitsCodec}). A `binary` is
- * no such term: its value type is `string` for every literal, and {@link UnnamedValues} reads it.
+ * **Whether a term holds a literal that the type does not name exactly**: the value type is a
+ * union, a template literal, a whole base, or a list that is no tuple, as `string(u)` gives for
+ * `u: 'a' | 'b'`. A `binary` and a `dynamoNumber` with free text are the same case, because the
+ * type of their value is the whole base. The constructor keeps such an argument. The value at run
+ * time is one value, or the values of the list, and the type names a set that holds it. So the type
+ * cannot say which alternative the term pins ({@link FitsCodec}). A union with an option that is no
+ * literal is no literal term.
  */
-type TermWide<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
-    ? N extends ['prim', ['literal', infer K, infer V]]
-        ? WideValue<K, V>
+type Inexact<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
+    ? N extends ['prim', ['literal', unknown, infer V]]
+        ? InexactValue<V>
         : N extends ['union', infer Os extends unknown[]]
-          ? true extends {
-                [I in keyof Os]: Norm<Os[I], E>[0] extends [
-                    'prim',
-                    ['literal', infer K, infer V],
-                ]
-                    ? WideValue<K, V>
-                    : false
-            }[number]
-              ? true
-              : false
+          ? InexactAll<{ [I in keyof Os]: OptionInexact<Os[I], E> }[number]>
           : N extends ['refine', infer I]
-            ? TermWide<I, E>
+            ? Inexact<I, E>
             : [LibraryInner<N>] extends [never]
               ? false
-              : TermWide<LibraryInner<N>, E>
+              : Inexact<LibraryInner<N>, E>
     : false
-/** The fit that a `held` part or a wide literal decides, or `'n'`, no answer. */
+type OptionInexact<O, E> = Norm<O, E>[0] extends [
+    'prim',
+    ['literal', unknown, infer V],
+]
+    ? InexactValue<V>
+    : 'other'
+type InexactAll<X> = 'other' extends X ? false : true extends X ? true : false
+type InexactValue<V> = IsUnion<V> extends true
+    ? true
+    : [V] extends [PropertyKey]
+      ? Record<never, never> extends Record<V, 1>
+          ? true
+          : false
+      : false
+/** The fit that a `held` part or an inexact literal decides, or `'n'`, no answer. */
 type DecidedFit<A, P> = HeldFit<A, P> extends 'n'
-    ? WideFit<A, P>
+    ? InexactFit<A, P>
     : HeldFit<A, P>
-/** `'u'` where the pattern holds a wide literal, or the codec does and the pattern pins a literal. */
-type WideFit<A, P> = TermWide<TermOf<MarkedCodec<P>>> extends true
-    ? 'u'
+/**
+ * Where the pattern holds an inexact literal, or the codec does and the pattern pins a literal: `'f'`
+ * where the stored types or the decoded types are disjoint, and `'u'` otherwise. A codec that pins
+ * no literal is `'f'` against an inexact pattern, unless it reads a `ref`.
+ */
+type InexactFit<A, P> = Inexact<TermOf<MarkedCodec<P>>> extends true
+    ? Inexact<TermOf<MarkedCodec<A>>> extends true
+        ? Apart<A, P>
+        : PinsALiteral<MarkedCodec<A>> extends true
+          ? Apart<A, P>
+          : ReadsRef<TermOf<MarkedCodec<A>>> extends true
+            ? 'u'
+            : 'f'
     : PatternPins<MarkedCodec<P>> extends true
-      ? TermWide<TermOf<MarkedCodec<A>>> extends true
-          ? 'u'
+      ? Inexact<TermOf<MarkedCodec<A>>> extends true
+          ? Apart<A, P>
           : 'n'
       : 'n'
-type WideValue<K, V> = K extends 'binary'
-    ? false
-    : IsUnion<V> extends true
-      ? true
-      : [V] extends [PropertyKey]
-        ? Record<never, never> extends Record<V, 1>
-            ? true
-            : false
-        : false
-
+type Apart<A, P> = [StoredMembers<A> & StoredMembers<P>] extends [never]
+    ? 'f'
+    : [Decoded<A> & Decoded<P>] extends [never]
+      ? 'f'
+      : 'u'
 /**
  * Whether a decoded type is a literal type rather than a base. `'a'` and `'a' | 'b'` answer `true`;
  * `string`, `number` and `boolean` answer `false`, each excluded by its own row, because a base is
@@ -6462,20 +6489,6 @@ type PinsALiteralValue<V> = [V] extends [never]
  * {@link DynamoNumber} and `binary(bytes)` a `Uint8Array`.
  */
 type LiteralCarrier = DynamoNumber | Uint8Array
-
-/**
- * **Whether the type cannot name the alternatives of a carrier**: `true` for a `Uint8Array`, which
- * has no literal type, and for a {@link DynamoNumber} whose text is `string`. A clause at such a
- * value keeps a member only on the values, which the type cannot decide. `boolean` for a union
- * that holds both kinds of value.
- */
-type UnnamedValues<V> = V extends Uint8Array
-    ? true
-    : V extends DynamoNumber
-      ? string extends V['digits']
-          ? true
-          : false
-      : false
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -7137,9 +7150,9 @@ type MapObjects<Specs extends readonly unknown[]> = {
  * them inside some object of the pattern ({@link SpecFits}). Where the pattern is a union of
  * objects, each part of the codec fits some object ({@link EveryFitsParts}). Any other pattern is
  * met by a codec whose decoded and stored types lie inside the pattern's. A literal whose
- * alternatives the type cannot name ({@link UnnamedValues}) is `'u'`. A literal that is not one
- * value ({@link TermWide}) is `'u'`, in the pattern, or in the codec against a pattern that pins a
- * literal. A slot that the bound cut ({@link OverflowCodec}) is `'u'`.
+ * alternatives the type does not name exactly ({@link Inexact}) is `'f'` where the stored types or the
+ * decoded types are disjoint, and `'u'` otherwise, in the pattern, or in the codec against a pattern
+ * that pins a literal. A slot that the bound cut ({@link OverflowCodec}) is `'u'`.
  */
 type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = IsOverflow<A> extends true
@@ -7150,9 +7163,7 @@ type FitsCodec<A, P> = IsOverflow<A> extends true
         ? PinsALiteral<MarkedCodec<A>> extends true
             ? [AttributeOf<A>] extends [AttributeOf<P>]
                 ? [Decoded<A>] extends [Decoded<P>]
-                    ? true extends UnnamedValues<Decoded<P>>
-                        ? 'u'
-                        : 't'
+                    ? 't'
                     : 'f'
                 : 'f'
             : ReadsRef<TermOf<MarkedCodec<A>>> extends true
