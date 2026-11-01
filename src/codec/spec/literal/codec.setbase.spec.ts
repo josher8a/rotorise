@@ -24,12 +24,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { BS, NS, SS } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import {
     array,
     binary,
     boolean,
     CodecError,
     decimal,
+    dynamoNumber,
     held,
     item,
     number,
@@ -39,6 +41,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
+import { orThrow } from '../../result'
 import { checkRoundTrip } from '../../testing'
 
 declare const brand: unique symbol
@@ -152,6 +155,39 @@ describe('a set of a literal, spelled at the base', () => {
             ),
             { count: 100, seed: 20260901 },
         )
+    })
+})
+
+/**
+ * **A set of a literal names each value once, at each base.** A literal's alternatives are a set,
+ * and a repeated value makes a two-value literal that admits one value, which stops the literal
+ * reading as a constant. `string('dog', 'dog')` refuses, so `string.set('dog', 'dog')` refuses for
+ * the same reason, and so does the set at every other base.
+ */
+describe('a set of a literal refuses a repeated value, at each base', () => {
+    const repeated = /a literal's alternatives are a \*set\*/
+    const one = orThrow(DynamoNumber.from('1'))
+    it('refuses the repeat at string', () => {
+        expect(() => string.set('dog', 'dog')).toThrow(repeated)
+    })
+    it('refuses the repeat at number', () => {
+        expect(() => number.set(1, 1)).toThrow(repeated)
+    })
+    it('refuses the repeat at decimal', () => {
+        expect(() => decimal.set('1', '1')).toThrow(repeated)
+    })
+    it('refuses the repeat at binary, comparing the bytes', () => {
+        expect(() =>
+            binary.set(new Uint8Array([1]), new Uint8Array([1])),
+        ).toThrow(repeated)
+    })
+    it('refuses the repeat at dynamoNumber', () => {
+        expect(() => dynamoNumber.set(one, one)).toThrow(repeated)
+    })
+
+    it('builds the set of two distinct values, as the literal builds them', () => {
+        expect(string.set('dog', 'cat').def).toBeDefined()
+        expect(() => string.set('dog', 'cat')).not.toThrow()
     })
 })
 

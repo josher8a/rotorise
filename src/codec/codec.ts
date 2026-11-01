@@ -1027,10 +1027,12 @@ const setCapability =
     (...allowed: readonly LiteralValue[]) =>
         // the *public* codec, reached through a thunk because it is the constant being defined:
         // `string.set()` and the set of that same base should be the same codec, definition
-        // included, and a second element object built from the same closures would compare unequal
+        // included, and a second element object built from the same closures would compare unequal.
+        // The literal comes from {@link literalCapability}, the call of the base itself, so a
+        // repeated value refuses here as it refuses at `string('dog', 'dog')`
         set(
             (allowed.length
-                ? literalCodec(base, allowed)
+                ? literalCapability(base)(...allowed)
                 : ground()) as AnyCodec,
         )
 
