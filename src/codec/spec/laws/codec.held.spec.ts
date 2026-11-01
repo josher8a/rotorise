@@ -14,6 +14,7 @@ import {
     array,
     boolean,
     CodecError,
+    codecOfTerm,
     decimal,
     failed,
     held,
@@ -660,5 +661,24 @@ describe('the held side is the write occupancy of a union option', () => {
         })
         expect(memberOf(at.encode(new Date(0)) as never)).toBe('N')
         expect(valueKinds(at.def)).toEqual(valueKinds({ kind: 'opaq' }))
+    })
+
+    /**
+     * **An older reader runs only where the wire side holds it.** The held side of an adapter is
+     * read through `encode` alone, so a `withLegacyRead` there widens no read. The same wrapper at
+     * the inner codec reads an older form, so a set of that element has no law.
+     */
+    it('builds a set of an element whose held side carries an older reader, and refuses one whose inner codec carries it', () => {
+        const older = { decode: (at: unknown) => String(at) }
+        const carried = withLegacyRead({ current: string, older })
+        const asHeld = { encode: (v: string) => v, decode: (v: string) => v }
+        const onOuter = held(string, carried, asHeld)
+        const onInner = held(carried, string, asHeld)
+        expect(() =>
+            codecOfTerm({ kind: 'set', elem: onOuter.def }),
+        ).not.toThrow()
+        expect(() => codecOfTerm({ kind: 'set', elem: onInner.def })).toThrow(
+            /cannot carry `withLegacyRead`/,
+        )
     })
 })

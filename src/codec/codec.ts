@@ -73,6 +73,7 @@ import {
     clauseForm,
     closedCopy,
     holdsNoValue,
+    mapChildren,
     member as memberOf,
     openRefusal,
     ownsNullOf,
@@ -5867,19 +5868,13 @@ export const opened = throughRefs((t, opened) => {
                 },
             }
         }
-        case 'union':
-            return { kind: 'union', options: t.options.map(opened) }
-        case 'list':
-            return {
-                kind: 'list',
-                pre: t.pre.map(opened),
-                ...(t.spread === undefined ? {} : { spread: opened(t.spread) }),
-                suf: t.suf.map(opened),
-            }
-        case 'held':
-            return { ...t, inner: opened(t.inner) }
-        default:
+        // the opening stops at these three, which stay as the pattern wrote them
+        case 'set':
+        case 'refine':
+        case 'legacy':
             return t
+        default:
+            return mapChildren(t, opened, 'wire')
     }
 })
 

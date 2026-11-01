@@ -1067,35 +1067,13 @@ const reaches = (
 ): boolean => {
     if (kinds.includes(t.kind)) return true
     const on = (one: Term) => reaches(one, kinds, seen)
-    switch (t.kind) {
-        case 'ref': {
-            if (seen.has(t)) return true
-            seen.add(t)
-            const target = targetOf(t)
-            return target === undefined || on(target)
-        }
-        case 'held':
-        case 'legacy':
-        case 'refine':
-            return on(t.inner)
-        case 'set':
-            return on(t.elem)
-        case 'list':
-            return (
-                t.pre.some(on) ||
-                (t.spread !== undefined && on(t.spread)) ||
-                t.suf.some(on)
-            )
-        case 'object':
-            return (
-                Object.values(t.body.fields).some((f) => on(f.t)) ||
-                (t.body.rest !== undefined && on(t.body.rest))
-            )
-        case 'union':
-            return t.options.some(on)
-        default:
-            return false
+    if (t.kind === 'ref') {
+        if (seen.has(t)) return true
+        seen.add(t)
+        const target = targetOf(t)
+        return target === undefined || on(target)
     }
+    return childrenOf(t, 'wire').some(on)
 }
 
 /**
@@ -1142,37 +1120,11 @@ export const unboundRefs = (roots: readonly Term[]): ReadonlySet<RefSlot> => {
     const walk = (t: Term): void => {
         if (seen.has(t)) return
         seen.add(t)
-        switch (t.kind) {
-            case 'ref': {
-                const { slot } = t
-                if (slot.bound === undefined) slots.add(slot)
-                return
-            }
-            case 'list':
-                for (const one of [...t.pre, ...t.suf]) walk(one)
-                if (t.spread !== undefined) walk(t.spread)
-                return
-            case 'object':
-                for (const field of Object.values(t.body.fields)) walk(field.t)
-                if (t.body.rest !== undefined) walk(t.body.rest)
-                return
-            case 'union':
-                t.options.forEach(walk)
-                return
-            case 'set':
-                walk(t.elem)
-                return
-            case 'held':
-                walk(t.inner)
-                walk(t.outer)
-                return
-            case 'refine':
-            case 'legacy':
-                walk(t.inner)
-                return
-            default:
-                return
+        if (t.kind === 'ref') {
+            if (t.slot.bound === undefined) slots.add(t.slot)
+            return
         }
+        for (const child of childrenOf(t)) walk(child)
     }
     for (const root of roots) walk(root)
     return slots
@@ -1262,8 +1214,16 @@ export class RecursionRefused extends CodecError {
     }
 }
 
-/** A list, an object or a union with each position, field and option replaced by its view. */
-export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
+/**
+ * The term with each child replaced by its view, for the children that {@link childrenOf} lists.
+ * A `ref` has no child here, because the view of a `ref` is the choice of the caller. `wire` leaves
+ * `held.outer` as it is.
+ */
+export const mapChildren = (
+    t: Term,
+    view: (t: Term) => Term,
+    side: 'all' | 'wire' = 'all',
+): Term => {
     switch (t.kind) {
         case 'list':
             return {
@@ -1289,9 +1249,17 @@ export const mapChildren = (t: Term, view: (t: Term) => Term): Term => {
         }
         case 'union':
             return { kind: 'union', options: t.options.map(view) }
-        // a view holds no `held`, so the set of the element's view writes element by element
         case 'set':
             return { kind: 'set', elem: view(t.elem) }
+        case 'held':
+            return {
+                ...t,
+                inner: view(t.inner),
+                ...(side === 'wire' ? {} : { outer: view(t.outer) }),
+            }
+        case 'refine':
+        case 'legacy':
+            return { ...t, inner: view(t.inner) }
         default:
             return t
     }
@@ -1317,11 +1285,7 @@ export const closedCopy = (
         const made: Term =
             t.kind === 'ref'
                 ? { kind: 'ref', slot: { name: t.slot.name, bound: record } }
-                : t.kind === 'held'
-                  ? { ...t, inner: close(t.inner), outer: close(t.outer) }
-                  : t.kind === 'refine' || t.kind === 'legacy'
-                    ? { ...t, inner: close(t.inner) }
-                    : mapChildren(t, close)
+                : mapChildren(t, close)
         copies.set(t, made)
         return made
     }
@@ -1503,7 +1467,10 @@ export const leafKinds: ReadonlySet<Term['kind']> = new Set([
  * A `ref` with no target holds no cycle. A scope binds each `ref` of its closed copy, so the guard
  * of the scope reads each cycle of the copy.
  */
-export const childrenOf = (t: Term): readonly Term[] => {
+export const childrenOf = (
+    t: Term,
+    side: 'all' | 'wire' = 'all',
+): readonly Term[] => {
     switch (t.kind) {
         case 'ref': {
             const target = targetOf(t)
@@ -1524,8 +1491,10 @@ export const childrenOf = (t: Term): readonly Term[] => {
             return t.options
         case 'set':
             return [t.elem]
+        // `wire` drops the held side: the run time calls only `outer.encode`, so no older reader
+        // under `outer` runs
         case 'held':
-            return [t.inner, t.outer]
+            return side === 'wire' ? [t.inner] : [t.inner, t.outer]
         case 'refine':
         case 'legacy':
             return [t.inner]

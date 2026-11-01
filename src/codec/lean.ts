@@ -102,6 +102,7 @@ import type {
     Field as TermField,
 } from './term'
 import {
+    childrenOf,
     clauseForm,
     componentsOf,
     mapChildren,
@@ -2326,10 +2327,6 @@ const recording = (
 ): Term =>
     throughRefs((t, copy) => {
         switch (t.kind) {
-            case 'held':
-                return { ...t, inner: copy(t.inner), outer: copy(t.outer) }
-            case 'refine':
-                return { ...t, inner: copy(t.inner) }
             case 'legacy': {
                 const answers = log.get(t.r) ?? []
                 log.set(t.r, answers)
@@ -2718,37 +2715,7 @@ export const reachable = (root: Term): ReadonlySet<Term> => {
     const walk = (t: Term): void => {
         if (seen.has(t)) return
         seen.add(t)
-        switch (t.kind) {
-            case 'ref': {
-                const target = targetOf(t)
-                if (target !== undefined) walk(target)
-                return
-            }
-            case 'list':
-                for (const one of [...t.pre, ...t.suf]) walk(one)
-                if (t.spread !== undefined) walk(t.spread)
-                return
-            case 'object':
-                for (const field of Object.values(t.body.fields)) walk(field.t)
-                if (t.body.rest !== undefined) walk(t.body.rest)
-                return
-            case 'union':
-                t.options.forEach(walk)
-                return
-            case 'set':
-                walk(t.elem)
-                return
-            case 'held':
-                walk(t.inner)
-                walk(t.outer)
-                return
-            case 'refine':
-            case 'legacy':
-                walk(t.inner)
-                return
-            default:
-                return
-        }
+        for (const child of childrenOf(t)) walk(child)
     }
     walk(root)
     return seen

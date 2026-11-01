@@ -29,6 +29,7 @@ import {
     union,
     withLegacyRead,
 } from '../../codec'
+import { freeNamesOf } from '../../term'
 import { arbitraryOf, checkRoundTrip, rngFrom, shrinkOf } from '../../testing'
 
 type Category = {
@@ -311,6 +312,17 @@ describe('a former directly over a ref', () => {
         })
         expect(When.unsafeEncode('AB')).toEqual({ S: 'ab' })
         expect(When.unsafeDecode({ S: 'ab' })).toBe('AB')
+    })
+
+    it('closes the ref of a held side, so the scope leaves no free name in the term', () => {
+        const { Name } = scope({
+            Name: held(string, ref('Text'), {
+                encode: (v: unknown) => String(v).toLowerCase(),
+                decode: (v: unknown) => String(v).toUpperCase(),
+            }),
+            Text: string,
+        })
+        expect(freeNamesOf(Name.def)).toEqual([])
     })
 
     it('accepts a refine directly over a ref, and refuses what the predicate refuses', () => {
