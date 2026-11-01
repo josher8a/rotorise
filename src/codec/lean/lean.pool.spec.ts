@@ -919,6 +919,48 @@ const typeOnlySlices: readonly Slice[] = (() => {
 })()
 
 /**
+ * **The roots whose slots differ in presence, adapter and layout**, against the patterns that the
+ * square puts to them: an `undefinable` or an `optional` slot, a `held` slot, a base slot, a list
+ * with a prefix and a spread, a decimal literal set against a union of decimal literals, and a
+ * pattern of two keys. The members hold an older reading, a stand-in, a list and a decimal union.
+ */
+const presenceAndHolds: Slice = (() => {
+    const dog = object({
+        kind: string('dog'),
+        name: string,
+        petIds: list(string),
+        price: union([decimal('1'), decimal('2')]),
+    })
+    const cat = object({
+        kind: string('cat'),
+        nickname: optional(string),
+        name: withLegacyRead({ current: string, older: decimal }),
+        petIds: list(string, spread(string)),
+    })
+    const fish = object({
+        kind: string('fish'),
+        name: withLegacyRead({ current: string, whenMissing: 'unnamed' }),
+        price: string('free'),
+    })
+    return {
+        name: 'presence_and_holds',
+        codec: sliceableOf(erase(union([dog, cat, fish]))),
+        clauses: [],
+        shapes: [
+            { nickname: erase(undefinable(string)) },
+            { nickname: erase(optional(string)) },
+            { name: erase(opaque('lossy')) },
+            { name: erase(string) },
+            { kind: erase(string) },
+            { petIds: erase(list(string, spread(string))) },
+            { petIds: erase(list(string)) },
+            { price: erase(decimal('1', '2')) },
+            { kind: erase(string('dog')), name: erase(string) },
+        ],
+    }
+})()
+
+/**
  * **The roots whose member reads an object through a `ref`**, bare in a slot, below a `list`, below an
  * `array`, and in a recursive entry. Each cat and dog names its basket back through an optional
  * slot, so the `ref` closes a cycle and the print keeps it. The patterns are the shapes that the
@@ -2101,6 +2143,7 @@ describe('the generated pool, against the model', () => {
             slices: [
                 ...perSeed.flatMap((one) => one.slices),
                 ...typeOnlySlices,
+                presenceAndHolds,
                 ...refObjects,
             ],
             paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
@@ -2132,6 +2175,14 @@ describe('the generated pool, against the model', () => {
             'rows.json',
             'tsconfig.slices0.json',
             'tsconfig.slices1.json',
+            'tsconfig.slices2.json',
+            'tsconfig.slices3.json',
+            'tsconfig.slices4.json',
+            'tsconfig.slices5.json',
+            'tsconfig.slices6.json',
+            'tsconfig.slices7.json',
+            'tsconfig.slices8.json',
+            'tsconfig.slices9.json',
             'tsconfig.paths0.json',
             'tsconfig.paths1.json',
             'tsconfig.paths2.json',

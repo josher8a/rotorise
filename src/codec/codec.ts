@@ -6362,48 +6362,6 @@ const slicedDissection = (
 // ── unions with no discriminator ────────────────────────────────────
 
 /**
- * **A member's codec that pins a literal**: its term pins a literal, and it decodes to a literal
- * type rather than a base. The member's side reads through a refinement, as `pinnedForm` does.
- *
- * A caller's adapter pins nothing ({@link LibraryInner}). `Norm` resolves the entry of a scope term
- * and each option of a union under the scope of that entry, and a bare `ref` in the spec of an entry
- * is the entry that the name binds ({@link ClosedRef}). A `ref` that no scope binds pins nothing.
- */
-type PinsALiteral<C> = TermPins<TermOf<C>, true> extends true
-    ? PinsALiteralValue<Decoded<C>>
-    : false
-/** …and a pattern's codec, which reads through no refinement, as `clauseForm` does. */
-type PatternPins<C> = TermPins<TermOf<C>, false> extends true
-    ? PinsALiteralValue<Decoded<C>>
-    : false
-/** Whether a term pins a literal: a literal, a union of literals, or a library adapter over a pin. */
-type TermPins<T, R extends boolean, Env = []> = Norm<T, Env> extends [
-    infer N,
-    infer E,
-]
-    ? N extends ['prim', ['literal', ...unknown[]]]
-        ? true
-        : N extends ['union', infer Os extends unknown[]]
-          ? false extends {
-                [I in keyof Os]: Norm<Os[I], E>[0] extends [
-                    'prim',
-                    ['literal', ...unknown[]],
-                ]
-                    ? true
-                    : false
-            }[number]
-              ? false
-              : true
-          : N extends ['refine', infer I]
-            ? R extends true
-                ? TermPins<I, R, E>
-                : false
-            : [LibraryInner<N>] extends [never]
-              ? false
-              : TermPins<LibraryInner<N>, R, E>
-    : false
-
-/**
  * **Whether a term holds a literal that the type does not name exactly**: the value type is a
  * union, a template literal, a whole base, or a list that is no tuple, as `string(u)` gives for
  * `u: 'a' | 'b'`. A `binary` and a `dynamoNumber` with free text are the same case, because the
@@ -6437,58 +6395,6 @@ type InexactValue<V> = IsUnion<V> extends true
           ? true
           : false
       : false
-/** The fit that a `held` part or an inexact literal decides, or `'n'`, no answer. */
-type DecidedFit<A, P> = HeldFit<A, P> extends 'n'
-    ? InexactFit<A, P>
-    : HeldFit<A, P>
-/**
- * Where the pattern holds an inexact literal, or the codec does and the pattern pins a literal: `'f'`
- * where the stored types or the decoded types are disjoint, and `'u'` otherwise. A codec that pins
- * no literal is `'f'` against an inexact pattern, unless it reads a `ref`.
- */
-type InexactFit<A, P> = Inexact<TermOf<MarkedCodec<P>>> extends true
-    ? Inexact<TermOf<MarkedCodec<A>>> extends true
-        ? Apart<A, P>
-        : PinsALiteral<MarkedCodec<A>> extends true
-          ? Apart<A, P>
-          : ReadsRef<TermOf<MarkedCodec<A>>> extends true
-            ? 'u'
-            : 'f'
-    : PatternPins<MarkedCodec<P>> extends true
-      ? Inexact<TermOf<MarkedCodec<A>>> extends true
-          ? Apart<A, P>
-          : 'n'
-      : 'n'
-type Apart<A, P> = [StoredMembers<A> & StoredMembers<P>] extends [never]
-    ? 'f'
-    : [Decoded<A> & Decoded<P>] extends [never]
-      ? 'f'
-      : 'u'
-/**
- * Whether a decoded type is a literal type rather than a base. `'a'` and `'a' | 'b'` answer `true`;
- * `string`, `number` and `boolean` answer `false`, each excluded by its own row, because a base is
- * assignable *from* its literals and `extends` alone cannot tell the two apart.
- *
- * A {@link LiteralCarrier} answers `true`: the mark says that a literal constructor built the
- * codec, and the carrier can hold a value that no literal type names.
- */
-type PinsALiteralValue<V> = [V] extends [never]
-    ? false
-    : string extends V
-      ? false
-      : number extends V
-        ? false
-        : boolean extends V
-          ? false
-          : [V] extends [string | number | boolean | LiteralCarrier]
-            ? true
-            : false
-
-/**
- * **The carriers of a literal that is no primitive**: `dynamoNumber(n)` decodes a
- * {@link DynamoNumber} and `binary(bytes)` a `Uint8Array`.
- */
-type LiteralCarrier = DynamoNumber | Uint8Array
 
 /**
  * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
@@ -7138,51 +7044,22 @@ type MapObjects<Specs extends readonly unknown[]> = {
 }
 
 /**
- * **Whether a codec fits a pattern**, as the run time decides it, read on the types that the codecs
+ * **Whether a codec fits a pattern**, as the run time decides it, read on the terms that the codecs
  * carry. `'t'` fits, `'f'` does not, and `'u'` is where the type cannot decide: the extraction and
  * the exclusion each keep such an option, so each result type admits every option that the run time
  * keeps.
  *
- * A pattern that pins a literal is met by a codec that pins one, at the same stored type and a
- * decoded type inside the pattern's. The mark is what tells a literal from a caller's adapter that
- * decodes to a literal type. The stored type is what tells `string('1')` from `decimal('1')`, which
- * decode to one text. A pattern that holds objects is met by a codec that holds objects, each of
- * them inside some object of the pattern ({@link SpecFits}). Where the pattern is a union of
- * objects, each part of the codec fits some object ({@link EveryFitsParts}). Any other pattern is
- * met by a codec whose decoded and stored types lie inside the pattern's. A literal whose
- * alternatives the type does not name exactly ({@link Inexact}) is `'f'` where the stored types or the
- * decoded types are disjoint, and `'u'` otherwise, in the pattern, or in the codec against a pattern
- * that pins a literal. A slot that the bound cut ({@link OverflowCodec}) is `'u'`.
+ * The fit is {@link BelowT}, rule for rule the order `below` of the run time at the `value` order,
+ * with the pattern open at every object ({@link opened}). A rule that reads a fact that the type
+ * lacks answers `'u'`: a `ref` that no scope binds, a caller's adapter against a caller's adapter,
+ * a literal whose value type is not one value ({@link Inexact}), a term that two readings of one
+ * term decide differently, and a term whose parts pass the bound ({@link PartsCap}). A slot that the
+ * bound cut ({@link OverflowCodec}) is `'u'`.
  */
 type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = IsOverflow<A> extends true
     ? 'u'
-    : DecidedFit<A, P> extends infer HF extends Fit
-      ? HF
-      : PatternPins<MarkedCodec<P>> extends true
-        ? PinsALiteral<MarkedCodec<A>> extends true
-            ? [AttributeOf<A>] extends [AttributeOf<P>]
-                ? [Decoded<A>] extends [Decoded<P>]
-                    ? 't'
-                    : 'f'
-                : 'f'
-            : ReadsRef<TermOf<MarkedCodec<A>>> extends true
-              ? 'u'
-              : 'f'
-        : ListFit<A, P> extends infer LF extends Fit
-          ? LF
-          : [FieldSpecList<P>] extends [never]
-            ? [Decoded<A>] extends [Decoded<P>]
-                ? [AttributeOf<A>] extends [AttributeOf<P>]
-                    ? 't'
-                    : 'f'
-                : 'f'
-            : [FieldSpecList<A>] extends [never]
-              ? 'f'
-              : EveryFitsParts<
-                    FieldSpecList<A>[number],
-                    FieldSpecList<P>[number]
-                >
+    : BelowT<TermOf<MarkedCodec<A>>, TermOf<MarkedCodec<P>>, [], [], [], true>
 /**
  * The tag of the adapter of a `held` node, as `[tag]`, or `never` where the node is no `held`. The
  * tag of a library adapter is its name. The tag of a caller's adapter is `['caller']`, and the
@@ -7198,135 +7075,584 @@ type HeldTag<N> = N extends [
 ]
     ? [G]
     : never
+
+/** The most pairs that the walk of {@link BelowT} enters on one path, as a tuple of that length. */
+type BelowDepth = Repeat<16>
 /**
- * **The fit where the codec is a `held` part**, as the run time reads it: a `held` part fits an
- * `opaque` pattern, and fits a `held` pattern of one adapter whose inner term it fits. It fits no
- * other node, because the decoded type of the part says nothing about the stored rows that the
- * adapter relates. So the type answers `'u'` where it cannot see the adapter, which is a caller's
- * adapter against a caller's adapter, a `ref`, or a union with an option that is not `'f'`. A union
- * and an older reading read through to their options ({@link HeldFitNode}). It answers `'f'` where
- * the nodes differ for certain. It answers `'n'`, no answer, where the decoded types decide: the
- * codec is no `held` part, the pattern is `opaque`, or both parts hold one library adapter.
+ * **The order `below` of the run time on terms**, three-valued. `A` is the term of the option and
+ * `P` the term of the pattern, each under its own scope (`EA`, `EP`). `Seen` holds the pairs that the
+ * walk entered at a name step on the path, and such a pair is below, as the order is the greatest
+ * fixed point of its rules. `Open` says whether the pattern is open at its objects: the opening reads
+ * through an object, a union, a list and a `held`, and stops at a set, a refinement and an older
+ * reading.
  */
-type HeldFit<A, P> = HeldTag<NodeOf<TermOf<MarkedCodec<A>>>> extends infer TA
-    ? [TA] extends [never]
-        ? 'n'
-        : HeldFitNode<TA, NodeOf<TermOf<MarkedCodec<P>>>>
-    : 'n'
+type BelowT<
+    A,
+    P,
+    EA,
+    EP,
+    Seen extends readonly unknown[],
+    Open extends boolean,
+> = [Norm<A, EA>, Norm<P, EP>] extends [
+    [infer NA, infer EA2],
+    [infer NP, infer EP2],
+]
+    ? [IsRef<A>, IsRef<P>] extends [false, false]
+        ? BelowStep<NA, NP, EA2, EP2, Seen, Open>
+        : SeenPair<Seen, RefKey<A, NA, EA2>, RefKey<P, NP, EP2>> extends true
+          ? 't'
+          : Seen extends BelowDepth
+            ? 'u'
+            : BelowStep<
+                  NA,
+                  NP,
+                  EA2,
+                  EP2,
+                  [[RefKey<A, NA, EA2>, RefKey<P, NP, EP2>], ...Seen],
+                  Open
+              >
+    : 'u'
+/** Whether a term is a name that `Norm` resolves: a `ref`, or an entry of a scope. */
+type IsRef<T> = T extends ['ref', unknown] | ['scope', unknown, unknown]
+    ? true
+    : false
 /**
- * The fit of a `held` part with the adapter tag `TA` at the pattern node `NP`. A union reads each
- * option, as the run time reads the parts of the part against the options: it is `'f'` where each
- * option is `'f'`, and `'u'` otherwise. An older reading holds each pair of its current form, so it
- * reads its current term. A `ref` is `'u'`.
+ * The key of a node in `Seen`: the name as written with the scope that it resolved under, or the
+ * node where the term is no name. A cycle passes through a name, so the walk records a pair at a
+ * name step only, and two names compare by their text and scope, not by the terms that they resolve
+ * to.
  */
-type HeldFitNode<TA, NP> = NP extends ['opaq']
-    ? 'n'
-    : NP extends ['union', infer Os extends unknown[]]
-      ? [
-            {
-                [I in keyof Os]: HeldFitNode<TA, NodeOf<Os[I]>>
-            }[number],
-        ] extends ['f']
-          ? 'f'
-          : 'u'
-      : NP extends ['legacy', infer I]
-        ? HeldFitNode<TA, NodeOf<I>>
-        : NP extends ['ref', unknown]
+type RefKey<T, N, E> = IsRef<T> extends true ? [T, E] : N
+/** The rules at two nodes, and `'u'` for the pair of one term where the rules give `'f'`. */
+type BelowStep<
+    NA,
+    NP,
+    EA,
+    EP,
+    Seen extends readonly unknown[],
+    Open extends boolean,
+> = BelowN<NA, NP, EA, EP, Seen, Open> extends 'f'
+    ? SameTerm<NA, NP> extends true
+        ? 'u'
+        : 'f'
+    : BelowN<NA, NP, EA, EP, Seen, Open>
+/** Whether the pair is on the path. */
+type SeenPair<Seen extends readonly unknown[], A, P> = Seen extends readonly [
+    [infer SA, infer SP],
+    ...infer Rest extends readonly unknown[],
+]
+    ? SameTerm<SA, A> extends true
+        ? SameTerm<SP, P> extends true
+            ? true
+            : SeenPair<Rest, A, P>
+        : SeenPair<Rest, A, P>
+    : false
+/**
+ * Whether two terms are one term. The run time answers `true` for one object, so two codecs built
+ * apart read by the rules, and the same codec reads `true`. The type cannot tell the two cases
+ * apart, so it answers `'u'` where the rules give `'f'` for one term.
+ */
+type SameTerm<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+/** The rules of {@link BelowT} at two nodes. */
+type BelowN<
+    A,
+    P,
+    EA,
+    EP,
+    Seen extends readonly unknown[],
+    Open extends boolean,
+> = HoldsNoValue<A> extends true
+    ? 't'
+    : P extends ['opaq']
+      ? 't'
+      : A extends ['ref', unknown]
+        ? 'u'
+        : P extends ['ref', unknown]
           ? 'u'
-          : [HeldTag<NP>] extends [never]
+          : A extends ['union', infer Os extends unknown[]]
+            ? AllOf<
+                  {
+                      [I in keyof Os]: BelowT<Os[I], P, EA, EP, Seen, Open>
+                  }[number]
+              >
+            : P extends ['union', infer Ps extends unknown[]]
+              ? JoinParts<A, PatternNodes<Ps, EP>, EP> extends infer Parts
+                  ? Parts extends readonly unknown[]
+                      ? AllOf<
+                            {
+                                [I in keyof Parts]: SomeOf<
+                                    {
+                                        [J in keyof Ps]: BelowT<
+                                            Parts[I],
+                                            Ps[J],
+                                            EA,
+                                            EP,
+                                            Seen,
+                                            Open
+                                        >
+                                    }[number]
+                                >
+                            }[number]
+                        >
+                      : 'u'
+                  : 'u'
+              : A extends ['refine', infer I]
+                ? BelowT<I, P, EA, EP, Seen, Open>
+                : P extends ['legacy', infer I]
+                  ? BelowT<A, I, EA, EP, Seen, false>
+                  : [ClauseOf<P>] extends [never]
+                    ? BelowShape<A, P, EA, EP, Seen, Open>
+                    : BelowClause<A, P>
+type SomeOf<U extends Fit> = 't' extends U ? 't' : 'u' extends U ? 'u' : 'f'
+type AllOf<U extends Fit> = 'f' extends U ? 'f' : 'u' extends U ? 'u' : 't'
+/**
+ * **The form that a literal names**, as {@link clauseForm} reads it: the adapters that it sits
+ * under and the base and value of the literal, or `never`. An adapter whose held side is `opaque`
+ * names no form.
+ */
+type ClauseOf<N, Tags extends readonly unknown[] = []> = N extends [
+    'prim',
+    ['literal', infer K, infer V],
+]
+    ? ['form', Tags, K, V]
+    : N extends [
+            'held',
+            unknown,
+            infer I,
+            infer O,
+            [infer G, unknown],
+            ...unknown[],
+        ]
+      ? [NodeOf<O>] extends [['opaq']]
+          ? never
+          : ClauseOf<NodeOf<I>, [...Tags, G]>
+      : never
+/**
+ * A literal against the literal of the pattern: the two forms are one form, and each value is a
+ * value of the pattern. A literal whose value type is not one value is `'u'`, or `'f'` where the
+ * two value types are disjoint ({@link Inexact}).
+ */
+type BelowClause<A, P> = ClauseOf<A> extends [
+    'form',
+    infer AT,
+    infer AK,
+    infer AV,
+]
+    ? ClauseOf<P> extends ['form', infer PT, infer PK, infer PV]
+        ? SameTags<AT, PT> extends 'f'
             ? 'f'
-            : [TA] extends [HeldTag<NP>]
-              ? [HeldTag<NP>] extends [TA]
-                  ? [TA] extends [['caller']]
+            : [AK] extends [PK]
+              ? [PK] extends [AK]
+                  ? SameTags<AT, PT> extends 'u'
                       ? 'u'
-                      : 'n'
+                      : true extends InexactValue<AV> | InexactValue<PV>
+                        ? [AV & PV] extends [never]
+                            ? 'f'
+                            : 'u'
+                        : [AV] extends [PV]
+                          ? 't'
+                          : 'f'
                   : 'f'
               : 'f'
-/**
- * Whether a member's term reads a `ref` with no scope in the term, or a union that holds one. The
- * type reads no literal mark through such a `ref`, and the run time resolves the `ref`, so the
- * type cannot decide the fit. An entry of a scope holds its scope in the term, and so does a bare
- * `ref` slot of an entry ({@link ClosedRef}), and so does each option of a union slot and each slot
- * of an object slot of an entry ({@link SlotInScope}). A `ref` below any other node holds no scope.
- */
-type ReadsRef<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
-    ? N extends ['ref', unknown]
-        ? true
-        : N extends ['union', infer Os extends unknown[]]
-          ? true extends {
-                [I in keyof Os]: Norm<Os[I], E>[0] extends ['ref', unknown]
-                    ? true
-                    : false
-            }[number]
-              ? true
-              : false
-          : false
-    : false
-/** The fit of two lists with fixed positions, or `'none'` where either has none. */
-type ListFit<A, P> = [FixedElements<P>] extends [never]
-    ? 'none'
-    : [FixedElements<A>] extends [never]
-      ? 'none'
-      : FitsPositions<FixedElements<A>, FixedElements<P>>
-/** A list fits a list pattern of its arity where each position fits, as the run time reads a product. */
-type FitsPositions<
-    AE extends readonly unknown[],
-    PE extends readonly unknown[],
-> = AE['length'] extends PE['length']
-    ? AllOf<
-          {
-              [I in keyof AE]: I extends keyof PE
-                  ? FitsCodec<AE[I], PE[I]>
-                  : 'f'
-          }[number]
-      >
+        : 'f'
     : 'f'
-/** Whether a member spec fits a pattern codec: the pattern must hold objects. */
-type FitsSpec<A, P> = [FieldSpecList<P>] extends [never]
-    ? 'f'
-    : EveryFitsParts<A, PatternSpecs<P>>
-/** Each member spec of the codec fits some member spec of the pattern. */
-type EveryFits<A, P> = AllOf<A extends unknown ? SomeFit<A, P> : never>
-/**
- * Each part of each member spec fits some member spec of the pattern. Where the pattern is a union
- * of specs, the union rule needs the parts of the normal form of the codec ({@link joinParts}): a
- * literal set fits two members where each of its literals fits one. A pattern of one spec has no
- * such rule, and each member spec is one part.
- */
-type EveryFitsParts<A, P> = AllOf<
-    A extends unknown
-        ? true extends IsUnion<P>
-            ? AllOf<
-                  SplitSpec<A, P, true>[number] extends infer S
-                      ? S extends unknown
-                          ? SomeFit<S, P>
-                          : never
-                      : never
-              >
-            : SomeFit<A, P>
-        : never
->
-type SomeFit<A, P> = 't' extends SpecFits<A, P>
-    ? 't'
-    : 'u' extends SpecFits<A, P>
-      ? 'u'
-      : 'f'
-type SpecFits<A, P> = P extends unknown
-    ? AllOf<
-          {
-              [K in keyof P]-?: K extends keyof A
-                  ? [P[K]] extends [{ readonly [optionalMarker]: true }]
-                      ? FitsCodec<A[K], P[K]>
-                      : [A[K]] extends [{ readonly [optionalMarker]: true }]
-                        ? 'f'
-                        : FitsCodec<A[K], P[K]>
-                  : [P[K]] extends [{ readonly [optionalMarker]: true }]
-                    ? 't'
+/** `'f'` where two chains of adapter tags differ, `'u'` where a caller's adapter meets one, else `'t'`. */
+type SameTags<A, B> = [A] extends [B]
+    ? [B] extends [A]
+        ? [A] extends [readonly []]
+            ? 't'
+            : true extends (
+                    A extends readonly (infer G)[]
+                        ? [G] extends [['caller']]
+                            ? true
+                            : false
+                        : false
+                )
+              ? 'u'
+              : 't'
+        : 'f'
+    : 'f'
+/** The rules at a pattern that is no literal. */
+type BelowShape<
+    A,
+    P,
+    EA,
+    EP,
+    Seen extends readonly unknown[],
+    Open extends boolean,
+> = P extends ['object', ['mk', infer PF, infer PW]]
+    ? A extends ['object', ['mk', infer AF, infer AW]]
+        ? AllOf<
+              | {
+                    [K in keyof AF | keyof PF]: BelowSlot<
+                        K extends keyof AF
+                            ? AF[K]
+                            : ['optional', BlockOf<AW, false>],
+                        K extends keyof PF
+                            ? PF[K]
+                            : ['optional', BlockOf<PW, Open>],
+                        EA,
+                        EP,
+                        Seen,
+                        Open
+                    >
+                }[keyof AF | keyof PF]
+              | BelowT<
+                    BlockOf<AW, false>,
+                    BlockOf<PW, Open>,
+                    EA,
+                    EP,
+                    Seen,
+                    Open
+                >
+          >
+        : 'f'
+    : P extends [
+            'list',
+            infer PP extends unknown[],
+            infer PS,
+            infer PU extends unknown[],
+        ]
+      ? A extends [
+            'list',
+            infer AP extends unknown[],
+            infer AS,
+            infer AU extends unknown[],
+        ]
+          ? BelowList<AP, AS, AU, PP, PS, PU, EA, EP, Seen, Open>
+          : 'f'
+      : P extends [
+              'held',
+              unknown,
+              infer PI,
+              unknown,
+              [infer PG, unknown],
+              ...unknown[],
+          ]
+        ? A extends [
+              'held',
+              unknown,
+              infer AI,
+              unknown,
+              [infer AG, unknown],
+              ...unknown[],
+          ]
+            ? [AG] extends [PG]
+                ? [PG] extends [AG]
+                    ? [AG] extends [['caller']]
+                        ? 'u'
+                        : BelowT<AI, PI, EA, EP, Seen, Open>
                     : 'f'
-          }[keyof P]
+                : 'f'
+            : 'f'
+        : P extends ['set', infer PE]
+          ? A extends ['set', infer AE]
+              ? BelowT<AE, PE, EA, EP, Seen, false>
+              : 'f'
+          : A extends ['prim', ['literal', infer K, unknown]]
+            ? P extends ['prim', ['base', K]]
+                ? 't'
+                : 'f'
+            : A extends ['prim', ['base', infer K]]
+              ? P extends ['prim', ['base', K]]
+                  ? 't'
+                  : 'f'
+              : 'f'
+/** The open block of an object term as a term: the block, or the bottom, or `opaque` where the pattern is open. */
+type BlockOf<W, Open extends boolean> = W extends ['some', infer T]
+    ? T
+    : Open extends true
+      ? ['opaq']
+      : ['never']
+/**
+ * The slot of the option against the slot of the pattern: the absent row, then the term. At the
+ * `value` order a stand-in counts no absent row, so a `withLegacyRead` slot reads as a required one.
+ * `undefinable` pairs the absent row with `{ k: undefined }`, which `optional` reads as `{}`.
+ */
+type BelowSlot<
+    M,
+    W,
+    EA,
+    EP,
+    Seen extends readonly unknown[],
+    Open extends boolean,
+> = [M, W] extends [
+    [infer MM extends string, infer MT],
+    [infer WM extends string, infer WT],
+]
+    ? AllOf<
+          | AbsentBelow<
+                MM extends 'fill' ? 'req' : MM,
+                WM extends 'fill' ? 'req' : WM
+            >
+          | BelowT<MT, WT, EA, EP, Seen, Open>
+      >
+    : 'u'
+/** The presence mark of a field, where a stand-in counts as required at the `value` order. */
+type SlotMarkOf<F> = SlotOf<F> extends [infer M extends string, unknown]
+    ? M extends 'fill'
+        ? 'req'
+        : M
+    : never
+type AbsentBelow<M extends string, W extends string> = W extends 'req'
+    ? M extends 'req'
+        ? 't'
+        : 'f'
+    : W extends 'undefinable'
+      ? M extends 'req' | 'undefinable'
+          ? 't'
+          : 'f'
+      : 't'
+/**
+ * A list against a list pattern: a pattern of one element holds every list whose positions each fit
+ * the element. Any other pattern is a product of positions: the same layout, and each position
+ * inside the pattern's.
+ */
+type BelowList<
+    AP extends unknown[],
+    AS,
+    AU extends unknown[],
+    PP extends unknown[],
+    PS,
+    PU extends unknown[],
+    EA,
+    EP,
+    Seen extends readonly unknown[],
+    Open extends boolean,
+> = [PS, PP, PU] extends [['some', infer E], [], []]
+    ? AllOf<
+          | { [I in keyof AP]: BelowT<AP[I], E, EA, EP, Seen, Open> }[number]
+          | (AS extends ['some', infer S]
+                ? BelowT<S, E, EA, EP, Seen, Open>
+                : never)
+          | { [I in keyof AU]: BelowT<AU[I], E, EA, EP, Seen, Open> }[number]
+      >
+    : AP['length'] extends PP['length']
+      ? AU['length'] extends PU['length']
+          ? [AS extends ['some', unknown] ? true : false] extends [
+                PS extends ['some', unknown] ? true : false,
+            ]
+              ? AllOf<
+                    | {
+                          [I in keyof AP]: I extends keyof PP
+                              ? BelowT<AP[I], PP[I], EA, EP, Seen, Open>
+                              : 'f'
+                      }[number]
+                    | {
+                          [I in keyof AU]: I extends keyof PU
+                              ? BelowT<AU[I], PU[I], EA, EP, Seen, Open>
+                              : 'f'
+                      }[number]
+                    | (AS extends ['some', infer S]
+                          ? PS extends ['some', infer E2]
+                              ? BelowT<S, E2, EA, EP, Seen, Open>
+                              : 'f'
+                          : never)
+                >
+              : 'f'
+          : 'f'
+      : 'f'
+/** The nodes that the options of a pattern union name, each union read through. */
+type PatternNodes<Ps extends readonly unknown[], EP> = {
+    [I in keyof Ps]: Norm<Ps[I], EP> extends [infer N, infer E]
+        ? N extends ['union', infer Os extends readonly unknown[]]
+            ? PatternNodes<Os, E>
+            : N
+        : never
+}[number]
+/**
+ * **The parts of the normal form of a term in the value order**, as {@link joinParts} builds them,
+ * split at the names that the pattern options declare: `boolean` is `true` and `false`, a union
+ * flattens, an object is the product of the parts of its fields, and a list is the product of the
+ * parts of its positions. A split at a name that no option declares changes no fit, because the
+ * pattern is open there. `'over'` where the parts pass {@link PartsCap}.
+ */
+type JoinParts<A, Ps, EP> = A extends [
+    'union',
+    infer Os extends readonly unknown[],
+]
+    ? FlatParts<Os, Ps, EP>
+    : A extends ['prim', ['base', 'boolean']]
+      ? [
+            ['prim', ['literal', 'boolean', true]],
+            ['prim', ['literal', 'boolean', false]],
+        ]
+      : A extends ['object', ['mk', infer F, infer W]]
+        ? ObjectParts<
+              F,
+              W,
+              KeyTuple<
+                  Ps extends ['object', ['mk', infer PF, unknown]]
+                      ? keyof PF
+                      : never
+              >,
+              Ps,
+              EP,
+              [Record<never, never>]
+          >
+        : A extends [
+                'list',
+                infer Pre extends readonly unknown[],
+                infer Sp,
+                infer Suf extends readonly unknown[],
+            ]
+          ? ListParts<Pre, Sp, Suf, PatternElems<Ps, EP>, EP>
+          : [A]
+type FlatParts<Os extends readonly unknown[], Ps, EP> = Os extends readonly [
+    infer H,
+    ...infer R extends readonly unknown[],
+]
+    ? JoinParts<H, Ps, EP> extends infer HP extends readonly unknown[]
+        ? FlatParts<R, Ps, EP> extends infer RP extends readonly unknown[]
+            ? Capped<[...HP, ...RP]>
+            : 'over'
+        : 'over'
+    : []
+type Capped<T extends readonly unknown[]> = T extends readonly [
+    ...PartsCap,
+    ...unknown[],
+]
+    ? 'over'
+    : T
+type ObjectParts<
+    F,
+    W,
+    Keys extends readonly unknown[],
+    Ps,
+    EP,
+    Rows extends readonly unknown[],
+> = Keys extends readonly [infer K, ...infer Rest extends readonly unknown[]]
+    ? K extends keyof F
+        ? F[K] extends [infer M, infer T]
+            ? JoinParts<
+                  T,
+                  PatternSlotNodes<Ps, K, EP>,
+                  EP
+              > extends infer Parts extends readonly unknown[]
+                ? Capped<
+                      CrossFields<Rows, K, M, Parts>
+                  > extends infer Next extends readonly unknown[]
+                    ? ObjectParts<F, W, Rest, Ps, EP, Next>
+                    : 'over'
+                : 'over'
+            : ObjectParts<F, W, Rest, Ps, EP, Rows>
+        : ObjectParts<F, W, Rest, Ps, EP, Rows>
+    : {
+          [I in keyof Rows]: [
+              'object',
+              ['mk', Omit<F, keyof Rows[I]> & Rows[I], W],
+          ]
+      }
+type CrossFields<
+    Rows extends readonly unknown[],
+    K,
+    M,
+    Parts extends readonly unknown[],
+> = Rows extends readonly [infer Row, ...infer Rest extends readonly unknown[]]
+    ? [
+          ...{ [I in keyof Parts]: Row & { [P in K & string]: [M, Parts[I]] } },
+          ...CrossFields<Rest, K, M, Parts>,
+      ]
+    : []
+/** The nodes at the name `K` in the slots of the object options. */
+type PatternSlotNodes<Ps, K, EP> = Ps extends [
+    'object',
+    ['mk', infer F, unknown],
+]
+    ? K extends keyof F
+        ? F[K] extends [unknown, infer T]
+            ? PatternNodes<[T], EP>
+            : never
+        : never
+    : never
+/** The nodes of each position of the list options of the pattern, and of their spreads. */
+type PatternElems<Ps, EP> = Ps extends [
+    'list',
+    infer Pre extends readonly unknown[],
+    infer Sp,
+    infer Suf extends readonly unknown[],
+]
+    ? PatternNodes<
+          [...Pre, ...(Sp extends ['some', infer E] ? [E] : []), ...Suf],
+          EP
       >
     : never
-type AllOf<U extends Fit> = 'f' extends U ? 'f' : 'u' extends U ? 'u' : 't'
+type ListParts<
+    Pre extends readonly unknown[],
+    Sp,
+    Suf extends readonly unknown[],
+    Ps,
+    EP,
+> = PositionRows<Pre, Ps, EP, [[]]> extends infer PreRows extends
+    readonly unknown[]
+    ? PositionRows<Suf, Ps, EP, [[]]> extends infer SufRows extends
+          readonly unknown[]
+        ? Capped<CrossLists<PreRows, SufRows, Sp>>
+        : 'over'
+    : 'over'
+type PositionRows<
+    Items extends readonly unknown[],
+    Ps,
+    EP,
+    Rows extends readonly unknown[],
+> = Items extends readonly [infer H, ...infer R extends readonly unknown[]]
+    ? JoinParts<H, Ps, EP> extends infer Parts extends readonly unknown[]
+        ? Capped<CrossRows<Rows, Parts>> extends infer Next extends
+              readonly unknown[]
+            ? PositionRows<R, Ps, EP, Next>
+            : 'over'
+        : 'over'
+    : Rows
+type CrossRows<
+    Rows extends readonly unknown[],
+    Parts extends readonly unknown[],
+> = Rows extends readonly [
+    infer Row extends readonly unknown[],
+    ...infer Rest extends readonly unknown[],
+]
+    ? [...{ [I in keyof Parts]: [...Row, Parts[I]] }, ...CrossRows<Rest, Parts>]
+    : []
+type CrossLists<
+    PreRows extends readonly unknown[],
+    SufRows extends readonly unknown[],
+    Sp,
+> = PreRows extends readonly [
+    infer Pre,
+    ...infer Rest extends readonly unknown[],
+]
+    ? [
+          ...{ [I in keyof SufRows]: ['list', Pre, Sp, SufRows[I]] },
+          ...CrossLists<Rest, SufRows, Sp>,
+      ]
+    : []
+
+/** The term of a member spec: a closed object. */
+type SpecTerm<S> = ObjectTermOf<S, undefined>
+/** The term of the member specs of a pattern: one object, or the union of the objects. */
+type SpecsTerm<P> = true extends IsUnion<P>
+    ? ['union', SpecTerms<KeyTuple<P>>]
+    : SpecTerm<P>
+type SpecTerms<Ps extends readonly unknown[]> = {
+    [I in keyof Ps]: SpecTerm<Ps[I]>
+}
+/** Whether a member spec fits the member specs of a pattern: the fit of the closed object at the opened pattern. */
+type EveryFits<A, P> = BelowT<SpecTerm<A>, SpecsTerm<P>, [], [], [], true>
+/** Whether a member spec fits a pattern codec: the pattern must hold objects. */
+type FitsSpec<A, P> = BelowT<
+    SpecTerm<A>,
+    TermOf<MarkedCodec<P>>,
+    [],
+    [],
+    [],
+    true
+>
+/** Whether two codecs hold lists with fixed positions. */
+type HasFixed<A, P> = [FixedElements<A>] extends [never]
+    ? false
+    : [FixedElements<P>] extends [never]
+      ? false
+      : true
+
 /** Whether the extraction (`Keep` true) or the exclusion keeps a codec with this fit. */
 type KeepsFit<Keep extends boolean, F extends Fit> = Keep extends true
     ? F extends 'f'
@@ -7340,7 +7666,7 @@ type KeepsFit<Keep extends boolean, F extends Fit> = Keep extends true
  * **The option codecs that a union pattern keeps**, in the order they were declared, after the
  * split. A union pattern is no product of its keys, so an option splits at each field that the
  * pattern names, and the parts that fit stay. An option whose parts all fit stays whole, because
- * the fit reads the parts of the normal form ({@link EveryFitsParts}). `Keep` is `true` for the
+ * the fit reads the parts of the normal form ({@link BelowT}). `Keep` is `true` for the
  * extraction and `false` for the exclusion, so the two are one walk and the complement cannot
  * drift from the selection.
  */
@@ -7383,11 +7709,16 @@ type NestedKey<
 /** The one summand of a field that holds no object: the field as declared. */
 type WholeField = { readonly whole: true }
 
-/** Whether a field may be absent where the pattern requires the key: the field splits at presence. */
-type SplitsAtPresence<A, P> = [A] extends [{ readonly [optionalMarker]: true }]
-    ? [P] extends [{ readonly [optionalMarker]: true }]
-        ? false
-        : true
+/**
+ * Whether a field splits at presence: the pattern refuses the absent row of the field, which
+ * {@link AbsentBelow} decides on the marks. A required field, and a stand-in at the `value` order,
+ * hold no absent row.
+ */
+type SplitsAtPresence<A, P> = AbsentBelow<
+    SlotMarkOf<A>,
+    SlotMarkOf<P>
+> extends 'f'
+    ? true
     : false
 
 /**
@@ -7471,7 +7802,7 @@ type SliceKeys<
                 ? SlicePresence<S, K, R, PS, PS[K], Leaf, Nested>
                 : FitsCodec<S[K], PS[K]> extends 't'
                   ? SliceKeys<S, R, PS, Leaf, Nested>
-                  : ListFit<S[K], PS[K]> extends 'u' | 'f'
+                  : HasFixed<S[K], PS[K]> extends true
                     ? FixedElements<S[K]>['length'] extends FixedElements<
                           PS[K]
                       >['length']
@@ -7520,7 +7851,7 @@ type SliceKeys<
                                 ]
                             >
                           : never
-            : [PS[K]] extends [{ readonly [optionalMarker]: true }]
+            : AbsentBelow<'optional', SlotMarkOf<PS[K]>> extends 't'
               ? SliceKeys<S, R, PS, Leaf, Nested>
               : SliceKeys<S, R, PS, Leaf | 'f', Nested>
         : SliceKeys<S, R, PS, Leaf, Nested>

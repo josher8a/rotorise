@@ -47,7 +47,7 @@ import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
 import { CodecError, failed } from './result'
 import type { Literal, Term } from './term'
-import { componentsOf, leafKinds, sameTerm, targetOf } from './term'
+import { componentsOf, type Field, leafKinds, sameTerm, targetOf } from './term'
 import { arbitraryOf, rngFrom } from './testing'
 
 /** A term that this module cannot print as library calls. */
@@ -603,6 +603,8 @@ const printerOf = (
         line: (kind: string, t: Term, line: string): void =>
             declare(kind, lean(t), line),
         clause: (codec: AnyCodec): string => inline(codec.def),
+        /** A term, written in place. */
+        term: inline,
     }
 }
 
@@ -879,14 +881,24 @@ const sliceRoot = (
         patterns.push(q)
     }
     for (const shape of slice.shapes ?? []) {
-        const argument = `{ ${Object.entries(shape)
-            .map(([name, c]) => `${keyText(name)}: ${p.clause(c)}`)
+        const codec = object(shape)
+        const fields = codec.def.kind === 'object' ? codec.def.body.fields : {}
+        const slot = (name: string, f: Field): string => {
+            const text = p.term(f.t)
+            switch (f.mark) {
+                case 'req':
+                    return text
+                case 'optional':
+                case 'undefinable':
+                    return `${f.mark}(${text})`
+                case 'fallback':
+                    return refuse(name, 'a stand-in slot in a pattern shape')
+            }
+        }
+        const argument = `{ ${Object.entries(fields)
+            .map(([name, f]) => `${keyText(name)}: ${slot(name, f)}`)
             .join(', ')} }`
-        patterns.push({
-            argument,
-            source: `object(${argument})`,
-            codec: object(shape),
-        })
+        patterns.push({ argument, source: `object(${argument})`, codec })
     }
     for (const pattern of patterns)
         for (const op of ['extract', 'exclude'] as const) {
@@ -1118,7 +1130,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, list, meet, narrow, number, object, string, union } from '${library}/codec'`,
+    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",
@@ -1129,20 +1141,22 @@ const checksHeader = [
 
 /**
  * **The slice checks go to ten files**, cut at the boundary of a root. Ten files of the same
- * checks give the same errors as one file, in less time.
+ * checks give the same errors as one file, in less time. Each file is one program, so the peak
+ * memory holds one part: two programs of five files passed the heap of the checker.
  */
-const SLICE_FILES = [
-    'slices0.ts',
-    'slices1.ts',
-    'slices2.ts',
-    'slices3.ts',
-    'slices4.ts',
-    'slices5.ts',
-    'slices6.ts',
-    'slices7.ts',
-    'slices8.ts',
-    'slices9.ts',
+const SLICE_PROGRAMS = [
+    ['slices0.ts', 'tsconfig.slices0.json'],
+    ['slices1.ts', 'tsconfig.slices1.json'],
+    ['slices2.ts', 'tsconfig.slices2.json'],
+    ['slices3.ts', 'tsconfig.slices3.json'],
+    ['slices4.ts', 'tsconfig.slices4.json'],
+    ['slices5.ts', 'tsconfig.slices5.json'],
+    ['slices6.ts', 'tsconfig.slices6.json'],
+    ['slices7.ts', 'tsconfig.slices7.json'],
+    ['slices8.ts', 'tsconfig.slices8.json'],
+    ['slices9.ts', 'tsconfig.slices9.json'],
 ] as const
+const SLICE_FILES = SLICE_PROGRAMS.map(([file]) => file)
 
 /**
  * **The path checks go to three programs**, cut at the boundary of a root. The bridge compiles
@@ -1375,15 +1389,7 @@ export const typeVectorFiles = ({
             'rows.json',
             `[\n${rows.map((r) => JSON.stringify(r)).join(',\n')}\n]\n`,
         ],
-        [
-            'tsconfig.slices0.json',
-            tsconfig(['codecs.ts', ...SLICE_FILES.slice(0, 5)]),
-        ],
-        [
-            'tsconfig.slices1.json',
-            tsconfig(['codecs.ts', ...SLICE_FILES.slice(5)]),
-        ],
-        ...[...PATH_FILES, ...MEET_FILES].map(
+        ...[...SLICE_PROGRAMS, ...PATH_FILES, ...MEET_FILES].map(
             ([file, config]) =>
                 [config, tsconfig(['codecs.ts', file])] as const,
         ),
