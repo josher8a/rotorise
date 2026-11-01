@@ -8232,23 +8232,38 @@ export type VariantsOf<Spec> = {
  * A key of a pattern that holds a refinement, at any depth: no function decides whether a member
  * lies inside a predicate. A pattern that no member fits is an answer, and the result keeps nothing.
  */
-type BadPatternKey<PSpec> = {
-    [K in keyof PSpec]: RefinedSlot<PSpec[K]> extends true ? K : never
+type BadPatternKey<PSpec, Seen extends readonly unknown[] = []> = {
+    [K in keyof PSpec]: RefinedSlot<PSpec[K], Seen> extends true ? K : never
 }[keyof PSpec]
-/** Whether the pattern codec at a slot holds a refinement, at the slot or below it. */
-type RefinedSlot<PC> = NodeOf<TermOf<PC>> extends ['refine', unknown]
+/**
+ * Whether the pattern codec at a slot holds a refinement, at the slot or below it. `Seen` holds
+ * the terms of the names that the walk entered, so a walk through a recursive `ref` ends.
+ */
+type RefinedSlot<PC, Seen extends readonly unknown[] = []> = NodeOf<
+    TermOf<PC>
+> extends ['refine', unknown]
     ? true
-    : [FixedElements<PC>] extends [never]
-      ? [FieldSpecList<PC>] extends [never]
+    : IsRef<TermOf<PC>> extends true
+      ? [TermOf<PC>] extends [Seen[number]]
           ? false
-          : [BadPatternKey<FieldSpecList<PC>[number]>] extends [never]
-            ? false
-            : true
-      : true extends {
-              [I in keyof FixedElements<PC>]: RefinedSlot<FixedElements<PC>[I]>
-          }[number]
-        ? true
-        : false
+          : RefinedBelow<PC, [TermOf<PC>, ...Seen]>
+      : RefinedBelow<PC, Seen>
+type RefinedBelow<PC, Seen extends readonly unknown[]> = [
+    FixedElements<PC>,
+] extends [never]
+    ? [FieldSpecList<PC>] extends [never]
+        ? false
+        : [BadPatternKey<FieldSpecList<PC>[number], Seen>] extends [never]
+          ? false
+          : true
+    : true extends {
+            [I in keyof FixedElements<PC>]: RefinedSlot<
+                FixedElements<PC>[I],
+                Seen
+            >
+        }[number]
+      ? true
+      : false
 
 /** Rejects a pattern that holds a part no meet reads, at the call rather than on the result. */
 export type ValidatePattern<P> = [FieldSpecList<P>] extends [never]
@@ -8710,10 +8725,20 @@ const splitBy = (
  * is refused, because no function decides whether a member lies inside a predicate. A pattern that
  * no member fits is an answer: the extraction keeps nothing, and the exclusion keeps all.
  */
-const patternRefusal = (pattern: Term): string | undefined => {
+const patternRefusal = (
+    pattern: Term,
+    seen: Set<Term> = new Set(),
+): string | undefined => {
+    // **A node that the walk entered has no refusal that the walk did not return**, so a walk
+    // through a recursive `ref` ends where it meets the node again
+    const node = resolvedTerm(pattern)
+    if (node !== undefined) {
+        if (seen.has(node)) return undefined
+        seen.add(node)
+    }
     for (const wanted of objectMembersOf(pattern)) {
         for (const [name, field] of Object.entries(wanted.body.fields)) {
-            const why = slotRefusal(name, field.t)
+            const why = slotRefusal(name, field.t, seen)
             if (why) return why
         }
     }
@@ -8721,14 +8746,18 @@ const patternRefusal = (pattern: Term): string | undefined => {
 }
 
 /** Why the pattern at one slot, a field or a position of a list, holds a refinement, or nothing. */
-const slotRefusal = (name: string, there: Term): string | undefined => {
+const slotRefusal = (
+    name: string,
+    there: Term,
+    seen: Set<Term>,
+): string | undefined => {
     const node = resolvedTerm(there)
     if (node?.kind === 'refine') {
         return `the pattern at '${name}' holds a refinement, and the host cannot decide whether a member lies inside a predicate. Pin the key to a literal, or slice the field first`
     }
-    if (node?.kind !== 'list') return patternRefusal(there)
+    if (node?.kind !== 'list') return patternRefusal(there, seen)
     for (const position of node.pre) {
-        const why = slotRefusal(name, position)
+        const why = slotRefusal(name, position, seen)
         if (why) return why
     }
     return undefined

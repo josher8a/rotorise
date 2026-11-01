@@ -12,6 +12,7 @@ import {
     array,
     exclude,
     extract,
+    list,
     object,
     optional,
     ref,
@@ -55,6 +56,65 @@ describe('the fit of a recursive entry at the entry itself', () => {
             Owner: object({
                 kind: string('owner'),
                 pets: array(ref('Pet')),
+            }),
+            Pet: object({
+                kind: string('pet'),
+                owner: optional(ref('Owner')),
+            }),
+        })
+        const rest = exclude(union([Owner, Pet, stray]), Owner)
+        const kept = extract(union([Owner, Pet, stray]), Owner)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof Pet> | Decoded<typeof stray>
+        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof Owner>
+        >()
+        expect(rest.decode(strayStored)).toEqual({ kind: 'stray' })
+        expect(rest.decode({ M: { kind: { S: 'pet' } } })).toEqual({
+            kind: 'pet',
+        })
+        expect(
+            failed(
+                rest.decode({
+                    M: { kind: { S: 'owner' }, pets: { L: [] } },
+                }),
+            ),
+        ).toBe(true)
+    })
+})
+
+describe('the fit of a recursive entry that a list names, at the entry itself', () => {
+    it('removes in the exclusion a pet whose friends are a list of pets, as the run time removes it', () => {
+        const { Pet } = scope({
+            Pet: object({
+                kind: string('pet'),
+                friends: list(ref('Pet')),
+            }),
+        })
+        const rest = exclude(union([Pet, stray]), Pet)
+        const kept = extract(union([Pet, stray]), Pet)
+        expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+            Decoded<typeof stray>
+        >()
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            Decoded<typeof Pet>
+        >()
+        expect(rest.decode(strayStored)).toEqual({ kind: 'stray' })
+        expect(
+            failed(
+                rest.decode({
+                    M: { kind: { S: 'pet' }, friends: { L: [] } },
+                }),
+            ),
+        ).toBe(true)
+    })
+
+    it('removes in the exclusion an owner whose list of pets names the owner back, through two entries', () => {
+        const { Owner, Pet } = scope({
+            Owner: object({
+                kind: string('owner'),
+                pets: list(ref('Pet')),
             }),
             Pet: object({
                 kind: string('pet'),
