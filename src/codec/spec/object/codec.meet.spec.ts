@@ -1059,13 +1059,57 @@ describe('the type of a meet reads the values that the run time keeps', () => {
     })
 
     /**
-     * **An older reading shows no stored shape of its older form.** The older reader is a function
-     * of any attribute, so the type reads the stored view of the current form alone. The type
-     * builds the call below, and the run time refuses it.
+     * **An older reading below a field is no refusal of the type.** The type reads the top node of
+     * each factor, and the older reading sits below a field of an object. The type builds the union
+     * below, and the run time refuses it: the two options overlap through an adapter.
      */
-    it('builds in the type an older reading against a held literal, and the run time refuses the pair', () => {
+    it('builds in the type an older reading below a field, and the run time refuses the union', () => {
         const widened = withLegacyRead({ current: string, older: decimal })
+        expect(() =>
+            union([object({ x: widened }), object({ x: number })]),
+        ).toThrow(/not shown compatible/)
+    })
+
+    /**
+     * **An older reading that neither side fits, apart in neither view, is refused at the call**, as
+     * the run time refuses it. The older reader is a function of any attribute, so the stored views
+     * are not apart, and the decoded types share a value.
+     */
+    it('refuses at the call an older reading against a held literal', () => {
+        const widened = withLegacyRead({ current: string, older: decimal })
+        // @ts-expect-error the older reading fits neither side, and the views overlap
         expect(() => meet(widened, decimal('1'))).toThrow(/`legacy` part/)
+    })
+
+    /**
+     * **A plain part against an opaque part fits neither side, and the views overlap**, so the run
+     * time refuses the pair in each order. The refusal lands at the call, through an intersection
+     * with the parameter.
+     */
+    it('refuses at the call a plain part against an opaque part, in both orders', () => {
+        // @ts-expect-error `string` is below no opaque part that holds a function, and no view is apart
+        expect(() => meet(string, opaque('lossy'))).toThrow(
+            /`held` part that fits neither side/,
+        )
+        // @ts-expect-error the same pair, reversed
+        expect(() => meet(opaque('lossy'), string)).toThrow(
+            /`held` part that fits neither side/,
+        )
+    })
+
+    /** A plain part that the views keep apart meets at the bottom, with no refusal. */
+    it('meets two plain parts that the views keep apart at never', () => {
+        const apart = meet(string, number)
+        expectTypeOf(apart).toBeNever()
+        expect(defOf(apart)).toEqual(never.def)
+    })
+
+    /** Two held parts of one adapter are no refusal: one adapter relates one inner literal to one outer. */
+    it('builds two held parts of one adapter', () => {
+        const same = meet(decimal, decimal)
+        expect(failed(same.decode({ N: '1' }))).toBe(false)
+        const common = meet(decimal('1', '2'), decimal('2', '3'))
+        expectTypeOf<Decoded<typeof common>>().toEqualTypeOf<'2'>()
     })
 
     /** A held part that one side fits is no refusal, at the call as at run time. */

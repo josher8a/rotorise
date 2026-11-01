@@ -107,6 +107,7 @@ import {
     rngFrom,
     structuralEquals,
 } from '../testing'
+import type { MeetPair } from '../typeVectors'
 import { typeVectorFiles } from '../typeVectors'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -915,6 +916,28 @@ const typeOnlySlices: readonly Slice[] = (() => {
         name,
         codec: sliceableOf(erase(codec)),
         clauses: [],
+    }))
+})()
+
+/**
+ * **The meets that only the type square reads**, each pinned so that the first roots of the pool
+ * never drop it. A plain part against an opaque part fits neither side, and the two views overlap,
+ * so the run time refuses the pair. A plain part against a plain part that the views keep apart
+ * meets at the bottom. Two literal sets under one adapter meet at the common literals.
+ */
+const typeOnlyMeets: readonly MeetPair[] = (() => {
+    const widened = withLegacyRead({ current: string, older: decimal })
+    return [
+        [string, opaque('lossy')],
+        [opaque('lossy'), string],
+        [string, number],
+        [decimal('1', '2'), decimal('2', '3')],
+        [decimal, decimal],
+        [widened, decimal('1')],
+    ].map(([left, right]) => ({
+        left: erase(left),
+        right: erase(right),
+        pinned: true,
     }))
 })()
 
@@ -2147,7 +2170,7 @@ describe('the generated pool, against the model', () => {
                 ...refObjects,
             ],
             paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
-            meets: pairs,
+            meets: [...pairs, ...typeOnlyMeets],
             clauses: clauseVocabulary,
         })
         if (process.env.EMIT_LEAN_REFUSALS) {

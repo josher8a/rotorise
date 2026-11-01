@@ -93,29 +93,43 @@ ids, measured 2026-10-14.
 
 ---
 
-## Known: the type of meet states no refusal of a held or older part that the run time refuses
+## Known: the type of meet builds two caller adapters of one type
 
 **Observation.** The run time refuses a `held` part or an older reading where the two parts are
 apart in neither view and neither side fits the other, because an opaque function decides which
-common rows relate one value. The type states the refusal for two `held` parts whose adapters
-differ for certain, read at the top node of each factor. Three calls build in the type and throw at
-run time. Measured 2026-10-27 with `npx vitest --run` and `tsc --noEmit`:
+common rows relate one value. The type states the refusal at the top node of each factor: the fit
+is false in both orders, the stored views are not apart, and the decoded views overlap. One call
+builds in the type and throws at run time. Measured 2026-11-01 with `npx vitest --run` and
+`tsc --noEmit`:
 
     meet(h1, h2)                     two adapters of a caller, of one type
-    meet(withLegacyRead({ current: string, older: decimal }), decimal('1'))
-    union([object({ x: withLegacyRead({ current: string, older: decimal }) }), object({ x: number })])
 
 The run time tells two adapters of a caller apart by object identity, and a structural type holds
 no identity. So `meet(h, h)` and `meet(h1, h2)` have one type, and a refusal of the pair refuses
-`meet(h, h)`, which the run time builds. The mark of an older reading holds the current term only,
-and the older reader is a function over any attribute, so the type holds no stored shape of the
-older reading.
+`meet(h, h)`, which the run time builds.
 
-**Effect.** A call of the three forms builds in the type and throws at run time. A `held` part
-below a field of an object is not refused in the type either.
+**Effect.** The call builds in the type and throws at run time.
 
 **Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the refused pairs, the pairs that build,
-the pair of one type with two results, and the older reading.
+and the pair of one type.
+
+---
+
+## Known: the type of union builds two options that an adapter keeps from being shown compatible
+
+**Observation.** The run time refuses a union where two options overlap and an adapter or a `ref`
+on a side keeps the declaration from showing that a value both admit is written to one attribute.
+The type of `union` states no such refusal. Measured 2026-11-01 with `npx vitest --run` and
+`tsc --noEmit`:
+
+    union([object({ x: withLegacyRead({ current: string, older: decimal }) }), object({ x: number })])
+      type checker: builds
+      runtime:      throws, the two options are not shown compatible
+
+**Effect.** The call builds in the type and throws at construction.
+
+**Pin.** `src/codec/spec/object/codec.meet.spec.ts`: the type builds an older reading below a
+field, and the run time refuses the union.
 
 ---
 

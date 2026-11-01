@@ -35,6 +35,7 @@ import {
     termOf,
 } from './denote'
 import type {
+    ApartG,
     CycleEntryOf,
     DecodeFrame,
     DecodeTerm,
@@ -5140,18 +5141,22 @@ export type ValidateMeet<Fs extends readonly unknown[]> = [
     AnyOpen<Fs[number]>,
 ] extends [never]
     ? HeldRefusal<Fs> extends true
-        ? ErrorMessage<'[meet] a factor holds a `held` part whose adapter differs from the adapter of the other factor, and the two parts overlap. An opaque function decides which common rows relate one value, and the host cannot read the function. Meet only a part that one side fits'>
+        ? ErrorMessage<'[meet] a factor holds a `held` or an older part that fits neither side, and the two parts are apart in neither view. An opaque function decides which common rows relate one value, and the host cannot read the function. Meet only a part that one side fits'>
         : unknown
     : ErrorMessage<'[meet] a factor holds undeclared names through a `rest` codec, and the type of a meet reads no open block. Close every factor: give it no open key entry'>
 
 /**
- * **Whether the fold of a meet reaches two `held` parts that the run time refuses**, read at the
- * top node of each factor, step by step as {@link FoldMeet} folds. The refusal needs two `held`
- * parts with two adapters that differ for certain ({@link TagsDiffer}), whose stored views and
- * decoded types overlap. Two parts that the type cannot tell apart are no refusal: a caller's
- * adapter against a caller's adapter is one adapter or two, and the type cannot see which, so the
- * run time builds the first and refuses the second. A `held` part below a field of an object is no
- * refusal here either, and the run time refuses it.
+ * **Whether the fold of a meet reaches a `held` or an older part that the run time refuses**, read
+ * at the top node of each factor, step by step as {@link FoldMeet} folds. The rule is the last
+ * refusal of `meetParts`: one top node is a `held` or an older part, no top node is a refinement,
+ * the order holds in neither direction, and the two parts are apart in neither view. The order is
+ * `'f'` in both directions ({@link FitsCodec}), and `'u'` in one direction is no refusal, because
+ * the type cannot decide. The stored views are apart where {@link ApartG} says so. The caller views
+ * overlap where a member of one decoded type is assignable to the other. A set against a byte
+ * string is no overlap, because the run time may read two object types as apart. Two caller
+ * adapters meet at `'u'`: a caller's adapter against a caller's adapter is one adapter or two, and
+ * the type cannot see which, so the run time builds the first and refuses the second. A `held` part
+ * below a field of an object is no refusal here either, and the run time refuses it.
  */
 type HeldRefusal<Fs extends readonly unknown[]> = Fs extends readonly [
     infer A,
@@ -5162,26 +5167,65 @@ type HeldRefusal<Fs extends readonly unknown[]> = Fs extends readonly [
         ? true
         : HeldRefusal<[MeetOfTwo<A, B>, ...R]>
     : false
-type HeldPairRefused<A, B> = TagsDiffer<
-    HeldTag<NodeOf<TermOf<MarkedCodec<A>>>>,
-    HeldTag<NodeOf<TermOf<MarkedCodec<B>>>>
-> extends true
-    ? [StoredMembers<A> & StoredMembers<B>] extends [never]
-        ? false
-        : [Decoded<A> & Decoded<B>] extends [never]
-          ? false
-          : true
-    : false
-/** Whether two tags of {@link HeldTag} differ for certain: both are tags, and they are two tags. */
-type TagsDiffer<X, Y> = [X] extends [never]
-    ? false
-    : [Y] extends [never]
-      ? false
-      : [X] extends [Y]
-        ? [Y] extends [X]
+type HeldPairRefused<A, B> = [
+    NodeOf<TermOf<MarkedCodec<A>>>,
+    NodeOf<TermOf<MarkedCodec<B>>>,
+] extends [infer NA, infer NB]
+    ? true extends IsPart<NA> | IsPart<NB>
+        ? true extends IsRefine<NA> | IsRefine<NB> | OneAdapter<NA, NB>
             ? false
-            : true
-        : true
+            : [FitsCodec<A, B>, FitsCodec<B, A>] extends ['f', 'f']
+              ? ApartG<
+                    TermOf<MarkedCodec<A>>,
+                    [],
+                    TermOf<MarkedCodec<B>>,
+                    [],
+                    []
+                > extends true
+                  ? false
+                  : [
+                          | Extract<Decoded<A>, Decoded<B>>
+                          | Extract<Decoded<B>, Decoded<A>>,
+                      ] extends [never]
+                    ? false
+                    : true
+              : false
+        : false
+    : false
+/** Whether a node is a part that no meet reads: a `held` or an older reading. */
+type IsPart<N> = N extends ['held', ...unknown[]] | ['legacy', unknown]
+    ? true
+    : false
+type IsRefine<N> = N extends ['refine', unknown] ? true : false
+/**
+ * Whether two `held` nodes carry one adapter tag. The run time meets two literal sets under one
+ * adapter at the common literals ({@link commonHeldLiterals}), before it reads the refusal. The
+ * type reads no literal set here, so the pair of one tag is no refusal.
+ */
+type OneAdapter<NA, NB> = [HeldTag<NA>] extends [never]
+    ? false
+    : [HeldTag<NB>] extends [never]
+      ? false
+      : [HeldTag<NA>] extends [HeldTag<NB>]
+        ? [HeldTag<NB>] extends [HeldTag<NA>]
+            ? true
+            : false
+        : false
+/**
+ * The tag of the adapter of a `held` node, as `[tag]`, or `never` where the node is no `held`. The
+ * tag of a library adapter is its name. The tag of a caller's adapter is `['caller']`, and the
+ * type cannot tell two of them apart, because the run time tells them apart by object identity.
+ */
+type HeldTag<N> = N extends [
+    'held',
+    unknown,
+    unknown,
+    unknown,
+    [infer G, unknown],
+    ...unknown[],
+]
+    ? [G]
+    : never
 
 /**
  * **The options a slot offers to the slice**: the object node that the slot names, or each option of
@@ -7060,22 +7104,6 @@ type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = IsOverflow<A> extends true
     ? 'u'
     : BelowT<TermOf<MarkedCodec<A>>, TermOf<MarkedCodec<P>>, [], [], [], true>
-/**
- * The tag of the adapter of a `held` node, as `[tag]`, or `never` where the node is no `held`. The
- * tag of a library adapter is its name. The tag of a caller's adapter is `['caller']`, and the
- * type cannot tell two of them apart, because the run time tells them apart by object identity.
- */
-type HeldTag<N> = N extends [
-    'held',
-    unknown,
-    unknown,
-    unknown,
-    [infer G, unknown],
-    ...unknown[],
-]
-    ? [G]
-    : never
-
 /** The most pairs that the walk of {@link BelowT} enters on one path, as a tuple of that length. */
 type BelowDepth = Repeat<16>
 /**

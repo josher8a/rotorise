@@ -640,7 +640,7 @@ type EntryOf<T, Env> = T extends ['scope', infer D, infer K]
           ? ['some', ['entry', D, N], M, [['scope', D]]]
           : None
       : None
-type ApartG<L, LE, R, RE, A extends unknown[]> = RowG<L, LE, R, RE, A>
+export type ApartG<L, LE, R, RE, A extends unknown[]> = RowG<L, LE, R, RE, A>
 type RowG<L, LE, R, RE, A extends unknown[]> = EntryOf<L, LE> extends [
     'some',
     unknown,

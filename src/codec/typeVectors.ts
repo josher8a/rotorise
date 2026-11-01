@@ -995,7 +995,12 @@ const pathRoot = (
 }
 
 /** Two factors of a `meet`, as the pool pairs them. */
-export type MeetPair = { readonly left: AnyCodec; readonly right: AnyCodec }
+export type MeetPair = {
+    readonly left: AnyCodec
+    readonly right: AnyCodec
+    /** A pinned pair keeps a root beside the first {@link MEET_ROOTS}, whatever its hash. */
+    readonly pinned?: boolean
+}
 
 // one cast, where the run time takes erased factors and `meet` takes the tuple that it validates
 const meetOfCodecs = meet as unknown as (
@@ -1296,15 +1301,17 @@ export const typeVectorFiles = ({
         (pair) =>
             `meet|${leanClosedOf(pair.left, 'meet', freshBound())}|${leanClosedOf(pair.right, 'meet', freshBound())}`,
     )
+    const meetRootsOf = [
+        ...printable.filter(([, pair]) => pair.pinned),
+        ...printable.filter(([, pair]) => !pair.pinned).slice(0, MEET_ROOTS),
+    ]
     const constants = shared([
         ...slices.flatMap((s) => [
             s.codec.def,
             ...(s.codec.def.kind === 'union' ? s.codec.def.options : []),
         ]),
         ...paths.map((v) => v.codec.def),
-        ...printable
-            .slice(0, MEET_ROOTS)
-            .flatMap(([, pair]) => [pair.left.def, pair.right.def]),
+        ...meetRootsOf.flatMap(([, pair]) => [pair.left.def, pair.right.def]),
     ])
     const sliceRoots = byHash(
         slices,
@@ -1321,17 +1328,15 @@ export const typeVectorFiles = ({
     ).map(([root, v], i) =>
         pathRoot(v, printerOf(constants, `p${i}`, v.name), root),
     )
-    const meetRoots = printable
-        .slice(0, MEET_ROOTS)
-        .map(([root, pair], i) =>
-            meetRoot(
-                pair,
-                met(pair),
-                printerOf(constants, `m${i}`, 'meet'),
-                root,
-                'meet',
-            ),
-        )
+    const meetRoots = meetRootsOf.map(([root, pair], i) =>
+        meetRoot(
+            pair,
+            met(pair),
+            printerOf(constants, `m${i}`, 'meet'),
+            root,
+            'meet',
+        ),
+    )
     const codecs = placed(
         'codecs.ts',
         codecsHeader,
