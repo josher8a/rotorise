@@ -29,7 +29,7 @@ import type {
     SetSlot,
 } from './codec'
 import { CodecError } from './result'
-import { sameLiteral } from './value'
+import { asRecord, sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
@@ -322,25 +322,20 @@ export const standInEquals = (a: unknown, b: unknown): boolean => {
             a.every((x, i) => standInEquals(x, b[i]))
         )
     }
-    if (isPlain(a)) {
-        if (!isPlain(b)) return false
+    const mine = asRecord(a)
+    if (mine) {
+        const theirs = asRecord(b)
+        if (!theirs) return false
         const names = (o: Record<string, unknown>) =>
             Object.keys(o).filter((name) => o[name] !== undefined)
-        const mine = names(a)
+        const kept = names(mine)
         return (
-            mine.length === names(b).length &&
-            mine.every((name) => standInEquals(a[name], b[name]))
+            kept.length === names(theirs).length &&
+            kept.every((name) => standInEquals(mine[name], theirs[name]))
         )
     }
     return false
 }
-const isPlain = (value: unknown): value is Record<string, unknown> =>
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    !(value instanceof Set) &&
-    !(value instanceof Uint8Array) &&
-    !(value instanceof DynamoNumber)
 
 /** Whether the row always carries this field's attribute. */
 export const alwaysWritten = (field: Field): boolean =>

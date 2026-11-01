@@ -1765,12 +1765,6 @@ export const codecAtLevel = <T, A extends AttributeValue>(
     })
 }
 
-/** Only plain objects round-trip; anything with a prototype loses it. */
-const isPlainObject = (value: object) => {
-    const prototype = Object.getPrototypeOf(value)
-    return prototype === Object.prototype || prototype === null
-}
-
 const unrecoverable = (what: string, instead: string) =>
     new CodecError(
         `${what} cannot be stored as an unknown attribute, because decoding could not tell it apart from what it decodes to. ${instead}`,
@@ -1851,7 +1845,8 @@ export const encodeUnknown = (
     }
 
     if (typeof value === 'object') {
-        if (!isPlainObject(value)) {
+        const record = asRecord(value)
+        if (!record) {
             return unrecoverable(
                 `an instance of ${value.constructor?.name ?? 'a class'}`,
                 'Only plain objects survive: `M` carries the own enumerable properties and nothing that says how to rebuild the instance. Convert it first — a `Date`, for example, is faithful as an ISO string.',
@@ -1860,7 +1855,7 @@ export const encodeUnknown = (
         const deep = tooDeeplyNested(enclosing)
         if (deep) return new CodecError(deep)
         return andThen(
-            everyEntry(value as Record<string, unknown>, (v, k) =>
+            everyEntry(record, (v, k) =>
                 v === undefined
                     ? new CodecError(
                           `'${k}' is undefined, and DynamoDB has no attribute holding undefined. Omit the key, or use \`optional(...)\` on a declared attribute.`,
@@ -2009,14 +2004,11 @@ const numberPolicy = (numbers: opaque.Numbers) => {
                       'NS decodes as strings, because its members are decimal strings. Use a set of strings, or `array(number)` if the order does not matter to you.',
                   )
         }
-        if (
-            typeof value === 'object' &&
-            value !== null &&
-            isPlainObject(value)
-        ) {
+        const record = asRecord(value)
+        if (record) {
             return tooDeeplyNested(enclosing)
                 ? value
-                : everyEntry(value as Record<string, unknown>, (v) =>
+                : everyEntry(record, (v) =>
                       v === undefined ? v : into(v, enclosing + 1),
                   )
         }

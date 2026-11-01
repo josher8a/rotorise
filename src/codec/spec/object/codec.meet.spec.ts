@@ -33,6 +33,7 @@ import {
     withLegacyRead,
 } from '../../codec'
 import { failed, orThrow } from '../../result'
+import type { StandardSchemaV1 } from '../../standard'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
@@ -319,6 +320,36 @@ describe('the meet of two objects at a shared name', () => {
                 }),
             ),
         ).toThrow(/'a'.*withLegacyRead.*stand-ins differ/)
+    })
+
+    /**
+     * **A stand-in that is no `Value` compares by identity.** A `Date`, a `Map` and a class instance
+     * are plain objects to `Object.keys` and hold no own key, so a test by keys read two of them as
+     * one value. Two fills of two `Date` stand-ins that hold two instants have no meet. One `Date`
+     * object is one value, and the meet keeps it.
+     */
+    it('refuses two fills whose Date stand-ins hold two instants', () => {
+        const instant: StandardSchemaV1<Date> = {
+            '~standard': {
+                version: 1,
+                vendor: 'handwritten',
+                validate: (value) =>
+                    value instanceof Date
+                        ? { value }
+                        : { issues: [{ message: 'expected a Date' }] },
+            },
+        }
+        const when = held(string, instant, {
+            encode: (at: Date) => at.toISOString(),
+            decode: (at) => new Date(at),
+        })
+        const epoch = new Date(0)
+        const fill = (stand: Date) =>
+            object({ a: withLegacyRead({ current: when, whenMissing: stand }) })
+        expect(() => meet(fill(epoch), fill(new Date(1)))).toThrow(
+            /'a'.*withLegacyRead.*stand-ins differ/,
+        )
+        expect(() => meet(fill(epoch), fill(epoch))).not.toThrow()
     })
 
     /**
