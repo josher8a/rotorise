@@ -63,14 +63,12 @@ describe('a numeric literal', () => {
         expect(() => status.unsafeDecode({ S: '1' })).toThrow(CodecError)
     })
 
-    it('keeps the constant brand for a single value', () => {
+    it('holds the value of a single literal in the term, and no constant property', () => {
         const draft = number(0)
-        // the brand is type-level, and the annotation is the assertion; `constantOf` is what reads
-        // the value back at runtime, and is what a key component is built from
-        type Only = typeof draft.constant
-        const _narrowed: 0 = null as unknown as Only
-        void _narrowed
-        // and two admissible values decide nothing, which is the point of `constantOf`
+        // the value is a fact of the term, and `constantOf` reads it at run time
+        // @ts-expect-error the codec holds no `constant` property
+        expect(draft.constant).toBeUndefined()
+        expect('constant' in draft).toBe(false)
     })
 
     it('takes a number, which is what a union filters on', () => {

@@ -2,7 +2,7 @@
  * The two answers to "does this codec decide its value", held against each other.
  *
  * `ConstantAttributes<Spec>` is a type and `decides(codec)` is a function, and they reach the answer
- * by different routes: the type reads the `ConstantCodec` brand, the function reads `def.kind` and
+ * by different routes: the type reads the term, the function reads `def.kind` and
  * how many values the literal admits. Nothing makes them agree.
  *
  * Disagreement is quiet in one direction and loud in the other. If the type says decided where the
@@ -16,7 +16,7 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
 import type { ConstantAttributes } from '../../../Rotorise'
-import type { ConstantCodec, ObjectSlot } from '../../codec'
+import type { ObjectSlot } from '../../codec'
 import {
     constantOf,
     decimal,
@@ -70,20 +70,19 @@ describe('the type and the function agree on what is decided', () => {
     })
 
     /**
-     * The case that was wrong, and is not reachable through the constructors — which is why it
-     * survived.
+     * A literal whose one argument has a union type. The type cannot name one value, so the type
+     * decides nothing. The run time holds the one value that the call passed, so the run time decides it.
      *
-     * A codec branded as deciding *two* values decides neither. Asking only whether a `constant` was
-     * declared made the type call this decided while `decides` called it undecided: `keyUpdates`
-     * would not ask for the component, then throw demanding it.
+     * Asking only whether a `constant` was declared made the type call a union decided. The type reads
+     * the term now, and a union of texts is refused there. The type answers "nothing" where the run
+     * time answers "one value", which is the quiet direction: `keyUpdates` asks for a component that it
+     * could build.
      */
-    it('on a codec branded with two values, which decides neither', () => {
-        const twoValued = string('A', 'B') as unknown as ConstantCodec<
-            'A' | 'B'
-        >
-        const spec = { kind: twoValued, id: string }
+    it('on a literal whose argument has a union type, where the type is the more careful', () => {
+        const either = string('A' as 'A' | 'B')
+        const spec = { kind: either, id: string }
         attest<[ConstantAttributes<typeof spec>], [never]>()
-        expect(decided(spec)).toEqual([])
+        expect(decided(spec)).toEqual(['kind'])
     })
 
     /**

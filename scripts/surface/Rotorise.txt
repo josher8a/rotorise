@@ -22,6 +22,7 @@ CompositeKeyParams
 CompositeKeyParamsImpl
 ConstantAttributes
 ConstantCodec
+ConstantText
 Decoded
 DerivedUnion
 DerivedVariants

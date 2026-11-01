@@ -10,6 +10,7 @@ import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     Closed,
+    ConstantText,
     Encoded,
     IsUnion,
     ItemCodec,
@@ -2390,9 +2391,9 @@ type ConstantValue<C> = C extends {
             readonly codec: infer Marked
         }
       ? ConstantValue<Marked>
-      : C extends { readonly constant: infer V extends string }
-        ? V
-        : unknown
+      : [ConstantText<C>] extends [never]
+        ? unknown
+        : ConstantText<C>
 
 /** What the variants say about one attribute, collapsed. */
 type AcrossVariants<Variants, K> = {
@@ -3300,6 +3301,7 @@ export type {
     BinaryCodec,
     BooleanCodec,
     ConstantCodec,
+    ConstantText,
     Decoded,
     DerivedUnion,
     DerivedVariants,

@@ -1006,15 +1006,33 @@ export type LiteralAttribute<T> = [T] extends [string]
  * or more values is an ordinary {@link AttributeCodec}: it narrows what is admissible without
  * deciding it.
  *
- * `constant` is a **type-level** brand and carries no runtime property; {@link constantOf} is what
- * reads the value back at runtime.
+ * The codec holds no `constant` property, at the type or at run time. The value is a fact of the
+ * term, and {@link ConstantText} reads it there, as {@link constantOf} reads it at run time.
  */
 export type ConstantCodec<
     T,
     A extends AttributeValue = T extends LiteralValue
         ? LiteralAttribute<T>
         : AttributeValue,
-> = AttributeCodec<T, A> & { readonly constant: T }
+> = AttributeCodec<T, A>
+
+/**
+ * The text that the term of a codec pins to one value, or `never`. A string literal pins its value,
+ * and a decimal literal pins the text that its adapter writes back. A union of values, a number
+ * and any other term pin no text.
+ */
+export type ConstantText<C> = TermOf<C> extends LitT<
+    'string',
+    infer V extends string
+>
+    ? V
+    : TermOf<C> extends HeldT<
+            LitT<'number', string>,
+            LitT<'string', infer V extends string>,
+            'decimalText'
+        >
+      ? V
+      : never
 
 /**
  * The `.set()` capability, on the four bases that have one.
