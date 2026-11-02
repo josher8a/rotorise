@@ -4776,7 +4776,31 @@ export function item(codec: object): unknown {
             'this codec has no whole-item reading: `item` takes an object or a union',
         )
     }
-    return reading
+    return objectWrote(codec) ? writtenReading(codec, reading) : reading
+}
+
+/** An object codec: the one codec whose spec holds the codecs that the caller wrote. */
+const objectWrote = (
+    codec: object,
+): codec is ObjectCodec<Record<string, ObjectSlot>, AnyCodec | undefined> =>
+    'spec' in codec && 'rest' in codec && !('discriminator' in codec)
+
+/**
+ * The reading of an object node is a function of the term, so its spec holds a codec built from
+ * each field term: a codec with no `set` and no literal constructor. The reading of an object codec
+ * holds the codecs that the caller wrote, which the type of the spec states. One reading for each
+ * spec, so a spread copy of an object codec keeps the item of the original.
+ */
+const writtenReadings = new WeakMap<object, unknown>()
+const writtenReading = (
+    codec: ObjectCodec<Record<string, ObjectSlot>, AnyCodec | undefined>,
+    reading: Reading,
+): unknown => {
+    const known = writtenReadings.get(codec.spec)
+    if (known !== undefined) return known
+    const made = { ...reading, spec: codec.spec, rest: codec.rest }
+    writtenReadings.set(codec.spec, made)
+    return made
 }
 
 /**
