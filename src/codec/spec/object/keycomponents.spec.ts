@@ -18,7 +18,7 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
 import type { KeyComponents, MovesTheItem } from '../../../Rotorise'
-import { keyComponents } from '../../../Rotorise'
+import { keyComponents, tableEntry } from '../../../Rotorise'
 
 /**
  * What the runtime walk found, for the runtime half of each pairing.
@@ -121,5 +121,26 @@ describe('the type walk and the runtime walk agree', () => {
 
         expect([...narrow].sort()).toEqual(['type', 'vendorId'])
         for (const component of narrow) expect(wide.has(component)).toBe(true)
+    })
+
+    /**
+     * The discriminator of a key can name a path below the top level. The change holds the value at
+     * that path, so the type asks for the components of the variant that the value selects, as the
+     * run time builds the key from them.
+     */
+    it('asks for the components of the variant that a dotted discriminant selects', () => {
+        type Pet =
+            | { petId: string; meta: { kind: 'DOG' }; collar: string }
+            | { petId: string; meta: { kind: 'CAT' }; bell: string }
+        const Pets = tableEntry<Pet>()({
+            PK: ['petId'],
+            GSI1PK: {
+                discriminator: 'meta.kind',
+                spec: { DOG: ['collar'], CAT: ['bell'] },
+            },
+        })
+        expect(
+            Pets.keyUpdates({ meta: { kind: 'DOG' }, collar: 'red' }).set,
+        ).toEqual({ GSI1PK: { S: 'COLLAR#red' } })
     })
 })

@@ -2220,18 +2220,17 @@ export type KeyComponents<Spec, Given = unknown> = Spec extends string
 /**
  * The components of the variants that the given discriminant selects, or of every variant.
  *
- * The type half of the narrowing in {@link componentsOf}. A discriminant that is not a literal
- * of a variant selects nothing, so every variant is read.
+ * The type half of the narrowing in {@link componentsOf}. The discriminator can name a path below
+ * the top level, as `meta.kind` does, and the change holds the value at that path. A discriminant
+ * that is not a literal of a variant selects nothing, so every variant is read.
  */
-type VariantComponents<
-    Variants,
-    Discriminator extends string,
-    Given,
-> = Discriminator extends keyof Given
-    ? Given[Discriminator] extends infer Chosen extends keyof Variants
-        ? KeyComponents<Variants[Chosen], Given>
-        : KeyComponents<Variants[keyof Variants], Given>
-    : KeyComponents<Variants[keyof Variants], Given>
+type VariantComponents<Variants, Discriminator extends string, Given> = [
+    ValueAt<Given, Discriminator>,
+] extends [never]
+    ? KeyComponents<Variants[keyof Variants], Given>
+    : ValueAt<Given, Discriminator> extends infer Chosen extends keyof Variants
+      ? KeyComponents<Variants[Chosen], Given>
+      : KeyComponents<Variants[keyof Variants], Given>
 
 /**
  * The components a change touches but does not carry, across every key it touches.
