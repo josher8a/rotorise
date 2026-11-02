@@ -436,6 +436,10 @@ export const member = (t: Term): AttributeName | undefined => {
             return undefined
         case 'union':
             return unanimous(t.options.map(member))
+        // the return type allows `undefined`, so an arm left out would answer "no member" with no
+        // error. This arm is the build error for a kind that has no row
+        default:
+            return t satisfies never
     }
 }
 
@@ -671,6 +675,9 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
             const target = targetOf(t)
             return target === undefined ? undefined : ownsNullOf(target)
         }
+        // an arm left out would answer "unknown" with no error. This arm is the build error
+        default:
+            return t satisfies never
     }
 }
 
@@ -724,6 +731,9 @@ export const occA = (t: Term): readonly AttributeName[] | undefined => {
         // empty and not `undefined`, for the reason {@link occV}'s `never` row gives
         case 'never':
             return []
+        // an arm left out would answer "unknown" with no error. This arm is the build error
+        default:
+            return t satisfies never
     }
 }
 
@@ -1252,6 +1262,7 @@ export const mapChildren = (
         case 'refine':
         case 'legacy':
             return { ...t, inner: view(t.inner) }
+        // a term with no child term reads as itself in every view
         default:
             return t
     }
@@ -1490,6 +1501,7 @@ export const childrenOf = (
         case 'refine':
         case 'legacy':
             return [t.inner]
+        // a ground kind, a literal, `opaque`, `never` and a `ref` hold no child term
         default:
             return []
     }
@@ -1671,12 +1683,7 @@ export const entryOrder = (component: Component): EntryOrder => {
 
 /** The primitives: the ground bases and the literals. */
 export const isPrim = (t: Term): boolean =>
-    t.kind === 'string' ||
-    t.kind === 'number' ||
-    t.kind === 'boolean' ||
-    t.kind === 'binary' ||
-    t.kind === 'null' ||
-    t.kind === 'literal'
+    t.kind === 'literal' || Object.hasOwn(ground, t.kind)
 
 /**
  * **A constructor of another shape class**, which shares no value with the left former: the

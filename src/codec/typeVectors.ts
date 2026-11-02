@@ -696,6 +696,7 @@ const literalsOf = (t: Term, depth = 0): readonly string[] => {
             const target = targetOf(t)
             return target === undefined ? [] : literalsOf(target, depth + 1)
         }
+        // any other term pins no string literal
         default:
             return []
     }
@@ -713,6 +714,7 @@ const holdsBoolean = (t: Term, depth = 0): boolean => {
             const target = targetOf(t)
             return target !== undefined && holdsBoolean(target, depth + 1)
         }
+        // any other term is not the base `boolean`
         default:
             return false
     }

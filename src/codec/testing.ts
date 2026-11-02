@@ -1151,6 +1151,10 @@ export const arbitraryOf = (
             throw new CodecError(
                 '`never` admits no value, so there is nothing to generate',
             )
+        // a kind left out would draw `undefined`, as the comment above says. This arm is the build
+        // error for it
+        default:
+            return def satisfies never
     }
 }
 
@@ -1344,8 +1348,12 @@ export const shrinkOf = (
             return shrinkOf(codecOfTerm(def.inner), value)
         case 'ref':
             return shrinkOf(codecOfTerm(usedTargetOf(def)), value)
-        default:
+        // a term that holds no value has nothing smaller
+        case 'never':
             return []
+        // a kind left out would never shrink and raise no error. This arm is the build error
+        default:
+            return def satisfies never
     }
 }
 

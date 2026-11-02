@@ -464,7 +464,7 @@ type DecodeLit<K, V> = K extends 'string'
         ? V
         : K extends 'binary'
           ? Uint8Array
-          : null
+          : never
 interface GroundCarrier {
     string: string
     number: DynamoNumberOf<string>

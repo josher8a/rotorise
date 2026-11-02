@@ -1262,6 +1262,9 @@ export const guardAt = (
                 throw new Error(
                     `a position of the flat scope holds a \`${t.kind}\``,
                 )
+            // a kind left out would state no precondition with no error. This arm is the build error
+            default:
+                t satisfies never
         }
     }
     walk(at, segments, fuel)
