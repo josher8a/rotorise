@@ -58,6 +58,7 @@ import type {
 } from './codec'
 import { at, CodecError, codecOfTerm, failed, orThrow } from './codec'
 import { accepts, holds } from './denote'
+import { Disagreement } from './result'
 import type { Term } from './term'
 import {
     componentsOf,
@@ -1598,7 +1599,7 @@ export const checkEquivalent = <T>(
         const written = a.encode(value)
         const alsoWritten = b.encode(value)
         if (failed(written) !== failed(alsoWritten)) {
-            throw new CodecError(
+            throw new Disagreement(
                 `these codecs disagree about whether ${show(value)} can be written, with seed ${seed}: ${
                     failed(written) ? `the first refused it (${written})` : ''
                 }${failed(alsoWritten) ? `the second refused it (${alsoWritten})` : ''}`,
@@ -1614,7 +1615,7 @@ export const checkEquivalent = <T>(
             continue
         }
         if (!equals(written, alsoWritten)) {
-            throw new CodecError(
+            throw new Disagreement(
                 `these codecs write ${show(value)} differently, with seed ${seed}: ${show(written)} against ${show(alsoWritten)}`,
             )
         }
@@ -1622,13 +1623,13 @@ export const checkEquivalent = <T>(
         const read = a.decode(written)
         const alsoRead = b.decode(written)
         if (failed(read) !== failed(alsoRead)) {
-            throw new CodecError(
+            throw new Disagreement(
                 `these codecs disagree about whether ${show(written)} can be read, with seed ${seed}`,
             )
         }
         if (failed(read) || failed(alsoRead)) continue
         if (!equals(read, alsoRead)) {
-            throw new CodecError(
+            throw new Disagreement(
                 `these codecs read ${show(written)} differently, with seed ${seed}: ${show(read)} against ${show(alsoRead)}`,
             )
         }

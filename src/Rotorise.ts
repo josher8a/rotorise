@@ -1127,10 +1127,20 @@ type FullKeySpec<Entity> =
     | PathMatch
     | CasesMatch
 
+type RotoriseErrorKind = 'refused' | 'separator' | 'decided' | 'rewrite'
+
 export class RotoriseError extends Error {
-    constructor(message: string) {
+    /**
+     * What kind of refusal this is. `refused` is any refusal that no reader tells apart. A key
+     * part that holds the separator, a change that writes a decided attribute at another value,
+     * and a change that cannot rewrite a touched key each have a kind.
+     */
+    readonly kind: RotoriseErrorKind
+
+    constructor(message: string, kind: RotoriseErrorKind = 'refused') {
         super(message)
         this.name = 'RotoriseError'
+        this.kind = kind
     }
 }
 
@@ -1416,6 +1426,7 @@ const key =
                 ) {
                     throw new RotoriseError(
                         `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
+                        'separator',
                     )
                 }
                 composite.push(segment)
@@ -2975,6 +2986,7 @@ export const tableEntry =
                 if (held.length === 0) continue
                 return new RotoriseError(
                     `'${key.name}' is the table's own key and is built from ${quoted(components)}. This change writes ${quoted(Object.keys(changed))}. The keys tie it to ${quoted(block)}, and the block holds ${quoted(held)} of '${key.name}'. A table key freezes its block, because rewriting the block would move the item and DynamoDB cannot update a key attribute. Write the new item and delete the old one.`,
+                    'rewrite',
                 )
             }
             const givenNames = Object.keys(given)
@@ -2984,6 +2996,7 @@ export const tableEntry =
             const needed = [...block].filter((c) => !holdsPath(c, givenNames))
             return new RotoriseError(
                 `'${touched.name}' is built from ${quoted(touched.components)} and this change touches ${quoted(touchedIn(touched.components, changed))}, so it has to be rebuilt, but ${quoted(missing)} ${missing.length === 1 ? 'is' : 'are'} not given. The keys tie ${quoted(block)} together. Write ${quoted(needed)} in the change.`,
+                'rewrite',
             )
         }
 
@@ -3059,6 +3072,7 @@ export const tableEntry =
                 ) {
                     throw new RotoriseError(
                         `'${name}' is decided by the codec as '${String(decided[name])}', and this change writes another value. The codec admits one value, so write '${String(decided[name])}' or leave '${name}' out.`,
+                        'decided',
                     )
                 }
             }

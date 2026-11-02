@@ -496,6 +496,8 @@ names no separator. A bare string as the second argument is refused.
 
 The key builders throw `RotoriseError` (exported), so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. A key that cannot be built throws `RotoriseError` in every method.
 
+Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'refused'` otherwise. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
+
 ```ts
 import { RotoriseError } from 'rotorise'
 

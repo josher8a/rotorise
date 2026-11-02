@@ -139,13 +139,10 @@ const hostOutcome = (
         return { kind: 'patch', entries }
     } catch (thrown) {
         if (!(thrown instanceof RotoriseError)) throw thrown
-        if (/is decided by the codec/.test(thrown.message))
-            return { kind: 'decided' }
-        if (
-            /is the table's own key|has to be rebuilt, but/.test(thrown.message)
-        )
-            return { kind: 'rewrite' }
-        return { kind: 'unbuilt' }
+        const { kind } = thrown
+        return {
+            kind: kind === 'decided' || kind === 'rewrite' ? kind : 'unbuilt',
+        }
     }
 }
 

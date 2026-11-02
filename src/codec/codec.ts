@@ -771,6 +771,7 @@ const narrowAcross = (
         .join(', ')
     return new CodecError(
         `the clause on ${keys} separates every option that the path reaches, so no codec stands at the path`,
+        'vacant',
     )
 }
 
@@ -860,7 +861,7 @@ const preconditionsOf = (
  * error that it receives.
  */
 const refusedAt = (refusal: CodecError): AnyCodec => {
-    const refused = () => new CodecError(refusal.message)
+    const refused = () => new CodecError(refusal.message, refusal.kind)
     return codec<never, AttributeValue>({
         def: { kind: 'never' },
         encode: refused,
@@ -896,6 +897,7 @@ const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
             partial
                 ? `'${path}' is declared by some variants only, so a write at this path would leave an item of another variant that no variant reads. Call \`narrow(object({...}))\` to keep the variants that declare it.`
                 : `'${path}' is declared differently in different variants, so this path cannot say which codec to encode with. Call \`narrow(object({...}))\` to keep the variants that agree, for example \`narrow(object({ type: string('A') }))\` where \`type\` is the discriminator.`,
+            partial ? 'someVariants' : 'ambiguous',
         ),
     )
 
@@ -4427,7 +4429,10 @@ const locate = (
             if (next instanceof CodecError) return refusedAt(next)
             // a frontier where no codec admits a value is a name that no codec declares
             if (next.every(admitsNothing)) {
-                throw new CodecError(`no attribute is declared at '${located}'`)
+                throw new CodecError(
+                    `no attribute is declared at '${located}'`,
+                    'vacant',
+                )
             }
             frontier = next
         }

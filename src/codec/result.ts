@@ -6,6 +6,8 @@
  * — which is what keeps that site out of the package's public surface. See {@link build}.
  */
 
+type CodecErrorKind = 'refused' | 'vacant' | 'someVariants' | 'ambiguous'
+
 /**
  * Encoding for DynamoDB is not a bijection, and no library can make it one.
  *
@@ -20,6 +22,14 @@ export class CodecError extends Error {
     override readonly name = 'CodecError'
 
     /**
+     * What kind of refusal this is, for a reader that has to tell one refusal from another. `refused`
+     * is any refusal that no reader tells apart. The other three are the decisions of `at` that
+     * are no codec: no codec stands at the path, some variants declare it only, or the variants
+     * declare it differently.
+     */
+    readonly kind: CodecErrorKind
+
+    /**
      * Where in the item it went wrong, outermost segment first.
      *
      * Empty at the point of failure and filled in as the error unwinds — each composite knows only
@@ -32,9 +42,10 @@ export class CodecError extends Error {
     /** The failure itself, without the path that was discovered on the way out. */
     readonly reason: string
 
-    constructor(reason: string) {
+    constructor(reason: string, kind: CodecErrorKind = 'refused') {
         super(reason)
         this.reason = reason
+        this.kind = kind
     }
 
     /** The same failure, one level further in. */
@@ -44,6 +55,12 @@ export class CodecError extends Error {
         return this
     }
 }
+
+/**
+ * Two codecs that a property check found to differ. The failure is of the check and no codec
+ * refused a value, so the failure is a class of its own and not a kind of {@link CodecError}.
+ */
+export class Disagreement extends CodecError {}
 
 /**
  * `lines[1].tender.note` — an index is bracketed, an attribute is dotted.

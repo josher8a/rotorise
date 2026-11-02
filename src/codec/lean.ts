@@ -2755,11 +2755,7 @@ export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
         reached = reach(item, steps)
     } catch (error) {
         if (!(error instanceof CodecError)) throw error
-        return {
-            kind: error.message.startsWith('no attribute is declared')
-                ? 'vacant'
-                : 'refused',
-        }
+        return { kind: error.kind === 'vacant' ? 'vacant' : 'refused' }
     }
     if (reachable(item.def as Term).has(reached.def as Term))
         return {
@@ -2768,16 +2764,11 @@ export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
             preconditions: preconditionsOf(reached),
         }
     const refusal = reached.decode({ NULL: true })
-    const message = refusal instanceof CodecError ? refusal.message : ''
     const preconditions = preconditionsOf(reached)
-    if (message.includes('is declared by some variants only'))
-        return { kind: 'someVariants', preconditions }
-    if (message.includes('is declared differently in different variants'))
-        return { kind: 'ambiguous', preconditions }
-    // a clause that separates every option leaves no codec at the path
-    if (message.startsWith('the clause on'))
-        return { kind: 'vacant', preconditions }
-    return { kind: 'refused', preconditions }
+    return {
+        kind: refusal instanceof CodecError ? refusal.kind : 'refused',
+        preconditions,
+    }
 }
 
 /** The order of `compare` on `String` in the model: by code point. */

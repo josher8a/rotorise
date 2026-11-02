@@ -90,7 +90,7 @@ import {
     sliceableOf,
     unionAt,
 } from '../lean'
-import { failed, orThrow } from '../result'
+import { Disagreement, failed, orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'
 import {
@@ -2241,10 +2241,7 @@ describe('fits is the order of the meet', () => {
             try {
                 checkEquivalent(one, other, { count: 20 })
             } catch (error) {
-                return error instanceof Error &&
-                    error.message.startsWith('these codecs')
-                    ? false
-                    : undefined
+                return error instanceof Disagreement ? false : undefined
             }
         }
         return true
@@ -2279,18 +2276,26 @@ describe('fits is the order of the meet', () => {
         )
         const disagree: string[] = []
         let decided = 0
+        let sampledNo = 0
         for (const { key, o, p } of rows) {
             let kept: boolean | undefined
+            let sampled = false
             try {
-                kept = equivalent(termOf(o), termOf(meetOrdered(o, p)))
+                const meet = termOf(meetOrdered(o, p))
+                kept = equivalent(termOf(o), meet)
+                sampled = holdsNoValue(termOf(o)) === holdsNoValue(meet)
             } catch {
                 continue
             }
             if (kept === undefined) continue
             decided++
+            if (sampled && !kept) sampledNo++
             if (fits(termOf(o), termOf(p)) !== kept) disagree.push(key)
         }
         expect(decided).toBeGreaterThan(rows.length / 2)
+        // the sample decides no as well as yes: a check that never sees a disagreement decides no
+        // only where one side holds no value
+        expect(sampledNo).toBeGreaterThan(0)
         expect(disagree).toEqual([
             '20261004.648 lr',
             '20261004.969 rl',

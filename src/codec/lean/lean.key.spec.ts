@@ -88,9 +88,9 @@ const hostOutcome = (
         return { kind: 'key', key }
     } catch (thrown) {
         if (thrown instanceof RotoriseError) {
-            return /holds the separator/.test(thrown.message)
-                ? { kind: 'separator' }
-                : { kind: 'refused' }
+            return {
+                kind: thrown.kind === 'separator' ? 'separator' : 'refused',
+            }
         }
         throw thrown
     }
