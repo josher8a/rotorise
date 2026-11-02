@@ -5868,10 +5868,9 @@ export const opened = throughRefs((t, opened) => {
                 },
             }
         }
-        // the opening stops at these three, which stay as the pattern wrote them
+        // the opening stops at these two, which stay as the pattern wrote them
         case 'set':
         case 'refine':
-        case 'legacy':
             return t
         default:
             return mapChildren(t, opened, 'wire')
@@ -7126,8 +7125,8 @@ type BelowDepth = Repeat<16>
  * `P` the term of the pattern, each under its own scope (`EA`, `EP`). `Seen` holds the pairs that the
  * walk entered at a name step on the path, and such a pair is below, as the order is the greatest
  * fixed point of its rules. `Open` says whether the pattern is open at its objects: the opening reads
- * through an object, a union, a list and a `held`, and stops at a set, a refinement and an older
- * reading.
+ * through an object, a union, a list, a `held` and an older reading, and stops at a set and a
+ * refinement.
  */
 type BelowT<
     A,
@@ -7242,7 +7241,14 @@ type BelowN<
               : A extends ['refine', infer I]
                 ? BelowT<I, P, EA, EP, Seen, Open>
                 : P extends ['legacy', infer I]
-                  ? BelowT<A, I, EA, EP, Seen, false>
+                  ? A extends ['legacy', infer AI]
+                      ? SomeOf<
+                            | ([BelowT<AI, I, EA, EP, Seen, Open>] extends ['f']
+                                  ? 'f'
+                                  : 'u')
+                            | BelowT<A, I, EA, EP, Seen, Open>
+                        >
+                      : BelowT<A, I, EA, EP, Seen, Open>
                   : [ClauseOf<P>] extends [never]
                     ? BelowShape<A, P, EA, EP, Seen, Open>
                     : BelowClause<A, P>
@@ -8519,9 +8525,14 @@ const fitsNode = (
         )
     }
     // a refinement holds a part of the pairs of its inner term, and an older reading holds each
-    // pair of its current form
+    // pair of its current form. Two older readings of one reader hold the same older pairs, so
+    // they compare at their current forms
     if (A.kind === 'refine') return fits(A.inner, P)
-    if (P.kind === 'legacy') return fits(A, P.inner)
+    if (P.kind === 'legacy')
+        return (
+            (A.kind === 'legacy' && A.r === P.r && fits(A.inner, P.inner)) ||
+            fits(A, P.inner)
+        )
     const pinned = clauseForm(P)
     if (pinned) {
         const mine = clauseForm(A)

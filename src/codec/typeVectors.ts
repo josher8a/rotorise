@@ -41,7 +41,15 @@
 import { createHash } from 'node:crypto'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec } from './codec'
-import { boolean, meet, number, object, string, union } from './codec'
+import {
+    boolean,
+    meet,
+    number,
+    object,
+    string,
+    union,
+    withLegacyRead,
+} from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
@@ -775,6 +783,22 @@ const patternsOf = (
     }
     const named = namedLiterals(options)
     const literal = [...named].filter(([, ls]) => ls.length > 0)
+    // an older reading around the object of one name: the opening reads through it, as it reads
+    // through the plain pattern
+    const [first] = literal
+    const firstLiteral = first?.[1][0]
+    if (first !== undefined && firstLiteral !== undefined) {
+        const read = withLegacyRead({
+            current: member(first[0], stringOf(firstLiteral)),
+            older: {
+                decode: (): never => {
+                    throw new Error('older')
+                },
+            },
+        })
+        const source = clause(read)
+        out.push({ argument: source, source, codec: read })
+    }
     for (const [name, ls] of literal) {
         for (const l of ls) out.push(objectPattern(name, stringOf(l)))
         const half = Math.ceil(ls.length / 2)
@@ -1135,7 +1159,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",
