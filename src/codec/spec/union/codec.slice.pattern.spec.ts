@@ -28,6 +28,7 @@ import {
     opaque,
     optional,
     refine,
+    spread,
     string,
     termOf,
     union,
@@ -464,6 +465,89 @@ describe('a pattern that the host cannot read is refused', () => {
         // @ts-expect-error a pattern key that holds a refinement is refused
         const byPredicate = () => extract(order, object({ kind: refined }))
         expect(byPredicate).toThrow(/holds a refinement/)
+    })
+
+    describe('a refinement at a position of a list', () => {
+        const short = refine(string, (v): v is string => v.length < 4)
+        const litters = union([
+            object({ tags: list(string, spread(string)) }),
+            object({ owner: string }),
+        ])
+        const fixed = union([
+            object({ tags: list(string, string) }),
+            object({ owner: string }),
+        ])
+
+        /**
+         * The run time reads the leading positions of a list, the ones before a spread. The type
+         * reads the same positions, so a list with a spread is refused as a list without one.
+         */
+        it('refuses a leading position of a list that has a spread', () => {
+            const byLength = () =>
+                // @ts-expect-error a leading position that holds a refinement is refused
+                extract(litters, object({ tags: list(short, spread(string)) }))
+            expect(byLength).toThrow(/holds a refinement/)
+        })
+
+        it('refuses a position of a list that has no spread', () => {
+            const byLength = () =>
+                // @ts-expect-error a position that holds a refinement is refused
+                extract(fixed, object({ tags: list(short, string) }))
+            expect(byLength).toThrow(/holds a refinement/)
+        })
+
+        it('refuses a pattern that holds the refinement in one option of a union', () => {
+            const byLength = () =>
+                extract(
+                    litters,
+                    // @ts-expect-error one option of the pattern holds a refinement
+                    union([
+                        object({ tags: list(string, spread(string)) }),
+                        object({ tags: list(short, spread(string)) }),
+                    ]),
+                )
+            expect(byLength).toThrow(/holds a refinement/)
+        })
+
+        /**
+         * Neither side walks the spread, the suffix or the element of an array. A refinement there
+         * is no refusal, because the pattern at that position is one that no option fits: the
+         * extraction keeps nothing and the exclusion keeps each option. The type and the run time
+         * give the same answer.
+         */
+        it('reads a refinement at a spread, a suffix or an array element as a pattern that no option fits', () => {
+            const spreadPattern = object({ tags: list(string, spread(short)) })
+            const suffixPattern = object({
+                tags: list(string, spread(string), short),
+            })
+            const arrayed = union([
+                object({ tags: array(string) }),
+                object({ owner: string }),
+            ])
+            const arrayPattern = object({ tags: array(short) })
+            for (const kept of [
+                extract(litters, spreadPattern),
+                extract(litters, suffixPattern),
+                extract(arrayed, arrayPattern),
+            ]) {
+                expect(kept.def.kind).toBe('never')
+                expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
+            }
+            for (const rest of [
+                exclude(litters, spreadPattern),
+                exclude(litters, suffixPattern),
+            ]) {
+                expect(optionsOf(rest)).toHaveLength(2)
+                expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<
+                    Decoded<typeof litters>
+                >()
+            }
+            const left = exclude(arrayed, arrayPattern)
+            expect(optionsOf(left)).toHaveLength(2)
+            expectTypeOf<Decoded<typeof left>>().toEqualTypeOf<
+                Decoded<typeof arrayed>
+            >()
+        })
     })
 
     it('refuses a split of an object that has an open key entry', () => {

@@ -168,6 +168,23 @@ type FixedElements<C> = C extends {
         ? never
         : Cs
     : never
+/**
+ * The positions of a list that come before a spread, or all of them where it has no spread, or
+ * `never` for a codec that is no list. The run time reads the same positions: `pre` of the term.
+ */
+type LeadingElements<C> = C extends {
+    readonly [elementsMarker]?: infer Cs extends readonly unknown[]
+}
+    ? Leading<Cs>
+    : never
+type Leading<Cs extends readonly unknown[]> = Cs extends readonly [
+    infer Head,
+    ...infer Tail,
+]
+    ? Head extends AnySpread
+        ? []
+        : [Head, ...Leading<Tail>]
+    : []
 type HasSpreadIn<Cs extends readonly unknown[]> = Cs[number] extends infer E
     ? E extends AnySpread
         ? true
@@ -8212,21 +8229,21 @@ type RefinedSlot<PC, Seen extends readonly unknown[] = []> = NodeOf<
           : RefinedBelow<PC, [TermOf<PC>, ...Seen]>
       : RefinedBelow<PC, Seen>
 type RefinedBelow<PC, Seen extends readonly unknown[]> = [
-    FixedElements<PC>,
+    LeadingElements<PC>,
 ] extends [never]
     ? [FieldSpecList<PC>] extends [never]
         ? false
         : [BadPatternKey<FieldSpecList<PC>[number], Seen>] extends [never]
           ? false
           : true
-    : true extends {
-            [I in keyof FixedElements<PC>]: RefinedSlot<
-                FixedElements<PC>[I],
-                Seen
-            >
-        }[number]
+    : true extends RefinedAmong<LeadingElements<PC>[number], Seen>
       ? true
       : false
+/** Whether the pattern codec at any of the positions holds a refinement. */
+type RefinedAmong<
+    Slots,
+    Seen extends readonly unknown[],
+> = Slots extends unknown ? RefinedSlot<Slots, Seen> : never
 
 /** Rejects a pattern that holds a part no meet reads, at the call rather than on the result. */
 export type ValidatePattern<P> = [FieldSpecList<P>] extends [never]
