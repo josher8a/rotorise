@@ -190,13 +190,13 @@ describe('a refinement and an adapter are one part', () => {
     })
 })
 
-describe('a split that passes the bound keeps the option', () => {
+describe('a split of 64 parts or more keeps the option', () => {
     /**
-     * The type reads at most 32 parts of one option. Past the bound the fit is unknown, so the slice
+     * The type reads at most 63 parts of one option. At 64 parts the fit is unknown, so the slice
      * keeps the option, which is wider than the run time and sound. The extraction keeps the option
      * where the run time keeps it. The exclusion keeps the option where the run time drops it.
      */
-    const first = [
+    const low = [
         'l00',
         'l01',
         'l02',
@@ -214,8 +214,6 @@ describe('a split that passes the bound keeps the option', () => {
         'l14',
         'l15',
         'l16',
-    ] as const
-    const rest = [
         'l17',
         'l18',
         'l19',
@@ -231,26 +229,83 @@ describe('a split that passes the bound keeps the option', () => {
         'l29',
         'l30',
         'l31',
-        'l32',
     ] as const
-    const big = union([object({ x: string(...first, ...rest) })])
-    const members = union([
-        object({ x: string(...first) }),
-        object({ x: string(...rest) }),
-    ])
+    const mid = [
+        'l32',
+        'l33',
+        'l34',
+        'l35',
+        'l36',
+        'l37',
+        'l38',
+        'l39',
+        'l40',
+        'l41',
+        'l42',
+        'l43',
+        'l44',
+        'l45',
+        'l46',
+        'l47',
+        'l48',
+        'l49',
+        'l50',
+        'l51',
+        'l52',
+        'l53',
+        'l54',
+        'l55',
+        'l56',
+        'l57',
+        'l58',
+        'l59',
+        'l60',
+        'l61',
+        'l62',
+    ] as const
+    const top = ['l63', 'l64'] as const
 
-    it('keeps the extraction, as the run time keeps it', () => {
-        const kept = extract(big, members)
-        expect(optionsOf(kept)).toHaveLength(1)
-        const row: Decoded<typeof kept> = { x: 'l32' }
-        expect(row.x).toBe('l32')
+    describe('a split of 63 parts is read in full', () => {
+        const whole = union([object({ x: string(...low, ...mid) })])
+        const members = union([
+            object({ x: string(...low) }),
+            object({ x: string(...mid) }),
+        ])
+
+        it('keeps the extraction, as the run time keeps it', () => {
+            const kept = extract(whole, members)
+            expect(optionsOf(kept)).toHaveLength(1)
+            const row: Decoded<typeof kept> = { x: 'l62' }
+            expect(row.x).toBe('l62')
+        })
+
+        it('empties the exclusion, as the run time empties it', () => {
+            const left = exclude(whole, members)
+            expect(optionsOf(left)).toHaveLength(0)
+            expectTypeOf<Decoded<typeof left>>().toEqualTypeOf<never>()
+        })
     })
 
-    it('keeps the exclusion where the run time drops the option', () => {
-        const rest = exclude(big, members)
-        expect(optionsOf(rest)).toHaveLength(0)
-        const row: Decoded<typeof rest> = { x: 'l00' }
-        expect(row.x).toBe('l00')
+    describe('a split of 65 parts passes the bound', () => {
+        const whole = union([object({ x: string(...low, ...mid, ...top) })])
+        const members = union([
+            object({ x: string(...low) }),
+            object({ x: string(...mid, ...top) }),
+        ])
+
+        it('keeps the extraction, as the run time keeps it', () => {
+            const kept = extract(whole, members)
+            expect(optionsOf(kept)).toHaveLength(1)
+            const row: Decoded<typeof kept> = { x: 'l64' }
+            expect(row.x).toBe('l64')
+        })
+
+        it('keeps the exclusion where the run time drops the option', () => {
+            const left = exclude(whole, members)
+            expect(optionsOf(left)).toHaveLength(0)
+            const row: Decoded<typeof left> = { x: 'l00' }
+            expect(row.x).toBe('l00')
+        })
     })
 })
 

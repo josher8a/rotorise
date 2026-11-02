@@ -152,16 +152,15 @@ of these through a `ref` are refused where `never` is, in the type and at run ti
 
 ---
 
-## Known: the type of a slice reads 32 parts of an option where the run time reads 1024
+## Known: the type of a slice reads 63 parts of an option where the run time reads 1024
 
 **Observation.** The run time splits an option into at most 1024 parts of its normal form before it
-reads a union pattern. The type splits an option into at most 32 parts. Past 32 parts the type
-cannot decide the fit, and the slice keeps the option. With a bound of 64, the type decides the pin
-below at 33 and 48 literals, and the checker reports no depth error. Measured 2026-11-02 with
-`npx tsc --noEmit` and the pin below:
+reads a union pattern. The type splits an option into at most 63 parts. At 64 parts the type
+cannot decide the fit, and the slice keeps the option. Measured 2026-11-02 with `npx tsc --noEmit`
+and the pin below:
 
-    const big = union([object({ x: string('l00', …, 'l32') })])
-    exclude(big, union([object({ x: string('l00', …, 'l16') }), object({ x: string('l17', …, 'l32') })]))
+    const big = union([object({ x: string('l00', …, 'l64') })])
+    exclude(big, union([object({ x: string('l00', …, 'l31') }), object({ x: string('l32', …, 'l64') })]))
       runtime: never
       type:    the option is kept
 

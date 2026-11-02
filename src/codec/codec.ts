@@ -6986,10 +6986,10 @@ type ReplaceField<
 
 /**
  * The most parts that the fit reads from one term, as a tuple of that length ({@link JoinParts}).
- * The run time bounds the parts at 1024 ({@link PARTS_LIMIT}), and the type bounds them at 32. A
+ * The run time bounds the parts at 1024 ({@link PARTS_LIMIT}), and the type bounds them at 64. A
  * term whose parts reach the bound has the fit `'u'`, so the slice keeps the option.
  */
-type PartsCap = Repeat<32>
+type PartsCap = Repeat<64>
 type Repeat<
     N extends number,
     T extends readonly unknown[] = [],
