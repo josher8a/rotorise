@@ -163,7 +163,7 @@ type ApartAt<S, T, Env> = StoredMember<T, Env> extends 'none'
 type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
 
 // ── the body (`slotAtG`) ──
-type Block<W> = W extends ['some', infer T] ? T : ['never']
+export type Block<W> = W extends ['some', infer T] ? T : ['never']
 type SlotAt<F, W, N> = N extends keyof F ? F[N] : ['optional', Block<W>]
 type SlotTerm<S> = S extends [
     'req' | 'optional' | 'undefinable' | 'fill',
@@ -784,10 +784,12 @@ type PrimsApartT<G, G2> = G extends ['base' | 'literal', infer K, ...unknown[]]
         : false
     : false
 /**
- * A term of a pattern, open at every object, as `opened` reads a pattern at run time: the pattern
- * has no open block, so every undeclared name of the pattern holds `opaque`.
+ * A term of a pattern, open at every object, as `opened` reads a pattern at run time: an object
+ * without a declared rest holds `opaque` at every undeclared name, and the opening reads through
+ * a union, a list, a `held`, an older reading and each entry of a scope. It stops at a set and at a
+ * refinement. A `ref` stays a name, and the entry that the scope binds to the name is open.
  */
-type OpenT<T> = T extends ['object', ['mk', infer F, unknown]]
+export type OpenT<T> = T extends ['object', ['mk', infer F, infer W]]
     ? [
           'object',
           [
@@ -797,7 +799,9 @@ type OpenT<T> = T extends ['object', ['mk', infer F, unknown]]
                       ? [M, OpenT<S>]
                       : F[K]
               },
-              ['some', ['opaq']],
+              W extends ['some', infer R]
+                  ? ['some', OpenT<R>]
+                  : ['some', ['opaq']],
           ],
       ]
     : T extends ['union', infer Os]
@@ -811,7 +815,11 @@ type OpenT<T> = T extends ['object', ['mk', infer F, unknown]]
           ]
         : T extends ['held', infer S, infer I, ...infer R]
           ? ['held', S, OpenT<I>, ...R]
-          : T
+          : T extends ['legacy', infer I]
+            ? ['legacy', OpenT<I>]
+            : T extends ['scope', infer D, infer K]
+              ? ['scope', { [N in keyof D]: OpenT<D[N]> }, K]
+              : T
 
 /** The clause as a term: each key required at the open term of its codec, and an opaque block. */
 type ClauseT<CT> = [

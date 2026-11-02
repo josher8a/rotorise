@@ -35,6 +35,7 @@ import {
 } from './denote'
 import type {
     ApartG,
+    Block,
     CycleEntryOf,
     DecodeFrame,
     DecodeTerm,
@@ -47,6 +48,7 @@ import type {
     NodeOf,
     Norm,
     OffersAt,
+    OpenT,
     ScopeWallCycle,
     StepFrames,
 } from './pathModel'
@@ -7050,11 +7052,10 @@ type MapObjects<Specs extends readonly unknown[]> = {
 type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = BelowT<
     TermOf<Marks<A>>,
-    TermOf<Marks<P>>,
+    OpenT<TermOf<Marks<P>>>,
     [],
     [],
-    [],
-    true
+    []
 >
 /** The most pairs that the walk of {@link BelowT} enters on one path, as a tuple of that length. */
 type BelowDepth = Repeat<16>
@@ -7062,23 +7063,14 @@ type BelowDepth = Repeat<16>
  * **The order `below` of the run time on terms**, three-valued. `A` is the term of the option and
  * `P` the term of the pattern, each under its own scope (`EA`, `EP`). `Seen` holds the pairs that the
  * walk entered at a name step on the path, and such a pair is below, as the order is the greatest
- * fixed point of its rules. `Open` says whether the pattern is open at its objects: the opening reads
- * through an object, a union, a list, a `held` and an older reading, and stops at a set and a
- * refinement.
+ * fixed point of its rules. The caller opens the pattern with {@link OpenT}, as the run time opens it.
  */
-type BelowT<
-    A,
-    P,
-    EA,
-    EP,
-    Seen extends readonly unknown[],
-    Open extends boolean,
-> = [Norm<A, EA>, Norm<P, EP>] extends [
-    [infer NA, infer EA2],
-    [infer NP, infer EP2],
-]
+type BelowT<A, P, EA, EP, Seen extends readonly unknown[]> = [
+    Norm<A, EA>,
+    Norm<P, EP>,
+] extends [[infer NA, infer EA2], [infer NP, infer EP2]]
     ? [IsRef<A>, IsRef<P>] extends [false, false]
-        ? BelowStep<NA, NP, EA2, EP2, Seen, Open>
+        ? BelowStep<NA, NP, EA2, EP2, Seen>
         : SeenPair<Seen, RefKey<A, NA, EA2>, RefKey<P, NP, EP2>> extends true
           ? 't'
           : Seen extends BelowDepth
@@ -7088,8 +7080,7 @@ type BelowT<
                   NP,
                   EA2,
                   EP2,
-                  [[RefKey<A, NA, EA2>, RefKey<P, NP, EP2>], ...Seen],
-                  Open
+                  [[RefKey<A, NA, EA2>, RefKey<P, NP, EP2>], ...Seen]
               >
     : 'u'
 /** Whether a term is a name that `Norm` resolves: a `ref`, or an entry of a scope. */
@@ -7104,18 +7095,17 @@ type IsRef<T> = T extends ['ref', unknown] | ['scope', unknown, unknown]
  */
 type RefKey<T, N, E> = IsRef<T> extends true ? [T, E] : N
 /** The rules at two nodes, and `'u'` for the pair of one term where the rules give `'f'`. */
-type BelowStep<
+type BelowStep<NA, NP, EA, EP, Seen extends readonly unknown[]> = BelowN<
     NA,
     NP,
     EA,
     EP,
-    Seen extends readonly unknown[],
-    Open extends boolean,
-> = BelowN<NA, NP, EA, EP, Seen, Open> extends 'f'
+    Seen
+> extends 'f'
     ? SameTerm<NA, NP> extends true
         ? 'u'
         : 'f'
-    : BelowN<NA, NP, EA, EP, Seen, Open>
+    : BelowN<NA, NP, EA, EP, Seen>
 /** Whether the pair is on the path. */
 type SeenPair<Seen extends readonly unknown[], A, P> = Seen extends readonly [
     [infer SA, infer SP],
@@ -7140,7 +7130,6 @@ type BelowN<
     EA,
     EP,
     Seen extends readonly unknown[],
-    Open extends boolean,
 > = HoldsNoValue<A> extends true
     ? 't'
     : P extends ['opaq']
@@ -7152,7 +7141,7 @@ type BelowN<
           : A extends ['union', infer Os extends unknown[]]
             ? AllOf<
                   {
-                      [I in keyof Os]: BelowT<Os[I], P, EA, EP, Seen, Open>
+                      [I in keyof Os]: BelowT<Os[I], P, EA, EP, Seen>
                   }[number]
               >
             : P extends ['union', infer Ps extends unknown[]]
@@ -7167,8 +7156,7 @@ type BelowN<
                                             Ps[J],
                                             EA,
                                             EP,
-                                            Seen,
-                                            Open
+                                            Seen
                                         >
                                     }[number]
                                 >
@@ -7177,18 +7165,18 @@ type BelowN<
                       : 'u'
                   : 'u'
               : A extends ['refine', infer I]
-                ? BelowT<I, P, EA, EP, Seen, Open>
+                ? BelowT<I, P, EA, EP, Seen>
                 : P extends ['legacy', infer I]
                   ? A extends ['legacy', infer AI]
                       ? SomeOf<
-                            | ([BelowT<AI, I, EA, EP, Seen, Open>] extends ['f']
+                            | ([BelowT<AI, I, EA, EP, Seen>] extends ['f']
                                   ? 'f'
                                   : 'u')
-                            | BelowT<A, I, EA, EP, Seen, Open>
+                            | BelowT<A, I, EA, EP, Seen>
                         >
-                      : BelowT<A, I, EA, EP, Seen, Open>
+                      : BelowT<A, I, EA, EP, Seen>
                   : [ClauseOf<P>] extends [never]
-                    ? BelowShape<A, P, EA, EP, Seen, Open>
+                    ? BelowShape<A, P, EA, EP, Seen>
                     : BelowClause<A, P>
 type SomeOf<U extends Fit> = 't' extends U ? 't' : 'u' extends U ? 'u' : 'f'
 type AllOf<U extends Fit> = 'f' extends U ? 'f' : 'u' extends U ? 'u' : 't'
@@ -7260,38 +7248,22 @@ type SameTags<A, B> = [A] extends [B]
         : 'f'
     : 'f'
 /** The rules at a pattern that is no literal. */
-type BelowShape<
-    A,
-    P,
-    EA,
-    EP,
-    Seen extends readonly unknown[],
-    Open extends boolean,
-> = P extends ['object', ['mk', infer PF, infer PW]]
+type BelowShape<A, P, EA, EP, Seen extends readonly unknown[]> = P extends [
+    'object',
+    ['mk', infer PF, infer PW],
+]
     ? A extends ['object', ['mk', infer AF, infer AW]]
         ? AllOf<
               | {
                     [K in keyof AF | keyof PF]: BelowSlot<
-                        K extends keyof AF
-                            ? AF[K]
-                            : ['optional', BlockOf<AW, false>],
-                        K extends keyof PF
-                            ? PF[K]
-                            : ['optional', BlockOf<PW, Open>],
+                        K extends keyof AF ? AF[K] : ['optional', Block<AW>],
+                        K extends keyof PF ? PF[K] : ['optional', Block<PW>],
                         EA,
                         EP,
-                        Seen,
-                        Open
+                        Seen
                     >
                 }[keyof AF | keyof PF]
-              | BelowT<
-                    BlockOf<AW, false>,
-                    BlockOf<PW, Open>,
-                    EA,
-                    EP,
-                    Seen,
-                    Open
-                >
+              | BelowT<Block<AW>, Block<PW>, EA, EP, Seen>
           >
         : 'f'
     : P extends [
@@ -7306,7 +7278,7 @@ type BelowShape<
             infer AS,
             infer AU extends unknown[],
         ]
-          ? BelowList<AP, AS, AU, PP, PS, PU, EA, EP, Seen, Open>
+          ? BelowList<AP, AS, AU, PP, PS, PU, EA, EP, Seen>
           : 'f'
       : P extends [
               'held',
@@ -7328,13 +7300,13 @@ type BelowShape<
                 ? [PG] extends [AG]
                     ? [AG] extends [['caller']]
                         ? 'u'
-                        : BelowT<AI, PI, EA, EP, Seen, Open>
+                        : BelowT<AI, PI, EA, EP, Seen>
                     : 'f'
                 : 'f'
             : 'f'
         : P extends ['set', infer PE]
           ? A extends ['set', infer AE]
-              ? BelowT<AE, PE, EA, EP, Seen, false>
+              ? BelowT<AE, PE, EA, EP, Seen>
               : 'f'
           : A extends ['prim', ['literal', infer K, unknown]]
             ? P extends ['prim', ['base', K]]
@@ -7345,25 +7317,12 @@ type BelowShape<
                   ? 't'
                   : 'f'
               : 'f'
-/** The open block of an object term as a term: the block, or the bottom, or `opaque` where the pattern is open. */
-type BlockOf<W, Open extends boolean> = W extends ['some', infer T]
-    ? T
-    : Open extends true
-      ? ['opaq']
-      : ['never']
 /**
  * The slot of the option against the slot of the pattern: the absent row, then the term. At the
  * `value` order a stand-in counts no absent row, so a `withLegacyRead` slot reads as a required one.
  * `undefinable` pairs the absent row with `{ k: undefined }`, which `optional` reads as `{}`.
  */
-type BelowSlot<
-    M,
-    W,
-    EA,
-    EP,
-    Seen extends readonly unknown[],
-    Open extends boolean,
-> = [M, W] extends [
+type BelowSlot<M, W, EA, EP, Seen extends readonly unknown[]> = [M, W] extends [
     [infer MM extends string, infer MT],
     [infer WM extends string, infer WT],
 ]
@@ -7372,7 +7331,7 @@ type BelowSlot<
                 MM extends 'fill' ? 'req' : MM,
                 WM extends 'fill' ? 'req' : WM
             >
-          | BelowT<MT, WT, EA, EP, Seen, Open>
+          | BelowT<MT, WT, EA, EP, Seen>
       >
     : 'u'
 /** The presence mark of a field, where a stand-in counts as required at the `value` order. */
@@ -7405,14 +7364,11 @@ type BelowList<
     EA,
     EP,
     Seen extends readonly unknown[],
-    Open extends boolean,
 > = [PS, PP, PU] extends [['some', infer E], [], []]
     ? AllOf<
-          | { [I in keyof AP]: BelowT<AP[I], E, EA, EP, Seen, Open> }[number]
-          | (AS extends ['some', infer S]
-                ? BelowT<S, E, EA, EP, Seen, Open>
-                : never)
-          | { [I in keyof AU]: BelowT<AU[I], E, EA, EP, Seen, Open> }[number]
+          | { [I in keyof AP]: BelowT<AP[I], E, EA, EP, Seen> }[number]
+          | (AS extends ['some', infer S] ? BelowT<S, E, EA, EP, Seen> : never)
+          | { [I in keyof AU]: BelowT<AU[I], E, EA, EP, Seen> }[number]
       >
     : AP['length'] extends PP['length']
       ? AU['length'] extends PU['length']
@@ -7422,17 +7378,17 @@ type BelowList<
               ? AllOf<
                     | {
                           [I in keyof AP]: I extends keyof PP
-                              ? BelowT<AP[I], PP[I], EA, EP, Seen, Open>
+                              ? BelowT<AP[I], PP[I], EA, EP, Seen>
                               : 'f'
                       }[number]
                     | {
                           [I in keyof AU]: I extends keyof PU
-                              ? BelowT<AU[I], PU[I], EA, EP, Seen, Open>
+                              ? BelowT<AU[I], PU[I], EA, EP, Seen>
                               : 'f'
                       }[number]
                     | (AS extends ['some', infer S]
                           ? PS extends ['some', infer E2]
-                              ? BelowT<S, E2, EA, EP, Seen, Open>
+                              ? BelowT<S, E2, EA, EP, Seen>
                               : 'f'
                           : never)
                 >
@@ -7623,9 +7579,9 @@ type SpecTerms<Ps extends readonly unknown[]> = {
     [I in keyof Ps]: SpecTerm<Ps[I]>
 }
 /** Whether a member spec fits the member specs of a pattern: the fit of the closed object at the opened pattern. */
-type EveryFits<A, P> = BelowT<SpecTerm<A>, SpecsTerm<P>, [], [], [], true>
+type EveryFits<A, P> = BelowT<SpecTerm<A>, OpenT<SpecsTerm<P>>, [], [], []>
 /** Whether a member spec fits a pattern codec: the pattern must hold objects. */
-type FitsSpec<A, P> = BelowT<SpecTerm<A>, TermOf<Marks<P>>, [], [], [], true>
+type FitsSpec<A, P> = BelowT<SpecTerm<A>, OpenT<TermOf<Marks<P>>>, [], [], []>
 /** Whether two codecs hold lists with fixed positions. */
 type HasFixed<A, P> = [FixedElements<A>] extends [never]
     ? false

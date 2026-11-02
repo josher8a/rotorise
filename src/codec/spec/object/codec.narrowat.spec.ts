@@ -23,6 +23,7 @@ import {
     object,
     path,
     refine,
+    scope,
     string,
     union,
     valueKinds,
@@ -555,5 +556,28 @@ describe('a path keeps every item that the codec reads readable', () => {
         expect(atOf(kept, ['data', 'k']).unsafeEncode('x')).toEqual({ S: 'x' })
         // @ts-expect-error the option that declares `m` is separated, so the type refuses the name
         expect(() => atOf(kept, ['data', 'm'])).toThrow(CodecError)
+    })
+
+    it('keeps the options that a clause by an entry of a scope does not separate', () => {
+        const { Vaccine } = scope({ Vaccine: object({ name: string }) })
+        const Pets = itemOf(
+            object({
+                u: union([
+                    object({
+                        vaccine: object({ name: string, lot: number }),
+                        kind: string('DOG'),
+                    }),
+                    object({
+                        vaccine: object({ shots: number }),
+                        kind: string('CAT'),
+                    }),
+                ]),
+            }),
+        )
+        const kept = narrow(atOf(Pets, ['u']), object({ vaccine: Vaccine }))
+        // the clause names an entry of a scope, which the type opens as the run time opens it
+        expect(atOf(kept, ['vaccine', 'lot']).unsafeEncode(7)).toEqual({
+            N: '7',
+        })
     })
 })
