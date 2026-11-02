@@ -3282,13 +3282,10 @@ type ItemFrontier<T, Spec, Rest> = {
     readonly t: T
 }
 
-/** The codec that a field of a spec marks, or the codec itself. */
-type MarkedCodec<C> = C extends { readonly codec: infer Marked } ? Marked : C
-
 /** The codec that a member holds at a key: the declared field, then the open entry. */
 type CodecAt<M, K> = M extends Spoken
     ? K extends keyof M['spec']
-        ? MarkedCodec<M['spec'][K]>
+        ? Marks<M['spec'][K]>
         : M['rest'] extends AnyCodec
           ? M['rest']
           : never
@@ -4972,11 +4969,11 @@ type MeetSlot<A, B> = [A] extends [{ readonly [optionalMarker]: true }]
     ? [B] extends [{ readonly [optionalMarker]: true }]
         ? SameAbsence<A, B> extends true
             ? MeetCodecs<A, B>
-            : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>> extends infer M
+            : MeetCodecs<Marks<A>, Marks<B>> extends infer M
               ? UndefinableCodec<Decoded<M>, AttributeOf<M> & AttributeValue, M>
               : never
-        : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>>
-    : MeetCodecs<MarkedCodec<A>, MarkedCodec<B>>
+        : MeetCodecs<Marks<A>, Marks<B>>
+    : MeetCodecs<Marks<A>, Marks<B>>
 
 /** Whether two slots that admit absence are both `undefinable`, or both `optional`. */
 type SameAbsence<A, B> = [A] extends [{ readonly [undefinableMarker]: true }]
@@ -5193,17 +5190,17 @@ type HeldRefusal<Fs extends readonly unknown[]> = Fs extends readonly [
         : HeldRefusal<[MeetOfTwo<A, B>, ...R]>
     : false
 type HeldPairRefused<A, B> = [
-    NodeOf<TermOf<MarkedCodec<A>>>,
-    NodeOf<TermOf<MarkedCodec<B>>>,
+    NodeOf<TermOf<Marks<A>>>,
+    NodeOf<TermOf<Marks<B>>>,
 ] extends [infer NA, infer NB]
     ? true extends IsPart<NA> | IsPart<NB>
         ? true extends IsRefine<NA> | IsRefine<NB> | OneAdapter<NA, NB>
             ? false
             : [FitsCodec<A, B>, FitsCodec<B, A>] extends ['f', 'f']
               ? ApartG<
-                    TermOf<MarkedCodec<A>>,
+                    TermOf<Marks<A>>,
                     [],
-                    TermOf<MarkedCodec<B>>,
+                    TermOf<Marks<B>>,
                     [],
                     []
                 > extends true
@@ -7121,7 +7118,7 @@ type MapObjects<Specs extends readonly unknown[]> = {
 type Fit = 't' | 'f' | 'u'
 type FitsCodec<A, P> = IsOverflow<A> extends true
     ? 'u'
-    : BelowT<TermOf<MarkedCodec<A>>, TermOf<MarkedCodec<P>>, [], [], [], true>
+    : BelowT<TermOf<Marks<A>>, TermOf<Marks<P>>, [], [], [], true>
 /** The most pairs that the walk of {@link BelowT} enters on one path, as a tuple of that length. */
 type BelowDepth = Repeat<16>
 /**
@@ -7691,14 +7688,7 @@ type SpecTerms<Ps extends readonly unknown[]> = {
 /** Whether a member spec fits the member specs of a pattern: the fit of the closed object at the opened pattern. */
 type EveryFits<A, P> = BelowT<SpecTerm<A>, SpecsTerm<P>, [], [], [], true>
 /** Whether a member spec fits a pattern codec: the pattern must hold objects. */
-type FitsSpec<A, P> = BelowT<
-    SpecTerm<A>,
-    TermOf<MarkedCodec<P>>,
-    [],
-    [],
-    [],
-    true
->
+type FitsSpec<A, P> = BelowT<SpecTerm<A>, TermOf<Marks<P>>, [], [], [], true>
 /** Whether two codecs hold lists with fixed positions. */
 type HasFixed<A, P> = [FixedElements<A>] extends [never]
     ? false
