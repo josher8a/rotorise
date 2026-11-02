@@ -11,7 +11,14 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
-import { boolean, decimal, string } from '../../codec'
+import {
+    boolean,
+    decimal,
+    discriminatedUnion,
+    item,
+    object,
+    string,
+} from '../../codec'
 
 /** What a consumer writes: the narrowing of a result. */
 const isError = (value: unknown): value is Error => value instanceof Error
@@ -90,6 +97,76 @@ describe('the codec decides the member of a key of one top-level attribute', () 
         })
         expect(Litters.keyUpdates({ weight: '2.25' }).set).toEqual({
             GSI1SK: { N: '2.25' },
+        })
+    })
+
+    describe('a tagged item codec decides the member as an item codec does', () => {
+        type Tagged =
+            | { kind: 'DOG'; litterId: string; weight: string }
+            | { kind: 'CAT'; litterId: string; weight: string }
+        const Both = tableEntry<Tagged>()(
+            { PK: ['litterId'], GSI1SK: 'weight' },
+            {
+                codec: item(
+                    discriminatedUnion('kind', [
+                        object({
+                            kind: string('DOG'),
+                            litterId: string,
+                            weight: decimal,
+                        }),
+                        object({
+                            kind: string('CAT'),
+                            litterId: string,
+                            weight: decimal,
+                        }),
+                    ]),
+                ),
+            },
+        )
+
+        it('writes N in keys, and in keyUpdates, as toItem does', () => {
+            const written = Both.toItem({
+                kind: 'DOG',
+                litterId: 'l1',
+                weight: '1.5',
+            })
+            if (isError(written)) return expect.unreachable()
+            expect(written.GSI1SK).toEqual({ N: '1.5' })
+            expect(
+                Both.keys(['GSI1SK'], { kind: 'DOG', weight: '1.5' }),
+            ).toEqual({ GSI1SK: { N: '1.5' } })
+            expect(Both.keyUpdates({ weight: '2.25' }).set).toEqual({
+                GSI1SK: { N: '2.25' },
+            })
+        })
+
+        it('refuses a key that the variants write as two members, where the item holds no discriminator', () => {
+            const Split = tableEntry<Tagged>()(
+                // @ts-expect-error the type refuses a key that two variants write as S and N
+                { PK: ['litterId'], GSI1SK: 'weight' },
+                {
+                    codec: item(
+                        discriminatedUnion('kind', [
+                            object({
+                                kind: string('DOG'),
+                                litterId: string,
+                                weight: decimal,
+                            }),
+                            object({
+                                kind: string('CAT'),
+                                litterId: string,
+                                weight: string,
+                            }),
+                        ]),
+                    ),
+                },
+            )
+            expect(() => Split.keyUpdates({ weight: '2.25' })).toThrow(
+                /written as different attributes by different variants/,
+            )
+            expect(
+                Split.keys(['GSI1SK'], { kind: 'CAT', weight: '2.25' }),
+            ).toEqual({ GSI1SK: { S: '2.25' } })
         })
     })
 

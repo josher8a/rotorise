@@ -2490,6 +2490,11 @@ const keyOfAttribute = (
     throw notAKey(name)
 }
 
+/** Two attributes that write the same member and the same text. */
+const sameAttribute = (a: AttributeValue, b: AttributeValue): boolean =>
+    memberOf(a) === memberOf(b) &&
+    String(Object.values(a)[0]) === String(Object.values(b)[0])
+
 /**
  * The top-level attribute that a key of one attribute reads at an item: the bare name of the spec,
  * or of the arm that a match selects. A list of components, a `null` arm and a path below the top
@@ -2550,16 +2555,29 @@ const isItemCodec = (value: unknown): value is ItemCodecRuntime =>
 const isCodecLike = (value: unknown): value is AnyCodec =>
     callable<AnyCodec>(value, ['unsafeEncode', 'unsafeDecode'])
 
-/** An erased tagged codec: the spec of each variant, keyed by the tag of the variant. */
+/**
+ * An erased tagged codec: the spec of each variant, keyed by the tag of the variant.
+ *
+ * `TaggedCodec` is the erased form that a signature admits, and it holds no `encodePartial`.
+ * Every tagged codec that the library builds has one, and the discriminator of a patch chooses the
+ * variant, so the guard asks for it.
+ */
 type TaggedRuntime = TaggedCodec<
     Record<string, unknown>,
     Record<string, Record<string, ObjectSlot>>
->
+> & {
+    readonly encodePartial: (
+        patch: Record<string, unknown>,
+    ) => AttributeMap | CodecError
+}
 
 /** A codec that decides its variant from the item, rather than having one set of attributes. */
 const isTagged = (value: unknown): value is TaggedRuntime =>
-    callable<TaggedRuntime>(value, ['unsafeEncode', 'unsafeDecode']) &&
-    typeof (value as TaggedRuntime).discriminator === 'string'
+    callable<TaggedRuntime>(value, [
+        'unsafeEncode',
+        'unsafeDecode',
+        'encodePartial',
+    ]) && typeof (value as TaggedRuntime).discriminator === 'string'
 
 /**
  * The value every variant writes at this attribute, when they all write the same one.
@@ -3016,12 +3034,58 @@ export const tableEntry =
                 String(written) === String(constant))
 
         /**
+         * The attribute that the codec writes at one field of an item, as the row holds it.
+         *
+         * An item codec writes the field alone. A tagged codec chooses its variant by the
+         * discriminator, so the patch carries the discriminator too. An item without the
+         * discriminator asks every variant. The variants that write the field agree on one
+         * attribute, or the key has no one member and the refusal names the field.
+         */
+        const writtenAt = (
+            codec: ItemCodecRuntime | TaggedRuntime,
+            field: string,
+            item: Record<string, unknown>,
+        ): AttributeValue | CodecError | undefined => {
+            const encoded = (
+                patch: Record<string, unknown>,
+            ): AttributeValue | CodecError | undefined => {
+                const map = codec.encodePartial(patch as never)
+                return map instanceof CodecError
+                    ? map
+                    : (map as AttributeMap)[field]
+            }
+            if (!isTagged(codec)) return encoded({ [field]: item[field] })
+            const tag = codec.discriminator
+            if (item[tag] !== undefined)
+                return encoded({ [tag]: item[tag], [field]: item[field] })
+            const found: AttributeValue[] = []
+            for (const variant of Object.keys(codec.spec)) {
+                const attribute = encoded({
+                    [tag]: variant,
+                    [field]: item[field],
+                })
+                if (
+                    attribute !== undefined &&
+                    !(attribute instanceof CodecError)
+                )
+                    found.push(attribute)
+            }
+            const [first, ...others] = found
+            if (first === undefined) return undefined
+            if (others.some((other) => !sameAttribute(first, other)))
+                throw new RotoriseError(
+                    `'${field}' is written as different attributes by different variants, and the item holds no '${tag}'. Give '${tag}' so that the key has one member.`,
+                )
+            return first
+        }
+
+        /**
          * A built key as the attribute that carries it.
          *
          * A key of one top-level attribute of an entry with a codec takes the attribute that the
          * codec writes for that field, as the row holds it: a decimal that the codec writes as `N`
-         * is an `N` key. Any other key takes the member that `native` writes. A codec that is not an
-         * item codec has no `encodePartial`, so its keys take the second rule.
+         * is an `N` key. Any other key takes the member that `native` writes. A codec that has no
+         * `encodePartial` is no item codec, and its keys take the second rule.
          */
         const carried = (
             name: string,
@@ -3034,21 +3098,11 @@ export const tableEntry =
                     ? undefined
                     : attributeOf(expanded[name], item)
             if (field === undefined) return asKey(name, value)
-            let encoded: AttributeValue | CodecError | undefined =
-                written?.[field]
-            if (
-                encoded === undefined &&
-                attributes !== undefined &&
-                isItemCodec(attributes)
-            ) {
-                const map = attributes.encodePartial({
-                    [field]: item[field],
-                } as never)
-                encoded =
-                    map instanceof CodecError
-                        ? map
-                        : (map as AttributeMap)[field]
-            }
+            const encoded =
+                written?.[field] ??
+                (attributes === undefined
+                    ? undefined
+                    : writtenAt(attributes, field, item))
             return encoded === undefined
                 ? asKey(name, value)
                 : keyOfAttribute(name, encoded)
