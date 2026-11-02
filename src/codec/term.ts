@@ -343,16 +343,27 @@ export const alwaysWritten = (field: Field): boolean =>
 
 /* ── the member index ─────────────────────────────────────────────────────────────────── */
 
+/** The ground kinds: the literal bases, and `null`, which has one value and no literal. */
+export type GroundKind = LiteralBase | 'null'
+
 /**
- * Which member each ground base stores, and it is injective again. `decimal` was the second base
- * at `N`, and it is an adapter over `number` now rather than a base, so no two bases share a
- * member and nothing downstream has to tell two of them apart by anything but the member.
+ * **The facts of a ground kind, stated once.** `member` is the member that the kind stores, and it
+ * is injective: `decimal` was the second base at `N`, and it is an adapter over `number` now rather
+ * than a base, so no two kinds share a member. `ctor` is the library constructor that prints the
+ * kind, which is `dynamoNumber` for `number` because `number` builds a float adapter over it. The
+ * keys of the record are the kinds, so a new kind is an error here before it is anywhere else.
  */
-const baseMember: { readonly [B in LiteralBase]: AttributeName } = {
-    string: 'S',
-    number: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
+export const ground = {
+    string: { member: 'S', ctor: 'string' },
+    number: { member: 'N', ctor: 'dynamoNumber' },
+    boolean: { member: 'BOOL', ctor: 'boolean' },
+    binary: { member: 'B', ctor: 'binary' },
+    null: { member: 'NULL', ctor: 'nullValue' },
+} as const satisfies {
+    readonly [K in GroundKind]: {
+        readonly member: AttributeName
+        readonly ctor: string
+    }
 }
 
 /**
@@ -400,17 +411,13 @@ export const unanimous = (
 export const member = (t: Term): AttributeName | undefined => {
     switch (t.kind) {
         case 'string':
-            return 'S'
         case 'number':
-            return 'N'
         case 'boolean':
-            return 'BOOL'
         case 'binary':
-            return 'B'
         case 'null':
-            return 'NULL'
+            return ground[t.kind].member
         case 'literal':
-            return baseMember[t.base]
+            return ground[t.base].member
         case 'set':
             return setMemberOf(member(t.elem))
         case 'list':
@@ -480,14 +487,6 @@ export const elementMember = (
 }
 
 /* ── occupancy ────────────────────────────────────────────────────────────────────────── */
-
-/** A ground base's value slot. `decimal` is held as text, which is why it lands on `string`. */
-const baseSlot: { readonly [B in LiteralBase]: SetSlot } = {
-    string: 'string',
-    number: 'number',
-    boolean: 'boolean',
-    binary: 'binary',
-}
 
 /**
  * The wire family a set writes for each scalar slot its element writes: `Slot.setElem`, read from
@@ -560,17 +559,14 @@ const joined = <A>(
 export const occV = (t: Term): readonly SetSlot[] => {
     switch (t.kind) {
         case 'string':
-            return ['string']
         case 'number':
-            return ['number']
         case 'boolean':
-            return ['boolean']
         case 'binary':
-            return ['binary']
         case 'null':
-            return ['null']
+            return [t.kind]
+        // `decimal` is held as text, which is why it lands on `string`
         case 'literal':
-            return [baseSlot[t.base]]
+            return [t.base]
         // a set writes the wire family of each scalar slot its element writes. **An element slot
         // with no family answers every family, not none.** The model's caller carrier has no
         // set of booleans, so the model drops the slot exactly. The host caller carrier holds
@@ -695,17 +691,13 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
 export const occA = (t: Term): readonly AttributeName[] | undefined => {
     switch (t.kind) {
         case 'string':
-            return ['S']
         case 'number':
-            return ['N']
         case 'boolean':
-            return ['BOOL']
         case 'binary':
-            return ['B']
         case 'null':
-            return ['NULL']
+            return [ground[t.kind].member]
         case 'literal':
-            return [baseMember[t.base]]
+            return [ground[t.base].member]
         case 'set': {
             const read = occA(t.elem)
             return read?.flatMap((one) => setMemberOf(one) ?? [])

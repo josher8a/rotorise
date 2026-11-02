@@ -15,20 +15,13 @@ import type {
     Carrying,
     DynamoNumber as DynamoNumberOf,
 } from './attribute'
+import type { GroundKind, ground } from './term'
 
 type Some<X> = ['some', X]
 type None = ['none']
 
 // ── μG (Lang/ScopePath.lean) at DynamoDB ──
-type KindMember<K> = K extends 'string'
-    ? 'S'
-    : K extends 'number'
-      ? 'N'
-      : K extends 'boolean'
-        ? 'BOOL'
-        : K extends 'binary'
-          ? 'B'
-          : 'NULL'
+type KindMember<K> = K extends GroundKind ? (typeof ground)[K]['member'] : never
 type SetMember<M> = M extends 'S'
     ? 'SS'
     : M extends 'N'
@@ -472,15 +465,14 @@ type DecodeLit<K, V> = K extends 'string'
         : K extends 'binary'
           ? Uint8Array
           : null
-type DecodeBase<K> = K extends 'string'
-    ? string
-    : K extends 'number'
-      ? DynamoNumberOf<string>
-      : K extends 'boolean'
-        ? boolean
-        : K extends 'binary'
-          ? Uint8Array
-          : null
+interface GroundCarrier {
+    string: string
+    number: DynamoNumberOf<string>
+    boolean: boolean
+    binary: Uint8Array
+    null: null
+}
+type DecodeBase<K> = K extends GroundKind ? GroundCarrier[K] : never
 type FloatLits<T> = T extends ['prim', ['literal', 'number', infer S]]
     ? FloatOf<S>
     : T extends ['union', infer Os extends unknown[]]

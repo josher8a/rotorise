@@ -78,28 +78,6 @@ import {
 } from './value'
 
 /**
- * Which member each base stores a literal in.
- *
- * Injective again. `decimal` was the second base at `N`, and it is an adapter over `number` now
- * rather than a base of its own, so the member recovers the base.
- */
-export const literalMember: { readonly [B in LiteralBase]: AttributeName } = {
-    string: 'S',
-    number: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
-}
-
-/** Which kind of JS value each base's alternatives are — the mirror, and not the same partition. */
-export const literalShape: { readonly [B in LiteralBase]: Shape } = {
-    string: 'string',
-    // a numeric alternative is a `DynamoNumber`, which is what the carrier is
-    number: 'number',
-    boolean: 'boolean',
-    binary: 'binary',
-}
-
-/**
  * A literal at a named base — the one builder every literal in this library goes through.
  *
  * The premises of the rule `(literal)`, checked where the rule states them:
@@ -163,7 +141,7 @@ const literalTermOf = (
 const literalTerm = (base: LiteralBase, value: LiteralValue): Literal => {
     const wrong = (): never => {
         throw new CodecError(
-            `\`${base}(...)\` admits ${literalShape[base]} values, and ${namedLiteral(value)} is not one`,
+            `\`${base}(...)\` admits ${base} values, and ${namedLiteral(value)} is not one`,
         )
     }
     switch (base) {

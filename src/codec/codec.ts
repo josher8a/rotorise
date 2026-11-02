@@ -27,7 +27,6 @@ import {
     itemSem,
     judged,
     literalCodec,
-    literalShape,
     membersOf,
     membersTooDeeply,
     opaqueTerms,
@@ -1316,7 +1315,7 @@ const numericAlternatives = (
     for (const one of allowed) {
         if (typeof one !== 'number') {
             throw new CodecError(
-                `\`number(...)\` admits ${literalShape.number} values, and ${namedLiteral(one)} is not one`,
+                `\`number(...)\` admits number values, and ${namedLiteral(one)} is not one`,
             )
         }
         const carried = asFloat(one)

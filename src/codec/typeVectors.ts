@@ -55,7 +55,14 @@ import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
 import { CodecError, failed } from './result'
 import type { Literal, Term } from './term'
-import { componentsOf, type Field, leafKinds, sameTerm, targetOf } from './term'
+import {
+    componentsOf,
+    type Field,
+    ground,
+    leafKinds,
+    sameTerm,
+    targetOf,
+} from './term'
 import { arbitraryOf, rngFrom } from './testing'
 
 /** A term that this module cannot print as library calls. */
@@ -153,14 +160,6 @@ const literalArgument = (l: Literal): string => {
     }
 }
 
-/** The constructor that builds a literal at each base. */
-const literalConstructor: { readonly [B in Literal['base']]: string } = {
-    string: 'string',
-    number: 'dynamoNumber',
-    boolean: 'boolean',
-    binary: 'binary',
-}
-
 /**
  * **A union of literals at one base prints as one call**, as `string('a', 'b')` builds it. Two
  * options at one value are two codecs, which a constructor of alternatives refuses, so such a
@@ -180,7 +179,7 @@ const literalCall = (
 
 const literalText = (ts: readonly Term[]): string | undefined => {
     const call = literalCall(ts)
-    return call && `${literalConstructor[call.base]}(${call.args})`
+    return call && `${ground[call.base].ctor}(${call.args})`
 }
 
 const optionsOf = (t: Term): readonly Term[] =>
@@ -480,15 +479,11 @@ const printerOf = (
     const print = (t: Term, sub: (t: Term) => string): string => {
         switch (t.kind) {
             case 'string':
-                return 'string'
             case 'number':
-                return 'dynamoNumber'
             case 'boolean':
-                return 'boolean'
             case 'binary':
-                return 'binary'
             case 'null':
-                return 'nullValue'
+                return ground[t.kind].ctor
             case 'opaq':
                 return 'opaque'
             case 'never':

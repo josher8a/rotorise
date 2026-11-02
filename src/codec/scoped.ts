@@ -11,13 +11,13 @@
  * **The host has one disjointness decision**, the walk of this file. {@link agrees}, path narrowing
  * and the disjointness rows each read the walk, and each Lean twin reads `Scoped.disjoint`.
  */
-import type { AttributeName } from './attribute'
 import type { Precondition, StoredLiteral } from './codec'
 import type { Alternatives, Body, Field, NonEmpty, Term } from './term'
 import {
     childrenOf,
     componentsOf,
     entryOrder,
+    ground,
     isPrim,
     literalAlternatives,
     memoClosed,
@@ -1217,7 +1217,7 @@ export const guardAt = (
             case 'boolean':
             case 'binary':
             case 'null':
-                conjuncts.push({ segments, type: groundMember[t.kind] })
+                conjuncts.push({ segments, type: ground[t.kind].member })
                 return
             case 'opaq':
             case 'legacy':
@@ -1305,15 +1305,6 @@ export type Guard = {
           }
         | undefined
 }
-
-/** The member of each ground base, which a `type` precondition tests. */
-const groundMember = {
-    string: 'S',
-    number: 'N',
-    boolean: 'BOOL',
-    binary: 'B',
-    null: 'NULL',
-} as const satisfies Readonly<Record<string, AttributeName>>
 
 /**
  * **The literal that the stored view of a position is**, the model's `storedLitG`: a literal, or
