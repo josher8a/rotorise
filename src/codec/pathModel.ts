@@ -241,9 +241,10 @@ export type NodeOf<T> = Norm<T, []>[0]
  * option holds no value, and a `held` whose inner term holds no value, each read at the node that a
  * name names. An array of options with no fixed
  * length decides nothing. A repeated entry closes a cycle with no container, which the guard
- * refuses, and holds a value.
+ * refuses, and holds a value. `Env` is the scope that binds the names of `T`: a term that a walk
+ * reached inside a scope reads its names there.
  */
-export type HoldsNoValue<T> = EmptyAt<T, [], []>
+export type HoldsNoValue<T, Env = []> = EmptyAt<T, Env, []>
 type EmptyAt<T, Env, Seen extends unknown[]> = T extends ['never']
     ? true
     : T extends ['union', infer Os]

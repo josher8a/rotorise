@@ -7173,13 +7173,10 @@ type SeenPair<Seen extends readonly unknown[], A, P> = Seen extends readonly [
  */
 type SameTerm<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 /** The rules of {@link BelowT} at two nodes. */
-type BelowN<
+type BelowN<A, P, EA, EP, Seen extends readonly unknown[]> = HoldsNoValue<
     A,
-    P,
-    EA,
-    EP,
-    Seen extends readonly unknown[],
-> = HoldsNoValue<A> extends true
+    EA
+> extends true
     ? 't'
     : P extends ['opaq']
       ? 't'
