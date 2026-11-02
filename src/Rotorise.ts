@@ -238,18 +238,21 @@ export type CompositeKeyBuilder<
 
 type joinable = string | number | bigint | boolean | null | undefined
 
+/** What a transform result prints: `Array.join` prints `null` and `undefined` as the empty string. */
+type Print<Value> = Value extends null | undefined ? '' : Value
+
 type ExtractHelper<Key, Value> = Value extends object
     ? Value extends {
           tag: infer Tag extends string
           value: infer Value extends joinable
       }
-        ? [Tag, Value]
+        ? [Tag, Print<Value>]
         : Value extends {
                 value: infer Value extends joinable
             }
-          ? [never, Value]
+          ? [never, Print<Value>]
           : never
-    : [Key, Value]
+    : [Key, Print<Value>]
 
 /**
  * The values of a component that the builder prints. A partial key ends at a component whose value
