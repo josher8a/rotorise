@@ -20,6 +20,7 @@ import type { ObjectSlot } from '../../codec'
 import {
     constantOf,
     decimal,
+    number,
     optional,
     refine,
     string,
@@ -122,5 +123,16 @@ describe('the type and the function agree on what is decided', () => {
         }
         attest<[ConstantAttributes<typeof stood>], ['TAG']>()
         expect(decided(stood)).toEqual(['TAG'])
+    })
+
+    /**
+     * A `number` literal is the adapter over a numeral. The function reads the value that the call
+     * named, so a numeric discriminator or tag decides, and the type read it as no text and asked
+     * for the component that the function could supply.
+     */
+    it('on a single-valued number, which decides, and on a number of two values, which does not', () => {
+        const counted = { age: number(5), litter: number(1, 2), id: string }
+        attest<[ConstantAttributes<typeof counted>], ['age']>()
+        expect(decided(counted)).toEqual(['age'])
     })
 })

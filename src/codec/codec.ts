@@ -1056,6 +1056,19 @@ export type ConstantText<C> = TermOf<C> extends LitT<
       : never
 
 /**
+ * The number that a `number` literal pins, as `constantOf` answers it at run time: the value that
+ * the call named. The text of the literal is the print of that value, so reading it back gives the
+ * same number. A union of values and any other term pin none.
+ */
+export type ConstantNumber<C> = TermOf<C> extends FloatT<
+    LitT<'number', infer V extends string>
+>
+    ? V extends `${infer N extends number}`
+        ? N
+        : never
+    : never
+
+/**
  * The `.set()` capability, on the four bases that have one.
  *
  * `base.set()` is the whole base; `base.set(...values)` is a set of a literal at it. Both are the

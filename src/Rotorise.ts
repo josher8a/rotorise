@@ -10,6 +10,7 @@ import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     Closed,
+    ConstantNumber,
     ConstantText,
     Encoded,
     IsUnion,
@@ -2351,7 +2352,8 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
             // a `constant` was declared had the type promise a component nobody needed to pass,
             // while the implementation went on to demand it
             [K in keyof Spec]: ConstantValue<Spec[K]> extends infer Only extends
-                string
+                | string
+                | number
                 ? IsUnion<Only> extends true
                     ? never
                     : K
@@ -2381,7 +2383,7 @@ type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
  * would let a variant that decides nothing be outvoted, where `unknown` absorbs. One silent variant
  * is enough.
  */
-type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string
+type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string | number
     ? V
     : unknown
 
@@ -2393,17 +2395,15 @@ type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string
  * constants spec is what holds the two together.
  */
 type ConstantValue<C> = C extends {
-    readonly def: { readonly mark: 'optional' }
+    readonly def: { readonly mark: 'fallback' }
+    readonly codec: infer Marked
 }
-    ? unknown
-    : C extends {
-            readonly def: { readonly mark: 'fallback' }
-            readonly codec: infer Marked
-        }
-      ? ConstantValue<Marked>
-      : [ConstantText<C>] extends [never]
-        ? unknown
-        : ConstantText<C>
+    ? ConstantValue<Marked>
+    : [ConstantText<C>] extends [never]
+      ? [ConstantNumber<C>] extends [never]
+          ? unknown
+          : ConstantNumber<C>
+      : ConstantText<C>
 
 /** What the variants say about one attribute, collapsed. */
 type AcrossVariants<Variants, K> = {
