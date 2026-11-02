@@ -156,8 +156,9 @@ of these through a `ref` are refused where `never` is, in the type and at run ti
 
 **Observation.** The run time splits an option into at most 1024 parts of its normal form before it
 reads a union pattern. The type splits an option into at most 32 parts. Past 32 parts the type
-cannot decide the fit, and the slice keeps the option. The checker passes its instantiation depth
-between 40 and 48 literals at one field. Measured 2026-10-27 with `npx vitest --run` and the pin below:
+cannot decide the fit, and the slice keeps the option. With a bound of 64, the type decides the pin
+below at 33 and 48 literals, and the checker reports no depth error. Measured 2026-11-02 with
+`npx tsc --noEmit` and the pin below:
 
     const big = union([object({ x: string('l00', …, 'l32') })])
     exclude(big, union([object({ x: string('l00', …, 'l16') }), object({ x: string('l17', …, 'l32') })]))

@@ -6837,44 +6837,31 @@ type ObjectOfSpec<S> = S extends Record<string, ObjectSlot>
     : never
 
 /** A spec, split at the keys of the pattern specs `PU` where the spec holds objects. */
-type SplitSpec<Spec, PU, Lit extends boolean = false> = SplitKeys<
-    [Spec],
-    KeyTuple<KeysOfUnion<PU>>,
-    PU,
-    Lit
->
+type SplitSpec<Spec, PU> = SplitKeys<[Spec], KeyTuple<KeysOfUnion<PU>>, PU>
 type SplitKeys<
     States extends readonly unknown[],
     Keys extends readonly unknown[],
     PU,
-    Lit extends boolean,
 > = Keys extends readonly [infer Key, ...infer Rest extends readonly unknown[]]
-    ? SplitKeys<
-          CapStates<SplitAt<States, Key, PU, Lit>, Key, Lit>,
-          Rest,
-          PU,
-          Lit
-      >
+    ? SplitKeys<SplitAt<States, Key, PU>, Rest, PU>
     : States
 type SplitAt<
     States extends readonly unknown[],
     Key,
     PU,
-    Lit extends boolean,
 > = States extends readonly [
     infer State,
     ...infer Rest extends readonly unknown[],
 ]
-    ? [...SplitState<State, Key, PU, Lit>, ...SplitAt<Rest, Key, PU, Lit>]
+    ? [...SplitState<State, Key, PU>, ...SplitAt<Rest, Key, PU>]
     : []
-type SplitState<State, Key, PU, Lit extends boolean> = Key extends keyof State
+type SplitState<State, Key, PU> = Key extends keyof State
     ? SplitsAtPresence<State[Key], PatternCodecsAt<PU, Key>> extends true
         ? ReplaceField<
               [
                   ...(SplitSlot<
                       Marks<State[Key]>,
-                      PatternCodecsAt<PU, Key>,
-                      Lit
+                      PatternCodecsAt<PU, Key>
                   > extends infer Parts extends readonly unknown[]
                       ? Parts
                       : [Marks<State[Key]>]),
@@ -6885,8 +6872,7 @@ type SplitState<State, Key, PU, Lit extends boolean> = Key extends keyof State
           >
         : SplitSlot<
                 State[Key],
-                PatternCodecsAt<PU, Key>,
-                Lit
+                PatternCodecsAt<PU, Key>
             > extends infer Parts extends readonly unknown[]
           ? ReplaceField<Parts, State, Key>
           : [State]
@@ -6903,21 +6889,14 @@ type PatternCodecsAt<PU, Key> = PU extends unknown
  * objects do. A fixed list is a product of its positions, so it splits at each position, and a
  * position is a slot again.
  */
-type SplitSlot<C, PC, Lit extends boolean = false> = [
-    FixedElements<C>,
-] extends [never]
+type SplitSlot<C, PC> = [FixedElements<C>] extends [never]
     ? [FieldSpecList<C>] extends [never]
-        ? Lit extends true
-            ? LiteralParts<Marks<C>>
-            : false
-        : MapObjects<
-              InnerSpecs<FieldSpecList<C>, FieldSpecList<PC>[number], Lit>
-          >
+        ? false
+        : MapObjects<InnerSpecs<FieldSpecList<C>, FieldSpecList<PC>[number]>>
     : SplitPositions<
             [C],
             PC,
-            FixedElements<C>['length'],
-            Lit
+            FixedElements<C>['length']
         > extends infer Ls extends readonly unknown[]
       ? [Ls] extends [[C]]
           ? [[C]] extends [Ls]
@@ -6930,42 +6909,29 @@ type SplitPositions<
     Ls extends readonly unknown[],
     PC,
     N extends number,
-    Lit extends boolean,
     I extends readonly unknown[] = [],
 > = I['length'] extends N
     ? Ls
-    : SplitPositions<
-          SplitAtPosition<Ls, PC, N, I['length'], Lit>,
-          PC,
-          N,
-          Lit,
-          [...I, 0]
-      >
+    : SplitPositions<SplitAtPosition<Ls, PC, N, I['length']>, PC, N, [...I, 0]>
 type SplitAtPosition<
     Ls extends readonly unknown[],
     PC,
     N extends number,
     I extends number,
-    Lit extends boolean,
 > = Ls extends readonly [infer L, ...infer Rest extends readonly unknown[]]
-    ? [
-          ...SplitPositionState<L, PC, N, I, Lit>,
-          ...SplitAtPosition<Rest, PC, N, I, Lit>,
-      ]
+    ? [...SplitPositionState<L, PC, N, I>, ...SplitAtPosition<Rest, PC, N, I>]
     : []
 type SplitPositionState<
     L,
     PC,
     N extends number,
     I extends number,
-    Lit extends boolean,
 > = FixedElements<L> extends infer Es extends readonly unknown[]
     ? [PositionCodecsAt<PC, `${I}`, N>] extends [never]
         ? [L]
         : SplitSlot<
                 Es[I],
-                PositionCodecsAt<PC, `${I}`, N>,
-                Lit
+                PositionCodecsAt<PC, `${I}`, N>
             > extends infer Parts extends readonly unknown[]
           ? WithPosition<Parts, Es, I>
           : [L]
@@ -6996,12 +6962,11 @@ type WithPosition<
 type InnerSpecs<
     Members extends readonly unknown[],
     PU,
-    Lit extends boolean,
 > = Members extends readonly [
     infer Head,
     ...infer Rest extends readonly unknown[],
 ]
-    ? [...SplitSpec<Head, PU, Lit>, ...InnerSpecs<Rest, PU, Lit>]
+    ? [...SplitSpec<Head, PU>, ...InnerSpecs<Rest, PU>]
     : []
 type ReplaceField<
     Parts extends readonly unknown[],
@@ -7020,64 +6985,15 @@ type ReplaceField<
     : []
 
 /**
- * The most parts that a split for the fit builds from one term, as a tuple of that length. The run
- * time bounds the parts at 1024 ({@link PARTS_LIMIT}), and the type bounds them at 32, because the
- * recursion over the parts passes the instantiation depth of the checker near 45 parts, and each
- * part is one more instantiation of the fit against each member of the pattern. A term past the
- * bound is one {@link OverflowCodec}, whose fit is `'u'`, so the slice keeps the option.
+ * The most parts that the fit reads from one term, as a tuple of that length ({@link JoinParts}).
+ * The run time bounds the parts at 1024 ({@link PARTS_LIMIT}), and the type bounds them at 32. A
+ * term whose parts reach the bound has the fit `'u'`, so the slice keeps the option.
  */
 type PartsCap = Repeat<32>
 type Repeat<
     N extends number,
     T extends readonly unknown[] = [],
 > = T['length'] extends N ? T : Repeat<N, [...T, unknown]>
-
-/** A slot that the bound cut. The fit of the slot is `'u'`: the type cannot decide it. */
-type OverflowCodec = AnyCodec & { readonly splitOverflow: true }
-type IsOverflow<A> = [A] extends [never]
-    ? false
-    : [A] extends [{ readonly splitOverflow: true }]
-      ? true
-      : false
-
-/** The states of a split, cut to one state where the parts reach the bound at `Key`. */
-type CapStates<
-    States extends readonly unknown[],
-    Key,
-    Lit extends boolean,
-> = Lit extends true
-    ? States extends readonly [...PartsCap, ...unknown[]]
-        ? States extends readonly [infer First, ...unknown[]]
-            ? ReplaceField<[OverflowCodec], First, Key>
-            : States
-        : States
-    : States
-
-/**
- * The parts of a slot for the fit: one codec for each literal of a literal set, and `true` and
- * `false` for `boolean`, as {@link joinParts} reads them. Any other slot is one part, and is
- * `false` here. The split for the fit is the only reader: the run time keeps a literal set whole,
- * so the result of a slice never holds a part.
- */
-type LiteralParts<C> = TermOf<C> extends [
-    'union',
-    infer Ts extends readonly unknown[],
-]
-    ? Ts extends readonly [...PartsCap, ...unknown[]]
-        ? [OverflowCodec]
-        : LiteralOptions<C> extends infer Ls extends readonly unknown[]
-          ? Ls extends readonly [unknown, unknown, ...unknown[]]
-              ? Ls
-              : false
-          : false
-    : [TermOf<C>] extends [BaseT<'boolean'>]
-      ? [
-            ConstantCodec<true, Attribute<'BOOL'>> &
-                TermMark<LitT<'boolean', true>>,
-            ConstantCodec<false, Attribute<'BOOL'>> &
-                TermMark<LitT<'boolean', false>>,
-        ]
-      : false
 
 /** The options split at the keys of a pattern. An option that is no object stays whole. */
 type SplitOptions<
@@ -7112,13 +7028,17 @@ type MapObjects<Specs extends readonly unknown[]> = {
  * with the pattern open at every object ({@link opened}). A rule that reads a fact that the type
  * lacks answers `'u'`: a `ref` that no scope binds, a caller's adapter against a caller's adapter,
  * a literal whose value type is not one value ({@link Inexact}), a term that two readings of one
- * term decide differently, and a term whose parts pass the bound ({@link PartsCap}). A slot that the
- * bound cut ({@link OverflowCodec}) is `'u'`.
+ * term decide differently, and a term whose parts pass the bound ({@link PartsCap}).
  */
 type Fit = 't' | 'f' | 'u'
-type FitsCodec<A, P> = IsOverflow<A> extends true
-    ? 'u'
-    : BelowT<TermOf<Marks<A>>, TermOf<Marks<P>>, [], [], [], true>
+type FitsCodec<A, P> = BelowT<
+    TermOf<Marks<A>>,
+    TermOf<Marks<P>>,
+    [],
+    [],
+    [],
+    true
+>
 /** The most pairs that the walk of {@link BelowT} enters on one path, as a tuple of that length. */
 type BelowDepth = Repeat<16>
 /**
