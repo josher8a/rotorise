@@ -6827,7 +6827,19 @@ type EveryOptionTagged<
  * The slice of a union and the slice of a field are one operation, and a pattern nests as a
  * codec nests: `pet: extract(pet, object({ status: string('AVAILABLE') }))`.
  */
-type PatternSpecs<P> = FieldSpecList<P>[number]
+type PatternSpecs<P> = P extends unknown
+    ? [OptionsOfCodec<P>] extends [never]
+        ? FieldSpecList<P>[number]
+        : PatternSpecs<OptionsOfCodec<P>[number]>
+    : never
+/** The options of a union codec, or `never` for any other codec. */
+type OptionsOfCodec<P> = P extends UnionCodec<
+    infer _T,
+    infer Os extends readonly unknown[],
+    infer _Tm
+>
+    ? Os
+    : never
 
 /** The member specs of the codec at a field: each option of a union of objects, or the object itself. */
 type FieldSpecList<F> = F extends Declares<infer Sp>
@@ -8168,9 +8180,16 @@ export type VariantsOf<Spec> = {
  * A key of a pattern that holds a refinement, at any depth: no function decides whether a member
  * lies inside a predicate. A pattern that no member fits is an answer, and the result keeps nothing.
  */
-type BadPatternKey<PSpec, Seen extends readonly unknown[] = []> = {
-    [K in keyof PSpec]: RefinedSlot<PSpec[K], Seen> extends true ? K : never
-}[keyof PSpec]
+type BadPatternKey<
+    PSpec,
+    Seen extends readonly unknown[] = [],
+> = PSpec extends unknown
+    ? {
+          [K in keyof PSpec]: RefinedSlot<PSpec[K], Seen> extends true
+              ? K
+              : never
+      }[keyof PSpec]
+    : never
 /**
  * Whether the pattern codec at a slot holds a refinement, at the slot or below it. `Seen` holds
  * the terms of the names that the walk entered, so a walk through a recursive `ref` ends.
@@ -8187,9 +8206,9 @@ type RefinedSlot<PC, Seen extends readonly unknown[] = []> = NodeOf<
 type RefinedBelow<PC, Seen extends readonly unknown[]> = [
     LeadingElements<PC>,
 ] extends [never]
-    ? [FieldSpecList<PC>] extends [never]
+    ? [PatternSpecs<PC>] extends [never]
         ? false
-        : [BadPatternKey<FieldSpecList<PC>[number], Seen>] extends [never]
+        : [BadPatternKey<PatternSpecs<PC>, Seen>] extends [never]
           ? false
           : true
     : true extends RefinedAmong<LeadingElements<PC>[number], Seen>
@@ -8202,7 +8221,7 @@ type RefinedAmong<
 > = Slots extends unknown ? RefinedSlot<Slots, Seen> : never
 
 /** Rejects a pattern that holds a part no meet reads, at the call rather than on the result. */
-export type ValidatePattern<P> = [FieldSpecList<P>] extends [never]
+export type ValidatePattern<P> = [PatternSpecs<P>] extends [never]
     ? unknown
     : [BadPatternKey<PatternSpecs<P>>] extends [never]
       ? unknown

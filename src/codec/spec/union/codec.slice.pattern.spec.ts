@@ -509,6 +509,32 @@ describe('a pattern that the host cannot read is refused', () => {
             expect(byLength).toThrow(/holds a refinement/)
         })
 
+        it('refuses a refinement in an option of a union pattern that the other options lack the key of', () => {
+            const byLength = () =>
+                extract(
+                    litters,
+                    // @ts-expect-error the option that holds `tags` holds the refinement
+                    union([
+                        object({ tags: list(short, spread(string)) }),
+                        object({ owner: string }),
+                    ]),
+                )
+            expect(byLength).toThrow(/holds a refinement/)
+        })
+
+        it('refuses a refinement below a union pattern in a union pattern', () => {
+            const byLength = () =>
+                extract(
+                    litters,
+                    // @ts-expect-error the inner union holds an option with the refinement
+                    union([
+                        union([object({ tags: list(short, spread(string)) })]),
+                        object({ owner: string }),
+                    ]),
+                )
+            expect(byLength).toThrow(/holds a refinement/)
+        })
+
         /**
          * Neither side walks the spread, the suffix or the element of an array. A refinement there
          * is no refusal, because the pattern at that position is one that no option fits: the
