@@ -1818,6 +1818,61 @@ const kernelLists = <F extends string>(
         return { form, name, ok, text: leanRowList(name, type, rows, ok) }
     })
 
+/**
+ * **The frame of a row module**, one for each file of the bridge: the header, the shapes, the row
+ * lists with the checker of each, and the diagnostic. A file adds the lines that lift the checker of
+ * a list to the statement of its rows (`lift`), and the paragraph of the checks that the corpus
+ * files share (`checks`). Generated at gate time and elaborated, never committed.
+ */
+const leanRowModule = <F extends string>({
+    title,
+    states,
+    checks,
+    subject,
+    file,
+    lift,
+}: {
+    readonly title: string
+    readonly states: string
+    readonly checks?: string
+    readonly subject: Subject
+    readonly file: RowFile<F>
+    readonly lift?: (list: {
+        readonly form: F
+        readonly name: string
+    }) => readonly string[]
+}): string => {
+    const shapes = kernelShapes()
+    const lists = kernelLists(file, shapes)
+    const printed = lists.map((one) =>
+        lift === undefined ? one.text : [one.text, '', ...lift(one)].join('\n'),
+    )
+    return leanModule(`import Calculus.Bridge.Rows
+
+/-!
+# ${title}
+
+**Generated — do not edit.** ${states}
+
+${checks === undefined ? '' : `${checks}\n\n`}${rowForm(subject)}
+-/
+
+/-! The emitted key function is total on a membership subtype, so a single-name object binds a
+\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
+set_option linter.unusedVariables false
+
+namespace Calculus
+
+${shapes.defs()}
+
+${printed.join('\n\n')}
+
+${leanDiagnostic(lists)}
+
+end Calculus
+`)
+}
+
 /** The disjointness pairs as rows: the two closed codecs and the two answers of {@link disjointAnswers}. */
 export const disjointRows = (
     pairs: readonly DisjointPair[],
@@ -1854,38 +1909,17 @@ export const disjointRows = (
 export const leanDisjointRowModule = (
     pairs: readonly DisjointPair[],
     subject: Subject = 'pool',
-): string => {
-    const shapes = kernelShapes()
-    const lists = kernelLists(disjointRows(pairs), shapes)
-    return leanModule(`import Calculus.Bridge.Rows
-
-/-!
-# Disjointness of the ${subject}, proposed to the model
-
-**Generated — do not edit.** One row per pair of ${subject} terms: the two closed codecs, the answer
+): string =>
+    leanRowModule({
+        title: `Disjointness of the ${subject}, proposed to the model`,
+        states: `One row per pair of ${subject} terms: the two closed codecs, the answer
 of \`src/\`'s \`disjoint\` on the two terms, and the answer of \`src/\`'s \`viewsDisjoint\` on the two
 pairs of views. The checker of a list states that \`Calculus.Closed.disjoint\` and
 \`Calculus.Closed.viewsDisjoint\` give the same answers at each row: \`disjointOk_iff\` makes
-\`disjointOk\` the two equations.
-
-${rowForm(subject)}
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-${shapes.defs()}
-
-${lists.map((one) => one.text).join('\n\n')}
-
-${leanDiagnostic(lists)}
-
-end Calculus
-`)
-}
+\`disjointOk\` the two equations.`,
+        subject,
+        file: disjointRows(pairs),
+    })
 
 /** The kernel's check of a row list of each form, and the lemma of `Calculus.Bridge.Rows` that lifts it. */
 const separationLists = {
@@ -1967,52 +2001,27 @@ export const separationRows = (
 export const leanSeparationRowModule = (
     separations: readonly Separation[],
     subject: Subject = 'pool',
-): string => {
-    const shapes = kernelShapes()
-    const separated = kernelLists(separationRows(separations), shapes)
-    const lists = [
-        ...separated.map(({ form, name, text }) => {
-            const { caller, verdict, lift } = separationLists[form]
-            return [
-                text,
-                '',
-                `theorem ${name}_verdicts ${rowBinders}${caller} :`,
-                `    ∀ p ∈ ${name} ρ π,`,
-                `    ${verdict} :=`,
-                `  ${lift(name)}`,
-            ].join('\n')
-        }),
-    ]
-    return leanModule(`import Calculus.Bridge.Rows
-
-/-!
-# Declaration verdicts of the ${subject}, both ways
-
-**Generated — do not edit.** One row per option pair of the ${subject}, in one list per form. A pair
+): string =>
+    leanRowModule({
+        title: `Declaration verdicts of the ${subject}, both ways`,
+        states: `One row per option pair of the ${subject}, in one list per form. A pair
 that \`src/\`'s \`union\` accepts holds two closed codecs, which exist only for guarded codecs, and
 carries the model's proof that the pair is compatible. A pair that \`src/\` refuses at
 compatibility holds two closed codecs and carries \`Closed.compatPair x y = false\`. A pair that
 \`src/\` refuses at the guard holds two graphs and carries the guard's refusal. The lemmas of \`Calculus.Bridge.Rows\` lift each checker to the verdict
-of each row.
-
-${rowForm(subject)}
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-${shapes.defs()}
-
-${lists.join('\n\n')}
-
-${leanDiagnostic(separated)}
-
-end Calculus
-`)
-}
+of each row.`,
+        subject,
+        file: separationRows(separations),
+        lift: ({ form, name }) => {
+            const { caller, verdict, lift } = separationLists[form]
+            return [
+                `theorem ${name}_verdicts ${rowBinders}${caller} :`,
+                `    ∀ p ∈ ${name} ρ π,`,
+                `    ${verdict} :=`,
+                `  ${lift(name)}`,
+            ]
+        },
+    })
 
 /* ── the meet cover ───────────────────────────────────────────────────────────────────────── */
 
@@ -2065,52 +2074,26 @@ export const meetCoverRows = (
 export const leanMeetCoverModule = (
     covers: readonly MeetCover[],
     subject: Subject = 'pool',
-): string => {
-    const shapes = kernelShapes()
-    const lists = kernelLists(meetCoverRows(covers), shapes)
-    return leanModule(`import Calculus.Bridge.Rows
-
-/-!
-# The meets of the ${subject}, covered in the model
-
-**Generated — do not edit.** One row per sampled pair of a meet of two ${subject} terms: the fuel,
+): string =>
+    leanRowModule({
+        title: `The meets of the ${subject}, covered in the model`,
+        states: `One row per sampled pair of a meet of two ${subject} terms: the fuel,
 the two closed factors, the closed codec of \`src/\`'s \`meet\` of the two, a value, and the attribute
 that one factor writes from the value. The checker of a list states that the model's meaning
 of the meet writes the attribute from the value wherever the meanings of both factors do, and each
 check settles. \`meetCovers_of_rows\` lifts the checker to the cover of \`Codec.meet\` of the two
 meanings at each row. A row reads each factor as written, and \`src/\` reads each factor open, so
-the row states the cover and not the equation.
-
-${rowForm(subject)}
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-${shapes.defs()}
-
-${lists
-    .map(({ name, text }) =>
-        [
-            text,
-            '',
+the row states the cover and not the equation.`,
+        subject,
+        file: meetCoverRows(covers),
+        lift: ({ name }) => [
             `theorem ${name}_covers [DecidableEq Attr] ${rowBinders} :`,
             `    ∀ x n A B M v s, (x, n, A, B, M, v, s) ∈ ${name} ρ π →`,
             '      (Alg.Codec.meet (A.meaning (libTable noCallers)) (B.meaning (libTable noCallers))).e v =',
             '        some s → (M.meaning (libTable noCallers)).e v = some s :=',
             `  meetCovers_of_rows (${name}_check ρ π)`,
-        ].join('\n'),
-    )
-    .join('\n\n')}
-
-${leanDiagnostic(lists)}
-
-end Calculus
-`)
-}
+        ],
+    })
 
 /* ── the fit rows ─────────────────────────────────────────────────────────────────────────── */
 
@@ -2167,15 +2150,10 @@ export const fitRows = (fits: readonly FitRow[]): RowFile<'fits'> => ({
 export const leanFitModule = (
     fits: readonly FitRow[],
     subject: Subject = 'pool',
-): string => {
-    const shapes = kernelShapes()
-    const lists = kernelLists(fitRows(fits), shapes)
-    return leanModule(`import Calculus.Bridge.Rows
-
-/-!
-# The fits of the ${subject}, checked in the model
-
-**Generated — do not edit.** One row per sampled value of an option of a ${subject} pair: the fuel,
+): string =>
+    leanRowModule({
+        title: `The fits of the ${subject}, checked in the model`,
+        states: `One row per sampled value of an option of a ${subject} pair: the fuel,
 the closed codec of the option, the closed codec of the pattern as \`src/\` opens it, the value, the
 attribute that the option writes from the value, and the flag. The flag is \`true\` where
 \`src/\`'s \`fits\` says that the option fits the pattern, and \`false\` where \`src/\` refuses the
@@ -2183,38 +2161,17 @@ value through the opened pattern. The checker of a list states that the model's 
 option writes the attribute from the value, and that the model's meaning of the opened pattern
 writes from the value exactly where the flag is \`true\`. \`fits_of_rows\` lifts the checker to that
 statement at each row. A row reads a sampled value, so the row states a witness of the value order
-and not the order.
-
-${rowForm(subject)}
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-${shapes.defs()}
-
-${lists
-    .map(({ name, text }) =>
-        [
-            text,
-            '',
+and not the order.`,
+        subject,
+        file: fitRows(fits),
+        lift: ({ name }) => [
             `theorem ${name}_fits ${rowBinders} :`,
             `    ∀ x n A P v s holds, (x, n, A, P, v, s, holds) ∈ ${name} ρ π →`,
             '      (A.meaning (libTable noCallers)).e v = some s ∧',
             '        ((P.meaning (libTable noCallers)).e v).isSome = holds :=',
             `  fits_of_rows (${name}_check ρ π)`,
-        ].join('\n'),
-    )
-    .join('\n\n')}
-
-${leanDiagnostic(lists)}
-
-end Calculus
-`)
-}
+        ],
+    })
 
 /* ── the legacy read gate ─────────────────────────────────────────────────────────────────── */
 
@@ -3715,42 +3672,6 @@ comparator at each row. The law of each comparator of \`Calculus.Bridge.Rows\` (
 rest) makes the comparator the former statement of the row. \`Attr\` and \`Value\` have no decidable
 equality, because a map holds a function, so a \`some\` answer keeps \`check\` or \`vcheck\`.`
 
-/** A module of corpus rows: the title, the statement, and the rows. */
-const leanCorpusRowModule = <F extends string>(
-    title: string,
-    states: string,
-    file: RowFile<F>,
-): string => {
-    const shapes = kernelShapes()
-    const lists = kernelLists(file, shapes)
-    return leanModule(`import Calculus.Bridge.Rows
-
-/-!
-# ${title}
-
-**Generated — do not edit.** ${states}
-
-${rowChecks}
-
-${rowForm('corpus')}
--/
-
-/-! The emitted key function is total on a membership subtype, so a single-name object binds a
-\`k\` it never reads; the binder cannot be \`_\` because a multi-name object reads \`k.1\`. -/
-set_option linter.unusedVariables false
-
-namespace Calculus
-
-${shapes.defs()}
-
-${lists.map((one) => one.text).join('\n\n')}
-
-${leanDiagnostic(lists)}
-
-end Calculus
-`)
-}
-
 /**
  * **The cross product of the corpus as rows**: each admission of {@link leanVector} in the `check`
  * protocol, with the guard of a recursive term, each guard verdict of {@link leanGuard}, and each
@@ -3809,15 +3730,17 @@ export const leanVectorRowModule = (
     refusals: readonly Refusal[],
     guards: readonly Guard[],
 ): string =>
-    leanCorpusRowModule(
-        'Differential-testing vectors, the full cross product',
-        `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
+    leanRowModule({
+        title: 'Differential-testing vectors, the full cross product',
+        states: `Emitted by \`src/codec/lean.ts\` from the shipped TypeScript codecs. A \`writes\`
 row is one \`encode\` that this library performed, \`check n ((t.meaning (libTable noCallers)).e v) (some a) = .same\`. A
 \`writesNothing\` row is a value that this library refuses, \`(t.meaning (libTable noCallers)).e v = none\`. A \`guards\` row
 is the graph guard on the graph of a codec, \`g.guarded = b\`. ${admissions.length} admissions,
 ${refusals.length} refusals.`,
-        vectorRows(admissions, refusals, guards),
-    )
+        checks: rowChecks,
+        subject: 'corpus',
+        file: vectorRows(admissions, refusals, guards),
+    })
 
 /**
  * The union resolutions as rows: each write that {@link writeOf} decides, then each read of
@@ -3893,14 +3816,16 @@ export const leanResolutionRowModule = (
     reads: readonly ReadResolution[],
     items: readonly ItemRead[],
 ): string =>
-    leanCorpusRowModule(
-        'Union resolution, model against library',
-        `One row per (union, value) and (union, attribute) pair: the option
+    leanRowModule({
+        title: 'Union resolution, model against library',
+        states: `One row per (union, value) and (union, attribute) pair: the option
 the model's \`select\` resolves to, against the one this library's resolver picked.
 ${writes.length} on the write side, ${reads.length} on the read side, and ${items.length} read through the
 index of a dissection's tags. A read row states \`vcheck\`, the \`Value\` twin of \`check\`.`,
-        resolutionRows(writes, reads, items),
-    )
+        checks: rowChecks,
+        subject: 'corpus',
+        file: resolutionRows(writes, reads, items),
+    })
 
 /**
  * The read verdicts as rows: the term, the attribute, and whether `src/` decodes it. A caller's
@@ -3932,15 +3857,17 @@ export const readVerdictRows = (
 
 /** The read verdicts in the row form. Generated at gate time, never committed. */
 export const leanReadRowModule = (verdicts: readonly ReadVerdict[]): string =>
-    leanCorpusRowModule(
-        "Read verdicts, proposed to the model's read row",
-        `One row per (codec, attribute) pair: \`AdmA t a\` equals whether
+    leanRowModule({
+        title: "Read verdicts, proposed to the model's read row",
+        states: `One row per (codec, attribute) pair: \`AdmA t a\` equals whether
 \`src/\`'s \`decode\` accepted it. All ${verdicts.length} pairs are asserted here. A caller's predicate is
 \`π k\`, pinned at the value that the inner term reads where the host answered the predicate there.
 \`veq_pin\` proves that a predicate with that answer equals its own pin, so the row at
 \`π k := q0\` states the former theorem at each such \`q0\`.`,
-        readVerdictRows(verdicts),
-    )
+        checks: rowChecks,
+        subject: 'corpus',
+        file: readVerdictRows(verdicts),
+    })
 
 /**
  * The legacy reads as rows. The older reader is `ρ k`, pinned at each attribute that `src/` asked
@@ -3978,15 +3905,17 @@ export const legacyReadRows = (
 
 /** The legacy reads in the row form. Generated at gate time, never committed. */
 export const leanLegacyReadRowModule = (reads: readonly LegacyRead[]): string =>
-    leanCorpusRowModule(
-        'The legacy read gate, model against library',
-        `One row per (codec, attribute) pair, ${reads.length} in all. Each older
+    leanRowModule({
+        title: 'The legacy read gate, model against library',
+        states: `One row per (codec, attribute) pair, ${reads.length} in all. Each older
 reader is \`ρ k\`, pinned at each attribute that \`src/\` asked it. \`aeq_pin\` proves that a reader
 with those answers equals its own pin, so the row at \`ρ k := r\` states the read at each such \`r\`.
 The model reads the older answer only where the current term writes the answer, and \`src/\` checks
 the same.`,
-        legacyReadRows(reads),
-    )
+        checks: rowChecks,
+        subject: 'corpus',
+        file: legacyReadRows(reads),
+    })
 
 /* ── the key rows ─────────────────────────────────────────────────────────────────────────── */
 
