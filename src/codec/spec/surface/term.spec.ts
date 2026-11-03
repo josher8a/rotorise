@@ -1,5 +1,5 @@
 /**
- * The five functions of a term, against the rules they are ported from.
+ * The functions of a term, against the rules they are ported from.
  *
  * Each test names the rule of the judgement, of choice or of the equations that the answer serves, not the answer. The terms are
  * built as data rather than through the constructors on purpose: the point of `term.ts` is that the
@@ -11,18 +11,16 @@ import { describe, expect, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
 import { decimal, opaque, refine, string } from '../../codec'
-import { orThrow } from '../../result'
+import { assignmentOf } from '../../denote'
+import { failed, orThrow } from '../../result'
 import { flatOf } from '../../scoped'
-import type { RefSlot, Term } from '../../term'
+import type { Field, RefSlot, Term } from '../../term'
 import {
     componentsOf,
     holdsNoValue,
     member,
-    occA,
     occV,
     ownsNullOf,
-    specOf,
-    tagsOf,
     unboundRefs,
 } from '../../term'
 
@@ -112,7 +110,7 @@ describe('the member a term stores', () => {
     })
 })
 
-describe('the occupancies of a term', () => {
+describe('the occupancy of a term', () => {
     /**
      * **A thunk carries a term, so both projections read through it.** The model has no thunk: the
      * emitter prints the term that a thunk returns, so the model reads that term on both
@@ -134,17 +132,15 @@ describe('the occupancies of a term', () => {
     it('a ref answers what its target answers, and the member is what it loses', () => {
         const recursive = refTo(str)
         expect(occV(recursive)).toEqual(occV(str))
-        expect(occA(recursive)).toEqual(occA(str))
         expect(member(recursive)).toBe(undefined)
     })
 
     /**
-     * `held` and `withLegacyRead` swap sides, and the swap is the whole content of the two families
-     * being asked separately. `held` writes where its held side does, because the held side
-     * restricts every value `f` receives, while its `g` only post-processes a read.
-     * `withLegacyRead`'s `r` widens exactly the reading and adds no way to write.
+     * `held` writes where its held side does, because the held side restricts every value `f`
+     * receives, while its `g` only post-processes a read. `withLegacyRead`'s `r` widens exactly the
+     * reading and adds no way to write.
      */
-    it('an adapter writes where its held side does and reads where its inner term does', () => {
+    it('an adapter writes where its held side does', () => {
         const at: Term = {
             kind: 'held',
             inner: { kind: 'number' },
@@ -153,21 +149,19 @@ describe('the occupancies of a term', () => {
             g: () => 0,
         }
         expect(occV(at)).toEqual(['string'])
-        expect(occA(at)).toEqual(['N'])
         // a foreign held side is the top, so the adapter writes every slot
         expect(occV({ ...at, outer: { kind: 'opaq' } })).toEqual(
             occV({ kind: 'opaq' }),
         )
     })
 
-    it('a read widening is the mirror: its inner term on the write side, opaque on the read', () => {
+    it('a read widening writes where its inner term does', () => {
         const older: Term = {
             kind: 'legacy',
             inner: { kind: 'number' },
             r: () => undefined,
         }
         expect(occV(older)).toEqual(['number'])
-        expect(occA(older)).toBe(undefined)
     })
 
     /**
@@ -184,194 +178,73 @@ describe('the occupancies of a term', () => {
      * it was a `held`. Its read side is the canonical term's, `N` included: a wider occupancy is
      * sound, and it refuses the unions a `Pred` complement would separate.
      */
-    it('the total opaque answers every slot and every member, never `⊤`', () => {
+    it('the total opaque answers every slot, never `⊤`', () => {
         expect(occV({ kind: 'opaq' })).toContain('number')
         expect(occV({ kind: 'opaq' })).toContain('numSet')
         expect(occV({ kind: 'opaq' })).toContain('string')
-        expect(occA({ kind: 'opaq' })).toContain('N')
-        expect(occA({ kind: 'opaq' })).toContain('NS')
         expect(occV({ kind: 'opaq' })).not.toBe(undefined)
         expect(occV(erase(opaque('refuse')).def)).not.toContain('number')
         expect(occV(erase(opaque('refuse')).def)).toContain('string')
-        expect(occA(erase(opaque('refuse')).def)).toContain('N')
         expect(occV(erase(opaque('lossy')).def)).toContain('number')
     })
 
     /**
      * A null point is the null term joined by a union, which is what {@link nullable} builds, so
-     * both sides gain it through the union's own row rather than through a wrapper of their own.
+     * the occupancy gains it through the union's own row rather than through a wrapper of its own.
      */
-    it('a union carrying the null term holds the null point on both sides of the pair', () => {
+    it('a union carrying the null term holds the null point', () => {
         const maybe: Term = { kind: 'union', options: [str, { kind: 'null' }] }
         expect(occV(maybe)).toEqual(['string', 'null'])
-        expect(occA(maybe)).toEqual(['S', 'NULL'])
     })
 
     /**
-     * Separation asks the two families separately and never reconciles them, and it needs a pair that
-     * fails on one side only to be worth doing.
-     *
-     * **The set bases no longer provide one.** `set(string)` against `set(decimal)` wrote one
-     * constructor and stored two members, and `set(number)` against `set(decimal)` was the mirror;
-     * `decimal` is an adapter over `number` now, so every set base is disjoint from every other on
-     * both sides and the two questions agree on all of them.
-     *
-     * **An adapter provides one, and it is the construct the carriers are built from.** `held`
-     * has distinct rows: it reads where its inner term reads, and writes where its held side
-     * writes. A foreign held side is the top, because this library cannot read a foreign schema.
-     * So two adapters over disjoint bases with foreign held sides separate on the stored side and
-     * not on the written one.
+     * `decimal` is an adapter over `number`, so every set base is disjoint from every other.
      */
-    it('an adapter separates on one side only, which is why both are asked', () => {
-        const heldString: Term = {
-            kind: 'held',
-            inner: { kind: 'string' },
-            outer: { kind: 'opaq' },
-            f: () => '',
-            g: () => '',
-        }
-        const heldNumber: Term = {
-            kind: 'held',
-            inner: { kind: 'number' },
-            outer: { kind: 'opaq' },
-            f: () => '',
-            g: () => '',
-        }
-        // stored apart, because the read side reads through to the base
-        expect(occA(heldString)).toEqual(['S'])
-        expect(occA(heldNumber)).toEqual(['N'])
-        // and not written apart, because a foreign held side is the top on the write side
-        expect(occV(heldString)).toEqual(occV({ kind: 'opaq' }))
-        expect(occV(heldNumber)).toEqual(occV({ kind: 'opaq' }))
-    })
-
-    it('and the set bases agree on both sides, so none of them is that pair', () => {
+    it('the set bases are disjoint on the write side', () => {
         for (const base of ['string', 'number', 'binary'] as const) {
             const one: Term = { kind: 'set', elem: { kind: base } }
             for (const other of ['string', 'number', 'binary'] as const) {
                 if (base === other) continue
                 const two: Term = { kind: 'set', elem: { kind: other } }
                 expect(occV(one)).not.toEqual(occV(two))
-                expect(occA(one)).not.toEqual(occA(two))
             }
         }
     })
 })
 
-describe("an object option's name spec", () => {
-    /**
-     * A union admits an object option when every present name is declared and every required
-     * name is present, so an `opt` binding **widens** admission. Two objects declaring only
-     * optional names both admit the empty map however disjoint their names, which is the ambiguity
-     * the name test cannot see — and it can only be stated because the spec records the two facts
-     * separately.
-     */
-    it('an optional name is declared and not required, which is what widens admission', () => {
-        const body: Term = {
-            kind: 'object',
-            body: {
-                fields: {
-                    id: { mark: 'req', t: str },
-                    note: { mark: 'optional', t: str },
-                    kind: { mark: 'fallback', t: str, v: 'x' },
-                },
-            },
-        }
-        // `withLegacyRead` concludes `req`: the absence is in the row, never in the value
-        expect(specOf(body)).toEqual({ id: true, note: false, kind: true })
-    })
+describe('the tag a variant answers to', () => {
+    const literal: Term = { kind: 'literal', base: 'string', v: 'A' }
+    const variant = (field: Field) =>
+        assignmentOf(['kind'], { fields: { kind: field } })
 
-    /** Only an object is chosen by names; everything else is chosen by being attempted. */
-    it('nothing but an object has a name spec', () => {
-        expect(specOf(str)).toBe(undefined)
-    })
-})
-
-describe('the tags a variant answers to', () => {
-    const variant = (
-        field: Term extends never ? never : Parameters<typeof tagsOf>[1],
-    ) => tagsOf('kind', field)
-
-    /** The rule `(dunion)`: the tag is read off the variant's own required string literal. */
-    it('a required string literal at the discriminator names the tags', () => {
-        expect(
-            variant({
-                kind: 'object',
-                body: {
-                    fields: {
-                        kind: {
-                            mark: 'req',
-                            t: { kind: 'literal', base: 'string', v: 'A' },
-                        },
-                    },
-                },
-            }),
-        ).toEqual(['A'])
+    /** The rule `(dunion)`: the tag is read off the variant's own required literal. */
+    it('a required string literal at the discriminator names the tag', () => {
+        expect(variant({ mark: 'req', t: literal })).toEqual({ kind: 'A' })
     })
 
     /**
      * A `withLegacyRead` discriminator would fill an absent tag with a value no tag set vouched for, and
      * (C) would then re-encode a variant no tag selects; an `optional` one would let the tag be
-     * absent altogether. Both answer no tag, which is what makes the arity premise reachable.
+     * absent altogether. Both name no tag, which is what makes the arity premise reachable.
      */
     it('a discriminator that may be absent or stood in for names no tag', () => {
-        const withMark = (mark: 'optional' | 'fallback'): Term => ({
-            kind: 'object',
-            body: {
-                fields: {
-                    kind:
-                        mark === 'optional'
-                            ? {
-                                  mark,
-                                  t: {
-                                      kind: 'literal',
-                                      base: 'string',
-                                      v: 'A',
-                                  },
-                              }
-                            : {
-                                  mark,
-                                  t: {
-                                      kind: 'literal',
-                                      base: 'string',
-                                      v: 'A',
-                                  },
-                                  v: 'A',
-                              },
-                },
-            },
-        })
-        expect(variant(withMark('optional'))).toEqual([])
-        expect(variant(withMark('fallback'))).toEqual([])
+        expect(failed(variant({ mark: 'optional', t: literal }))).toBe(true)
+        expect(failed(variant({ mark: 'fallback', t: literal, v: 'A' }))).toBe(
+            true,
+        )
     })
 
-    /** A tag is a stored string, so a literal at any other base names none. */
-    it('a discriminator that is not a string literal names no tag', () => {
+    /** A tag is a stored string or numeral, so a literal at any other base names none. */
+    it('a discriminator that is not a literal at a stored base names no tag', () => {
+        expect(failed(variant({ mark: 'req', t: bool }))).toBe(true)
         expect(
-            variant({
-                kind: 'object',
-                body: {
-                    fields: { kind: { mark: 'req', t: bool } },
-                },
-            }),
-        ).toEqual([])
-        expect(
-            variant({
-                kind: 'object',
-                body: {
-                    fields: {
-                        kind: {
-                            mark: 'req',
-                            t: { kind: 'literal', base: 'boolean', v: true },
-                        },
-                    },
-                },
-            }),
-        ).toEqual([])
-    })
-
-    it('a term that is not an object names no tag', () => {
-        expect(variant(str)).toEqual([])
+            failed(
+                variant({
+                    mark: 'req',
+                    t: { kind: 'literal', base: 'boolean', v: true },
+                }),
+            ),
+        ).toBe(true)
     })
 })
 

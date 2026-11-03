@@ -36,7 +36,7 @@ import {
 import { failed } from '../../result'
 import { disjoint } from '../../scoped'
 import type { Term } from '../../term'
-import { clauseLiteralsOf } from '../../term'
+import { clauseForm } from '../../term'
 
 type Dec = Decoded<typeof decimal>
 
@@ -281,8 +281,9 @@ describe('the slice is the Extract of TypeScript, applied inside the field', () 
     it('keeps no option that the original lacks, and each option its own tag', () => {
         const tagsOf = (codec: { readonly def: Term }) =>
             optionsOf(codec).map((one) => {
-                const pins = clauseLiteralsOf(one)
-                return pins?.kind?.alts.ls[0]
+                const field =
+                    one.kind === 'object' ? one.body.fields.kind : undefined
+                return field && clauseForm(field.t)?.alts.ls[0]
             })
         const patterns = [
             dogs,

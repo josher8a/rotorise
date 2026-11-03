@@ -1513,12 +1513,11 @@ describe('the published surface', () => {
         'RestDeclaration',
         // a cycle is a `scope`, and the thunk under a `ref` is internal
         'lazy',
-        // the five functions of a term the model computes, which `writes` and `decides` became
+        // the functions of a term the model computes, which `writes` and `decides` became, and the
+        // tag of a variant, which `assignmentOf` reads off the body of the option
         'member',
         'occV',
-        'occA',
-        'specOf',
-        'tagsOf',
+        'assignmentOf',
         // the declaration guard and what it reads, which `identifying` and `deeper` became
         'compatible',
         // the predicate a refinement carries, run

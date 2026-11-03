@@ -1,10 +1,8 @@
 /**
- * The term language, and the five functions of a term that the model computes.
+ * The term language, and the functions of a term that the model computes.
  *
- * Derived from `formal/Calculus/Dynamo/Lang/Term.lean`, with `member` from `ScopePath.lean`'s `μG`, `specOf`
- * from `ScopeSlice.lean`'s `Closed.spec`. {@link occV}, {@link occA} and {@link tagsOf} have no counterpart there: the
- * two occupancies serve the host's union dispatch, and the tag table is a host index that no term
- * carries. One
+ * Derived from `formal/Calculus/Dynamo/Lang/Term.lean`, with `member` from `ScopePath.lean`'s `μG`.
+ * {@link occV} has no counterpart there: the occupancy serves the host's union dispatch. One
  * variant per model constructor, under the model's own names, so a reader holding the two files
  * side by side is reading one language twice rather than two languages that agree.
  *
@@ -85,7 +83,7 @@ export type Literal =
  * a union of literals at one base.
  *
  * This is what {@link Literal} was before a literal carried one value, and it survives for the
- * place the model keeps a set of alternatives too: the answer {@link literalsOf} gives for a
+ * place the model keeps a set of alternatives too: the answer {@link literalAlternatives} gives for a
  * declared name. The model's split is the same one, `inL` against `inLs`.
  */
 export type Alternatives =
@@ -231,7 +229,7 @@ export type Term =
      * when a list or an object sits on the cycle. The node is wider than `ref i` in one way: a
      * name that no scope binds yet has no target, and the model has no free variable.
      *
-     * **Everything else here reads through the node.** {@link occV}, {@link occA} and
+     * **Everything else here reads through the node.** {@link occV} and
      * {@link ownsNullOf} answer what the target answers, and the emitter prints an entry of a
      * cycle as a `ref`. Only {@link member} answers `undefined`. An unknown occupancy is the
      * unsound direction: the declaration guard refuses a union when two occupancies *meet*, so a
@@ -521,31 +519,6 @@ export const everySlot: readonly SetSlot[] = [
     'map',
 ]
 
-const everyMember: readonly AttributeName[] = [
-    'S',
-    'N',
-    'B',
-    'BOOL',
-    'NULL',
-    'SS',
-    'NS',
-    'BS',
-    'L',
-    'M',
-]
-
-/** `⊤` is `undefined`, so a union of occupancies is `undefined` as soon as one side is. */
-const joined = <A>(
-    parts: readonly (readonly A[] | undefined)[],
-): readonly A[] | undefined => {
-    const out: A[] = []
-    for (const part of parts) {
-        if (part === undefined) return undefined
-        for (const one of part) if (!out.includes(one)) out.push(one)
-    }
-    return out
-}
-
 /**
  * `occV`: which value constructors a term may write.
  *
@@ -681,117 +654,7 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
     }
 }
 
-/**
- * `occA`: which members a term may read, or `undefined` for every one of them.
- *
- * The mirror of {@link occV}, and **not a symmetric mirror**: `held` and `withLegacyRead` swap sides.
- * `held`'s `g` sits *behind* `p`, so it changes which value comes out and never which attributes go
- * in, and the read occupancy is the subterm's. `withLegacyRead`'s `r` is arbitrary data the term carries and
- * widens exactly the reading, so it is `⊤` here where it was the subterm's on the write side.
- *
- * A lawful `r` does respect the member, and the model records that this is the one place `μG` is
- * sharper than `occA` — sharper only under an obligation no declaration-time certificate takes as a
- * premise.
- *
- * `ref` diverges from the model for the reason {@link occV} gives.
- */
-export const occA = (t: Term): readonly AttributeName[] | undefined => {
-    switch (t.kind) {
-        case 'string':
-        case 'number':
-        case 'boolean':
-        case 'binary':
-        case 'null':
-            return [ground[t.kind].member]
-        case 'literal':
-            return [ground[t.base].member]
-        case 'set': {
-            const read = occA(t.elem)
-            return read?.flatMap((one) => setMemberOf(one) ?? [])
-        }
-        case 'list':
-            return ['L']
-        case 'object':
-            return ['M']
-        case 'legacy':
-            return undefined
-        // transparent, as on the write side. A free variable may read every member
-        case 'ref': {
-            const target = targetOf(t)
-            return target === undefined ? undefined : occA(target)
-        }
-        case 'refine':
-        case 'held':
-            return occA(t.inner)
-        case 'union':
-            return joined(t.options.map(occA))
-        // the closed form again, for the reason {@link occV}'s `opaq` row gives
-        case 'opaq':
-            return everyMember
-        // empty and not `undefined`, for the reason {@link occV}'s `never` row gives
-        case 'never':
-            return []
-        // an arm left out would answer "unknown" with no error. This arm is the build error
-        default:
-            return t satisfies never
-    }
-}
-
 /* ── the name spec, and the discriminator ─────────────────────────────────────────────── */
-
-/**
- * The names an object option answers to, each with whether the item must carry it.
- *
- * `undefined` for a non-object. The certificate reads these names and the literals an object
- * pins (the model reads them through the disjointness of two bodies). Selection itself is by attempt at every option, objects
- * included. An `optional` binding is declared and not required, and that is
- * the ambiguity of the union: two objects declaring only optional names both admit
- * the empty map, however disjoint their names.
- */
-export const specOf = (
-    t: Term,
-): Readonly<Record<string, boolean>> | undefined => {
-    if (t.kind !== 'object') return undefined
-    const spec: Record<string, boolean> = {}
-    for (const [name, field] of Object.entries(t.body.fields)) {
-        spec[name] = alwaysWritten(field)
-    }
-    return spec
-}
-
-/**
- * One declared name, as a **slice clause** reads it.
- *
- * The model's `NameSpec`, which `litSubAt` reads: `required` is its presence, `alts` its literal. Split
- * across two host readers rather than one record, because {@link specOf} already answers the first
- * for every declared name and this answers the second for the few names a literal pins.
- */
-export type NameLiteral = {
-    readonly required: boolean
-    readonly alts: Alternatives
-}
-
-/**
- * The literal each declared name is pinned to — the names with no literal field are absent, and a
- * non-object term answers `undefined`.
- *
- * **Every mark, not `req` alone**, which is where this parts company with {@link tagsOf}. A tag has
- * to be written, so `tagsOf` reads `req` and refuses the other three. A literal *field* constrains
- * exactly the values that carry the name whatever its mark, and admission is present-only, so an
- * `optional` literal is read here and its `required` says `false`. That is the model's
- * `Closed.spec`, which reads `pinOfG` at every slot, `req`, `optional` and `withLegacyRead` alike.
- */
-export const literalsOf = (
-    t: Term,
-): Readonly<Record<string, NameLiteral>> | undefined => {
-    if (t.kind !== 'object') return undefined
-    const literals: Record<string, NameLiteral> = {}
-    for (const [name, field] of Object.entries(t.body.fields)) {
-        const alts = pinnedLiteral(field.t)
-        if (alts) literals[name] = { required: alwaysWritten(field), alts }
-    }
-    return literals
-}
 
 /**
  * **The form a clause is written at**, which the base alone stopped naming.
@@ -834,38 +697,10 @@ export type NameForm = {
 }
 
 /**
- * The literal each declared name is pinned to, **read through a declared adapter**.
- *
- * **Not {@link literalsOf}, and the two must not become one.** That reader answers at the caller's
- * level: an adapter pins nothing there, so a field under one is absent. This reader
- * descends, because `extract` compares a clause literal against a member literal and both sit
- * under the same kind of adapter, so the pair below is the pair that decides. Merging them makes
- * every object union at a numeric name refuse every value, and the failure is a runtime refusal
- * rather than a type error.
- *
- * An adapter whose held side is `opaque` pins nothing here either, and a clause cannot
- * name it.
- */
-export const clauseLiteralsOf = (
-    t: Term,
-): Readonly<Record<string, NameForm>> | undefined => {
-    if (t.kind !== 'object') return undefined
-    const literals: Record<string, NameForm> = {}
-    for (const [name, field] of Object.entries(t.body.fields)) {
-        const pinned = pinnedForm(field.t)
-        if (pinned)
-            literals[name] = { required: alwaysWritten(field), ...pinned }
-    }
-    return literals
-}
-
-/**
  * **The form a clause names**, reading through a declared adapter and *not* through a refinement.
  *
- * The refinement rule is {@link pinnedLiteral}'s and the reason is the same one stated there: a
- * member's literal survives a narrowing as an upper bound, and a clause is written by the caller
- * and states exactly what it means. So the member side reads through both and the clause side
- * reads through the adapter alone.
+ * A clause is written by the caller and states exactly what it means, so a refinement is no part
+ * of it: the clause side reads through the adapter alone.
  */
 export const clauseForm = (
     t: Term,
@@ -882,34 +717,14 @@ export const clauseForm = (
     return alts && { alts, form: literalForm(alts.base, outer) }
 }
 
-/** …and the member's side, which reads through a refinement too. @see {@link clauseForm} */
-export const pinnedForm = (t: Term): Omit<NameForm, 'required'> | undefined => {
-    const at = resolvedTerm(t)
-    return at?.kind === 'refine' ? pinnedForm(at.inner) : at && clauseForm(at)
-}
-
-/**
- * The literal a term is pinned to, reading through a refinement.
- *
- * A refinement of a literal admits a subset of that literal's alternatives, so the literal is a
- * sound upper bound on what the field can carry: a value outside it is outside the field, and a
- * value inside it that the refinement rejects is the option's own error to report.
- */
-const pinnedLiteral = (t: Term): Alternatives | undefined => {
-    const at = resolvedTerm(t)
-    return at?.kind === 'refine'
-        ? pinnedLiteral(at.inner)
-        : at && literalAlternatives(at)
-}
-
 /**
  * **The alternatives a term pins, without reading through a refinement.**
  *
  * One literal pins its own value; a union of literals at one base pins theirs, which is what
  * `string('a', 'b')` builds. Everything else pins nothing.
  *
- * Separate from {@link pinnedLiteral} because a tag is written and a refinement is not: a reader
- * that must produce the value the codec writes cannot look through a predicate that narrows it.
+ * A reader that must produce the value the codec writes cannot look through a refinement, because
+ * a predicate narrows the literal.
  */
 export const literalAlternatives = (t: Term): Alternatives | undefined => {
     const at = resolvedTerm(t)
@@ -1033,24 +848,6 @@ export const unionAlternatives = (
         base: first.base,
         ls,
     } as unknown as Alternatives
-}
-
-/**
- * The tags an object option answers to on discriminator `d` — empty for everything else.
- *
- * **`req` only, and a string literal only.** A `withLegacyRead` discriminator would fill an absent tag
- * with an arbitrary value the tag sets never vouched for, and (C) would then re-encode a variant no
- * tag selects; an `optional` one would let the tag be absent altogether. So four facts are read off
- * one question: the term is an object, `d` is declared, the field is `req`, and its term is a
- * literal at the string base. The model reads none of this, because no term carries the table.
- */
-export const tagsOf = (d: string, t: Term): readonly string[] => {
-    if (t.kind !== 'object') return []
-    const field = t.body.fields[d]
-    if (field === undefined || field.mark !== 'req') return []
-    // a union of string literals is what `string('a', 'b')` builds, and it names those tags
-    const alts = literalAlternatives(field.t)
-    return alts?.base === 'string' ? alts.ls : []
 }
 
 /* ── the declaration guard ────────────────────────────────────────────────────────────── */

@@ -483,8 +483,8 @@ export type Decoded<C> = C extends {
 
 /*
  * A reader here answers from the **term** and nothing else, which is what makes the term determine
- * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`,
- * `occA`, `specOf`, `tagsOf` and `agrees` are `term.ts`'s, and
+ * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`
+ * and `agrees` are `term.ts`'s, and
  * `carries`, `accepts` and `readsBack` ask the pair in `denote.ts`.
  *
  * They take a *codec* and read its term rather than taking the term, and that is the decision
