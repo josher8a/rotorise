@@ -157,41 +157,39 @@ describe('a nested key match', () => {
 
 describe('the type of a nested key match', () => {
     it('refuses an inner arm that names an attribute of another variant', () => {
-        tableEntry<Creature>()({
-            PK: ['id'],
+        type Schema = {
+            PK: ['id']
             SK: {
-                discriminator: 'tag',
+                discriminator: 'tag'
                 spec: {
-                    OBJECT: ['name'],
+                    OBJECT: ['name']
                     ANIMAL: {
-                        discriminator: 'specie',
-                        spec: {
-                            CAT: null,
-                            // @ts-expect-error `breed` exists only on a dog
-                            HORSE: ['breed'],
-                            DOG: ['name'],
-                        },
-                    },
-                },
-            },
-        })
+                        discriminator: 'specie'
+                        spec: { CAT: null; HORSE: ['breed']; DOG: ['name'] }
+                    }
+                }
+            }
+        }
+        // @ts-expect-error `breed` exists only on a dog
+        tableEntry<Creature>()<Schema>
     })
 
     it('refuses an inner match that lacks a literal', () => {
-        tableEntry<Creature>()({
-            PK: ['id'],
+        type Schema = {
+            PK: ['id']
             SK: {
-                discriminator: 'tag',
+                discriminator: 'tag'
                 spec: {
-                    OBJECT: ['name'],
+                    OBJECT: ['name']
                     ANIMAL: {
-                        discriminator: 'specie',
-                        // @ts-expect-error `HORSE` has no arm
-                        spec: { CAT: null, DOG: ['name'] },
-                    },
-                },
-            },
-        })
+                        discriminator: 'specie'
+                        spec: { CAT: null; DOG: ['name'] }
+                    }
+                }
+            }
+        }
+        // @ts-expect-error `HORSE` has no arm
+        tableEntry<Creature>()<Schema>
     })
 
     it('refuses a match on an attribute that the variant does not have', () => {

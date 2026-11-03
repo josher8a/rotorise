@@ -353,13 +353,22 @@ describe('the type of a grouped match', () => {
     })
 
     it('refuses a case with an empty list of literals', () => {
+        type Schema = {
+            PK: ['id']
+            SK: {
+                discriminator: 's'
+                cases: [[[], ['id']], [['A', 'B', 'C'], ['id']]]
+            }
+        }
+        // @ts-expect-error a case names a literal
+        tableEntry<Row>()<Schema>
+        const untyped = tableEntry<Row>() as (schema: object) => unknown
         expect(() =>
-            tableEntry<Row>()({
+            untyped({
                 PK: ['id'],
                 SK: {
                     discriminator: 's',
                     cases: [
-                        // @ts-expect-error a case names a literal
                         [[], ['id']],
                         [['A', 'B', 'C'], ['id']],
                     ],
