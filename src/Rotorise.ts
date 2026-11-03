@@ -1653,6 +1653,8 @@ type OptimizedAttributes<Entity, Spec, Config extends SpecConfigShape> = show<
  * The key that a call builds, from the attributes of the call. A key of one attribute is the value
  * of that attribute in the call, and `null` gives no key. The call holds every attribute that the
  * key reads, so the value is read at the name of the spec and not from the call as a whole.
+ * An empty separator gives `never`. A call with an empty separator is a refusal, and on TypeScript
+ * 5.5 and later the recursion on that separator reaches the depth limit before the refusal shows.
  */
 type ProcessKey<
     Entity,
@@ -1660,33 +1662,35 @@ type ProcessKey<
     Separator extends string,
     NullAs extends never | undefined = never,
     Config extends SpecConfigShape = SpecConfigShape,
-> = [Entity] extends [never]
+> = Separator extends ''
     ? never
-    : Spec extends keyof Entity
-      ? Replace<Entity[Spec], null, undefined>
-      : Spec extends InputSpecShape
-        ? CompositeKeyBuilderImpl<
-              Entity,
-              Spec,
-              Separator,
-              Exclude<Config['depth'], undefined>,
-              Exclude<Config['allowPartial'], undefined>,
-              [Config['enforceBoundary']] extends [true] ? true : false
-          >
-        : Spec extends null | undefined
-          ? NullAs
-          : Spec extends DiscriminatedSchemaShape
-            ? ProcessKey<
-                  Entity,
-                  ValueOf<
-                      Spec['spec'],
-                      ValueOfKey<Entity, Spec['discriminator']>
-                  >,
-                  Separator,
-                  NullAs,
-                  Config
-              >
-            : ErrorMessage<'Invalid Spec'>
+    : [Entity] extends [never]
+      ? never
+      : Spec extends keyof Entity
+        ? Replace<Entity[Spec], null, undefined>
+        : Spec extends InputSpecShape
+          ? CompositeKeyBuilderImpl<
+                Entity,
+                Spec,
+                Separator,
+                Exclude<Config['depth'], undefined>,
+                Exclude<Config['allowPartial'], undefined>,
+                [Config['enforceBoundary']] extends [true] ? true : false
+            >
+          : Spec extends null | undefined
+            ? NullAs
+            : Spec extends DiscriminatedSchemaShape
+              ? ProcessKey<
+                    Entity,
+                    ValueOf<
+                        Spec['spec'],
+                        ValueOfKey<Entity, Spec['discriminator']>
+                    >,
+                    Separator,
+                    NullAs,
+                    Config
+                >
+              : ErrorMessage<'Invalid Spec'>
 
 type OptimizedBuiltKey<
     Entity,
