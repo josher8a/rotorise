@@ -221,8 +221,6 @@ HOST = {
                     "codec and the term are named on their own sides",
     "sampleVectors": "`src/codec/lean/lean.spec.ts`'s differential corpus. The vectors it "
                      "generates are elaborated here; the list itself is the host's",
-    "literalsOf": "`src/codec/term.ts`'s reader for the literals an object pins, at the caller's "
-                  "level. The model reads `pinOfG`, which is not the same question",
     "opaque": "`src/`'s codec, analysed here as the language's one escape hatch, and warranted "
               "by the calculus rather than by its user (§7). `opaqCodec` is the model's, and is "
               "not the same name",
