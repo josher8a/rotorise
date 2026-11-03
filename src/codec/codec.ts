@@ -50,6 +50,7 @@ import type {
     Norm,
     OffersAt,
     OpenT,
+    Same,
     ScopeWallCycle,
     StepFrames,
 } from './pathModel'
@@ -5136,10 +5137,8 @@ type InLits<L, Bs extends unknown[]> = Bs extends [
     infer Head,
     ...infer Rest extends unknown[],
 ]
-    ? [L] extends [Head]
-        ? [Head] extends [L]
-            ? true
-            : InLits<L, Rest>
+    ? Same<L, Head> extends true
+        ? true
         : InLits<L, Rest>
     : false
 /** The codec of the literals `Ls`, at the attribute of `A`: `never` where no literal is common. */
@@ -7152,7 +7151,11 @@ type IsRef<T> = T extends ['ref', unknown] | ['scope', unknown, unknown]
  * to.
  */
 type RefKey<T, N, E> = IsRef<T> extends true ? [T, E] : N
-/** The rules at two nodes, and `'u'` for the pair of one term where the rules give `'f'`. */
+/**
+ * The rules at two nodes, and `'u'` for the pair of one term where the rules give `'f'`. The run
+ * time answers `true` for one object, so two codecs built apart read by the rules, and the same
+ * codec reads `true`. The type cannot tell the two cases apart.
+ */
 type BelowStep<NA, NP, EA, EP, Seen extends readonly unknown[]> = BelowN<
     NA,
     NP,
@@ -7160,7 +7163,7 @@ type BelowStep<NA, NP, EA, EP, Seen extends readonly unknown[]> = BelowN<
     EP,
     Seen
 > extends 'f'
-    ? SameTerm<NA, NP> extends true
+    ? Same<NA, NP> extends true
         ? 'u'
         : 'f'
     : BelowN<NA, NP, EA, EP, Seen>
@@ -7169,18 +7172,12 @@ type SeenPair<Seen extends readonly unknown[], A, P> = Seen extends readonly [
     [infer SA, infer SP],
     ...infer Rest extends readonly unknown[],
 ]
-    ? SameTerm<SA, A> extends true
-        ? SameTerm<SP, P> extends true
+    ? Same<SA, A> extends true
+        ? Same<SP, P> extends true
             ? true
             : SeenPair<Rest, A, P>
         : SeenPair<Rest, A, P>
     : false
-/**
- * Whether two terms are one term. The run time answers `true` for one object, so two codecs built
- * apart read by the rules, and the same codec reads `true`. The type cannot tell the two cases
- * apart, so it answers `'u'` where the rules give `'f'` for one term.
- */
-type SameTerm<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 /** The rules of {@link BelowT} at two nodes. */
 type BelowN<A, P, EA, EP, Seen extends readonly unknown[]> = HoldsNoValue<
     A,
@@ -7271,36 +7268,32 @@ type BelowClause<A, P> = ClauseOf<A> extends [
     ? ClauseOf<P> extends ['form', infer PT, infer PK, infer PV]
         ? SameTags<AT, PT> extends 'f'
             ? 'f'
-            : [AK] extends [PK]
-              ? [PK] extends [AK]
-                  ? SameTags<AT, PT> extends 'u'
-                      ? 'u'
-                      : true extends InexactValue<AV> | InexactValue<PV>
-                        ? [AV & PV] extends [never]
-                            ? 'f'
-                            : 'u'
-                        : [AV] extends [PV]
-                          ? 't'
-                          : 'f'
-                  : 'f'
+            : Same<AK, PK> extends true
+              ? SameTags<AT, PT> extends 'u'
+                  ? 'u'
+                  : true extends InexactValue<AV> | InexactValue<PV>
+                    ? [AV & PV] extends [never]
+                        ? 'f'
+                        : 'u'
+                    : [AV] extends [PV]
+                      ? 't'
+                      : 'f'
               : 'f'
         : 'f'
     : 'f'
 /** `'f'` where two chains of adapter tags differ, `'u'` where a caller's adapter meets one, else `'t'`. */
-type SameTags<A, B> = [A] extends [B]
-    ? [B] extends [A]
-        ? [A] extends [readonly []]
-            ? 't'
-            : true extends (
-                    A extends readonly (infer G)[]
-                        ? [G] extends [['caller']]
-                            ? true
-                            : false
+type SameTags<A, B> = Same<A, B> extends true
+    ? [A] extends [readonly []]
+        ? 't'
+        : true extends (
+                A extends readonly (infer G)[]
+                    ? [G] extends [['caller']]
+                        ? true
                         : false
-                )
-              ? 'u'
-              : 't'
-        : 'f'
+                    : false
+            )
+          ? 'u'
+          : 't'
     : 'f'
 /** The rules at a pattern that is no literal. */
 type BelowShape<A, P, EA, EP, Seen extends readonly unknown[]> = P extends [
@@ -7351,12 +7344,10 @@ type BelowShape<A, P, EA, EP, Seen extends readonly unknown[]> = P extends [
               [infer AG, unknown],
               ...unknown[],
           ]
-            ? [AG] extends [PG]
-                ? [PG] extends [AG]
-                    ? [AG] extends [['caller']]
-                        ? 'u'
-                        : BelowT<AI, PI, EA, EP, Seen>
-                    : 'f'
+            ? Same<AG, PG> extends true
+                ? [AG] extends [['caller']]
+                    ? 'u'
+                    : BelowT<AI, PI, EA, EP, Seen>
                 : 'f'
             : 'f'
         : P extends ['set', infer PE]
@@ -7680,14 +7671,6 @@ type KeptBy<
       ]
     : []
 
-type SameList<A extends readonly unknown[], B extends readonly unknown[]> = [
-    A,
-] extends [B]
-    ? [B] extends [A]
-        ? true
-        : false
-    : false
-
 /** A split key of an option: the summand specs that the pattern keeps and rejects, and the summands as declared. */
 type NestedKey<
     K,
@@ -7950,7 +7933,7 @@ type FieldOf<
     L extends readonly unknown[],
     Orig extends readonly unknown[],
     Slot,
-> = true extends SameList<L, Orig>
+> = true extends Same<L, Orig>
     ? Slot
     : L extends readonly [infer One]
       ? ObjectOfSpec<One>

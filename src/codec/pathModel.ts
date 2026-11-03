@@ -146,12 +146,16 @@ type Unanimous<L> = L extends [infer H, ...infer R]
         : 'none'
     : 'none'
 type AllEq<R, H> = R extends [infer X, ...infer Rs]
-    ? [X] extends [H]
-        ? [H] extends [X]
-            ? AllEq<Rs, H>
-            : false
+    ? Same<X, H> extends true
+        ? AllEq<Rs, H>
         : false
     : true
+/** Whether two types are mutually assignable. */
+export type Same<A, B> = [A] extends [B]
+    ? [B] extends [A]
+        ? true
+        : false
+    : false
 
 // ── the segment, and the store's refusal (`Seg.member`, `apartAt`) ──
 type SegMember<S> = S extends ['name', unknown] ? 'M' : 'L'
@@ -769,18 +773,16 @@ type PairG<X, XE, Y, YE, A extends unknown[]> = EntryOf<X, XE> extends [
 /** `primsApart`: two kinds, or two literals of one kind with two texts. Bytes are not compared. */
 type PrimsApartT<G, G2> = G extends ['base' | 'literal', infer K, ...unknown[]]
     ? G2 extends ['base' | 'literal', infer K2, ...unknown[]]
-        ? [K] extends [K2]
-            ? [K2] extends [K]
-                ? G extends ['literal', unknown, infer V]
-                    ? G2 extends ['literal', unknown, infer V2]
-                        ? K extends 'binary'
-                            ? false
-                            : FrameSame<V, V2> extends true
-                              ? false
-                              : true
-                        : false
+        ? Same<K, K2> extends true
+            ? G extends ['literal', unknown, infer V]
+                ? G2 extends ['literal', unknown, infer V2]
+                    ? K extends 'binary'
+                        ? false
+                        : FrameSame<V, V2> extends true
+                          ? false
+                          : true
                     : false
-                : true
+                : false
             : true
         : false
     : false
