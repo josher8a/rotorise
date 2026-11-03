@@ -1644,15 +1644,35 @@ export const judged = (t: Term, declaring = true): void => {
     if (refusal) throw refusal
 }
 
+/**
+ * The capabilities that a term decides, added to the codec that the term denotes. `codec.ts`
+ * registers the function before it builds the first codec, because the capabilities are the
+ * constructors of `codec.ts`: the literal call and the `.set()`.
+ */
+let equipped:
+    | ((codec: AttributeCodec<never, AttributeValue>, def: Term) => unknown)
+    | undefined
+
+export const equipCodecs = (equip: NonNullable<typeof equipped>): void => {
+    equipped = equip
+}
+
 export const codecOfTerm = <T, A extends AttributeValue>(
     def: Term,
 ): AttributeCodec<T, A> => {
     const built = codecs.get(def)
     if (built) return built as unknown as AttributeCodec<T, A>
     judged(def)
-    const made = codecAtLevel<T, A>(Object.freeze(def), 0)
-    codecs.set(def, made as unknown as AttributeCodec<never, AttributeValue>)
-    return made
+    if (!equipped)
+        throw new Error(
+            'codecOfTerm ran before codec.ts registered the capabilities of a term',
+        )
+    const made = equipped(
+        codecAtLevel<never, AttributeValue>(Object.freeze(def), 0),
+        def,
+    ) as AttributeCodec<never, AttributeValue>
+    codecs.set(def, made)
+    return made as unknown as AttributeCodec<T, A>
 }
 
 /**

@@ -23,6 +23,7 @@ import {
     byTagSem,
     codecAtLevel,
     codecOfTerm,
+    equipCodecs,
     guard,
     itemSem,
     judged,
@@ -718,13 +719,6 @@ const including = (
         : [...frontier, codec]
 
 /**
- * **The codec where a container admits no value at a segment**: one `never`, so a frontier that
- * holds it agrees with no writer, and the walk refuses on use. One term, so the frontier keeps one
- * copy.
- */
-const absent: AnyCodec = codecOfTerm({ kind: 'never' })
-
-/**
  * **A codec that admits no value at a path**: its term is `never`, the model's frame whose head is
  * `never` (`frameNever`). A declared `never` and {@link absent} are one term, so the test reads the
  * term and not the identity of {@link absent}: the frontier keeps the first codec of a term, and an
@@ -1068,31 +1062,131 @@ export type ConstantNumber<C> = TermOf<C> extends FloatT<
         : never
     : never
 
-/**
- * The `.set()` capability, on the four bases that have one.
- *
- * `base.set()` is the whole base; `base.set(...values)` is a set of a literal at it. Both are the
- * same {@link set} underneath, which is what keeps there being one set combinator rather than two.
- */
-const setCapability =
-    (base: SetBase, ground: () => AnyCodec) =>
-    (...allowed: readonly LiteralValue[]) =>
-        // the *public* codec, reached through a thunk because it is the constant being defined:
-        // `string.set()` and the set of that same base should be the same codec, definition
-        // included, and a second element object built from the same closures would compare unequal.
-        // The literal comes from {@link literalCapability}, the call of the base itself, so a
-        // repeated value refuses here as it refuses at `string('dog', 'dog')`
-        set(
-            (allowed.length
-                ? literalCapability(base)(...allowed)
-                : ground()) as AnyCodec,
-        )
-
 /** The literal capability, on every base. */
 const literalCapability =
     (base: LiteralBase) =>
     (...allowed: readonly LiteralValue[]) =>
         literalCodec(base, someAlternatives(base, allowed))
+
+/**
+ * **The `.set()` of a codec**: the set of the codec that carries it, or, where the codec has a
+ * literal call, the set of the literal at the alternatives that the call names. One function for
+ * each codec that has a `.set()`: the bases, the two numeric adapters, a refinement and an entry of
+ * a scope. A repeated value refuses here as it refuses at `string('dog', 'dog')`.
+ *
+ * The thunk reads the codec that carries the `.set()`, and not the one that was handed in:
+ * `.set()` records its element in `def`, so two copies of one codec would give two definitions
+ * that differ by a property nobody can see.
+ */
+const setOf =
+    (carrier: () => AnyCodec, literal?: (...allowed: never[]) => AnyCodec) =>
+    (...allowed: readonly unknown[]) =>
+        set(
+            allowed.length > 0 && literal !== undefined
+                ? literal(...(allowed as never[]))
+                : carrier(),
+        )
+
+/**
+ * The slots of an object term, as a caller reads them: the codec of each field term, and the
+ * field itself, `{ codec, def }`, where the mark is not `req`. The rest is the codec of the open
+ * term. Each codec is the one that `codecOfTerm` gives the term, so a slot is the codec that the
+ * caller wrote, from one source.
+ */
+const slotsOf = (body: Body) => ({
+    spec: Object.fromEntries(
+        Object.entries(body.fields).map(([name, f]) => {
+            const codec = codecOfTerm(f.t)
+            return [name, f.mark === 'req' ? codec : { codec, def: f }]
+        }),
+    ),
+    rest: body.rest && codecOfTerm(body.rest),
+})
+
+/**
+ * **The capabilities that a term decides**, added to the codec that `codecOfTerm` denotes for it.
+ *
+ * - The literal call: the four bases at the term of the base (`string('A')`), the two numeric
+ *   adapters at the term of the adapter (`decimal('1.5')`, `number(5)`).
+ * - `.set()`: the bases that have a set (`boolean` has none), the two numeric adapters, and a
+ *   refinement of any term. `set` refuses an element that names no member of `S`, `N` or `B`.
+ * - `.spec` and `.rest`: the slots of an object term.
+ *
+ * The constants are the codecs that this gives for their own term, so a codec that a slice or a meet
+ * builds from a term is the codec that the caller wrote. `opaque` is not here: its call chooses
+ * among three codecs by a policy, and the canonical term holds no policy, so the policy would be a
+ * fact outside the term.
+ */
+const equip = (codec: AnyCodec, term: Term): unknown => {
+    if (term.kind === 'object') {
+        // read at the first use: a scope binds its names after the terms that name them are built
+        let slots: ReturnType<typeof slotsOf> | undefined
+        const read = () => {
+            slots ??= slotsOf(term.body)
+            return slots
+        }
+        return Object.defineProperties(
+            { ...codec },
+            {
+                spec: { enumerable: true, get: () => read().spec },
+                rest: { enumerable: true, get: () => read().rest },
+            },
+        )
+    }
+    if (term.kind === 'refine') {
+        const capable: AnyCodec = {
+            ...codec,
+            set: setOf(() => capable),
+        } as AnyCodec
+        return capable
+    }
+    const call = literalCallOf(term)
+    if (call === undefined) return codec
+    const carrier = Object.assign(call, codec) as unknown as AnyCodec
+    return term.kind === 'boolean'
+        ? carrier
+        : Object.assign(carrier, { set: setOf(() => carrier, call) })
+}
+
+/**
+ * The literal call that a term has, or nothing. Each call is a function of its own: the carrier
+ * takes the properties of the codec, so one function shared by two terms would carry the `def` of
+ * the last.
+ */
+const literalCallOf = (
+    term: Term,
+): ((...allowed: never[]) => AnyCodec) | undefined => {
+    switch (term.kind) {
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+            return literalCapability(term.kind) as (
+                ...allowed: never[]
+            ) => AnyCodec
+        case 'held':
+            if (term.inner.kind !== 'number') return undefined
+            if (term.via === 'decimalText' && term.outer.kind === 'string')
+                return (...allowed) => decimalCall(...(allowed as string[]))
+            return term.via === undefined &&
+                term.outer.kind === 'number' &&
+                term.f === asFloat &&
+                term.g === asJsNumber
+                ? (...allowed) => numberCall(...(allowed as number[]))
+                : undefined
+        default:
+            return undefined
+    }
+}
+
+equipCodecs(equip)
+
+/**
+ * **The codec where a container admits no value at a segment**: one `never`, so a frontier that
+ * holds it agrees with no writer, and the walk refuses on use. One term, so the frontier keeps one
+ * copy.
+ */
+const absent: AnyCodec = codecOfTerm({ kind: 'never' })
 
 /**
  * A string, as `S`. Exact in both directions: DynamoDB does not normalise strings.
@@ -1130,16 +1224,10 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
 
 /* ── the terms, denoted ───────────────────────────────────────────────────────────────── */
 
-const stringCodec: AttributeCodec<string, Attribute<'S'>> = codecOfTerm({
-    kind: 'string',
-})
-
 /** @see {@link StringCodec} */
-export const string: StringCodec = Object.assign(
-    literalCapability('string'),
-    stringCodec,
-    { set: setCapability('string', () => string) },
-) as unknown as StringCodec
+export const string: StringCodec = codecOfTerm({
+    kind: 'string',
+}) as unknown as StringCodec
 
 /**
  * **`N` itself, and the one native numeric term.** DynamoDB's own number, held as
@@ -1182,14 +1270,7 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
             ): AttributeCodec<ReadonlySet<T[number]>, NS> &
                 TermMark<['set', LitsT<'number', NumTexts<T>>]>
         }
-    } = Object.assign(
-    literalCapability('number'),
-    codecOfTerm({ kind: 'number' }) as AttributeCodec<
-        DynamoNumber,
-        Attribute<'N'>
-    >,
-    { set: setCapability('number', () => dynamoNumber) },
-) as never
+    } = codecOfTerm({ kind: 'number' }) as never
 
 /** The held side of an adapter over a finite set of numerals: the texts it hands the caller. */
 const textsOf = (texts: readonly string[]): Term => {
@@ -1247,6 +1328,19 @@ const storedOnly = (value: string): Result<DynamoNumber> =>
                 `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
             )
 
+/** The literal call of {@link decimal}: the digits are refused unless they are the stored spelling. */
+const decimalCall = (...allowed: readonly string[]) => {
+    const stored = allowed.map((one) => orThrow(storedOnly(one)))
+    return numericAdapter<string>(
+        termOf(literalCapability('number')(...stored) as AnyCodec),
+        // the held side is the texts the adapter hands the caller, so the view is exact
+        textsOf(stored.map((held) => held.toString())),
+        storedOnly,
+        (held) => held.toString(),
+        'decimalText',
+    )
+}
+
 /**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
  * nothing rounds.
@@ -1296,30 +1390,12 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> &
                     ]
                 >
         }
-    } = Object.assign(
-    (...allowed: readonly string[]) => {
-        const stored = allowed.map((one) => orThrow(storedOnly(one)))
-        return numericAdapter<string>(
-            termOf(literalCapability('number')(...stored) as AnyCodec),
-            // the held side is the texts the adapter hands the caller, so the view is exact
-            textsOf(stored.map((held) => held.toString())),
-            storedOnly,
-            (held) => held.toString(),
-            'decimalText',
-        )
-    },
-    numericAdapter<string>(
-        { kind: 'number' },
-        { kind: 'string' },
-        storedOnly,
-        (held) => held.toString(),
-        'decimalText',
-    ),
-    {
-        // the set of the adapter itself: the conversion rides at the element
-        set: (...allowed: readonly string[]) =>
-            set((allowed.length ? decimal(...allowed) : decimal) as AnyCodec),
-    },
+    } = numericAdapter<string>(
+    { kind: 'number' },
+    { kind: 'string' },
+    storedOnly,
+    (held) => held.toString(),
+    'decimalText',
 ) as never
 
 /** A JS number, as the carrier refuses it. */
@@ -1385,6 +1461,19 @@ const asJsNumber = (held: DynamoNumber): Result<number> => {
         : value
 }
 
+/** The literal call of {@link number}: each alternative is refused at the caller's level first. */
+const numberCall = (...allowed: readonly number[]) =>
+    numericAdapter<number>(
+        termOf(
+            literalCapability('number')(
+                ...numericAlternatives(allowed),
+            ) as AnyCodec,
+        ),
+        { kind: 'number' },
+        asFloat,
+        asJsNumber,
+    )
+
 /**
  * A JS number, stored as `N`. Lossy by construction — `N` carries 38 digits, `number` about 15.
  * Right for enums, counts and flags; wrong for money, which is {@link decimal}.
@@ -1411,29 +1500,11 @@ export const number: AttributeCodec<number, Attribute<'N'>> &
             ): AttributeCodec<ReadonlySet<L[number]>, NS> &
                 TermMark<['set', FloatT<LitsT<'number', FloatTexts<L>>>]>
         }
-    } = Object.assign(
-    (...allowed: readonly number[]) =>
-        numericAdapter<number>(
-            termOf(
-                literalCapability('number')(
-                    ...numericAlternatives(allowed),
-                ) as AnyCodec,
-            ),
-            { kind: 'number' },
-            asFloat,
-            asJsNumber,
-        ),
-    numericAdapter<number>(
-        { kind: 'number' },
-        { kind: 'number' },
-        asFloat,
-        asJsNumber,
-    ),
-    {
-        // the set of the adapter itself: the conversion rides at the element
-        set: (...allowed: readonly number[]) =>
-            set((allowed.length ? number(...allowed) : number) as AnyCodec),
-    },
+    } = numericAdapter<number>(
+    { kind: 'number' },
+    { kind: 'number' },
+    asFloat,
+    asJsNumber,
 ) as never
 
 /**
@@ -1454,15 +1525,10 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
             TermMark<LitsT<'boolean', L>>
     }
 
-const booleanCodec: AttributeCodec<boolean, Attribute<'BOOL'>> = codecOfTerm({
-    kind: 'boolean',
-})
-
 /** @see {@link BooleanCodec} */
-export const boolean: BooleanCodec = Object.assign(
-    literalCapability('boolean'),
-    booleanCodec,
-) as unknown as BooleanCodec
+export const boolean: BooleanCodec = codecOfTerm({
+    kind: 'boolean',
+}) as unknown as BooleanCodec
 
 /**
  * The `NULL` point: the one value `null`, stored as `⟨NULL, ∗⟩`.
@@ -1515,16 +1581,10 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
         }
     }
 
-const binaryCodec: AttributeCodec<Uint8Array, Attribute<'B'>> = codecOfTerm({
-    kind: 'binary',
-})
-
 /** @see {@link BinaryCodec} */
-export const binary: BinaryCodec = Object.assign(
-    literalCapability('binary'),
-    binaryCodec,
-    { set: setCapability('binary', () => binary) },
-) as unknown as BinaryCodec
+export const binary: BinaryCodec = codecOfTerm({
+    kind: 'binary',
+}) as unknown as BinaryCodec
 
 // ── collections ─────────────────────────────────────────────────────
 
@@ -1532,8 +1592,8 @@ export const binary: BinaryCodec = Object.assign(
  * A non-empty set, stored as the native set its members belong to.
  *
  * **The one set builder, and it is internal.** Every set in the surface comes through here:
- * `string.set()` and the other three bases via {@link setCapability}, and everything that reduces
- * to a base via {@link setCapable} — `amount.set()` where `amount = refine(decimal, isAmount)`.
+ * `string.set()` and the other bases via {@link setOf}, and everything that reduces to a base via
+ * {@link equip} — `amount.set()` where `amount = refine(decimal, isAmount)`.
  * It was exported as `set(element)` and is not any more: the capability propagates, so a
  * free-standing form said nothing `.set()` cannot, and having two spellings of one combinator on
  * the surface meant two things to keep in step. It stays a function rather than being inlined
@@ -1969,25 +2029,6 @@ export type SetCapable<T, A extends AttributeValue, Tm = FreeTerm> = [
           }
         : Record<never, never>
 
-/**
- * The `.set()` capability, attached to a codec that is not one of the four bases.
- *
- * The thunk closes over the codec **it returns**, not the one it was handed, and that is the whole
- * of the care needed here: `.set()` records its element in `def`, so a thunk closing over the
- * argument would make `amount.set().def` and `amount.set().def` two definitions that differ by a
- * `set` property nobody can see. Same reason {@link setCapability} reaches its base through a thunk
- * rather than naming the constant it is defining.
- */
-const setCapable = <T, A extends AttributeValue>(
-    self: AttributeCodec<T, A>,
-): Refined<T, A> => {
-    const capable = {
-        ...self,
-        set: () => set(capable as unknown as AnyCodec),
-    }
-    return capable as unknown as Refined<T, A>
-}
-
 /** What {@link refine} takes beside the inner codec and the predicate. */
 type RefineOptions<Narrow> = {
     /**
@@ -2043,23 +2084,21 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     // `member` reads through a refinement, which is what lets a set of a brand work; `constantOf`
     // does not, because the predicate may be exactly what rejects the constant.
     //
-    // `setCapable` is what carries `.set()` across the refinement, and it is the whole of why the
-    // brand survives: `amount.set()` decodes as `ReadonlySet<Price>` because the set is built from
+    // `equip` carries `.set()` across the refinement, and it is the whole of why the brand
+    // survives: `amount.set()` decodes as `ReadonlySet<Price>` because the set is built from
     // `amount`, where the predicate that produces a `Price` already lives.
-    return setCapable(
-        codecOfTerm<Narrow, A>({
-            kind: 'refine',
-            inner: termOf(inner as unknown as AnyCodec),
-            q: {
-                is: is as (value: never) => boolean,
-                what,
-                arbitrary: options.arbitrary as
-                    | ((rng: Rng, size: number) => unknown)
-                    | undefined,
-                onThinSearch: options.onThinSearch,
-            },
-        }),
-    )
+    return codecOfTerm<Narrow, A>({
+        kind: 'refine',
+        inner: termOf(inner as unknown as AnyCodec),
+        q: {
+            is: is as (value: never) => boolean,
+            what,
+            arbitrary: options.arbitrary as
+                | ((rng: Rng, size: number) => unknown)
+                | undefined,
+            onThinSearch: options.onThinSearch,
+        },
+    }) as unknown as Refined<Narrow, A, unknown>
 }
 
 // ── reading what is already there ───────────────────────────────────
@@ -2830,7 +2869,7 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
 const entryOf = (codec: AnyCodec, kind: Term['kind'] | undefined): object =>
     'set' in codec || kind === 'object' || kind === 'union'
         ? codec
-        : { ...codec, set: () => set(codec) }
+        : { ...codec, set: setOf(() => codec) }
 
 // ── presence ────────────────────────────────────────────────────────
 
@@ -4680,13 +4719,7 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
      */
     const body = itemSem(itemDef)
     const fields = itemDef.body.fields
-    const spec = Object.fromEntries(
-        Object.entries(fields).map(([name, f]) => {
-            const codec = codecOfTerm(f.t)
-            return [name, f.mark === 'req' ? codec : { codec, def: f }]
-        }),
-    )
-    const rest = itemDef.body.rest && codecOfTerm(itemDef.body.rest)
+    const { spec, rest } = slotsOf(itemDef.body)
     // a term that reads a name that no scope binds refuses each use
     const self: ObjectItem = {
         [itemMark]: true,
@@ -4789,31 +4822,7 @@ export function item(codec: object): unknown {
             'this codec has no whole-item reading: `item` takes an object or a union',
         )
     }
-    return objectWrote(codec) ? writtenReading(codec, reading) : reading
-}
-
-/** An object codec: the one codec whose spec holds the codecs that the caller wrote. */
-const objectWrote = (
-    codec: object,
-): codec is ObjectCodec<Record<string, ObjectSlot>, AnyCodec | undefined> =>
-    'spec' in codec && 'rest' in codec && !('discriminator' in codec)
-
-/**
- * The reading of an object node is a function of the term, so its spec holds a codec built from
- * each field term: a codec with no `set` and no literal constructor. The reading of an object codec
- * holds the codecs that the caller wrote, which the type of the spec states. One reading for each
- * spec, so a spread copy of an object codec keeps the item of the original.
- */
-const writtenReadings = new WeakMap<object, unknown>()
-const writtenReading = (
-    codec: ObjectCodec<Record<string, ObjectSlot>, AnyCodec | undefined>,
-    reading: Reading,
-): unknown => {
-    const known = writtenReadings.get(codec.spec)
-    if (known !== undefined) return known
-    const made = { ...reading, spec: codec.spec, rest: codec.rest }
-    writtenReadings.set(codec.spec, made)
-    return made
+    return reading
 }
 
 /**
