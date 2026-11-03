@@ -268,7 +268,8 @@ Name the command, and quote the output. A report without both is a claim.
 
 | check | command |
 | --- | --- |
-| type checker clean | `npm run check`, which runs `tsc --noEmit` |
+| type checker clean | `npm run check`, which runs `tsc --noEmit` on TypeScript 7. The `typescript` package is TypeScript 6, because the build and attest load the compiler API, which TypeScript 7 lacks. TypeScript 7 is the `typescript-7` alias. `npx tsc` runs TypeScript 6 |
+| type checker clean on a second compiler | `bash scripts/tsc-second.sh`, which runs `tsc --noEmit` on the newest TypeScript 5.x. A consumer compiles the published types with the compiler of the consumer |
 | suite green in the real environment | `npx vitest --run`. `npm test` opens watch mode. A stubbed runner reports a false green |
 | formatter, import order and linter clean | `npm run format:ci`, which runs `biome ci --error-on-warnings ./src`. A lint warning fails the check. The spec and test files are not linted |
 | published name set | `bash scripts/surface-names.sh --build`, which compares the export set of the three entries against `scripts/surface/*.txt`. Name each move in the commit message |

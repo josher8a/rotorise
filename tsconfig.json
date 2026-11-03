@@ -17,7 +17,10 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     /* If transpiling with TypeScript: */
-    "module": "commonjs",
+    /* tsc checks and emits nothing; tsup bundles. TypeScript 7 removes the node10 resolution that
+       commonjs implied. */
+    "module": "preserve",
+    "moduleResolution": "bundler",
     "sourceMap": true,
     /* AND if you're building for a library: */
     "declaration": true,
@@ -27,6 +30,10 @@
     /* If your code doesn't run in the DOM: */
     "lib": [
       "es2022"
+    ],
+    /* TypeScript 6 and later load no @types package unless a config names it. */
+    "types": [
+      "node"
     ],
     "rootDir": "./src",
     "outDir": "./dist",

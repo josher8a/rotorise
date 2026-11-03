@@ -19,6 +19,14 @@ export default defineConfig({
     // `composite` is on in tsconfig.json for monorepo project references, but the dts worker builds
     // a program from the entry alone, and composite requires every file to be listed. Rotorise.ts
     // now imports sibling modules, so the declaration build needs it off.
-    dts: { compilerOptions: { composite: false, declarationMap: false } },
+    // `ignoreDeprecations`: the dts worker sets `baseUrl`, and TypeScript 6 refuses `baseUrl` unless
+    // the flag is set. TypeScript 7 has no compiler API for the worker, so the worker runs on 6
+    dts: {
+        compilerOptions: {
+            composite: false,
+            declarationMap: false,
+            ignoreDeprecations: '6.0',
+        },
+    },
     treeshake: true,
 })
