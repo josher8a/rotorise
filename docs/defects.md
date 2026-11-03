@@ -191,3 +191,64 @@ refuses the value.
 
 **Pin.** `src/codec/spec/object/codec.rest.spec.ts`: the type admits a declared field type at an
 undeclared name, and the run time refuses the value.
+
+---
+
+## Partially mitigated: the type of a slice keeps a held option inside the union of a scope entry where the run time drops it
+
+**Observation.** A `held` whose inner term is a `ref` to an empty entry holds no value, and an
+exclusion drops it at run time. The type reads the name in the scope that binds it where the option
+is the entry. Where the `held` is an option of the union of an entry, the head of the slice carries
+no scope, so the type cannot read the name. Measured 2026-11-02 with `npx vitest --run` and
+`npx tsc --noEmit` and the pin below:
+
+    const { Pets } = scope({ Gone: never, Pets: union([held(ref('Gone'), string, …), object({ name: string })]) })
+    exclude(Pets, object({ name: string }))
+      runtime: never
+      type:    the held option is kept
+
+**Effect.** The type of exclude is wider than the value. Each value that the run time gives fits
+the type.
+
+**What is mitigated.** An option that is itself the entry is read in its scope, in the type and at
+run time.
+
+**Pin.** `src/codec/spec/union/codec.slice.empty.spec.ts`: the option that is the entry is dropped
+in the type, and the held option inside the union of an entry is kept in the type and dropped at
+run time.
+
+---
+
+## Known: the type of a slice by a union pattern stops at TS2589 at 89 literals of one field
+
+**Observation.** An exclusion that splits one field of literals into two halves of a union pattern
+type-checks at 88 literals and keeps the option. At 89 literals the type checker reports TS2589.
+The bound of the parts does not move the wall. Measured 2026-11-02 with `npx tsc --noEmit`:
+
+    const big = union([object({ x: string('l00', …, 'l88') })])
+    exclude(big, union([object({ x: string('l00', …, 'l44') }), object({ x: string('l45', …, 'l88') })]))
+      runtime:      never
+      type checker: TS2589, type instantiation is excessively deep and possibly infinite
+
+**Effect.** The call of the caller does not compile. A literal set at one field of 89 or more
+literals cannot be sliced by a pattern that splits the set.
+
+**Pin.** None. A pin compiles a literal set of 89 at one field in the suite, and its cost in
+instantiations is not measured.
+
+---
+
+## Known: the native reader writes the attribute into the text of an attribute with no member
+
+**Observation.** The native reader answers an attribute that carries no member with
+`No value defined:` and the JSON of the attribute. The reader copies the text that
+`@aws-sdk/util-dynamodb` throws when it reads the attribute to a native value. Measured 2026-11-02 with
+`npx vitest --run`:
+
+    native.decode({ petName: 'Rex' })
+      error: No value defined: {"petName":"Rex"}
+
+**Effect.** The text of the refusal carries the value of the input. A log line that writes the
+error writes the stored data.
+
+**Pin.** None.
