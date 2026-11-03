@@ -76,7 +76,7 @@ describe('the extraction keeps the present part with the key required, and the e
         expectTypeOf<
             Equal<
                 Decoded<typeof rejected>,
-                { readonly k: 'A'; readonly a?: undefined }
+                { readonly k: 'A'; readonly a?: never }
             >
         >().toEqualTypeOf<true>()
     })
@@ -130,7 +130,7 @@ describe('an option without the key, an option that requires it, and an option t
         expectTypeOf<
             Equal<
                 Decoded<typeof rejected>,
-                | { readonly k: 'A'; readonly a?: undefined }
+                | { readonly k: 'A'; readonly a?: never }
                 | { readonly k: 'B' }
                 | { readonly k: 'D'; readonly a: undefined }
             >
@@ -271,14 +271,14 @@ describe('a union pattern splits an option at a field that may be absent', () =>
             | {
                   readonly supplyType: 'TOY'
                   readonly brand: 'ROPE' | 'BALL'
-                  readonly warrantyId?: undefined
+                  readonly warrantyId?: never
                   readonly priceType: 'FIXED'
                   readonly value: string
               }
             | {
                   readonly supplyType: 'TOY'
                   readonly brand: 'ROPE' | 'BALL'
-                  readonly warrantyId?: undefined
+                  readonly warrantyId?: never
                   readonly priceType: 'BID'
                   readonly expected: string
               }
