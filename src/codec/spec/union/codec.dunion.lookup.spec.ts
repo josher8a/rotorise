@@ -20,6 +20,7 @@ import { CodecError } from '../../../Rotorise'
 import type { AnyObjectCodec } from '../../codec'
 import {
     discriminatedUnion,
+    item,
     mdunion,
     object,
     ref,
@@ -159,6 +160,40 @@ describe('a stored tag that names a member of Object.prototype', () => {
             type: 'CHECKUP',
             petId: 'p',
         })
+    })
+})
+
+describe('a stored item whose discriminator the reader cannot read', () => {
+    const visit = item(
+        discriminatedUnion('kind', [
+            object({ kind: string('DOG'), petId: string }),
+            object({ kind: string('CAT'), petId: string }),
+        ]),
+    )
+
+    /**
+     * An absent tag chooses no variant. The text names the discriminator and says that the item has
+     * no such attribute, which is a different fact from a tag in the wrong member: both sentences
+     * hold "chooses the variant", so a pattern on those words alone cannot tell them apart.
+     */
+    it('refuses an item with no discriminator, and says the attribute is absent', () => {
+        const result = visit.decode({ petId: { S: 'p' } })
+        expect(result).toBeInstanceOf(CodecError)
+        expect((result as CodecError).message).toMatch(
+            /'kind' chooses the variant and the item has no such attribute/,
+        )
+    })
+
+    /** A tag is read as a text, so a member other than `S` and `N` carries none. */
+    it('refuses a discriminator carried as BOOL, and names S and N', () => {
+        const result = visit.decode({
+            kind: { BOOL: true },
+            petId: { S: 'p' },
+        })
+        expect(result).toBeInstanceOf(CodecError)
+        expect((result as CodecError).message).toMatch(
+            /'kind' chooses the variant, so it must be carried as 'S' or 'N', not 'BOOL'/,
+        )
     })
 })
 

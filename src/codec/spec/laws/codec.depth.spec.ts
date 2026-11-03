@@ -54,6 +54,13 @@ const nestM = (n: number): unknown => {
     return v
 }
 
+/** The same in `Map` values, which `native` reads as a map apart from a plain object. */
+const nestMap = (n: number): unknown => {
+    let v: unknown = 'leaf'
+    for (let i = 0; i < n; i++) v = new Map([['k', v]])
+    return v
+}
+
 describe('the document nesting bound', () => {
     /**
      * The boundary is the one thing the reference does not settle — its sentence does not say
@@ -96,6 +103,16 @@ describe('the document nesting bound', () => {
             CodecError,
         )
         expect(native.encode(nestM(MAX_DOCUMENT_NESTING + 1))).toBeInstanceOf(
+            CodecError,
+        )
+    })
+
+    /** A `Map` has its own branch in `native`, so the bound is asked there as well. */
+    it('applies to a Map in native, as it applies to a list and an object', () => {
+        expect(native.encode(nestMap(MAX_DOCUMENT_NESTING))).not.toBeInstanceOf(
+            CodecError,
+        )
+        expect(native.encode(nestMap(MAX_DOCUMENT_NESTING + 1))).toBeInstanceOf(
             CodecError,
         )
     })
