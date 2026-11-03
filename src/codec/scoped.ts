@@ -564,10 +564,9 @@ const slotAt = (
 }
 
 /**
- * **Every row that reads the right operand alone**, the model's `rightC` at a family that answers no
- * entry, refinement or union. The bottom admits
- * nothing. A union is disjoint where each option is. A refinement is bounded by its inner term.
- * An entry unfolds through `restart`. `fam` answers every other position.
+ * **The rows of the right operand**, the model's `rightC`. `fam` answers each position first. The
+ * bottom agrees with every position. A union agrees where each option does, and a refinement
+ * where its inner position does. An entry unfolds through `restart`.
  */
 const rightRows = (
     c: Ctx,
@@ -577,9 +576,9 @@ const rightRows = (
 ): boolean => {
     switch (r.kind) {
         case 'entry':
-            return restart(body(c.right, r.j))
+            return fam(r) || restart(body(c.right, r.j))
         case 'refine':
-            return rightRows(c, restart, fam, r.inner)
+            return fam(r) || rightRows(c, restart, fam, r.inner)
         case 'free':
             return fam(r)
         case 'term':
@@ -594,13 +593,16 @@ const rightRows = (
                         viewAt(c.right, r.t, r.closed),
                     )
                 case 'union':
-                    return r.t.options.every((option) =>
-                        rightRows(
-                            c,
-                            restart,
-                            fam,
-                            inPlace(c.right, option, r.closed),
-                        ),
+                    return (
+                        fam(r) ||
+                        r.t.options.every((option) =>
+                            rightRows(
+                                c,
+                                restart,
+                                fam,
+                                inPlace(c.right, option, r.closed),
+                            ),
+                        )
                     )
             }
             return fam(r)
@@ -886,52 +888,6 @@ const agreeBase = (k: Agreement, l: At, r: At): boolean =>
     apartAt(k.viewL, k.viewR, viewOf(k.viewL, l), viewOf(k.viewR, r))
 
 /**
- * **The rows of the right operand**, the model's `rightC`. `fam` answers each position first. The
- * bottom agrees with every position. A union agrees where each option does, and a refinement
- * where its inner position does. An entry unfolds through `restart`.
- */
-const agreeRight = (
-    k: Agreement,
-    restart: (r: At) => boolean,
-    fam: (r: At) => boolean,
-    r: At,
-): boolean => {
-    switch (r.kind) {
-        case 'entry':
-            return fam(r) || restart(body(k.right, r.j))
-        case 'refine':
-            return fam(r) || agreeRight(k, restart, fam, r.inner)
-        case 'free':
-            return fam(r)
-        case 'term':
-            switch (r.t.kind) {
-                case 'never':
-                    return true
-                case 'refine':
-                    return agreeRight(
-                        k,
-                        restart,
-                        fam,
-                        viewAt(k.right, r.t, r.closed),
-                    )
-                case 'union':
-                    return (
-                        fam(r) ||
-                        r.t.options.every((option) =>
-                            agreeRight(
-                                k,
-                                restart,
-                                fam,
-                                inPlace(k.right, option, r.closed),
-                            ),
-                        )
-                    )
-            }
-            return fam(r)
-    }
-}
-
-/**
  * **One row per operation of the left operand**, the model's `rowSpecC`, with `prev` as the walk at
  * the next fuel. In one scope, an entry agrees with the same entry, because one entry has one
  * meaning (`identSound_oneScope`). A set and an object compare their positions below the guard ({@link pairX}). A
@@ -950,7 +906,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
         case 'refine':
             return base(r) || agreeRow(k, table, l.inner, r)
         case 'free':
-            return agreeRight(k, restart, base, r)
+            return rightRows(k, restart, base, r)
         case 'term':
             break
     }
@@ -969,7 +925,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
             )
         // two `held`s of one adapter agree where their inner terms agree
         case 'held':
-            return agreeRight(
+            return rightRows(
                 k,
                 restart,
                 (r1) =>
@@ -989,7 +945,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                 r,
             )
         case 'set':
-            return agreeRight(
+            return rightRows(
                 k,
                 restart,
                 (r1) =>
@@ -1008,7 +964,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                 r,
             )
         case 'list':
-            return agreeRight(
+            return rightRows(
                 k,
                 restart,
                 (r1) =>
@@ -1042,7 +998,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                 r,
             )
         case 'object':
-            return agreeRight(
+            return rightRows(
                 k,
                 restart,
                 (r1) =>
@@ -1059,7 +1015,7 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                 r,
             )
         default:
-            return agreeRight(k, restart, base, r)
+            return rightRows(k, restart, base, r)
     }
 }
 
