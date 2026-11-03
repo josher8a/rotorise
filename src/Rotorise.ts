@@ -1231,19 +1231,8 @@ const relatedToAny = (path: string, names: Iterable<string>): boolean => {
 
 /** Refuses each name or path of a schema that is no key path, once, where the schema is read. */
 const checkPaths = (schema: Record<string, unknown>): void => {
-    const visit = (spec: unknown): void => {
-        if (typeof spec === 'string') {
-            pathSegments(spec)
-        } else if (Array.isArray(spec)) {
-            for (const entry of spec) {
-                visit(Array.isArray(entry) ? entry[0] : entry)
-            }
-        } else if (isMatch(spec)) {
-            pathSegments(String(spec.discriminator))
-            for (const arm of Object.values(spec.spec)) visit(arm)
-        }
-    }
-    for (const spec of Object.values(schema)) visit(spec)
+    for (const spec of Object.values(schema))
+        for (const path of componentsOf(spec, {}).components) pathSegments(path)
 }
 
 /** A match that groups literals: a discriminator and a list of cases. */
