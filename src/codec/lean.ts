@@ -1376,10 +1376,18 @@ export type Separation = {
  * guard or with `agrees`, no form states the host, and the emitter refuses the pair. Otherwise a row
  * checks the union decision alone, and a guard or `agrees` that drifts from the decision passes.
  */
-type SeparationForm = 'accepted' | 'acceptedShared' | 'refused' | 'guardRefused'
+export type SeparationForm =
+    | 'accepted'
+    | 'acceptedShared'
+    | 'refused'
+    | 'guardRefused'
 
 /** The form of one separation verdict, with the `src/` side decided here. */
-const separationForm = ({ name, left, right }: Separation): SeparationForm => {
+export const separationForm = ({
+    name,
+    left,
+    right,
+}: Separation): SeparationForm => {
     const guarded = [left, right].every(
         (option) => recursionUse(option.def) < 2,
     )
@@ -1421,68 +1429,6 @@ const separationForm = ({ name, left, right }: Separation): SeparationForm => {
               name,
               '`src/` accepts this pair on no warrant that the model proves: the decision refuses it',
           )
-}
-
-/** One declaration verdict, as a Lean `theorem`, with the `src/` side decided here. */
-export const leanSeparation = ({ name, left, right }: Separation): string => {
-    // a caller's function is a variable of the theorem, and the goal closes as {@link closing} says
-    const bound: Bound = {
-        closures: new Map(),
-        adapters: new Map(),
-        readers: new Map(),
-    }
-    const form = separationForm({ name, left, right })
-    // a pair that the guard refuses has no closed codec, so it prints as two graphs
-    const print = form === 'guardRefused' ? leanGraphOf : leanClosedOf
-    // two options of one scope print as one closed scope with two roots, which `l` holds
-    const shared = form === 'acceptedShared'
-    const l = shared
-        ? leanSharedOf(left, right, name, bound)
-        : print(left, name, bound)
-    const r = shared ? '' : print(right, name, bound)
-    const binders = leanBinders(bound)
-    const head = `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`}`
-    const reduce = closing(binders)
-    if (form === 'guardRefused') {
-        return [
-            `/-- \`${name}\` — \`src/\` refuses this pair at the guard; the graph guard refuses a graph too -/`,
-            `${head} :`,
-            `    ((${l}).guarded &&`,
-            `      (${r}).guarded) = false :=`,
-            `  ${reduce}`,
-        ].join('\n')
-    }
-    // the host's guard accepted before its compatibility test refused, and a closed codec states the guard
-    if (form === 'refused') {
-        return [
-            `/-- \`${name}\` — \`src/\` refuses this pair; the model's decision refuses it -/`,
-            `${head} :`,
-            `    Closed.compatPair (${l})`,
-            `      (${r}) = false :=`,
-            `  ${reduce}`,
-        ].join('\n')
-    }
-    // two options that share a node are one scope, and the decision over one scope states the pair
-    if (form === 'acceptedShared') {
-        return [
-            `/-- \`${name}\` — \`src/\` accepts two options of one scope; the model proves them compatible -/`,
-            `${head} (κ : Callers) :`,
-            `    let s := ${l}`,
-            '    Lawful (s.meaning (libTable κ) s.left) → Lawful (s.meaning (libTable κ) s.right) →',
-            '      Alg.Compat (s.meaning (libTable κ) s.left) (s.meaning (libTable κ) s.right) ∧',
-            '        Alg.Compat (s.meaning (libTable κ) s.right) (s.meaning (libTable κ) s.left) :=',
-            `  Closed.Shared.compat_of_compatPair (${reduce}) (libTable κ)`,
-        ].join('\n')
-    }
-    // the host's union verdict is the guard and the compatibility test, and a closed codec states the guard
-    return [
-        `/-- \`${name}\` — \`src/\` accepts this pair; the model proves it compatible -/`,
-        `${head} (κ : Callers) :`,
-        `    Lawful ((${l}).meaning (libTable κ)) → Lawful ((${r}).meaning (libTable κ)) →`,
-        `      Alg.Compat ((${l}).meaning (libTable κ)) ((${r}).meaning (libTable κ)) ∧`,
-        `        Alg.Compat ((${r}).meaning (libTable κ)) ((${l}).meaning (libTable κ)) :=`,
-        `  Closed.compat_of_compatPair (${reduce}) (libTable κ)`,
-    ].join('\n')
 }
 
 /**
@@ -1593,7 +1539,7 @@ export type DisjointPair = {
 }
 
 /** The two answers that `src/` computes on a pair: the raw terms, then the two pairs of views. */
-const disjointAnswers = ({
+export const disjointAnswers = ({
     name,
     left,
     right,
@@ -1607,34 +1553,6 @@ const disjointAnswers = ({
         )
     }
     return [disjoint(one, other), viewsDisjoint(one, other)]
-}
-
-/**
- * One pair, as a Lean `theorem`: the two terms, and the two answers this library gives.
- *
- * `false` is asserted as much as `true` is. `false` states nothing about the pair, but a port
- * that certified a pair the model declines would fail here on that pair.
- */
-export const leanDisjoint = ({ name, left, right }: DisjointPair): string => {
-    const [disjointly, views] = disjointAnswers({ name, left, right })
-    // a caller's function is a variable of the theorem, and each conjunct closes as
-    // {@link closing} says
-    const bound: Bound = {
-        closures: new Map(),
-        adapters: new Map(),
-        readers: new Map(),
-    }
-    const l = leanClosedOf(left, name, bound)
-    const r = leanClosedOf(right, name, bound)
-    const binders = leanBinders(bound)
-    return [
-        `/-- \`${name}\` — the answers \`src/\` computes, put to the model -/`,
-        `theorem ${leanIdent(name)}${binders === '' ? '' : ` ${binders}`} :`,
-        `    Closed.disjoint (${l})`,
-        `        (${r}) = ${disjointly} ∧`,
-        `      Closed.viewsDisjoint (${l})`,
-        `        (${r}) = ${views} := ⟨${closing(binders)}, ${closing(binders)}⟩`,
-    ].join('\n')
 }
 
 /* ── the row form ──────────────────────────────────────────────────────────────────────────── */
@@ -1900,7 +1818,7 @@ const kernelLists = <F extends string>(
         return { form, name, ok, text: leanRowList(name, type, rows, ok) }
     })
 
-/** The disjointness pairs as rows: the two closed codecs and the two answers of {@link leanDisjoint}. */
+/** The disjointness pairs as rows: the two closed codecs and the two answers of {@link disjointAnswers}. */
 export const disjointRows = (
     pairs: readonly DisjointPair[],
 ): RowFile<'rows'> => ({
@@ -1929,7 +1847,7 @@ export const disjointRows = (
 
 /**
  * The disjointness pairs in the row form: each row is the two closed codecs and the two answers of
- * {@link leanDisjoint}, and the checker of a list states both answers at each row.
+ * {@link disjointAnswers}, and the checker of a list states both answers at each row.
  *
  * Generated at gate time and elaborated, never committed.
  */
@@ -2041,7 +1959,7 @@ export const separationRows = (
 
 /**
  * The declaration verdicts in the row form: one row list per {@link SeparationForm}. Each list
- * carries the checker, and the verdict of {@link leanSeparation} at each row, lifted from the
+ * carries the checker, and the verdict of {@link separationForm} at each row, lifted from the
  * checker.
  *
  * Generated at gate time and elaborated, never committed.
@@ -2359,39 +2277,11 @@ export type LegacyRead = {
 }
 
 /**
- * **The legacy read gate, as one read.** The host decodes through a copy of the term whose older
- * readers record each answer. The theorem binds each reader as a variable, and pins the variable
- * at each attribute that the host asked. A reader that threw, failed, or answered `undefined`
- * pins to `none`. The model reads the older answer only where the current term writes the answer.
- */
-export const leanLegacyRead = (one: LegacyRead): string => {
-    const { name, attribute } = one
-    const { read, term, binders } = legacyReadOf(one)
-    const head = [
-        `/-- \`${name}\` — the older reader pinned where \`src/\` asked it -/`,
-        `theorem ${leanIdent(name)} ${binders} :`,
-    ]
-    return failed(read)
-        ? [
-              ...head,
-              `    (Closed.meaning (libTable noCallers) ${term}).p`,
-              `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
-          ].join('\n')
-        : [
-              ...head,
-              `    vcheck ${fuelForValue(read)}`,
-              `      ((Closed.meaning (libTable noCallers) ${term}).p`,
-              `        (${leanAttrOf(attribute, name)}))`,
-              `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
-          ].join('\n')
-}
-
-/**
  * **One legacy read, decided here**: what the host read, the answers of each older reader that the
- * host asked, and the term with each reader pinned. The refusals of {@link leanLegacyRead} are made
+ * host asked, and the term with each reader pinned. The refusals of the legacy read are made
  * here.
  */
-const legacyReadOf = (
+export const legacyReadOf = (
     one: LegacyRead,
 ): {
     readonly read: unknown
@@ -3303,58 +3193,11 @@ end Calculus
 }
 
 /**
- * One read verdict, as a Lean `theorem`; `src/`'s answer is taken by running `decode`.
- *
- * **A caller's predicate at the top is a variable `q0` of the theorem.** The model's `refine` row
- * reads the attribute with the inner term, then applies `q0` to the value read. Where the inner
- * term refuses, the verdict is `false` at every `q0`. Where the inner term reads `v`, the theorem
- * assumes `q0 v` equals the answer of the caller's closure at the value that the host read. The
- * proof rewrites `q0` to its pin at that value (`veq_pin`), and the kernel checks that `decode`
- * answers as the meaning reads under the pin.
- * A caller's predicate below the top is refused, because the emitter computes the value that the
- * predicate reads at the top only. A caller's adapter and an older reader are refused, because the
- * row reads under `libTable noCallers`.
- */
-export const leanReadVerdict = (one: ReadVerdict): string => {
-    const { name, attribute } = one
-    const { decodes, term, quantified, pin } = readVerdictOf(one)
-    const head = [
-        `/-- \`${name}\` — \`src/\` ${decodes ? 'decodes' : 'refuses'} this attribute -/`,
-        `    Closed.AdmA (libTable noCallers) ${term}`,
-        `      (${leanAttrOf(attribute, name)}) = ${decodes}`,
-    ] as const
-    if (!quantified) {
-        return [
-            head[0],
-            `theorem ${leanIdent(name)} :`,
-            head[1],
-            `${head[2]} := kernel_rfl%`,
-        ].join('\n')
-    }
-    if (pin === undefined) {
-        return [
-            head[0],
-            `theorem ${leanIdent(name)} (q0 : Value → Bool) :`,
-            head[1],
-            `${head[2]} := kernel_rfl%`,
-        ].join('\n')
-    }
-    const { v, answer } = pin
-    return [
-        head[0],
-        `theorem ${leanIdent(name)} (q0 : Value → Bool) (h0 : q0 (${v}) = ${answer}) :`,
-        head[1],
-        `${head[2]} := by`,
-        `  rw [← veq_pin (n := ${pin.fuel}) h0]; exact kernel_rfl%`,
-    ].join('\n')
-}
-
-/**
  * **One read verdict, decided here**: `src/`'s answer, the term, whether a caller's predicate at the
  * top is a variable, and the answer of that predicate at the value that the inner term reads, where
- * the inner term reads one. The refusals of {@link leanReadVerdict} are made here.
+ * the inner term reads one. The refusals of the read verdict are made here.
  */
-const readVerdictOf = (
+export const readVerdictOf = (
     one: ReadVerdict,
 ): {
     readonly decodes: boolean
@@ -3423,7 +3266,7 @@ const readVerdictOf = (
  * The write vectors assert `(Closed.meaning α t).e v = some a` and the refusal vectors assert `= none`, so
  * one half of every pair was proposed to the model and the other half was not — for the corpus at
  * large. The read side *was* asserted, but only where a union had to choose:
- * {@link leanReadResolution} states `(Closed.meaning α t).p a = some v` for each read resolution. This is
+ * the rows of {@link resolutionRows} state `(Closed.meaning α t).p a = some v` for each read resolution. This is
  * that assertion over every corpus codec rather than over the unions alone.
  *
  * **The attribute comes from the library and so does the value.** `a` is what this codec's
@@ -3576,12 +3419,6 @@ export type ReadResolution = {
     readonly attribute: AttributeValue
 }
 
-/** One read-side resolution: what the union read, or that it read nothing. */
-export const leanReadResolution = (one: ReadResolution): string =>
-    statedRead(one.name, one.union, one.attribute, () =>
-        one.union.decode(one.attribute as never),
-    )
-
 /**
  * A dissection, with the read of a whole item that `src/` runs through the index of its tags.
  *
@@ -3600,14 +3437,8 @@ export type ItemRead = {
     readonly item: Readonly<Record<string, AttributeValue>>
 }
 
-/** One read through the index: what the index read from the item, or that it read nothing. */
-export const leanItemReadResolution = (one: ItemRead): string =>
-    statedRead(one.name, one.dissection, carrying('M', one.item), () =>
-        itemOf(one.dissection).decode(one.item),
-    )
-
 /** What the union read, or that it read nothing. */
-const readOf = (
+export const readOf = (
     decode: () => unknown,
 ): { readonly did: boolean; readonly read: unknown } => {
     try {
@@ -3616,36 +3447,6 @@ const readOf = (
     } catch {
         return { did: false, read: undefined }
     }
-}
-
-/** The theorem that the model's union reads `attribute` as the host read it, or reads nothing. */
-const statedRead = (
-    name: string,
-    u: AnyCodec,
-    attribute: AttributeValue,
-    decode: () => unknown,
-): string => {
-    const { did, read } = readOf(decode)
-    const head = [
-        `/-- \`${name}\` — the option the union read it back through -/`,
-        `theorem ${leanIdent(name)} :`,
-    ]
-    // `vcheck` where something was read, for the reason the write side uses `check`: a `Value.map`
-    // carries a function, so `rfl` on the assembled closure does not close. A refusal answers
-    // `none`, which carries nothing, so it needs no comparator.
-    return did
-        ? [
-              ...head,
-              `    vcheck ${fuelForValue(read)}`,
-              `      (${leanMeaningOf(u, name)}.p`,
-              `        (${leanAttrOf(attribute, name)}))`,
-              `      (some (${leanValueOf(read, name)})) = .same := kernel_rfl%`,
-          ].join('\n')
-        : [
-              ...head,
-              `    ${leanMeaningOf(u, name)}.p`,
-              `      (${leanAttrOf(attribute, name)}) = none := kernel_rfl%`,
-          ].join('\n')
 }
 
 /**
@@ -4020,7 +3821,7 @@ ${refusals.length} refusals.`,
 
 /**
  * The union resolutions as rows: each write that {@link writeOf} decides, then each read of
- * {@link leanReadResolution}, then each read of {@link leanItemReadResolution}.
+ * a read resolution, then each read of an item through the index of a dissection.
  */
 export const resolutionRows = (
     writes: readonly Resolution[],
@@ -4143,7 +3944,7 @@ export const leanReadRowModule = (verdicts: readonly ReadVerdict[]): string =>
 
 /**
  * The legacy reads as rows. The older reader is `ρ k`, pinned at each attribute that `src/` asked
- * it, as {@link leanLegacyRead} pins the variable of the former theorem. `aeq_pin` proves that a
+ * it, as the pin of the older reader does for the variable of the former theorem. `aeq_pin` proves that a
  * reader with the pinned answers equals its own pin.
  */
 export const legacyReadRows = (

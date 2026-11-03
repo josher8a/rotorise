@@ -81,22 +81,16 @@ import {
     LeanUnemittable,
     leanAttrOf,
     leanClosedOf,
-    leanDisjoint,
     leanDisjointRowModule,
     leanFormerGuard,
     leanGraphOf,
     leanGuard,
-    leanItemReadResolution,
-    leanLegacyRead,
     leanLegacyReadRowModule,
     leanPath,
-    leanReadResolution,
     leanReadRowModule,
     leanReadVector,
     leanReadVectorModule,
-    leanReadVerdict,
     leanResolutionRowModule,
-    leanSeparation,
     leanSeparationRowModule,
     leanShapes,
     leanSlice,
@@ -105,15 +99,18 @@ import {
     leanVector,
     leanVectorModule,
     leanVectorRowModule,
+    legacyReadOf,
     legacyReadRows,
+    readOf,
     readVectorIsUnstatable,
     readVerdictRows,
     resolutionRows,
+    separationForm,
     separationRows,
     sliceableOf,
     vectorRows,
 } from '../lean'
-import { CodecError, orThrow } from '../result'
+import { CodecError, failed, orThrow } from '../result'
 import type { RefSlot, Term } from '../term'
 import { cycleEntryOf, RecursionRefused, standInEquals } from '../term'
 
@@ -496,43 +493,38 @@ describe('terms', () => {
     })
 
     /**
-     * **A caller's function is a variable of a quantified verdict.** The model has no expression
-     * for a caller's closure or adapter, so a verdict binds one variable for each function, and the
-     * claim holds at every function. One function is one variable on both sides of the pair.
-     * Outside a verdict the emitter refuses the function, because no vector states a value there.
+     * **A caller's function is a variable of a row's term.** The model has no expression for a
+     * caller's closure or adapter, so the `def` of a term binds one variable for each function, and
+     * the row applies the `def` to the function of the file. One function is one variable on both
+     * sides of the pair. Outside a verdict the emitter refuses the function, because no vector
+     * states a value there.
      */
     it('binds each caller function of a declaration verdict as a variable, and refuses it elsewhere', () => {
-        const verdict = leanSeparation({
-            name: 'flags',
-            left: textFlags,
-            right: numberFlags,
-        })
-        expect(verdict).toContain('theorem flags (q0 : Value → Bool) :')
-        expect(verdict).toContain('(Pred.closure q0)')
-        // a quantified goal closes by `kernel_rfl%` on the equation itself
-        expect(verdict.endsWith('= false :=\n  kernel_rfl%')).toBe(true)
+        const module = leanSeparationRowModule([
+            { name: 'flags', left: textFlags, right: numberFlags },
+        ])
+        expect(module).toContain('(q0 : Value → Bool) : Closed :=')
+        expect(module).toContain('(Pred.closure q0)')
         expect(refusal(() => leanClosedOf(textFlags)).reason).toContain(
             'Value → Bool',
         )
     })
 
     /**
-     * **An older reader is a variable of a quantified verdict**, as a caller's function is. The
-     * decision reads a `legacy` term as an opaque leaf, so the verdict holds at every reader.
-     * Outside a verdict the emitter refuses the reader, because no vector can run it.
+     * **An older reader is a variable of a row's term**, as a caller's function is. The decision
+     * reads a `legacy` term as an opaque leaf, so the verdict holds at every reader. Outside a
+     * verdict the emitter refuses the reader, because no vector can run it.
      */
     it('binds the older reader of a legacy term in a verdict, and refuses it elsewhere', () => {
         const migrated = withLegacyRead({
             current: string,
             older: { decode: () => 'older' as string },
         })
-        const verdict = leanSeparation({
-            name: 'migrated',
-            left: migrated,
-            right: number,
-        })
-        expect(verdict).toContain('(r0 : Attr → Option Value)')
-        expect(verdict).toContain(
+        const module = leanSeparationRowModule([
+            { name: 'migrated', left: migrated, right: number },
+        ])
+        expect(module).toContain('(r0 : Attr → Option Value) : Closed :=')
+        expect(module).toContain(
             '(Scoped.Term.legacy (Scoped.Graph.Term.string) r0)',
         )
         expect(refusal(() => leanClosedOf(migrated)).reason).toContain(
@@ -561,18 +553,22 @@ describe('terms', () => {
      * The host reads two `opaque('lossy')` as one adapter, so the two print one generator.
      */
     it('emits each numeric policy of a declaration verdict as a generator, one for each adapter', () => {
-        const verdict = leanSeparation({
-            name: 'policies',
-            left: erase(opaque('lossy')),
-            right: erase(object({ a: opaque('lossy') })),
-        })
+        const verdict = leanSeparationRowModule([
+            {
+                name: 'policies',
+                left: erase(opaque('lossy')),
+                right: erase(object({ a: opaque('lossy') })),
+            },
+        ])
         expect(verdict).toContain('(.caller 0, false)')
         expect(verdict).not.toContain('(.caller 1, false)')
-        const both = leanSeparation({
-            name: 'two_policies',
-            left: erase(opaque('lossy')),
-            right: erase(opaque('refuse')),
-        })
+        const both = leanSeparationRowModule([
+            {
+                name: 'two_policies',
+                left: erase(opaque('lossy')),
+                right: erase(opaque('refuse')),
+            },
+        ])
         expect(both).toContain('(.caller 1, false)')
     })
 })
@@ -1747,7 +1743,7 @@ const disjointPairs = (): readonly DisjointPair[] => {
                 right,
             }
             try {
-                leanDisjoint(one)
+                disjointRows([one]).rows(leanShapes(() => 'f'))
             } catch {
                 continue
             }
@@ -1852,7 +1848,7 @@ const readVerdicts = (): readonly ReadVerdict[] => {
         for (const [an, attribute] of attributes) {
             const one = { name: `${cn}__reads__${an}`, codec, attribute }
             try {
-                leanReadVerdict(one)
+                readVerdictRows([one]).rows(leanShapes(() => 'f'))
             } catch (error) {
                 if (error instanceof LeanUnemittable) continue
                 throw error
@@ -2116,9 +2112,8 @@ describe('union resolution, model against library', () => {
          * form makes `leanValueOf` throw, so a pair becoming unstatable fails the emission rather
          * than leaving the module in silence.
          */
-        for (const one of reads) {
-            expect(() => leanReadResolution(one)).not.toThrow()
-        }
+        const stated = resolutionRows([], reads, []).rows(leanShapes(() => 'f'))
+        expect(stated.length).toBe(reads.length)
     })
 
     /**
@@ -2139,7 +2134,9 @@ describe('union resolution, model against library', () => {
             'rr_d_two_variants__discriminated_union',
         ]) {
             const one = byName.get(name) as ReadResolution
-            expect(leanReadResolution(one)).toContain('vcheck')
+            expect(
+                readOf(() => one.union.decode(one.attribute as never)).did,
+            ).toBe(true)
         }
     })
 
@@ -2147,9 +2144,9 @@ describe('union resolution, model against library', () => {
         const one = readResolutions().find(
             (r) => r.name === 'rr_stand_in__open_empty',
         )
-        expect(one && leanReadResolution(one)).toContain(
-            '(some (Value.map {"a"} (fun k => Value.str "stand-in")))',
-        )
+        expect(
+            one && readOf(() => one.union.decode(one.attribute as never)).read,
+        ).toEqual({ a: 'stand-in' })
     })
 
     /**
@@ -2162,8 +2159,10 @@ describe('union resolution, model against library', () => {
         const reads = itemReads()
         expect(reads.length).toBe(90)
         const byName = new Map(reads.map((one) => [one.name, one] as const))
-        const stated = (name: string) =>
-            leanItemReadResolution(byName.get(name) as ItemRead)
+        const didRead = (name: string) => {
+            const one = byName.get(name) as ItemRead
+            return readOf(() => itemOf(one.dissection).decode(one.item)).did
+        }
         for (const name of [
             'ir_tag_string__found_A',
             'ir_tag_string__found_B',
@@ -2173,7 +2172,7 @@ describe('union resolution, model against library', () => {
             'ir_two_keys__found_BX',
             'ir_two_keys__found_AY',
         ]) {
-            expect(stated(name)).toContain('vcheck')
+            expect(didRead(name), name).toBe(true)
         }
         for (const name of [
             'ir_tag_string__not_variant',
@@ -2184,7 +2183,7 @@ describe('union resolution, model against library', () => {
             'ir_tag_decimal__tag_as_s',
             'ir_two_keys__no_combination',
         ]) {
-            expect(stated(name)).toContain(') = none := kernel_rfl%')
+            expect(didRead(name), name).toBe(false)
         }
     })
 
@@ -2312,7 +2311,7 @@ const legacyReads = (): readonly LegacyRead[] => {
         for (const [an, attribute] of attributes) {
             const one = { name: `lr_${cn}__${an}`, codec, attribute }
             try {
-                leanLegacyRead(one)
+                legacyReadRows([one]).rows(leanShapes(() => 'f'))
             } catch (error) {
                 if (error instanceof LeanUnemittable) continue
                 throw error
@@ -2334,25 +2333,21 @@ describe('the legacy read gate, against the model', () => {
         const byName = new Map(
             legacyReads().map((one) => [one.name, one] as const),
         )
-        const stated = (name: string) =>
-            leanLegacyRead(byName.get(name) as LegacyRead)
+        const decided = (name: string) =>
+            legacyReadOf(byName.get(name) as LegacyRead)
+        const answers = (name: string) =>
+            [...decided(name).pins.values()].flat().map(([, answer]) => answer)
         // the older reader answers `A`, which the current literal writes
-        expect(stated('lr_literal_A__raw_N_1')).toContain('vcheck')
-        expect(stated('lr_nested_A__raw_M_f1')).toContain('vcheck')
+        expect(failed(decided('lr_literal_A__raw_N_1').read)).toBe(false)
+        expect(failed(decided('lr_nested_A__raw_M_f1').read)).toBe(false)
         // the older reader answers `B`, which the current literal cannot write
-        expect(stated('lr_literal_A__raw_N_2')).toContain(
-            ') = none := kernel_rfl%',
-        )
-        expect(stated('lr_nested_A__raw_M_f2')).toContain(
-            ') = none := kernel_rfl%',
-        )
+        expect(failed(decided('lr_literal_A__raw_N_2').read)).toBe(true)
+        expect(failed(decided('lr_nested_A__raw_M_f2').read)).toBe(true)
         // a reader that throws or answers nothing pins to `none`
-        expect(stated('lr_throws__raw_N_1')).toContain('then none else r0 b')
-        expect(stated('lr_undefined_reader__raw_N_1')).toContain(
-            'then none else r0 b',
-        )
+        expect(answers('lr_throws__raw_N_1')).toContain('none')
+        expect(answers('lr_undefined_reader__raw_N_1')).toContain('none')
         // the current read answers first, and the host asks the older reader nothing
-        expect(stated('lr_literal_A__raw_S_A')).toContain(
+        expect(decided('lr_literal_A__raw_S_A').term).toContain(
             '(Scoped.Term.legacy (Scoped.Graph.Term.literal GroundKind.string "A") r0)',
         )
     })
@@ -2406,7 +2401,7 @@ describe("the read side, against the model's read row", () => {
      * predicate is a variable, and the theorem assumes the answer of the closure at the value read.
      */
     it('states the read of a refinement and of the bottom, both ways', () => {
-        const module = readVerdicts().map(leanReadVerdict).join('\n\n')
+        const rows = readVerdictRows(readVerdicts()).rows(leanShapes(() => 'f'))
         for (const name of [
             'refine_string_isNumeral__reads__raw_S_numeral',
             'refine_string_isNumeral__reads__raw_S',
@@ -2420,11 +2415,8 @@ describe("the read side, against the model's read row", () => {
             'object_optional_never__reads__raw_M_empty',
             'object_optional_never__reads__raw_M_a',
         ]) {
-            expect(module).toContain(`theorem ${name} `)
+            expect(rows.map((one) => one.name)).toContain(name)
         }
-        expect(module).toContain(
-            'theorem refine_string_caller__reads__raw_S_empty (q0 : Value → Bool) (h0 : q0 (Value.str "") = false) :',
-        )
         // the row pins the predicate where the theorem assumed its answer: `veq_pin` makes a
         // predicate with that answer its own pin, so the row at that predicate is the theorem
         const row = readVerdictRows(
@@ -2463,25 +2455,16 @@ describe("the declaration guard, against the model's classifier", () => {
      * widening the corpus is meant to fail here and be looked at.
      */
     it("accepts only pairs the model proves compatible, and refuses only pairs the model's decision refuses", () => {
-        const emitted = separationPairs().map(leanSeparation)
-        const accepted = emitted.filter((one) =>
-            one.includes('Closed.compat_of_compatPair ('),
-        )
-        const refused = emitted.filter((one) =>
-            /^ {4}Closed\.compatPair \([\s\S]*= false :=\n {2}(of_decide_eq_true kernel_rfl%|kernel_rfl%)$/m.test(
-                one,
-            ),
-        )
-        const acceptedShared = emitted.filter((one) =>
-            one.includes('Closed.Shared.compat_of_compatPair ('),
-        )
-        expect(accepted.length + acceptedShared.length + refused.length).toBe(
-            emitted.length,
+        const forms = separationPairs().map(separationForm)
+        const count = (form: string) =>
+            forms.filter((one) => one === form).length
+        expect(forms.length).toBe(
+            count('accepted') + count('acceptedShared') + count('refused'),
         )
         expect([
-            accepted.length,
-            acceptedShared.length,
-            refused.length,
+            count('accepted'),
+            count('acceptedShared'),
+            count('refused'),
         ]).toEqual([1015, 4, 45])
     })
 
@@ -2492,25 +2475,22 @@ describe("the declaration guard, against the model's classifier", () => {
      */
     it('accepts two stand-ins that are one value and refuses two that are not, at a text and at an object', () => {
         const pairs = separationPairs()
-        const emitted = (name: string) => {
+        const formOf = (name: string) => {
             const pair = pairs.find((one) => one.name === name)
             if (pair === undefined) throw new Error(`no pair ${name}`)
-            return leanSeparation(pair)
+            return separationForm(pair)
         }
         for (const name of [
             'stand_in__vs__stand_in',
             'object_stand_in__vs__object_stand_in',
         ]) {
-            expect(emitted(name), name).toContain(
-                'Closed.compat_of_compatPair (',
-            )
+            expect(formOf(name), name).toBe('accepted')
         }
         for (const name of [
             'stand_in__vs__other_stand_in',
             'object_stand_in__vs__other_object_stand_in',
         ]) {
-            expect(emitted(name), name).toContain('Closed.compatPair (')
-            expect(emitted(name), name).toMatch(/= false :=/)
+            expect(formOf(name), name).toBe('refused')
         }
     })
 
@@ -2525,33 +2505,19 @@ describe("the declaration guard, against the model's classifier", () => {
         const recursive = separationPairs().filter((one) =>
             one.name.includes('recursive'),
         )
-        const emitted = recursive.map(leanSeparation)
-        const byDecision = emitted.filter((one) =>
-            one.includes('Closed.compat_of_compatPair'),
-        )
-        const refused = emitted.filter((one) =>
-            one.endsWith('= false :=\n  of_decide_eq_true kernel_rfl%'),
-        )
+        const forms = recursive.map(separationForm)
+        const byDecision = forms.filter((one) => one === 'accepted')
+        const refused = forms.filter((one) => one === 'refused')
         expect([byDecision.length, refused.length]).toEqual([173, 4])
         expect(byDecision.length + refused.length).toBe(recursive.length)
-        const verdict = (left: AnyCodec, right: AnyCodec) =>
-            leanSeparation({ name: 'probe', left, right })
-        expect(verdict(erase(dynamoNumber), json)).toContain(
-            'Closed.compat_of_compatPair',
-        )
-        expect(verdict(erase(array(string)), json)).toContain(
-            'Closed.compat_of_compatPair',
-        )
-        expect(verdict(erase(decimal), json)).toContain(
-            '= false :=\n  of_decide_eq_true kernel_rfl%',
-        )
-        expect(verdict(erase(string), tree)).toContain(
-            'Closed.compat_of_compatPair',
-        )
+        const form = (left: AnyCodec, right: AnyCodec) =>
+            separationForm({ name: 'probe', left, right })
+        expect(form(erase(dynamoNumber), json)).toBe('accepted')
+        expect(form(erase(array(string)), json)).toBe('accepted')
+        expect(form(erase(decimal), json)).toBe('refused')
+        expect(form(erase(string), tree)).toBe('accepted')
         // `tree` requires `v` and `Category` holds no `v`, and both are held-free
-        expect(verdict(tree, erase(Category))).toContain(
-            'Closed.compat_of_compatPair',
-        )
+        expect(form(tree, erase(Category))).toBe('accepted')
     })
 
     it('emits them for the gate to elaborate', () => {
@@ -2645,24 +2611,20 @@ describe("the declaration guard, against the model's classifier", () => {
 
     /** A pair `src/` accepts carries the decision the host ran, and a refused pair its refusal. */
     it('states the warrant of each verdict, both ways', () => {
-        const accepted = leanSeparation({
-            name: 'accepted',
-            left: erase(string),
-            right: erase(boolean),
-        })
-        expect(accepted).toContain('Alg.Compat (((⟨1, ')
-        expect(accepted).toContain(
-            'Closed.compat_of_compatPair (of_decide_eq_true kernel_rfl%) (libTable κ)',
-        )
-        const refused = leanSeparation({
-            name: 'refused',
-            left: erase(string),
-            right: erase(decimal),
-        })
-        expect(refused).toMatch(/^ {4}Closed\.compatPair \(\(⟨1, /m)
         expect(
-            refused.endsWith('= false :=\n  of_decide_eq_true kernel_rfl%'),
-        ).toBe(true)
+            separationForm({
+                name: 'accepted',
+                left: erase(string),
+                right: erase(boolean),
+            }),
+        ).toBe('accepted')
+        expect(
+            separationForm({
+                name: 'refused',
+                left: erase(string),
+                right: erase(decimal),
+            }),
+        ).toBe('refused')
     })
 })
 

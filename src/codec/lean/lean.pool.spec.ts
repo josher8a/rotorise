@@ -67,12 +67,12 @@ import type {
     Slice,
 } from '../lean'
 import {
+    disjointRows,
     hostAt,
     LeanUnemittable,
     leanAttrOf,
     leanClosedOf,
     leanClosedOfTerm,
-    leanDisjoint,
     leanDisjointRowModule,
     leanFitModule,
     leanFormerGuard,
@@ -81,12 +81,14 @@ import {
     leanMeetCoverModule,
     leanPath,
     leanPathModules,
-    leanSeparation,
     leanSeparationRowModule,
+    leanShapes,
     leanSlice,
     leanSliceModule,
     leanValueOf,
     reachable,
+    separationForm,
+    separationRows,
     sliceableOf,
     unionAt,
 } from '../lean'
@@ -773,14 +775,14 @@ const kernelPairs = (pairs: readonly PoolPair[]) => {
     for (const p of pairs) {
         const one = { name: p.name, left: p.left, right: p.right }
         try {
-            leanDisjoint(one)
+            disjointRows([one]).rows(leanShapes(() => 'f'))
             disjoints.push(one)
         } catch (error) {
             if (!(error instanceof LeanUnemittable)) throw error
             drop(`disjoint: ${error.reason}`)
         }
         try {
-            leanSeparation(one)
+            separationRows([one]).rows(leanShapes(() => 'f'))
             separations.push(one)
         } catch (error) {
             if (!(error instanceof LeanUnemittable)) throw error
@@ -2126,7 +2128,7 @@ describe('the generated pool, against the model', () => {
      */
     it('refuses a pair over an open fragment', () => {
         expect(() =>
-            leanSeparation({
+            separationForm({
                 name: 'open',
                 left: erase(array(undeclared)),
                 right: erase(string),
