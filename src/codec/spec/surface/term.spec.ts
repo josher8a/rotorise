@@ -165,8 +165,7 @@ describe('the occupancy of a term', () => {
     })
 
     /**
-     * The rule `(opaque)` is **total**: it holds a number as a `DynamoNumber`, so it writes every slot
-     * and reads every member. That is the model's `occTop` at the exact `opaq`.
+     * The rule `(opaque)` is **total**: it holds a number as a `DynamoNumber`, so it writes every slot.
      *
      * **The closed form, and `undefined` would be the wrong answer.** Separation tells apart the two things
      * a `⊤` covers: *unknown*, which is `held`, `custom` and a host `lazy`, and *everything*,

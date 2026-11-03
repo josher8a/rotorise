@@ -173,7 +173,7 @@ export type Term =
           readonly inner: Term
           /**
            * **The held side, as a term.** The write occupancy of a `held` is the occupancy of this
-           * term, as the model's `occV (held t P k) = occV P` states. A library adapter records
+           * term, because the held side restricts every value that `f` receives. A library adapter records
            * the base it hands to the caller. A foreign schema records `opaque`, the top, because
            * the library cannot read which kinds of value a foreign schema admits.
            */
@@ -491,8 +491,8 @@ export const elementMember = (
 /* ── occupancy ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * The wire family a set writes for each scalar slot its element writes: `Slot.setElem`, read from
- * the element's side.
+ * The wire family a set writes for each scalar slot its element writes, read from the element's
+ * side.
  */
 const setSlotOf = (slot: SetSlot): SetSlot | undefined =>
     slot === 'string'
@@ -563,7 +563,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
             return ['array']
         case 'object':
             return ['map']
-        // the held side restricts every value `f` receives, as `occV (held t P k) = occV P`
+        // the held side restricts every value `f` receives
         case 'held':
             return occV(t.outer)
         // a `ref` answers what its target answers. The model reads through on both projections,
@@ -578,14 +578,13 @@ export const occV = (t: Term): readonly SetSlot[] => {
         case 'union':
             return [...new Set(t.options.flatMap(occV))]
         // **A closed form, not `⊤`.** Separation tells apart the two things a `⊤` covers: *unknown*, which is
-        // the read side of a `legacy`, and *everything*, which is `opaque` by design. The
-        // model takes the second as data — `occV .opaq` is `occTop` — so answering
+        // the read side of a `legacy`, and *everything*, which is `opaque` by design. Answering
         // `undefined` here would say "cannot be read" about the one term whose occupancy is fully
         // known.
         case 'opaq':
             return everySlot
         // **Empty, not `undefined`.** `undefined` is the `⊤` that says "cannot be read", and this
-        // term's occupancy is fully known: it is nothing. The model spells it `occNone`.
+        // term's occupancy is fully known: it is nothing.
         case 'never':
             return []
     }
@@ -1133,9 +1132,8 @@ export const throughRefs =
 export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
 
 /**
- * **Whether two `held` terms are one adapter**: the tag test of the held row, which mirrors the
- * model's `dynOracle.same`. The tag of a library adapter is its `via` name, and the model carries
- * one generator for each name. The tag of a caller's adapter is the pair of functions that
+ * **Whether two `held` terms are one adapter**: the tag test of the held row. The tag of a
+ * library adapter is its `via` name, and the model carries one generator for each name. The tag of a caller's adapter is the pair of functions that
  * `held` builds once for each call, so two terms of one call are one adapter.
  */
 export const sameAdapter = (
