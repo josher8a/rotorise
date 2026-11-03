@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    // The root tsconfig skips the declaration files. A consumer can check them, so this project does.
+    "skipLibCheck": false,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "types": [],
+    "noEmit": true
+  },
+  "include": ["index.mts", "index.cts"]
+}

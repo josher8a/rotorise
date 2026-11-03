@@ -31,3 +31,4 @@ tsconfig.tsbuildinfo
 
 # local tarballs for installing into consuming repos before a release
 .pack/
+/scripts/consumer/node_modules
