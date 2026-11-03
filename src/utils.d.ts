@@ -52,7 +52,7 @@ export type SliceFromStart<
               : Acc
         : never
 
-export type MergeIntersectionObject<T, Keys = keyof T> = {
+export type MergeIntersectionObject<T, Keys extends keyof T = keyof T> = {
     [K in Keys]: T[K]
 }
 
