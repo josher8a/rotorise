@@ -38,8 +38,11 @@ ERROR = re.compile(r"^(.*?)\((\d+),(\d+)\): error (TS\d+): (.*)$")
 
 
 def tsc(program):
+    """The compiler is TypeScript 7, the compiler of `npm run check`. The `typescript` package is
+    TypeScript 6 for the compiler API, and the bridge reads only the diagnostics."""
+    compiler = os.path.join(REPO, "node_modules", "typescript-7", "bin", "tsc")
     return subprocess.Popen(
-        ["npx", "--no-install", "tsc", "-p", os.path.join(TYPES, program), "--pretty", "false"],
+        ["node", compiler, "-p", os.path.join(TYPES, program), "--pretty", "false"],
         cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
 
