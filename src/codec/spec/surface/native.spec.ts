@@ -31,6 +31,7 @@ import type {
     S,
     SS,
 } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import { CodecError, opaque } from '../../codec'
 import { native } from '../../native'
 import { arbitraryOf, rngFrom } from '../../testing'
@@ -351,6 +352,33 @@ describe('the port refuses four things the SDK does not', () => {
 describe('the port agrees on values nobody picked', () => {
     const holder = { ...opaque, def: opaque.def }
 
+    /**
+     * The SDK writes the class it names, `NumberValue`, where the port writes a `DynamoNumber`.
+     * The SDK side of the comparison reads the same digits through its own class.
+     */
+    const asSdk = (value: unknown): unknown => {
+        if (value instanceof DynamoNumber) {
+            return sdk.NumberValueImpl.from(value.digits)
+        }
+        if (Array.isArray(value)) return value.map(asSdk)
+        if (value instanceof Set) return new Set([...value].map(asSdk))
+        if (value instanceof Map) {
+            return new Map([...value].map(([key, held]) => [key, asSdk(held)]))
+        }
+        if (typeof value === 'object' && value !== null) {
+            const proto: unknown = Object.getPrototypeOf(value)
+            if (proto === Object.prototype || proto === null) {
+                return Object.fromEntries(
+                    Object.entries(value).map(([key, held]) => [
+                        key,
+                        asSdk(held),
+                    ]),
+                )
+            }
+        }
+        return value
+    }
+
     it.each([1, 7, 0x5eed, 20260827, 99].map((seed) => ({ seed })))(
         'agrees over 200 generated values, seed $seed',
         ({ seed }) => {
@@ -365,7 +393,7 @@ describe('the port agrees on values nobody picked', () => {
                 let theirs: unknown
                 let sdkRefused = false
                 try {
-                    theirs = sdk.convertToAttr(value)
+                    theirs = sdk.convertToAttr(asSdk(value))
                 } catch {
                     sdkRefused = true
                 }
@@ -423,6 +451,114 @@ describe('what the port does, with or without the SDK present', () => {
     /** A number too wide for a float comes back as a `bigint`, not a rounded number. */
     it('reads a wide number back as a bigint', () => {
         expect(native.decode({ N: '9007199254740993' })).toBe(9007199254740993n)
+    })
+})
+
+/**
+ * The text of a refusal is a contract: a caller reads it, and the SDK's text is the one the
+ * caller already knows. Compared on `reason`, which is the text without the path of the port.
+ *
+ * One sentence differs by design. The SDK ends a safe-range refusal with "Use NumberValue from
+ * @aws-sdk/lib-dynamodb." That advice is false here, because the port does not write that class.
+ * The port writes a `DynamoNumber`, and the tail names it, so the advice is true.
+ */
+describe('the port refuses what the SDK refuses, with the text of the SDK', () => {
+    const sdkTail = 'Use NumberValue from @aws-sdk/lib-dynamodb.'
+    const portTail = 'Use DynamoNumber from rotorise.'
+    class Pet {
+        name = 'Rex'
+    }
+
+    const pool: readonly { name: string; value: unknown }[] = [
+        { name: 'NaN', value: Number.NaN },
+        { name: 'Infinity', value: Number.POSITIVE_INFINITY },
+        { name: '-Infinity', value: Number.NEGATIVE_INFINITY },
+        { name: '2 ** 60', value: 2 ** 60 },
+        { name: '-(2 ** 60)', value: -(2 ** 60) },
+        { name: 'undefined', value: undefined },
+        { name: 'a list holding undefined', value: [1, undefined] },
+        { name: 'an object holding undefined', value: { a: undefined } },
+        { name: 'a Set holding undefined', value: new Set(['a', undefined]) },
+        { name: 'a Map holding undefined', value: new Map([['a', undefined]]) },
+        { name: 'an empty Set', value: new Set() },
+        { name: 'a Set of booleans', value: new Set([true]) },
+        { name: 'a class instance', value: new Pet() },
+        { name: 'NaN inside a list', value: [[Number.NaN]] },
+        {
+            name: 'undefined inside an object',
+            value: { a: [{ b: undefined }] },
+        },
+        { name: 'a Set of unsafe numbers', value: new Set([2 ** 60]) },
+    ]
+
+    const sdkReason = (value: unknown): string => {
+        try {
+            sdk.convertToAttr(value)
+        } catch (thrown) {
+            return (thrown as Error).message
+        }
+        throw new Error(
+            'the SDK accepted a value that the pool says it refuses',
+        )
+    }
+
+    it.each(pool)('refuses $name, and says what the SDK says', ({ value }) => {
+        const refused = native.encode(value)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toBe(
+            sdkReason(value).replace(sdkTail, portTail),
+        )
+    })
+
+    it('names DynamoNumber in the tail of a safe-range refusal', () => {
+        const refused = native.encode(2 ** 60)
+        expect((refused as CodecError).reason).toMatch(
+            /Number\.MAX_SAFE_INTEGER\. Use DynamoNumber from rotorise\.$/,
+        )
+    })
+
+    it('writes N with the exact digits of a DynamoNumber, as the SDK does for a NumberValue', () => {
+        const digits = '12345678901234567890'
+        expect(native.encode(DynamoNumber.from(digits))).toEqual({ N: digits })
+        expect(sdk.NumberValueImpl.from(digits).toAttributeValue()).toEqual({
+            N: digits,
+        })
+    })
+
+    it('writes NS from a Set of DynamoNumber, as the SDK does for a Set of NumberValue', () => {
+        const digits = ['12345678901234567890', '1.5']
+        expect(
+            native.encode(new Set(digits.map((d) => DynamoNumber.from(d)))),
+        ).toEqual({ NS: digits })
+        expect(
+            sdk.convertToAttr(
+                new Set(digits.map((d) => sdk.NumberValueImpl.from(d))),
+            ),
+        ).toEqual({ NS: digits })
+    })
+})
+
+describe('a Set of DynamoNumber that repeats a numeral', () => {
+    /**
+     * Two objects with one numeral are two members of a Set. The SDK writes both, and DynamoDB
+     * refuses the set. The port refuses it, as it refuses a document past the nesting bound.
+     */
+    it('is refused, where the SDK writes a set that DynamoDB refuses', () => {
+        expect(
+            sdk.convertToAttr(
+                new Set([
+                    sdk.NumberValueImpl.from('1'),
+                    sdk.NumberValueImpl.from('1.0'),
+                ]),
+            ),
+        ).toEqual({ NS: ['1', '1.0'] })
+        const refused = native.encode(
+            new Set([DynamoNumber.from('1'), DynamoNumber.from('1.0')]),
+        )
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toMatch(
+            /The number 1 is twice in a Number Set \(NS\)/,
+        )
     })
 })
 

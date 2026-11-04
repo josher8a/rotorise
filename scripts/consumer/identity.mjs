@@ -33,4 +33,10 @@ check(
     !(opaque.encode(DynamoNumber.from('7')) instanceof Error),
 )
 
+check(
+    'native writes N for a DynamoNumber of rotorise',
+    JSON.stringify(native.encode(DynamoNumber.from('12345678901234567890'))) ===
+        JSON.stringify({ N: '12345678901234567890' }),
+)
+
 process.exit(rows.every(Boolean) ? 0 : 1)

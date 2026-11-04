@@ -40,7 +40,13 @@ import type {
     S,
     SS,
 } from './attribute'
-import { carrying, isNumeral, memberOf, tooDeeplyNested } from './attribute'
+import {
+    carrying,
+    DynamoNumber,
+    isNumeral,
+    memberOf,
+    tooDeeplyNested,
+} from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
@@ -92,12 +98,12 @@ const nativeNumber = (
     if (typeof value === 'number' && !options.allowImpreciseNumbers) {
         if (value > Number.MAX_SAFE_INTEGER) {
             return new CodecError(
-                `Number ${value} is greater than Number.MAX_SAFE_INTEGER.`,
+                `Number ${value} is greater than Number.MAX_SAFE_INTEGER. Use DynamoNumber from rotorise.`,
             )
         }
         if (value < Number.MIN_SAFE_INTEGER) {
             return new CodecError(
-                `Number ${value} is lesser than Number.MIN_SAFE_INTEGER.`,
+                `Number ${value} is lesser than Number.MIN_SAFE_INTEGER. Use DynamoNumber from rotorise.`,
             )
         }
     }
@@ -143,6 +149,26 @@ const nativeSet = (
     }
 
     const first = members[0]
+    if (first instanceof DynamoNumber) {
+        if (!members.every((member) => member instanceof DynamoNumber)) {
+            return new CodecError(
+                'Only Number Set (NS), Binary Set (BS) or String Set (SS) are allowed.',
+            )
+        }
+        // a Set tells two DynamoNumber objects apart by identity, and the digits are normalised, so
+        // `1` and `1.0` arrive as two members with one numeral. DynamoDB refuses a set that repeats
+        // a member, and the SDK writes one from two NumberValue objects: a divergence of the same
+        // kind as the nesting bound
+        const digits = members.map((member) => member.digits)
+        const repeated = digits.find(
+            (numeral, at) => digits.indexOf(numeral) !== at,
+        )
+        return repeated === undefined
+            ? carrying('NS', digits)
+            : new CodecError(
+                  `The number ${repeated} is twice in a Number Set (NS), and DynamoDB refuses a set that repeats a member.`,
+              )
+    }
     if (typeof first === 'number' || typeof first === 'bigint') {
         return andThen(
             every(members, (member) => write(member as number | bigint)),
@@ -222,6 +248,9 @@ const toNative = (
             (written) => carrying('M', written),
         )
     }
+
+    // before the class-instance branch, as in the SDK, where `NumberValue` is a number and not a map
+    if (value instanceof DynamoNumber) return carrying('N', value.digits)
 
     const isPlain = named === 'Object' || (!named && typeof value === 'object')
     if (
