@@ -419,3 +419,11 @@ describe('a spelling through a ref draws the same values', () => {
         }
     })
 })
+
+describe('a generator reads a closed codec', () => {
+    it('refuses a ref that no scope binds with a ReferenceError that names the ref, because the target is unknown', () => {
+        const run = () => arbitraryOf(ref('Pet') as never, rngFrom(1), 2)
+        expect(run).toThrow(ReferenceError)
+        expect(run).toThrow("ref('Pet') is bound by no scope yet")
+    })
+})

@@ -14,6 +14,7 @@ import {
     array,
     binary,
     boolean,
+    CodecError,
     decimal,
     discriminatedUnion,
     exclude,
@@ -608,6 +609,74 @@ describe('a pattern that the host cannot read is refused', () => {
         expect(split).toThrow(/keeps its members whole/)
         expect(optionsOf(extract(byKind, object({ pet })))).toHaveLength(2)
     })
+
+    /**
+     * **A member with an open key entry is split on declared names only.** The two halves of a split
+     * member would each lose the open entry, and a half that drops it reads fewer values than the
+     * member. Each test below uses a pattern that splits the member, so the refusal is the only
+     * statement of the fact: a codec that dropped the entry would answer with no error.
+     */
+    const open = (spec: Parameters<typeof object>[0]) =>
+        object(spec, [string, optional(string)])
+    const owner = union([
+        object({ type: string('PERSON'), name: string }),
+        object({ type: string('SHELTER'), id: string }),
+    ])
+    const person = object({ type: string('PERSON') })
+    const shelter = object({ type: string('SHELTER') })
+    const adopt = open({ kind: string('ADOPT'), owner })
+    // the type of the slice reads an open member to its limit of depth, so the table holds a plain signature
+    type Slice = (member: AnyCodec, pattern: AnyCodec) => unknown
+    const slices: readonly (readonly [string, Slice])[] = [
+        ['extract', extract as never],
+        ['exclude', exclude as never],
+    ]
+
+    it.each(slices)(
+        'refuses %s of a member with an open key entry by a field pattern, because the split drops the entry',
+        (_, slice) => {
+            const run = () => slice(adopt, object({ owner: person }))
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(
+                'a member has an open key entry, and a pattern splits declared names only',
+            )
+        },
+    )
+
+    it.each(slices)(
+        'refuses %s of a member with an open key entry by a union pattern, because each arm splits the member',
+        (_, slice) => {
+            const arms = union([
+                object({ kind: string('ADOPT'), owner: person }),
+                object({ kind: string('RETURN'), owner: shelter }),
+            ])
+            const run = () =>
+                slice(
+                    union([adopt, object({ kind: string('RETURN'), owner })]),
+                    arms,
+                )
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(
+                'a member has an open key entry, and a pattern splits declared names only',
+            )
+        },
+    )
+
+    it.each(slices)(
+        'refuses %s of a field that holds an object with an open key entry by a union pattern, and names the field',
+        (_, slice) => {
+            const wrapper = object({ kind: string('X'), wrap: open({ owner }) })
+            const arms = union([
+                object({ kind: string('X'), wrap: object({ owner: person }) }),
+                object({ kind: string('Y'), wrap: object({ owner: shelter }) }),
+            ])
+            const run = () => slice(wrapper, arms)
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(
+                "'wrap' holds an object with an open key entry, and a pattern splits declared names only",
+            )
+        },
+    )
 })
 
 /**

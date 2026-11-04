@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AttributeMap } from '../../attribute'
 import {
+    array,
     at,
     CodecError,
     decimal,
@@ -14,7 +15,10 @@ import {
     number,
     object,
     optional,
+    ref,
+    scope,
     string,
+    union,
 } from '../../codec'
 import { checkEncodePaths, checkRoundTrip } from '../../testing'
 
@@ -204,6 +208,54 @@ describe('tagged', () => {
             /every option must be an object codec/,
         )
     })
+
+    it.each([
+        ['a bare spec', { type: string('DOG') }],
+        ['null', null],
+        ['undefined', undefined],
+    ])(
+        'refuses %s as an option, with a refusal of the library and no TypeError',
+        (_, bare) => {
+            const run = () =>
+                discriminatedUnion(
+                    'type',
+                    past([bare, object({ type: string('CAT') })]),
+                )
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(/every option must be an object codec/)
+        },
+    )
+
+    /**
+     * An option that is a `ref` passes the first loop, because a scope may bind the name to an
+     * object later. The scope reads the closed copy, and the index refuses a target that is no
+     * object, with the position of the option.
+     */
+    it.each([
+        ['a string', string, 'string'],
+        ['a list', array(string), 'list'],
+        [
+            'a union of objects',
+            union([object({ type: string('FISH') })]),
+            'union',
+        ],
+    ])(
+        'refuses a ref to %s as an option, when the scope binds the name',
+        (_, target, kind) => {
+            const run = () =>
+                scope({
+                    Target: target,
+                    Pet: discriminatedUnion(
+                        'type',
+                        past([object({ type: string('CAT') }), ref('Target')]),
+                    ),
+                })
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(
+                `every option must be an object codec, and option 1 is a \`${kind}\``,
+            )
+        },
+    )
 
     /**
      * The other half of the same guarantee: an object option that does not *name* the discriminator

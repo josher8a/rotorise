@@ -259,6 +259,19 @@ describe('a strict object', () => {
         )
     })
 
+    it('refuses an undeclared name on the way out, and returns the refusal that names the name', () => {
+        const entry = { id: 'w1', retired: 'x' } as never
+        const written = Closed.encode(entry)
+        expect(written).toBeInstanceOf(CodecError)
+        expect(String(written)).toContain(
+            "'retired' is not an attribute this codec declares",
+        )
+        expect(() => Closed.unsafeEncode(entry)).toThrow(CodecError)
+        expect(() => Closed.unsafeEncode(entry)).toThrow(
+            "'retired' is not an attribute this codec declares",
+        )
+    })
+
     it('refuses an undeclared attribute in a patch', () => {
         expect(() =>
             Closed.unsafeEncodePartial({ retired: 'x' } as never),

@@ -242,6 +242,18 @@ describe('the construction of a grouped match', () => {
         expect(() => refused([[[], ['id']]])).toThrow(RotoriseError)
     })
 
+    it.each([
+        ['an object', {}],
+        ['a string', 'ADOPTION'],
+    ])(
+        'refuses cases that is %s, because a match reads a list of cases',
+        (_, cases) => {
+            const run = () => refused(cases)
+            expect(run).toThrow(RotoriseError)
+            expect(run).toThrow('Match on type: cases is no list of cases')
+        },
+    )
+
     it('refuses a match that holds both spec and cases', () => {
         expect(() =>
             refused([[['A'], ['id']]], { spec: { A: ['id'] } }),

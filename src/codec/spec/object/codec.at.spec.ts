@@ -146,6 +146,16 @@ describe('a codec at a path', () => {
         ).toThrow(/no attribute is declared at 'fulfilment.legs\[0\].nonsense'/)
     })
 
+    it.each(['id[', 'i]d', 'id[x]', 'id[1]d'])(
+        'refuses %s, because a name holds no bracket and a position is digits in brackets',
+        (malformed) => {
+            // the type of `at` refuses the string, so a cast is the way in that a caller of plain JavaScript has
+            const run = () => atOf(Delivery, malformed as 'id')
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(`'${malformed}' is no document path`)
+        },
+    )
+
     it('types the codec by what lives at the path', () => {
         const located = atOf(Adoption, [
             'fulfilment',

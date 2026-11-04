@@ -6319,7 +6319,13 @@ const dissect = <T extends Record<string, unknown>>(
     // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
     // that no scope binds is read by the scope, where the index reads the node of the closed copy
     for (const option of options) {
-        const node = resolvedTerm(termOf(option as unknown as AnyCodec))
+        // a bare spec has no `def`, and `termOf` would throw a `TypeError` on it
+        const bare =
+            (option as { readonly def?: unknown } | null | undefined)?.def ===
+            undefined
+        const node = bare
+            ? undefined
+            : resolvedTerm(termOf(option as unknown as AnyCodec))
         if (node?.kind !== 'ref' && !(node && objectNamed(node))) {
             throw new CodecError(
                 'every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass `object(...)` around it',

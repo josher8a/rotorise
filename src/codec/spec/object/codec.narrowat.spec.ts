@@ -189,6 +189,29 @@ describe('a clause narrows the frontier of `at`', () => {
         expect(single.unsafeEncode('3')).toEqual({ S: '3' })
     })
 
+    it.each([
+        ['a string codec', string],
+        ['a list codec', array(string)],
+        [
+            'a union of object codecs',
+            union([object({ type: string('SHIPMENT') })]),
+        ],
+    ])(
+        'refuses %s as a clause, because a clause is an object codec',
+        (_, pattern) => {
+            // the type of `narrow` refuses the pattern, so a cast is the way in that a caller of plain JavaScript has
+            const run = () => narrow(atOf(Entity, ['op']), pattern as never)
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow('a pattern of `narrow` is an object codec')
+        },
+    )
+
+    it('refuses a clause that is no object codec at the type', () => {
+        // @ts-expect-error a string codec is no clause: the pattern is an object codec
+        const run = () => narrow(atOf(Entity, ['op']), string)
+        expect(run).toThrow(CodecError)
+    })
+
     it('refuses on use where the clause separates every option, and names the keys', () => {
         const none = atOf(
             narrow(
