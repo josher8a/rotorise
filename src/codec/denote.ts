@@ -1166,8 +1166,9 @@ export const denote = (def: Term): Pair => {
             const inner = codecOfTerm(def.elem)
             const one = elementMember(def.elem)
             if (one !== 'S' && one !== 'N' && one !== 'B') {
+                // `judge` refuses a set of any other member first, so this narrows `one` for `setWire`
                 throw new CodecError(
-                    `a set holds strings, numbers or binary, and this element writes ${one ? `'${one}'` : 'no single member'}`,
+                    'codecOfTerm received a set that the judge did not refuse',
                 )
             }
             const member = one

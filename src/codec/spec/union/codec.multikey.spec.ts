@@ -7,7 +7,16 @@
  * below names one rule that index needs.
  */
 import { describe, expect, it } from 'vitest'
-import { at, boolean, item, mdunion, narrow, object, string } from '../../codec'
+import {
+    at,
+    boolean,
+    CodecError,
+    item,
+    mdunion,
+    narrow,
+    object,
+    string,
+} from '../../codec'
 import type { ItemPair } from '../../denote'
 import { assignmentOf } from '../../denote'
 import { failed } from '../../result'
@@ -265,6 +274,14 @@ describe('the type refuses what a lookup could not reach', () => {
             // @ts-expect-error an empty list is a typo, and the bottom has its own name
             mdunion(['kind'], []),
         ).toThrow(/needs at least one option/)
+    })
+
+    it('refuses an empty key set, because every value carries the empty assignment', () => {
+        const run = () =>
+            // @ts-expect-error a dissection names at least one key
+            mdunion([], [pet, dog])
+        expect(run).toThrow(CodecError)
+        expect(run).toThrow(/needs at least one discriminator/)
     })
 
     it('admits a dissection whose members are pairwise distinct', () => {

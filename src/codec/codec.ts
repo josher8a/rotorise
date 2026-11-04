@@ -843,6 +843,8 @@ const preconditionsOf = (
             )
         }
         const side = sideOf(step, 'raw')
+        // a clause has no scoped form only where its flat scope is refused, and `scope` refuses an
+        // unguarded cycle of refs (RecursionRefused) before any path records the clause
         if (side === undefined && fields.length > 0) {
             return new CodecError(
                 `the clause at '${asPath(prefix)}' has no scoped form, so no precondition reads it`,
@@ -4485,6 +4487,8 @@ const locate = (
             const open = openRefusal(itemDef)
             if (open) return refusedAt(open)
             const flat = flatOf(itemDef)
+            // `openRefusal` refused an open item above, and `scope` refuses an unguarded cycle of refs
+            // (RecursionRefused), so a closed item has a flat scope
             if (flat.kind === 'refused')
                 return refusedAt(new CodecError(flat.reason))
             cycles = flat.cycles
@@ -5313,44 +5317,6 @@ type HeldTag<N> = N extends [
     ? [G]
     : never
 
-/**
- * **The options a slot offers to the slice**: the object node that the slot names, or each option of
- * the union node that the slot names. Each read goes through the `ref`s, so a slot and a `ref` to the
- * slot give one split. The caller reads a slot that {@link holdsObjects}, so each refusal below
- * guards a broken invariant and no input.
- */
-const optionsOfFactor = (factor: AnyCodec): readonly ObjectItem[] => {
-    const node = resolvedTerm(termOf(factor))
-    if (holdsNoValue(termOf(factor))) {
-        throw new CodecError(
-            '`never` holds no value, and a slot at `never` has no option to split',
-        )
-    }
-    if (node?.kind === 'ref') {
-        throw new CodecError(
-            `a slot names ref('${node.slot.name}'), which no scope binds yet — the slice reads the declared names at its declaration, so slice where the scope binds the name`,
-        )
-    }
-    if (node?.kind === 'union') {
-        // a dissection is a union of objects in the term, so its members split in declared order
-        // like the options of any union
-        return node.options.map((option) => {
-            const one = objectNamed(option)
-            if (!one) {
-                throw new CodecError(
-                    'an option of a union slot is not an object codec — the slice splits declared names, and only an object declares any',
-                )
-            }
-            return one
-        })
-    }
-    const one = node && objectNamed(node)
-    if (one) return [one]
-    throw new CodecError(
-        'a slot that the slice splits is an object codec or a `union` of object codecs, and this is neither — only an object declares names',
-    )
-}
-
 /** The options of a factor: each option of the union node it names, or the factor itself. */
 const meetOptions = (factor: AnyCodec): readonly AnyCodec[] => {
     const node = resolvedTerm(termOf(factor))
@@ -5445,6 +5411,8 @@ const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
 const meetParts = (a: AnyCodec, b: AnyCodec, walk: MeetWalk): AnyCodec => {
     const A = resolvedTerm(termOf(a))
     const B = resolvedTerm(termOf(b))
+    // a term resolves to nothing only for a cycle of refs alone, and `scope` refuses that cycle
+    // (RecursionRefused) before a meet reads the term
     if (A === undefined || B === undefined) {
         throw new CodecError(
             'a factor of a meet names a cycle of refs with no node',
@@ -8559,11 +8527,25 @@ const objectMembersOf = (
     return node.kind === 'union' ? node.options.flatMap(objectMembersOf) : []
 }
 
-/** Whether a term is an object, or a union of objects only. */
-const holdsObjects = (node: Term | undefined): boolean =>
-    node?.kind === 'union'
-        ? node.options.every((option) => objectNamed(option) !== undefined)
-        : node !== undefined && objectNamed(node) !== undefined
+/**
+ * **The options a slot offers to the slice**: the object node that the slot names, or each option of
+ * the union node that the slot names. The answer is nothing where the slot is no object and no union
+ * of objects only, and where the union has no option, because a slot that holds no value has no
+ * option to split. A dissection is a union of objects in the term, so its members split in declared
+ * order like the options of any union.
+ */
+const objectOptionsOf = (
+    node: Term | undefined,
+): readonly ObjectItem[] | undefined => {
+    if (node === undefined) return undefined
+    const options = node.kind === 'union' ? node.options : [node]
+    const items = options
+        .map(objectNamed)
+        .filter((one): one is ObjectItem => one !== undefined)
+    return items.length > 0 && items.length === options.length
+        ? items
+        : undefined
+}
 
 /**
  * The codecs that a pattern splits one slot into, where a slot is a field or a position of a fixed
@@ -8582,8 +8564,9 @@ const splitSlot = (
 ): readonly AnyCodec[] => {
     const node = resolvedTerm(termOf(slot))
     if (node?.kind === 'list') return splitList(name, slot, node, pattern)
-    if (!holdsObjects(node)) return [slot]
-    const parts = optionsOfFactor(slot).flatMap((one) =>
+    const options = objectOptionsOf(node)
+    if (options === undefined) return [slot]
+    const parts = options.flatMap((one) =>
         splitBy(one.spec as Record<string, ObjectSlot>, pattern).map(
             (inner) => ({ one, inner }),
         ),

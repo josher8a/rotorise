@@ -496,6 +496,16 @@ describe('an entry carries the capabilities of the node that its ref chain names
         expect(() => B.set()).toThrow(/a set holds strings, numbers or binary/)
     })
 
+    it('refuses the set of a node that writes BOOL with the text of the judge, which owns the rule of a set element', () => {
+        const { B } = scope({ B: ref('T'), T: boolean })
+        // @ts-expect-error a boolean writes BOOL, and DynamoDB has no set of it
+        const run = () => B.set()
+        expect(run).toThrow(CodecError)
+        expect(run).toThrow(
+            "a set holds strings, numbers or binary, and this element writes 'BOOL'",
+        )
+    })
+
     it('merges each variant of a discriminatedUnion factor that a ref names, in declared order', () => {
         const direct = scope({
             D: discriminatedUnion('kind', [
