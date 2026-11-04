@@ -90,7 +90,6 @@ TableEntry
 TableKeys
 Tagged
 TaggedCodec
-TaggedSpec
 Term
 TransformShape
 UndefinableCodec

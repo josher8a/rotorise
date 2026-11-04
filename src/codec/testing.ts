@@ -57,7 +57,7 @@ import type {
     Segment,
 } from './codec'
 import { at, CodecError, codecOfTerm, failed, orThrow } from './codec'
-import { accepts, holds } from './denote'
+import { accepts, holds, termOf } from './denote'
 import { Disagreement } from './result'
 import type { Term } from './term'
 import {
@@ -1000,7 +1000,7 @@ export const arbitraryOf = (
     rng: Rng,
     size: number,
 ): unknown => {
-    const def = codec.def
+    const def = termOf(codec)
     switch (def.kind) {
         case 'string':
             return someString(rng)
@@ -1191,7 +1191,7 @@ export const shrinkOf = (
     codec: AnyCodec,
     value: unknown,
 ): readonly unknown[] => {
-    const def = codec.def
+    const def = termOf(codec)
     const shrinkAt = (inner: AnyCodec) => (x: unknown) => shrinkOf(inner, x)
 
     switch (def.kind) {

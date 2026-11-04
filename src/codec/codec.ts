@@ -23,6 +23,7 @@ import {
     byTagSem,
     codecAtLevel,
     codecOfTerm,
+    defOf,
     equipCodecs,
     guard,
     itemSem,
@@ -548,7 +549,7 @@ export type SetSlot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
  * codec, and the body is what holds a field — so this reads the mark first and the term second.
  */
 export const constantOf = (declared: ObjectSlot): unknown => {
-    const def = declared.def
+    const def = defOf(declared)
     if (
         'mark' in def &&
         (def.mark === 'optional' || def.mark === 'undefinable')
@@ -4460,7 +4461,7 @@ const locate = (
     steps: readonly Step[],
     prior: Located | undefined,
 ): unknown => {
-    const itemDef = root.def
+    const itemDef = termOf(root)
     // a whole-item reading writes no map, and only such a reading carries the item mark. An object
     // codec holds a `spec` as well, so `spec` is no test
     const whole = isItemReading(root)
@@ -4624,7 +4625,7 @@ export type Declared = {
  * for.
  */
 const fieldOf = (declared: ObjectSlot): Field => {
-    const def = declared.def
+    const def = defOf(declared)
     return 'mark' in def ? def : { mark: 'req', t: def }
 }
 
@@ -4821,7 +4822,7 @@ export function item<
     Free<ObjectFree<Spec, Rest, Tm>>
 export function item<C extends Itemable<unknown>>(codec: C): ReadingOf<C>
 export function item(codec: object): unknown {
-    const reading = readingOf((codec as AnyCodec).def)
+    const reading = readingOf(termOf(codec as AnyCodec))
     if (reading === undefined) {
         throw new CodecError(
             'this codec has no whole-item reading: `item` takes an object or a union',
@@ -5912,7 +5913,7 @@ export const opened = throughRefs((t, opened) => {
 
 /** The term of a clause, built one time when the path records the clause. */
 export const clauseOf = (pattern: ClausePattern): Clause => {
-    const t = opened(pattern.def)
+    const t = opened(termOf(pattern as unknown as AnyCodec))
     // the type admits an object codec only, so the term of the pattern is an object
     if (t.kind !== 'object')
         throw new CodecError('a pattern of `narrow` is an object codec')
@@ -6203,16 +6204,6 @@ export type TaggedCodec<T, Spec = unknown> = {
     readonly [freeMarker]?: [never]
 }
 
-/**
- * The codecs a discriminated entity needs: every variant, and every attribute of each.
- *
- * Coverage is total on two axes. Missing a variant is a compile error, and so is missing an
- * attribute of one — a variant that gains a field cannot silently stop being written.
- */
-export type TaggedSpec<T, D extends keyof T> = {
-    [V in T[D] & (string | number)]: ItemSpec<VariantOf<T, D, V>>
-}
-
 export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
     /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
     readonly [itemMark]: true
@@ -6253,14 +6244,6 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
  *
  * Mirrors `tableEntry`'s discriminated key schema, so a union spells its discriminator the same way
  * for keys and for attributes.
- *
- * @example
- * ```ts
- * const Visit = tagged<Visit>()('type', {
- *     CHECKUP: { type: string('CHECKUP'), petId: string, vetId: string },
- *     VACCINATION: { type: string('VACCINATION'), petId: string, vaccine: string },
- * })
- * ```
  */
 const dissect = <T extends Record<string, unknown>>(
     ks: readonly string[],
@@ -6287,16 +6270,10 @@ const dissect = <T extends Record<string, unknown>>(
     // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
     // that no scope binds is read by the scope, where the index reads the node of the closed copy
     for (const option of options) {
-        // a bare spec has no `def`, and `termOf` would throw a `TypeError` on it
-        const bare =
-            (option as { readonly def?: unknown } | null | undefined)?.def ===
-            undefined
-        const node = bare
-            ? undefined
-            : resolvedTerm(termOf(option as unknown as AnyCodec))
+        const node = resolvedTerm(termOf(option as unknown as AnyCodec))
         if (node?.kind !== 'ref' && !(node && objectNamed(node))) {
             throw new CodecError(
-                'every option must be an object codec, and one of them is not — a bare spec has no variant to select, so pass `object(...)` around it',
+                'every option must be an object codec, and one of them is not',
             )
         }
     }
@@ -6357,7 +6334,7 @@ const dissectionOf = (
                 const item = node && objectNamed(node)
                 if (node?.kind !== 'object' || !item) {
                     throw new CodecError(
-                        `every option must be an object codec, and option ${at} is a \`${node?.kind}\` — a bare spec has no variant to select, so pass \`object(...)\` around it`,
+                        `every option must be an object codec, and option ${at} is a \`${node?.kind}\``,
                     )
                 }
                 return [
@@ -9386,7 +9363,7 @@ const slicedUnion = (
  * every key in its slice, because each member still writes its tag.
  */
 const sliced = (codec: AnyCodec, pattern: unknown, keep: boolean): unknown => {
-    const t = codec.def
+    const t = termOf(codec)
     // a slice of `never` keeps nothing, and leaves nothing to exclude
     if (t.kind === 'never') return codec
     if (t.kind !== 'union') return sliced(union([codec]), pattern, keep)

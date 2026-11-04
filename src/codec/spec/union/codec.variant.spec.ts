@@ -10,7 +10,9 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    extract,
     item,
+    list,
     narrow,
     number,
     object,
@@ -20,7 +22,13 @@ import {
     string,
     union,
 } from '../../codec'
-import { checkEncodePaths, checkRoundTrip } from '../../testing'
+import {
+    arbitraryOf,
+    checkEncodePaths,
+    checkRoundTrip,
+    rngFrom,
+    shrinkOf,
+} from '../../testing'
 
 type Account =
     | {
@@ -222,9 +230,74 @@ describe('tagged', () => {
                     past([bare, object({ type: string('CAT') })]),
                 )
             expect(run).toThrow(CodecError)
-            expect(run).toThrow(/every option must be an object codec/)
+            expect(run).toThrow(/this position takes a codec/)
         },
     )
+
+    it('refuses a string beside a ref at the declaration, with no scope to read the ref', () => {
+        const run = () =>
+            discriminatedUnion('type', past([string, ref('Other')]))
+        expect(run).toThrow(CodecError)
+        expect(run).toThrow(
+            'every option must be an object codec, and one of them is not',
+        )
+    })
+
+    /**
+     * **One refusal of a value that is no codec, at the one place a builder reads a child.** The
+     * types refuse each of these calls, so the cast is how a test reaches the throw. A bare spec,
+     * `null`, `undefined` and a number each gave a `TypeError` that named an internal read.
+     */
+    describe('a position that takes a codec', () => {
+        const cat = object({ type: string('CAT') })
+        const bare = past({ type: string('A') })
+        // the signatures refuse each of these calls, so the call goes through an erased function
+        const loose = (f: unknown) => f as (...args: unknown[]) => unknown
+        it.each([
+            ['union, a bare spec', () => union(past([bare]))],
+            ['union, null beside a codec', () => union(past([cat, null]))],
+            [
+                'union, undefined beside a codec',
+                () => union(past([cat, undefined])),
+            ],
+            ['union, a number', () => union(past([cat, 5]))],
+            [
+                'discriminatedUnion, a bare spec',
+                () => discriminatedUnion('type', past([bare])),
+            ],
+            ['an object field, a bare spec', () => object({ a: bare })],
+            ['an object field, an empty record', () => object({ a: past({}) })],
+            ['an object field, null', () => object({ a: past(null) })],
+            ['array, a bare spec', () => array(bare)],
+            ['optional, a bare spec', () => optional(bare)],
+            ['scope, a bare spec', () => scope({ A: bare })],
+            ['list, a bare spec', () => loose(list)(bare)],
+            ['at, a bare spec', () => loose(at)(bare, [])],
+            ['item, a bare spec', () => item(bare)],
+            [
+                'extract, a bare spec as the codec',
+                () => loose(extract)(bare, cat),
+            ],
+            [
+                'narrow, a bare spec as the codec',
+                () => loose(narrow)(bare, cat),
+            ],
+            [
+                'narrow, a bare spec as the pattern',
+                () => loose(narrow)(cat, bare),
+            ],
+            [
+                'arbitraryOf, a bare spec',
+                () => loose(arbitraryOf)(bare, rngFrom(1), 2),
+            ],
+            ['shrinkOf, a bare spec', () => loose(shrinkOf)(bare, {})],
+        ])('refuses %s with a CodecError and no TypeError', (_, run) => {
+            expect(run).toThrow(CodecError)
+            expect(run).toThrow(
+                'this position takes a codec, and the value is not one. To describe the attributes of an object, pass `object(...)` around the spec',
+            )
+        })
+    })
 
     /**
      * An option that is a `ref` passes the first loop, because a scope may bind the name to an

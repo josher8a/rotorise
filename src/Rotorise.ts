@@ -3411,7 +3411,6 @@ export type {
     StringCodec,
     Tagged,
     TaggedCodec,
-    TaggedSpec,
     UndefinableCodec,
     UnionCodec,
     Untagged,

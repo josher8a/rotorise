@@ -1482,6 +1482,28 @@ export const denote = (def: Term): Pair => {
 const codecs = new WeakMap<Term, AttributeCodec<never, AttributeValue>>()
 
 /**
+ * What a declaration holds: a term, or a field that marks one.
+ *
+ * **The one refusal of a value that is no codec.** A bare spec, `null`, `undefined` and a number
+ * have no definition, and every builder reads a child through this function or through
+ * {@link termOf}, so the refusal stands here and nowhere else. A term has a `kind` and a field has
+ * a `mark`. The types refuse each of these calls, so the caller is one that arrived past a cast.
+ */
+export const defOf = (declared: ObjectSlot): Term | Field => {
+    const def = (declared as { readonly def?: unknown } | null | undefined)?.def
+    if (
+        typeof def !== 'object' ||
+        def === null ||
+        !('kind' in def || 'mark' in def)
+    ) {
+        throw new CodecError(
+            'this position takes a codec, and the value is not one. To describe the attributes of an object, pass `object(...)` around the spec',
+        )
+    }
+    return declared.def
+}
+
+/**
  * A declaration's term, refusing a field where a term is wanted.
  *
  * `optional(c)` and `withLegacyRead({ current: c, whenMissing: v })` denote a `Field`, and no `Term` position accepts one — which
@@ -1492,7 +1514,7 @@ export const termOf = (declared: ObjectSlot): Term => {
     // a declaration and not a codec, which is what keeps the refusal below reachable: a codec's
     // definition is a term, so a parameter of `AnyCodec` would make this a branch the checker
     // says cannot be taken, and the caller it is for is the one that arrived past a cast
-    const def = declared.def
+    const def = defOf(declared)
     if ('mark' in def) {
         throw new CodecError(
             `\`${def.mark}\` marks a *field* — whether a name may be absent — and this position takes a term. The type says so too; this call reached here past a cast`,
