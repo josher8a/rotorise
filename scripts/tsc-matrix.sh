@@ -8,7 +8,9 @@
 # A consumer compiles the published types with its own compiler, and a type can reach a limit there
 # that the compiler of the lockfile does not reach. The project resolves `rotorise` through the
 # `exports` map, as a consumer does, and checks the `.d.ts` files too (`skipLibCheck` is off).
-# Every version runs and prints one line. Exit 1 on any failure.
+# Every version runs and prints one line. Then the published entries run under node, in ESM and in
+# CJS, and one script per format checks that a class has one identity across the entries.
+# Exit 1 on any failure.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -50,6 +52,14 @@ for version in "${VERSIONS[@]}"; do
   else
     printf 'FAIL  typescript@%s\n' "$version"
     printf '%s\n' "$out" | sed 's/^/      | /' | head -20
+    failed=1
+  fi
+done
+for format in mjs cjs; do
+  if out=$(node "scripts/consumer/identity.$format" 2>&1); then
+    printf '%s\n' "$out"
+  else
+    printf '%s\n' "$out"
     failed=1
   fi
 done

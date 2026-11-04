@@ -11,7 +11,12 @@ export default defineConfig({
         testing: './src/codec/testing.ts',
         native: './src/codec/native.ts',
     },
-    splitting: false,
+    // each entry that bundles its own copy of a class gives a second class identity, and
+    // `instanceof` across the entries then fails: a refusal of `rotorise/native` is not a
+    // `CodecError` of `rotorise`, and `rotorise/testing` makes a `DynamoNumber` that `opaque` of
+    // `rotorise` refuses.
+    // A shared chunk holds one copy. `scripts/tsc-matrix.sh` runs the entries and checks it
+    splitting: true,
     sourcemap: true,
     outDir: 'dist',
     clean: true,
