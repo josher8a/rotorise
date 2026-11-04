@@ -144,7 +144,8 @@ describe('held', () => {
             decode: (at: string) => new Date(at),
         }
         checkIso(iso, asDate, { seed })
-        expect(() => checkIso(string, asDate, { seed })).toThrow()
+        // the adapter's own `toISOString` throws on an invalid date, and `checkIso` passes the throw on
+        expect(() => checkIso(string, asDate, { seed })).toThrow(RangeError)
     })
 
     /**

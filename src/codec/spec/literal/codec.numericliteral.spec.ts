@@ -381,8 +381,10 @@ describe('the read side reads through the same gate as number', () => {
             'NaN',
             'abc',
         ]) {
-            expect(() => number.unsafeDecode({ N: text })).toThrow()
-            expect(() => number(0, 1, 2).unsafeDecode({ N: text })).toThrow()
+            expect(() => number.unsafeDecode({ N: text })).toThrow(CodecError)
+            expect(() => number(0, 1, 2).unsafeDecode({ N: text })).toThrow(
+                CodecError,
+            )
         }
     })
 
@@ -424,6 +426,6 @@ describe('the read side reads through the same gate as number', () => {
         expect(() => number(1e125).unsafeDecode({ N: past })).toThrow(
             CodecError,
         )
-        expect(() => number.unsafeDecode({ N: past })).toThrow()
+        expect(() => number.unsafeDecode({ N: past })).toThrow(CodecError)
     })
 })
