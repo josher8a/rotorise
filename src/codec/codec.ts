@@ -2010,23 +2010,13 @@ export type Refined<
  * this type is declining to give.
  */
 export type SetCapable<T, A extends AttributeValue, Tm = FreeTerm> = [
-    A,
-] extends [Attribute<'S'>]
-    ? {
-          readonly set: () => AttributeCodec<ReadonlySet<T>, SS> &
+    SetAttribute<A>,
+] extends [never]
+    ? Record<never, never>
+    : {
+          readonly set: () => AttributeCodec<ReadonlySet<T>, SetAttribute<A>> &
               TermMark<['set', Tm]>
       }
-    : [A] extends [Attribute<'N'>]
-      ? {
-            readonly set: () => AttributeCodec<ReadonlySet<T>, NS> &
-                TermMark<['set', Tm]>
-        }
-      : [A] extends [Attribute<'B'>]
-        ? {
-              readonly set: () => AttributeCodec<ReadonlySet<T>, BS> &
-                  TermMark<['set', Tm]>
-          }
-        : Record<never, never>
 
 /** What {@link refine} takes beside the inner codec and the predicate. */
 type RefineOptions<Narrow> = {
@@ -6029,11 +6019,14 @@ export type EncodedVariants<Variants> = Variants extends readonly unknown[]
  * and be told when the element stops being a string. `L` and `SS` are the distinction a marshaller
  * that guesses gets wrong, so a shape that could not tell them apart would pin very little.
  */
-export type SetOf<C> = AttributeOf<C> extends Attribute<'S'>
+export type SetOf<C> = SetAttribute<AttributeOf<C>>
+
+/** The set that holds an element of the attribute `A`, or `never`. `A` is asked whole, not by member. */
+type SetAttribute<A> = [A] extends [Attribute<'S'>]
     ? SS
-    : AttributeOf<C> extends Attribute<'N'>
+    : [A] extends [Attribute<'N'>]
       ? NS
-      : AttributeOf<C> extends Attribute<'B'>
+      : [A] extends [Attribute<'B'>]
         ? BS
         : never
 
