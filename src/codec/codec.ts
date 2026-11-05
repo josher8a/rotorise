@@ -729,11 +729,11 @@ const including = (
  * term and not the identity of {@link absent}: the frontier keeps the first codec of a term, and an
  * identity test made the verdict depend on the order of the options.
  *
- * **The test reads through no `ref`.** The walk reads a `ref` only to step through it. So a `ref`
- * whose target is `never` reads as a codec here, where the model, which prints the target, reads
- * `never`.
+ * **The test reads through each `ref`**, as the head of the model's frame does: a `ref` whose
+ * target is `never` admits no value, as a `never` written in its place does.
  */
-const admitsNothing = (codec: AnyCodec): boolean => codec.def.kind === 'never'
+const admitsNothing = (codec: AnyCodec): boolean =>
+    resolvedTerm(codec.def)?.kind === 'never'
 
 /**
  * What the variants reach, one codec for each term ({@link sameTerm}), so the first declared wins.

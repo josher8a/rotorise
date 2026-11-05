@@ -281,6 +281,15 @@ describe('a path to a codec that admits no value', () => {
         expect(() => atOf(item, ['b'])).toThrow(vacant)
     })
 
+    it('a path to a `ref` whose target is `never` is vacant, as the `never` in its place is', () => {
+        const { Pet } = scope({
+            Pet: object({ a: string, b: optional(ref('Nothing')) }),
+            Nothing: never,
+        })
+        // @ts-expect-error the head of the frame reads through the `ref`, at the type as at run time
+        expect(() => atOf(itemOf(Pet), ['b'])).toThrow(vacant)
+    })
+
     it('a path past a list of `never` is vacant in either option order, because the verdict reads the term and not the order', () => {
         const declares = object({ k: string('a'), x: array(never) })
         const lacks = object({ k: string('b') })
