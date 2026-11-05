@@ -538,8 +538,9 @@ key would relate the absent row to two values, and decode would be no function. 
 top of the values only up to that reading. A literal fits a literal of one base and adapter, and a
 literal fits its base. A base fits itself. A set fits a set where its element fits. An option fits a
 union where each part of the option fits a member of the union. The parts are the join-prime terms
-of the normal form: a base of finite literals splits into its literals, and an object at a field and
-a list at a position split at a union. A list of a union is one part. A refinement fits where its
+of the normal form: a base of finite literals splits into its literals, an object at a field and a
+list at a position split at a union, and an optional field splits into its absent row and its
+values. A list of a union is one part. A refinement fits where its
 inner term fits, and an option fits an older reading where it fits the current form. Two objects
 compare on the alignment of their names: each slot of the option fits the slot of the pattern, and
 the open block of the option fits
