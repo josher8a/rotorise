@@ -115,21 +115,42 @@ export const memberOf = (value: AttributeValue): AttributeName | undefined => {
  * at most 38 significant digits; magnitude zero or `1e-130 … 9.9…e125`. The `Numerals` of the attribute domain, and the
  * same predicate as `Numeral.WF` in `formal/Calculus/Dynamo/Domain.lean`.
  */
-const NUMERAL = /^[+-]?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/
-
 export const isNumeral = (s: string): boolean => {
-    const m = NUMERAL.exec(s)
-    if (!m) return false
-    const int = m[1] as string
-    const frac = m[2] ?? ''
-    const mantissa = int + frac
-    const lead = mantissa.length - mantissa.replace(/^0+/, '').length
-    const significant = mantissa.replace(/^0+/, '').replace(/0+$/, '')
-    if (significant.length > 38) return false
-    if (significant.length === 0) return true // zero, however it is spelled
-    const exponent = int.length - 1 - lead + Number(m[3] ?? '0')
-    return exponent >= -130 && exponent <= 125
+    const value = numeralValue(s)
+    return value !== undefined && accepted(value)
 }
+
+/**
+ * **The value of a numeral, with no spelling**: the sign, the significant digits, and the place of
+ * the point, counted from the left of the digits. Two spellings of one value give one record, and
+ * zero has no digits.
+ */
+type NumeralValue = {
+    readonly sign: '' | '-'
+    readonly digits: string
+    readonly point: number
+}
+
+const numeralValue = (s: string): NumeralValue | undefined => {
+    const parts = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(s)
+    if (!parts) return undefined
+    const whole = parts[2] as string
+    const all = whole + (parts[3] ?? '')
+    const lead = all.length - all.replace(/^0+/, '').length
+    return {
+        sign: parts[1] === '-' ? '-' : '',
+        digits: all.slice(lead).replace(/0+$/, ''),
+        point: whole.length + Number(parts[4] ?? '0') - lead,
+    }
+}
+
+/**
+ * At most 38 significant digits, and zero or an exponent from -130 to 125. The exponent of the
+ * first digit is the point less one.
+ */
+const accepted = (value: NumeralValue): boolean =>
+    value.digits.length <= 38 &&
+    (value.digits === '' || (value.point > -130 && value.point <= 126))
 
 /**
  * What DynamoDB **hands back**, which is a smaller set: it normalises every `N` it accepts —
@@ -246,26 +267,8 @@ export class DynamoNumber<S extends string = string> {
      * **The spelling the store would return, expanded from the digits.** Not through a JS number:
      * `String(Number(...))` writes exponent form at or above `1e21` and below `1e-6` — `'1e+21'`,
      * `'1e-7'` — and the store returns neither, while DynamoDB carries magnitudes to `1e125`.
-     *
-     * Total on anything {@link isNumeral} accepts. The value does not change, so the significant
-     * digits and the magnitude are the ones that already passed.
      */
-    private static normalise(numeral: string): string {
-        const parts = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(
-            numeral,
-        )
-        // unreachable: every caller has already passed `isNumeral`, which is this shape
-        if (!parts) return numeral
-        const sign = parts[1] === '-' ? '-' : ''
-        const whole = parts[2] as string
-        // where the point sits in `digits`, counted from the left, after the exponent moves it
-        let point = whole.length + Number(parts[4] ?? '0')
-        let digits = whole + (parts[3] ?? '')
-
-        const lead = digits.length - digits.replace(/^0+/, '').length
-        digits = digits.slice(lead).replace(/0+$/, '')
-        point -= lead
-
+    private static spelled({ sign, digits, point }: NumeralValue): string {
         // every digit was a zero, and the store keeps one spelling of it
         if (!digits) return '0'
 
@@ -296,15 +299,16 @@ export class DynamoNumber<S extends string = string> {
      *
      * **The type computes the same text** from a literal argument: `from('1.50')` holds a
      * `DynamoNumber<'1.5'>`. The overload states that fact, and the implementation cannot prove
-     * it, because `normalise` returns a `string`, so a test pins the two texts equal on each
+     * it, because `spelled` returns a `string`, so a test pins the two texts equal on each
      * spelling. {@link NormalNumeral} names the spellings that fall back to `string`.
      */
     static from<const T extends string>(
         digits: T,
     ): Result<DynamoNumber<NormalNumeral<T>>>
     static from(digits: string): Result<DynamoNumber> {
-        return isNumeral(digits)
-            ? new DynamoNumber(DynamoNumber.normalise(digits))
+        const value = numeralValue(digits)
+        return value !== undefined && accepted(value)
+            ? new DynamoNumber(DynamoNumber.spelled(value))
             : new CodecError(
                   `'${digits}' is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
               )
