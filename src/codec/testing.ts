@@ -58,7 +58,7 @@ import type {
 } from './codec'
 import { at, CodecError, codecOfTerm, failed, orThrow } from './codec'
 import { accepts, holds, termOf } from './denote'
-import { Disagreement } from './result'
+import { asPath, Disagreement } from './result'
 import type { Term } from './term'
 import {
     componentsOf,
@@ -1529,17 +1529,7 @@ const attempt = (
 }
 
 const where = (difference: Difference): string =>
-    difference.path.length === 0
-        ? ''
-        : ` at ${difference.path
-              .map((segment, i) =>
-                  typeof segment === 'number'
-                      ? `[${segment}]`
-                      : i === 0
-                        ? segment
-                        : `.${segment}`,
-              )
-              .join('')}`
+    difference.path.length === 0 ? '' : ` at ${asPath(difference.path)}`
 
 // ── laws between codecs ─────────────────────────────────────────────
 
