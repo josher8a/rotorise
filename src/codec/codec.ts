@@ -54,6 +54,7 @@ import type {
     OpenT,
     Same,
     ScopeWallCycle,
+    SlotAt,
     StepFrames,
 } from './pathModel'
 import {
@@ -4876,10 +4877,6 @@ type EntrySpecs<Entries extends readonly AnyObjectEntry[]> = show<
     UnionToIntersection<EntrySpec<Entries[number]>>
 >
 
-type SlotCodec<Slot> = Slot extends { readonly codec: infer Codec }
-    ? Codec
-    : Slot
-
 type WildcardEntry<Entries extends readonly AnyObjectEntry[]> =
     Entries[number] extends infer Entry
         ? Entry extends readonly [
@@ -4887,7 +4884,7 @@ type WildcardEntry<Entries extends readonly AnyObjectEntry[]> =
               infer Value extends ObjectSlot,
           ]
             ? string extends Key
-                ? SlotCodec<Value>
+                ? Marks<Value>
                 : never
             : never
         : never
@@ -5286,11 +5283,7 @@ type OneAdapter<NA, NB> = [HeldTag<NA>] extends [never]
     ? false
     : [HeldTag<NB>] extends [never]
       ? false
-      : [HeldTag<NA>] extends [HeldTag<NB>]
-        ? [HeldTag<NB>] extends [HeldTag<NA>]
-            ? true
-            : false
-        : false
+      : Same<HeldTag<NA>, HeldTag<NB>>
 /**
  * The tag of the adapter of a `held` node, as `[tag]`, or `never` where the node is no `held`. The
  * tag of a library adapter is its name. The tag of a caller's adapter is `['caller']`, and the
@@ -6856,8 +6849,6 @@ type FieldSpecList<F> = F extends Declares<infer Sp>
         : [Sp]
     : never
 
-type KeysOfUnion<U> = U extends unknown ? keyof U : never
-
 /**
  * The keys of a union as a tuple. The order is the order that the checker gives, which no reader
  * relies on: each key splits one object field, and the decoded type is a union.
@@ -6876,7 +6867,7 @@ type ObjectOfSpec<S> = S extends Record<string, ObjectSlot>
     : never
 
 /** A spec, split at the keys of the pattern specs `PU` where the spec holds objects. */
-type SplitSpec<Spec, PU> = SplitKeys<[Spec], KeyTuple<KeysOfUnion<PU>>, PU>
+type SplitSpec<Spec, PU> = SplitKeys<[Spec], KeyTuple<UnionKeys<PU>>, PU>
 type SplitKeys<
     States extends readonly unknown[],
     Keys extends readonly unknown[],
@@ -7267,8 +7258,8 @@ type BelowShape<A, P, EA, EP, Seen extends readonly unknown[]> = P extends [
         ? AllOf<
               | {
                     [K in keyof AF | keyof PF]: BelowSlot<
-                        K extends keyof AF ? AF[K] : ['optional', Block<AW>],
-                        K extends keyof PF ? PF[K] : ['optional', Block<PW>],
+                        SlotAt<AF, AW, K>,
+                        SlotAt<PF, PW, K>,
                         EA,
                         EP,
                         Seen

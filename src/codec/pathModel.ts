@@ -164,7 +164,7 @@ type ApartOr<S, T, Env> = ApartAt<S, T, Env> extends true ? Some<[]> : None
 
 // ── the body (`slotAtG`) ──
 export type Block<W> = W extends ['some', infer T] ? T : ['never']
-type SlotAt<F, W, N> = N extends keyof F ? F[N] : ['optional', Block<W>]
+export type SlotAt<F, W, N> = N extends keyof F ? F[N] : ['optional', Block<W>]
 type SlotTerm<S> = S extends [
     'req' | 'optional' | 'undefinable' | 'fill',
     infer T,
