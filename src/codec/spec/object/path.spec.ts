@@ -236,3 +236,35 @@ describe('what a path is, to the runtime', () => {
         expect(Pet.then.toString()).toBe('then')
     })
 })
+
+/**
+ * DynamoDB admits `at`, `entry`, `narrow` and `toString` as attribute names, and the path type
+ * offers each as a hop. The path reads such a name as the attribute, and calls it as the method.
+ */
+describe('an attribute that shares the name of a method of the path', () => {
+    const Pet = pathBuilder<{
+        at: { entry: string }
+        narrow: string
+        toString: string
+        tags: string[]
+    }>()
+
+    it('is the attribute where the path reads it', () => {
+        expect(Pet.at.entry.toString()).toBe('at.entry')
+        expect(Pet.narrow.toString()).toBe('narrow')
+        expect(Pet.toString.toString()).toBe('toString')
+    })
+
+    it('is the method where the path calls it', () => {
+        expect(Pet.tags.at(0).toString()).toBe('tags[0]')
+        expect(Pet.at.toString()).toBe('at')
+    })
+
+    it('is not a thenable, so awaiting one does not hang', async () => {
+        const settled = await Promise.race([
+            Promise.resolve(Pet.at).then(() => 'resolved'),
+            new Promise((stop) => setTimeout(() => stop('hung'), 250)),
+        ])
+        expect(settled).toBe('resolved')
+    })
+})

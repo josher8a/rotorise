@@ -3283,7 +3283,8 @@ export namespace opaque {
  *
  * `at(i)` indexes a list. Bracket syntax works too, but under `noUncheckedIndexedAccess` a variable
  * index yields `| undefined` — again about a value, not a path — so `at` is the form that stays
- * clean. An entity with its own attribute named `at` should use brackets for that one hop.
+ * clean. An attribute named `at`, `entry`, `narrow` or `toString` is a hop where the path reads it,
+ * and the method where the path calls it.
  */
 export type PathOf<T, F = unknown> = PathTerminal<T> &
     PathBody<NonNullable<T>, F>
@@ -5928,32 +5929,47 @@ const nothing = {}
  * step.status` — would record both reads as one path. It also makes a recorder reusable, which is
  * what `path()` has always been.
  */
-const recordPath = (steps: readonly Step[]): unknown => {
-    const recorder = new Proxy(nothing, {
-        get: (_target, prop) => {
-            if (typeof prop !== 'string') return undefined
-            if (prop === 'toString') return () => asPath(segmentsIn(steps))
-            if (prop === 'at') {
-                return (index: number) => recordPath([...steps, index])
-            }
-            // an open name, selected by a method, as `at` selects a position
-            if (prop === 'entry') {
-                return (key: string) => recordPath([...steps, key])
-            }
-            // a clause narrows the frontier of `at`; the document path is unchanged
-            if (prop === 'narrow') {
-                return (pattern: ClausePattern) =>
-                    recordPath([...steps, clauseOf(pattern)])
-            }
-            // digits all the way through, or it is an attribute name: `parseInt` accepted a
-            // leading number and dropped the rest, so `'1abc'` recorded `[NaN]`
-            return recordPath([
-                ...steps,
-                asIndex.test(prop) ? Number(prop) : prop,
-            ])
-        },
+const recordPath = (steps: readonly Step[]): unknown =>
+    new Proxy(nothing, { get: (_target, prop) => hop(steps, prop) })
+
+/**
+ * **A method of a path is also an attribute name.** DynamoDB admits an attribute named `at`, and
+ * the path type offers it as a hop. So the hop to a method name is a recorder that is callable: read
+ * as a property, it is the hop to the attribute; called, it is the method at the node before the
+ * hop. Only these hops are callable, and their `then` is a plain hop, so no path is a thenable.
+ */
+const hop = (steps: readonly Step[], prop: string | symbol): unknown => {
+    if (typeof prop !== 'string') return undefined
+    // digits all the way through, or it is an attribute name: `parseInt` accepted a
+    // leading number and dropped the rest, so `'1abc'` recorded `[NaN]`
+    const next = [...steps, asIndex.test(prop) ? Number(prop) : prop]
+    const method = methodAt(steps, prop)
+    if (method === undefined) return recordPath(next)
+    return new Proxy(method, {
+        get: (_target, inner) => hop(next, inner),
     })
-    return recorder
+}
+
+/** The method of a path that `name` names, at the node that `steps` reaches. */
+const methodAt = (
+    steps: readonly Step[],
+    name: string,
+): ((arg: never) => unknown) | undefined => {
+    switch (name) {
+        case 'toString':
+            return () => asPath(segmentsIn(steps))
+        case 'at':
+            return (index: number | string) => recordPath([...steps, index])
+        // an open name, selected by a method, as `at` selects a position
+        case 'entry':
+            return (key: string) => recordPath([...steps, key])
+        // a clause narrows the frontier of `at`; the document path is unchanged
+        case 'narrow':
+            return (pattern: ClausePattern) =>
+                recordPath([...steps, clauseOf(pattern)])
+        default:
+            return undefined
+    }
 }
 
 /**
