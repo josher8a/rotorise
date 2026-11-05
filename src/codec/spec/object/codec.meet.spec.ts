@@ -14,6 +14,7 @@ import {
     decimal,
     dynamoNumber,
     exclude,
+    extract,
     fits,
     held,
     item,
@@ -1255,5 +1256,81 @@ describe('the presence of a slot in the meet and in the order of the slice', () 
             termOf(object({ petId: string, nickname: undefinable(never) })),
         )
         expect(fits(termOf(Closed), termOf(Named))).toBe(false)
+    })
+})
+
+describe('the presence lift in the type gives the answer of the run time', () => {
+    /**
+     * A slot that may be absent is the join of its absent row and its present values, in the type as
+     * at run time. The type of `extract` keeps the option that holds the absent row.
+     */
+    it('keeps the option that holds an optional name when extract splits the name at its absent row', () => {
+        const Pets = union([
+            object({ nickname: optional(string) }),
+            object({ age: number }),
+        ])
+        const Named = union([
+            object({ nickname: string }),
+            object({ nickname: optional(number) }),
+        ])
+        const kept = extract(Pets, Named)
+        expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
+            { readonly nickname?: string } | { readonly age: number }
+        >()
+        expect(termOf(kept)).toEqual(termOf(Pets))
+    })
+
+    /**
+     * Two optional slots meet at an optional slot over the meet of their codecs, and the meet of two
+     * codecs at `never` holds the absent row.
+     */
+    it('meets two optional names at an optional name over the meet of the two codecs', () => {
+        const Clash = meet(
+            object({ nickname: optional(string) }),
+            object({ nickname: optional(number) }),
+        )
+        expectTypeOf<Decoded<typeof Clash>>().toEqualTypeOf<{
+            readonly nickname?: never
+        }>()
+        expect(orThrow(item(Clash).decode({}))).toEqual({})
+        const Shared = meet(
+            object({ nickname: optional(string('Rex', 'Fido')) }),
+            object({ nickname: optional(string('Fido', 'Bo')) }),
+        )
+        expectTypeOf<Decoded<typeof Shared>>().toEqualTypeOf<{
+            readonly nickname?: 'Fido'
+        }>()
+        expect(failed(item(Shared).decode({ nickname: { S: 'Rex' } }))).toBe(
+            true,
+        )
+    })
+
+    it('keeps the fill when two slots of one type meet', () => {
+        const Legacy = object({
+            petId: withLegacyRead({ current: string, whenMissing: 'unknown' }),
+        })
+        const Twice = meet(Legacy, Legacy)
+        expectTypeOf(Twice.spec.petId.def.mark).toEqualTypeOf<'fallback'>()
+        expect(orThrow(item(Twice).decode({}))).toEqual({ petId: 'unknown' })
+    })
+
+    /**
+     * `undefinable` lies below `optional`, so the two meet at `undefinable`. A closed option that does
+     * not declare the name holds `nickname` as an optional slot over `never`, so `extract` of the
+     * option against an `undefinable` pattern keeps nothing, in the type as at run time.
+     */
+    it('meets undefinable and optional at undefinable, and extracts nothing from a closed option that lacks an undefinable name', () => {
+        const Both = meet(
+            object({ nickname: undefinable(string) }),
+            object({ nickname: optional(string) }),
+        )
+        expectTypeOf<Decoded<typeof Both>>().toEqualTypeOf<{
+            readonly nickname: string | undefined
+        }>()
+        const Closed = object({ petId: string })
+        const Named = object({ nickname: undefinable(string) })
+        const none = extract(Closed, Named)
+        expectTypeOf<Decoded<typeof none>>().toEqualTypeOf<never>()
+        expect(termOf(none)).toEqual({ kind: 'never' })
     })
 })

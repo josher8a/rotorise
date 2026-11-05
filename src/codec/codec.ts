@@ -5019,30 +5019,62 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
     : never
 
 /**
- * **The meet of two slots at one name, at the type level**: the meet of the two absences, as the
- * run time reads them, over the meet of the two codecs. A side that admits no absence, required or
- * `withLegacyRead`, makes the slot the meet of the two codecs, and two `withLegacyRead` sides with
- * one stand-in keep that fill over the meet. An `optional` side and an
- * `undefinable` side meet at `undefinable`. Two sides of one absence keep that absence.
+ * **The meet of two slots at one name, at the type level**: the meet of the two codecs, under the
+ * presence mark that the run time gives ({@link meetSlots}). The presence marks lie in the order of
+ * {@link absentBelow} at the `relation` order, and the meet takes the mark of the side that lies
+ * below the other, and `req` where neither side does: `undefinable` lies below `optional`, a
+ * required slot lies below each slot, and a fill lies below no other mark. Two fills keep the fill
+ * where the two slots are one type. The type reads no stand-in, so the run time decides where two
+ * fills of one type hold two stand-ins, and it gives `req` there.
  */
-type MeetSlot<A, B> = [A] extends [{ readonly [optionalMarker]: true }]
-    ? [B] extends [{ readonly [optionalMarker]: true }]
-        ? SameAbsence<A, B> extends true
-            ? MeetCodecs<A, B>
-            : MeetCodecs<Marks<A>, Marks<B>> extends infer M
-              ? UndefinableCodec<Decoded<M>, AttributeOf<M> & AttributeValue, M>
-              : never
-        : MeetCodecs<Marks<A>, Marks<B>>
-    : MeetCodecs<Marks<A>, Marks<B>>
+type MeetSlot<A, B> = MeetCodecs<Marks<A>, Marks<B>> extends infer M
+    ? MeetMark<SlotMark<A>, SlotMark<B>> extends infer K
+        ? [K] extends ['req']
+            ? M
+            : [K] extends ['fill']
+              ? Same<A, B> extends true
+                  ? MarkedMeet<'fill', M>
+                  : M
+              : MarkedMeet<K, M>
+        : never
+    : never
 
-/** Whether two slots that admit absence are both `undefinable`, or both `optional`. */
-type SameAbsence<A, B> = [A] extends [{ readonly [undefinableMarker]: true }]
-    ? [B] extends [{ readonly [undefinableMarker]: true }]
-        ? true
-        : false
-    : [B] extends [{ readonly [undefinableMarker]: true }]
-      ? false
-      : true
+/**
+ * The codec of a meet under a presence mark. A meet at `never` is the codec `never` there, because
+ * a slot that may be absent still holds the absent row: `optional(never)` decodes to `{}`.
+ */
+type MarkedMeet<
+    K,
+    M,
+    C = [M] extends [never] ? typeof never : M,
+> = K extends 'fill'
+    ? MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
+          TermMark<['fill', TermOf<C>]>
+    : K extends 'undefinable'
+      ? UndefinableCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
+            TermMark<['undefinable', TermOf<C>]>
+      : OptionalCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
+            TermMark<['optional', TermOf<C>]>
+
+/** The presence mark of a slot. */
+type SlotMark<S> = S extends { readonly [fallbackMarker]: unknown }
+    ? 'fill'
+    : S extends { readonly [undefinableMarker]: true }
+      ? 'undefinable'
+      : S extends { readonly [optionalMarker]: true }
+        ? 'optional'
+        : 'req'
+
+/** The greatest lower bound of two presence marks, in the order of {@link absentBelow}. */
+type MeetMark<A, B> = 'req' extends A | B
+    ? 'req'
+    : 'fill' extends A | B
+      ? [A, B] extends ['fill', 'fill']
+          ? 'fill'
+          : 'req'
+      : 'undefinable' extends A | B
+        ? 'undefinable'
+        : 'optional'
 
 /**
  * The meet of two codecs at one name, at the type level. Two object slots meet on the union of
@@ -7403,7 +7435,8 @@ type PatternNodes<Ps extends readonly unknown[], EP> = {
  * **The parts of the normal form of a term in the value order**, as {@link joinParts} builds them,
  * split at the names that the pattern options declare: `boolean` is `true` and `false`, a union
  * flattens, an object is the product of the parts of its fields, and a list is the product of the
- * parts of its positions. A split at a name that no option declares changes no fit, because the
+ * parts of its positions. A field that may be absent splits as {@link presenceParts} splits it
+ * ({@link PresenceSlots}). A split at a name that no option declares changes no fit, because the
  * pattern is open there. `'over'` where the parts pass {@link PartsCap}.
  */
 type JoinParts<A, Ps, EP> = A extends [
@@ -7469,7 +7502,7 @@ type ObjectParts<
                   EP
               > extends infer Parts extends readonly unknown[]
                 ? Capped<
-                      CrossFields<Rows, K, M, Parts>
+                      CrossFields<Rows, K, PresenceSlots<M, Parts>>
                   > extends infer Next extends readonly unknown[]
                     ? ObjectParts<F, W, Rest, Ps, EP, Next>
                     : 'over'
@@ -7485,14 +7518,24 @@ type ObjectParts<
 type CrossFields<
     Rows extends readonly unknown[],
     K,
-    M,
-    Parts extends readonly unknown[],
+    Slots extends readonly unknown[],
 > = Rows extends readonly [infer Row, ...infer Rest extends readonly unknown[]]
     ? [
-          ...{ [I in keyof Parts]: Row & { [P in K & string]: [M, Parts[I]] } },
-          ...CrossFields<Rest, K, M, Parts>,
+          ...{ [I in keyof Slots]: Row & { [P in K & string]: Slots[I] } },
+          ...CrossFields<Rest, K, Slots>,
       ]
     : []
+
+/**
+ * The slots of a field that {@link presenceParts} gives, at the type level: `optional` and
+ * `undefinable` give the absent row, a slot of the same mark over `never`, then the present parts
+ * as required slots. Any other mark keeps its mark over each part.
+ */
+type PresenceSlots<M, Parts extends readonly unknown[]> = M extends
+    | 'optional'
+    | 'undefinable'
+    ? [[M, ['never']], ...{ [I in keyof Parts]: ['req', Parts[I]] }]
+    : { [I in keyof Parts]: [M, Parts[I]] }
 /** The nodes at the name `K` in the slots of the object options. */
 type PatternSlotNodes<Ps, K, EP> = Ps extends [
     'object',
