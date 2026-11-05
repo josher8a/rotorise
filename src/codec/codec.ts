@@ -8528,15 +8528,14 @@ const fitsNode = (
     )
 }
 
-/** The object nodes that a term names: the object itself, or each object option of a union. */
+/** The object nodes that a term names: each summand of the term that is an object. */
 const objectMembersOf = (
     t: Term,
-): readonly Extract<Term, { kind: 'object' }>[] => {
-    const node = resolvedTerm(t)
-    if (node === undefined) return []
-    if (node.kind === 'object') return [node]
-    return node.kind === 'union' ? node.options.flatMap(objectMembersOf) : []
-}
+): readonly Extract<Term, { kind: 'object' }>[] =>
+    summandsOf(t).filter(
+        (node): node is Extract<Term, { kind: 'object' }> =>
+            node.kind === 'object',
+    )
 
 /**
  * **The options a slot offers to the slice**: the object node that the slot names, or each option of
@@ -8759,11 +8758,14 @@ type SpecSlice = {
     readonly rest: readonly Piece[]
 }
 
-/** The object nodes that a term names: the object itself, or each object option of a union. */
-const objectNodesOf = (t: Term): readonly Term[] => {
+/**
+ * **The summands of a term**: the nodes that its nested unions hold, each read through its `ref`s.
+ * A chain of `ref`s that names no node gives none.
+ */
+const summandsOf = (t: Term): readonly Term[] => {
     const node = resolvedTerm(t)
     if (node === undefined) return []
-    return node.kind === 'union' ? node.options.flatMap(objectNodesOf) : [node]
+    return node.kind === 'union' ? node.options.flatMap(summandsOf) : [node]
 }
 
 /**
@@ -8821,8 +8823,8 @@ const sliceSpec = (
         mine: Term,
         wanted: Term,
     ): Omit<Entry, 'name' | 'at'> | 'leaf' | 'split' => {
-        const summands = objectNodesOf(mine)
-        const members = objectNodesOf(wanted)
+        const summands = summandsOf(mine)
+        const members = summandsOf(wanted)
         if (
             summands.length === 0 ||
             members.length === 0 ||
