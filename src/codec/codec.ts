@@ -456,7 +456,7 @@ export type AnySpread = {
 /**
  * Anything an object member can be declared as: a codec, or a field that marks one.
  *
- * `optional` and `withLegacyRead` state that the attribute at a *name* may be absent, and the name belongs
+ * `optional` and `fill` state that the attribute at a *name* may be absent, and the name belongs
  * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
  * member is read and written through is the one the field marks.
  *
@@ -562,8 +562,8 @@ export const constantOf = (declared: ObjectSlot): unknown => {
     // **A single-valued literal decides; two admissible values narrow without deciding.** This was
     // `decides`, a reader that walked the definition to answer it, and the term answers the same
     // row — deliberately *not* through the wrappers `member` descends: a constant is a claim about
-    // the value, and `refine` can reject it, `withLegacyRead` can decode an older encoding into something
-    // else, and `optional` admits absence, which is not the value. `withLegacyRead` is the one that keeps
+    // the value, and `refine` can reject it, `legacy` can decode an older encoding into something
+    // else, and `optional` admits absence, which is not the value. `fill` is the one that keeps
     // it, always writing the attribute at a value typed to the same alternative.
     //
     // **An adapter is the second that keeps it**, and it has to be: `number` and `decimal` are
@@ -660,7 +660,7 @@ const childrenOf = (
         case 'legacy':
             if (apart) return []
             throw new CodecError(
-                `a path cannot go into \`withLegacyRead\` at '${segment}': an older encoding of the attribute has another shape, and a path addresses the current shape only. Address the attribute itself`,
+                `a path cannot go into \`legacy\` at '${segment}': an older encoding of the attribute has another shape, and a path addresses the current shape only. Address the attribute itself`,
             )
         case 'held':
             if (apart) return []
@@ -1649,7 +1649,7 @@ type ArrayOver<C extends AnyCodec> = AttributeCodec<
 /**
  * A declaration that fills a **slot** with a term holding no value.
  *
- * A slot is a position a value must fill: a declared element of a list, and a `req` or `withLegacyRead`
+ * A slot is a position a value must fill: a declared element of a list, and a `req` or `fill`
  * field. `optional` and `undefinable` are not slots, because the key may be absent. A list's
  * spread is not one either, because a value of the declared length omits it.
  */
@@ -1839,7 +1839,7 @@ export type ListWrites<Cs extends readonly unknown[]> = Split<Cs> extends {
 /**
  * Nothing, or why a spread is not an attribute.
  *
- * An item's members are reached by *name*, so `optional` and `withLegacyRead` belong here — both are
+ * An item's members are reached by *name*, so `optional` and `fill` belong here — both are
  * statements about a name. `spread` is a statement about a *position*, and there are no positions
  * in a map, so it is the one marker an object member cannot be.
  */
@@ -1982,7 +1982,7 @@ export type Refined<
  * it, which is not all the way. A codec's *type* is not generic in its definition: every codec
  * carries a `Term`, and none of them carries *which* one at the type. So `refine(...)`'s type
  * knows the attribute and never the term beneath, and the gate here is the attribute: `S`, `N` or
- * `B`, the three a stored set is built from. `refine(withLegacyRead(…), p).set()` type-checks
+ * `B`, the three a stored set is built from. `refine(legacy(…), p).set()` type-checks
  * and throws, because a read widening has no set in the model. That gap closes only by making the
  * codec type generic in its definition, which was measured at 481 of 968 signatures and rejected;
  * the runtime refusal in {@link set} is what stands in for it.
@@ -2097,8 +2097,8 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
  * A field that stands in a value where the attribute is absent.
  *
  * Not a codec, for the reason {@link OptionalCodec} records. The stand-in is the marker's payload at
- * the type level and `def.value` at run time, and the run-time side is the one {@link withLegacyRead}
- * checks against the rule `(withLegacyRead)`.
+ * the type level and `def.value` at run time, and the run-time side is the one {@link fill}
+ * checks against the rule `(fill)`.
  */
 type MissingCodec<
     T,
@@ -2124,7 +2124,7 @@ type MissingCodec<
  * `.fill` slot is in the write domain of its codec. The premise exists because the proof failed
  * without it: a row missing the attribute reads back as the stand-in, and if the inner codec cannot write that value the item cannot be written back —
  * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
- * declaration responsible for it. `withLegacyRead({ current: string('A'), whenMissing: 'B' })` is the whole of it.
+ * declaration responsible for it. `fill(string('A'), 'B')` is the whole of it.
  *
  * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
  * than on whichever read happens to need it first. A stand-in that the codec writes through a
@@ -2134,7 +2134,7 @@ type MissingCodec<
  * be writable: a `DynamoNumber` is shared, being immutable. Primitives are handed over as they are,
  * being unable to leak anything.
  */
-const withMissing = <const C extends AnyCodec>(
+export const fill = <const C extends AnyCodec>(
     // the *argument's own* type, not a re-declared `AttributeCodec<T, A>`: the guard has to see the
     // marker the caller passed, and a parameter written in terms of inferred `T` and `A` reconstructs
     // a plain codec that never carries one
@@ -2143,8 +2143,10 @@ const withMissing = <const C extends AnyCodec>(
     // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
     // codec it stands in for — invisible while the entity was declared first and pinned it itself
     value: NoInfer<Decoded<C>>,
-): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> => {
-    // The rule `(withLegacyRead)`: the stand-in must be *writable*, or a row missing the name decodes to a
+): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
+    TermMark<['fill', TermOf<C>]> &
+    Free<FreeOf<C>> => {
+    // The rule `(fill)`: the stand-in must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable from the
     // declaration alone, which is why the stand-in is a value and not a thunk
@@ -2156,7 +2158,13 @@ const withMissing = <const C extends AnyCodec>(
     return {
         codec: attribute,
         def: { mark: 'fallback', t: termOf(inner), v: value },
-    } as unknown as MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
+    } as unknown as MissingCodec<
+        Decoded<C>,
+        AttributeOf<C> & AttributeValue,
+        C
+    > &
+        TermMark<['fill', TermOf<C>]> &
+        Free<FreeOf<C>>
 }
 
 /** The refusal of a stand-in that the codec it stands in for cannot write. */
@@ -2173,15 +2181,15 @@ const standIn = (standsFor: AnyCodec, value: unknown): void => {
     }
     if (refusal) {
         throw new CodecError(
-            `\`withLegacyRead\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
+            `\`fill\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
         )
     }
 }
 
 /**
  * The refusal in the type of a wall argument whose term reaches an entry on a cycle. The overload
- * of `withLegacyRead` with a stand-in carries no refusal, because a stand-in alone builds no wall.
- * So an older reader beside a stand-in refuses at run time alone.
+ * of `fill` carries no refusal, because a stand-in alone builds no wall. A `fill` over a `legacy` read refuses
+ * through the wall of `legacy`.
  */
 type WallOver<W extends string, C> = [CycleEntryOf<TermOf<C>>] extends [never]
     ? unknown
@@ -2436,7 +2444,7 @@ const heldSide = (
 /**
  * One direction, which is all an older encoding is ever asked for.
  *
- * `withLegacyRead` never writes through `older` — that is the whole of what makes it a migration rather than
+ * `legacy` never writes through `older` — that is the whole of what makes it a migration rather than
  * a union — so asking for a whole codec there asked for a half nobody calls. It also *forced* one:
  * an older encoding whose held type differs from the current one has to be adapted, and {@link held}
  * requires both halves, so adapting a reader meant writing an encode path that is dead by
@@ -2445,7 +2453,7 @@ const heldSide = (
  * @example
  * ```ts
  * // stored as N now; some rows still hold the digits as B, from a migration nobody finished
- * withLegacyRead({
+ * legacy({
  *     current: decimal,
  *     older: { decode: (at) => andThen(binary.decode(at), (b) => decoder.decode(b)) },
  * })
@@ -2466,11 +2474,11 @@ export type Reader<T> = {
  * an index key cannot use it: DynamoDB rejects a write whose index key has the wrong type.
  *
  * @example
- * **One older encoding.** A table that has held three needs two of these, nested — and `withLegacyRead` is
+ * **One older encoding.** A table that has held three needs two of these, nested — and `legacy` is
  * itself a {@link Reader}, so it nests directly:
  *
  * ```ts
- * withLegacyRead({ current: decimal, older: withLegacyRead({ current: string, older: fromBytes }) })
+ * legacy({ current: decimal, older: legacy({ current: string, older: fromBytes }) })
  * ```
  *
  * Not a union: {@link union} requires its options to read back as *different* types so that a value
@@ -2480,10 +2488,10 @@ export type Reader<T> = {
  *
  * ```ts
  * // stored as N today, and as S in rows written before that; always written as N
- * rate: withLegacyRead({ current: decimal, older: string })
+ * rate: legacy({ current: decimal, older: string })
  * ```
  *
- * **Two things the rule `(withLegacyRead)` asks of the older reader**, and only one of them is checkable.
+ * **Two things the rule `(legacy)` asks of the older reader**, and only one of them is checkable.
  *
  * `ran(r) ⊆ dom(e)` — a migration lands on values the current encoding can *write*. This is
  * checked, per read, as soon as the older reader has answered, because that is the earliest
@@ -2500,65 +2508,20 @@ export type Reader<T> = {
  * union of `p` and the checked older reading. Without it the reading depends on declaration
  * order, which is the one thing that resolution never does. So it is a written obligation, and the thing to check is that two
  * readers of one attribute agree — nothing in this library will tell you they do not.
- */
-export type WithLegacyReadOptions<C extends AnyCodec> = {
-    readonly current: C
-} & (
-    | {
-          readonly older: Reader<Decoded<C>>
-          readonly whenMissing?: NoInfer<Decoded<C>>
-      }
-    | {
-          readonly older?: Reader<Decoded<C>>
-          readonly whenMissing: NoInfer<Decoded<C>>
-      }
-)
-
-/**
- * Reads an older attribute encoding or a missing object attribute.
  *
- * `older` extends an attribute codec's read side. `whenMissing` declares an object slot, because
- * absence belongs to an object map and no attribute codec can read an absent attribute.
+ * A missing object attribute is {@link fill}, and `fill(legacy({ current, older }), value)` is both.
  */
-export function withLegacyRead<const C extends AnyCodec>(options: {
-    readonly current: C & WallOver<'withLegacyRead', C>
+export const legacy = <const C extends AnyCodec>(options: {
+    readonly current: C & WallOver<'legacy', C>
     readonly older: Reader<Decoded<C>>
-    readonly whenMissing?: never
 }): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
     TermMark<['legacy', TermOf<C>]> &
-    Free<FreeOf<C>>
-export function withLegacyRead<const C extends AnyCodec>(options: {
-    readonly current: C
-    readonly older?: Reader<Decoded<C>>
-    readonly whenMissing: NoInfer<Decoded<C>>
-}): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
-    TermMark<['fill', TermOf<C>]> &
-    Free<FreeOf<C>>
-export function withLegacyRead<const C extends AnyCodec>(
-    options: WithLegacyReadOptions<C>,
-):
-    | AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
-    | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> {
-    const { current, older } = options
-    const currentCodec = current as unknown as AttributeCodec<
-        Decoded<C>,
-        AttributeOf<C> & AttributeValue
-    >
-    const extended = older
-        ? codecOfTerm<Decoded<C>, AttributeOf<C> & AttributeValue>({
-              kind: 'legacy',
-              inner: termOf(current),
-              r: older.decode,
-          })
-        : currentCodec
-    return (
-        'whenMissing' in options
-            ? withMissing(extended, options.whenMissing as Decoded<C>)
-            : extended
-    ) as
-        | AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue>
-        | MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C>
-}
+    Free<FreeOf<C>> =>
+    codecOfTerm<Decoded<C>, AttributeOf<C> & AttributeValue>({
+        kind: 'legacy',
+        inner: termOf(options.current),
+        r: options.older.decode,
+    })
 
 /*
  * **A cycle is a name in one declaration.** `ref(name)` is the reference, and its term is the
@@ -2781,7 +2744,7 @@ export function ref(name: string): unknown {
  * container on its path, or with an adapter on its path, is refused. A `ref` to a name that `defs`
  * does not declare is refused. Then each check that reads through a `ref` runs on the closed copy:
  * the check of a `union` with a `ref` option, which a `nullable` over a `ref` builds, the index of
- * a dissection whose tag reads a `ref`, and the stand-in of a `withLegacyRead` that writes through
+ * a dissection whose tag reads a `ref`, and the stand-in of a `fill` that writes through
  * a `ref`.
  *
  * **A scope closes a copy, by lexical scope.** Each entry is the codec of its closed term. A `ref`
@@ -2873,7 +2836,7 @@ const entryOf = (codec: AnyCodec, kind: Term['kind'] | undefined): object =>
  * nowhere else. A list, a set, a tuple, an open block and a union option have no name at that position for
  * anything to be missing from, and each of those refuses this because a field is not a codec — the
  * member for a value that may be stored as `NULL` in one of them is {@link nullable}. Marking a
- * marked declaration is refused the same way: `withLegacyRead({ current: c, whenMissing: v })` is the attribute that may be absent
+ * marked declaration is refused the same way: `fill(c, v)` is the attribute that may be absent
  * and has a stand-in, and it is what both nestings meant.
  */
 export const optional = <const C extends AnyCodec>(
@@ -2909,7 +2872,7 @@ export const optional = <const C extends AnyCodec>(
  *
  * It is the stricter of the pair: `optional` reads both `{}` and `{ k: undefined }` back as `{}`,
  * so **(R)** holds for it modulo that identification, while here the round trip is an equality. It
- * takes on no premise of its own — unlike {@link withLegacyRead}, which must check its stand-in is
+ * takes on no premise of its own — unlike {@link fill}, which must check its stand-in is
  * writable because it writes one.
  */
 export const undefinable = <const C extends AnyCodec>(
@@ -5676,7 +5639,7 @@ const meetSlots = (
           : undefined
     switch (below?.mark) {
         case 'fallback':
-            return withMissing(held, below.v as Decoded<typeof held>)
+            return fill(held, below.v as Decoded<typeof held>)
         case 'undefinable':
             return undefinable(held)
         case 'optional':
@@ -7347,7 +7310,7 @@ type BelowShape<A, P, EA, EP, Seen extends readonly unknown[]> = P extends [
               : 'f'
 /**
  * The slot of the option against the slot of the pattern: the absent row, then the term. At the
- * `value` order a stand-in counts no absent row, so a `withLegacyRead` slot reads as a required one.
+ * `value` order a stand-in counts no absent row, so a `fill` slot reads as a required one.
  * `undefinable` pairs the absent row with `{ k: undefined }`, which `optional` reads as `{}`.
  */
 type BelowSlot<M, W, EA, EP, Seen extends readonly unknown[]> = [M, W] extends [
@@ -8258,9 +8221,9 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
 
 /**
  * **What the order compares at the absent row of a slot.** `relation` compares pairs of a stored
- * row and a decoded value, so a `withLegacyRead` slot counts the absent row that its stand-in
+ * row and a decoded value, so a `fill` slot counts the absent row that its stand-in
  * reads. The meet of two codecs reads it. `value` compares decoded values alone, because a pattern
- * has no decode of its own: a `withLegacyRead` slot always gives a value, so the slot equals a
+ * has no decode of its own: a `fill` slot always gives a value, so the slot equals a
  * required slot, as the model's `AltClause.admitsC` reads a fill through `slotReq`. `fits`, the
  * slice and the pattern side of {@link meetOrdered} read it. The presence marks give one answer in
  * both orders.
@@ -8294,9 +8257,9 @@ const slotBelow = (
 
 /**
  * **Whether the pairs of the absent row that the slot `mine` holds are pairs of the slot
- * `wanted`.** A required slot holds no absent row. At the `relation` order, a `withLegacyRead` slot
+ * `wanted`.** A required slot holds no absent row. At the `relation` order, a `fill` slot
  * pairs the absent row with its stand-in, so it is below only a slot of the same stand-in. At the
- * `value` order, a `withLegacyRead` slot is a required slot. `undefinable` pairs it with
+ * `value` order, a `fill` slot is a required slot. `undefinable` pairs it with
  * `{ k: undefined }`, which `optional` reads as `{}`. `optional`, and a name that a closed object
  * does not declare, pair it with a value without the key, which `undefinable` refuses.
  */
@@ -8324,7 +8287,7 @@ const absentBelow = (mine: Field, wanted: Field, order: Order): boolean => {
  * **The order of the meet**, on terms as they are written, on the fragment that the host decides.
  * At the `relation` order it compares pairs of a stored row and a decoded value, and at the `value`
  * order it compares decoded values ({@link Order}). The two orders differ only at the absent row of
- * a `withLegacyRead` slot. `narrow`, `disjoint` and {@link storedApart} read stored rows through their own walk, and
+ * a `fill` slot. `narrow`, `disjoint` and {@link storedApart} read stored rows through their own walk, and
  * not this one. `opaque` is the top, and a term that holds no value is the bottom. A set is below a
  * set where its element is below the element. A list is below a list of one element where each
  * position and the spread are below that element. A refinement on the side of the option reads
@@ -8932,7 +8895,7 @@ const sliceSpec = (
         }
         // a slot whose absent row the pattern refuses splits into a present part and an absent
         // part, where the absent part has a codec: `optional` or `undefinable` at `never`. At the
-        // `value` order a `withLegacyRead` slot is required, so the pattern refuses no absent row
+        // `value` order a `fill` slot is required, so the pattern refuses no absent row
         if (!slotBelow(name, wantedObject.body, mine, wanted, 'value')) {
             const declared = own(piece.spec, name)
             if (!presence || declared === undefined || !('codec' in declared)) {

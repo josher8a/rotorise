@@ -12,10 +12,10 @@
  *
  * - A JS number is a binary64 float, and `Value.num` carries an exact `WFNumeral`, so a JS number
  *   has no Lean value. A `DynamoNumber` is a numeral and emits.
- * - `refine`, `held` and `withLegacyRead` carry *functions* in the model and *closures* here.
+ * - `refine`, `held` and `legacy` carry *functions* in the model and *closures* here.
  *   There is no expression in Lean for a closure. A declaration verdict binds a caller's closure
  *   and a caller's adapter as variables of the theorem, and every other vector refuses them.
- * - `optional` and `withLegacyRead` are `Field`s and `restOf` is a `Rest`. Asking for a `Term` at
+ * - `optional` and `fill` are `Field`s and `restOf` is a `Rest`. Asking for a `Term` at
  *   one of them is a stratification error, and the emitter reports it as one rather than flattening
  *   it — which is the same discipline `NotAboutAbsence` enforces in the types.
  *
@@ -40,8 +40,10 @@ import {
     discriminatedUnion,
     dynamoNumber,
     extract,
+    fill,
     held,
     item as itemOf,
+    legacy,
     list,
     mdunion,
     meet,
@@ -59,7 +61,6 @@ import {
     string,
     undefinable,
     union,
-    withLegacyRead,
 } from '../codec'
 import { accepts, codecOfTerm } from '../denote'
 import type {
@@ -354,11 +355,9 @@ describe('terms', () => {
         expect(() => leanClosedOf(erase(optional(string)))).toThrow(
             /a \*field\*, not a term/,
         )
-        expect(() =>
-            leanClosedOf(
-                erase(withLegacyRead({ current: string, whenMissing: 'x' })),
-            ),
-        ).toThrow(/`optional`\/`fallback` denote `Field`/)
+        expect(() => leanClosedOf(erase(fill(string, 'x')))).toThrow(
+            /`optional`\/`fallback` denote `Field`/,
+        )
         expect(entriesOf(erase(object({ a: optional(string) })))[0]).toContain(
             'Scoped.ObjectSlot.optional',
         )
@@ -395,10 +394,7 @@ describe('terms', () => {
             entriesOf(
                 erase(
                     object({
-                        a: withLegacyRead({
-                            current: string,
-                            whenMissing: 'd',
-                        }),
+                        a: fill(string, 'd'),
                     }),
                 ),
             ),
@@ -516,7 +512,7 @@ describe('terms', () => {
      * verdict the emitter refuses the reader, because no vector can run it.
      */
     it('binds the older reader of a legacy term in a verdict, and refuses it elsewhere', () => {
-        const migrated = withLegacyRead({
+        const migrated = legacy({
             current: string,
             older: { decode: () => 'older' as string },
         })
@@ -632,7 +628,7 @@ describe('what cannot be emitted', () => {
         expect(refusal(() => leanClosedOf(erase(adapted))).reason).toContain(
             'Value → Value',
         )
-        const older = withLegacyRead({
+        const older = legacy({
             current: string,
             older: { decode: () => 'older' as string },
         })
@@ -653,13 +649,7 @@ describe('what cannot be emitted', () => {
             refusal(() => leanClosedOf(erase(optional(string)))).reason,
         ).toContain('a *field*, not a term')
         expect(
-            refusal(() =>
-                leanClosedOf(
-                    erase(
-                        withLegacyRead({ current: string, whenMissing: 'd' }),
-                    ),
-                ),
-            ).reason,
+            refusal(() => leanClosedOf(erase(fill(string, 'd')))).reason,
         ).toContain('a *field*, not a term')
     })
 
@@ -1150,7 +1140,7 @@ export const sampleVectors: readonly Vector[] = [
         name: 'object_fallback_present',
         codec: erase(
             object({
-                a: withLegacyRead({ current: string, whenMissing: 'stand-in' }),
+                a: fill(string, 'stand-in'),
             }),
         ),
         value: { a: 'x' },
@@ -1468,10 +1458,7 @@ describe('the `check` protocol', () => {
  * as a variable; the corpus pairs it with the bottom, a disjoint scalar, its own scalar, and itself.
  */
 const migratedString = erase(
-    withLegacyRead({
-        current: string,
-        older: { decode: () => 'older' as string },
-    }),
+    legacy({ current: string, older: { decode: () => 'older' as string } }),
 )
 /**
  * A field that reads an absent name as a stand-in. The corpus pairs it with the two verdicts the
@@ -1479,26 +1466,17 @@ const migratedString = erase(
  * same name) and with each row of the stand-in test: beside `req`, beside `optional`, and beside a
  * closed body.
  */
-const standIn = erase(
-    object({ a: withLegacyRead({ current: string, whenMissing: 'stand-in' }) }),
-)
+const standIn = erase(object({ a: fill(string, 'stand-in') }))
 /**
  * A stand-in that one value states twice: a second codec with the text of `standIn`, a third with
  * another text, and two with an object constant, equal at one value and apart at two objects.
  */
-const standInAgain = erase(
-    object({ a: withLegacyRead({ current: string, whenMissing: 'stand-in' }) }),
-)
-const standInOther = erase(
-    object({ a: withLegacyRead({ current: string, whenMissing: 'other' }) }),
-)
+const standInAgain = erase(object({ a: fill(string, 'stand-in') }))
+const standInOther = erase(object({ a: fill(string, 'other') }))
 const nameOf = (nick: string) =>
     erase(
         object({
-            a: withLegacyRead({
-                current: object({ nick: string }),
-                whenMissing: { nick },
-            }),
+            a: fill(object({ nick: string }), { nick }),
         }),
     )
 /**
@@ -1514,10 +1492,10 @@ const undefinableBoolean = erase(object({ a: undefinable(boolean) }))
  * so lexical scope binds each name once for both. Two declarations of one adapter, and two nodes of
  * one structure, are two nodes, and the two scopes refuse them as before.
  */
-const sharedNode = withLegacyRead({ current: string, older: string })
+const sharedNode = legacy({ current: string, older: string })
 const sharedRefs = (() => {
     const { Pair } = scope({
-        Node: object({ v: withLegacyRead({ current: string, older: string }) }),
+        Node: object({ v: legacy({ current: string, older: string }) }),
         Pair: union([ref('Node'), ref('Node')]),
     })
     const options = (
@@ -1531,7 +1509,7 @@ const twoFields = erase(object({ a: string, n: boolean }))
 const legacyDecimalRestNumber = erase(
     object(
         {
-            a: withLegacyRead({
+            a: legacy({
                 current: decimal,
                 older: { decode: () => '1' as string },
             }),
@@ -1705,12 +1683,12 @@ const separationPairs = (): readonly Separation[] => {
             name: 'object_over_two_adapters__vs__object_over_two_adapters',
             left: erase(
                 object({
-                    v: withLegacyRead({ current: string, older: string }),
+                    v: legacy({ current: string, older: string }),
                 }),
             ),
             right: erase(
                 object({
-                    v: withLegacyRead({ current: string, older: string }),
+                    v: legacy({ current: string, older: string }),
                 }),
             ),
         },
@@ -2221,7 +2199,7 @@ describe('union resolution, model against library', () => {
  */
 const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
     const literalA = erase(
-        withLegacyRead({
+        legacy({
             current: string('A'),
             older: {
                 decode: ((attribute: AttributeValue) =>
@@ -2239,7 +2217,7 @@ const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
         [
             'throws',
             erase(
-                withLegacyRead({
+                legacy({
                     current: string,
                     older: {
                         decode: (() => {
@@ -2252,7 +2230,7 @@ const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
         [
             'undefined_reader',
             erase(
-                withLegacyRead({
+                legacy({
                     current: string,
                     older: { decode: (() => undefined) as never },
                 }),
@@ -2267,7 +2245,7 @@ const legacyCodecs = (): readonly (readonly [string, AnyCodec])[] => {
                     [
                         `older_o_${v.name}`,
                         erase(
-                            withLegacyRead({
+                            legacy({
                                 current: v.codec as never,
                                 older: { decode: () => 'o' as never },
                             }),
@@ -2567,7 +2545,7 @@ describe("the declaration guard, against the model's classifier", () => {
             name: 'quantified',
             term: refusedTerm(() =>
                 scope({
-                    L: withLegacyRead({
+                    L: legacy({
                         current: ref('L') as never,
                         older: { decode: () => 'o' as never },
                     }),
@@ -2930,11 +2908,8 @@ describe("the slice, against the model's `AltClause.admitsC`", () => {
 
     /** **The caller must write a fill**, so a fill is required where the clause reads presence. */
     it('keeps a member pinned with a fill, because the caller must write the name', () => {
-        const fill = withLegacyRead({
-            current: string('a'),
-            whenMissing: 'a',
-        } as never)
-        expect(rows(fill, [string('a')])).toContain('[[true, false]] := ')
+        const filled = fill(string('a'), 'a')
+        expect(rows(filled, [string('a')])).toContain('[[true, false]] := ')
     })
 
     /** **A clause keeps a member whose alternatives lie inside the clause's**, and not one that overlaps. */

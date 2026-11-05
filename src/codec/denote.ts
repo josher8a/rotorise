@@ -1266,17 +1266,17 @@ export const denote = (def: Term): Pair => {
                 refusedBy(def.q, value),
             )
         /**
-         * The rule `(withLegacyRead)`: the current reading, extended by an older one — the model's
+         * The rule `(legacy)`: the current reading, extended by an older one — the model's
          * `Codec.extendRead`. The model proves the core laws only (`LawfulCore.extendRead`): a
          * canonical read fails, and `legacy_breaks_MP` is the refutation. The write side is untouched,
-         * which is the whole of what makes it a migration rather than a union: `withLegacyRead` adds no
+         * which is the whole of what makes it a migration rather than a union: `legacy` adds no
          * way to *write*, only a second way to read.
          *
          * The current encoding is tried first and on its own, so the path every row written since
          * the migration takes allocates nothing — no `[current, ...older]` to walk and no list of
          * reasons collected for a failure that did not happen.
          *
-         * The rule `(withLegacyRead)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
+         * The rule `(legacy)`'s first premise, `ran(r) ⊆ dom(e)`, is checked here and nowhere earlier:
          * `older` is a function, so what it returns is known only once it has answered. Without
          * the check the row decodes and the write-back refuses, which is **(C)** broken at the
          * migrated row and reported at the next write instead of at this read.
@@ -1524,7 +1524,7 @@ export const defOf = (declared: ObjectSlot): Term | Field => {
 /**
  * A declaration's term, refusing a field where a term is wanted.
  *
- * `optional(c)` and `withLegacyRead({ current: c, whenMissing: v })` denote a `Field`, and no `Term` position accepts one — which
+ * `optional(c)` and `fill(c, v)` denote a `Field`, and no `Term` position accepts one — which
  * the positional guards refuse in the *type* at every site that could go wrong. This is the runtime
  * half, at the one place a child is taken from a codec a caller handed over.
  */
@@ -1569,7 +1569,7 @@ export const guard = (
 /** The text of a refusal of the model's guard, at the subject that the caller names. */
 const guardReason = (subject: string, use: 2 | 3): string =>
     use === 3
-        ? `${subject} reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`
+        ? `${subject} reaches a recursion with an adapter (\`held\` or \`legacy\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`
         : `${subject} reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`
 
 /**
@@ -1620,11 +1620,11 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
                 )
             if (widensRead(t.elem))
                 return new CodecError(
-                    `a set's element cannot carry \`withLegacyRead\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`withLegacyRead\` around the whole set`,
+                    `a set's element cannot carry \`legacy\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`legacy\` around the whole set`,
                 )
             break
         }
-        // **A wall reaches no cycle.** A wall is a `held` or a `withLegacyRead` with an older
+        // **A wall reaches no cycle.** A wall is a `held` or a `legacy` with an older
         // reader, and reads its argument through caller code at any depth. A wall that reads an
         // entry on a cycle makes the flat system non-contractive. With no such wall, the meaning of
         // a closed codec is one flat guarded system with a unique solution. A wall over an acyclic
@@ -1639,7 +1639,7 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
                 unboundRefs(args).size > 0 ? undefined : cycleEntryOf(args)
             if (entry !== undefined)
                 return new CodecError(
-                    `\`${t.kind === 'held' ? 'held' : 'withLegacyRead'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
+                    `\`${t.kind === 'held' ? 'held' : 'legacy'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
                 )
             break
         }

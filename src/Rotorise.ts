@@ -3422,7 +3422,6 @@ export type {
     Untagged,
     UntaggedSpec,
     VariantOf,
-    WithLegacyReadOptions,
     Writes,
     WrittenBy,
 } from './codec/codec'
@@ -3440,8 +3439,10 @@ export {
     exclude,
     extract,
     failed,
+    fill,
     held,
     item,
+    legacy,
     list,
     mdunion,
     meet,
@@ -3464,7 +3465,6 @@ export {
     string,
     undefinable,
     union,
-    withLegacyRead,
 } from './codec/codec'
 export { pin } from './codec/pin'
 export type { Field, Term } from './codec/term'

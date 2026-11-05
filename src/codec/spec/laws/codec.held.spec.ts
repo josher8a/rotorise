@@ -19,6 +19,7 @@ import {
     failed,
     held,
     item,
+    legacy,
     list,
     number,
     object,
@@ -30,7 +31,6 @@ import {
     string,
     union,
     valueKinds,
-    withLegacyRead,
 } from '../../codec'
 import { viewsDisjoint } from '../../scoped'
 import type { StandardSchemaV1 } from '../../standard'
@@ -564,7 +564,7 @@ describe('the held side is the write occupancy of a union option', () => {
     it('accepts two objects whose tags differ, where one object reads a legacy form of decimal', () => {
         const tagged = union([
             object({
-                a: withLegacyRead({ current: decimal, older: string }),
+                a: legacy({ current: decimal, older: string }),
                 k: string('x'),
             }),
             object({ a: string, k: string('y') }),
@@ -584,13 +584,13 @@ describe('the held side is the write occupancy of a union option', () => {
      * `number` at `n`, and the other object requires a boolean there.
      */
     it('accepts a legacy read of decimal beside an object whose required name keeps the views apart', () => {
-        const legacy = object(
-            { a: withLegacyRead({ current: decimal, older: string }) },
+        const widened = object(
+            { a: legacy({ current: decimal, older: string }) },
             [string, optional(number)],
         )
         const flagged = object({ a: string, n: boolean })
-        expect(viewsDisjoint(legacy.def, flagged.def)).toBe(true)
-        const either = union([flagged, legacy] as readonly AnyCodec[])
+        expect(viewsDisjoint(widened.def, flagged.def)).toBe(true)
+        const either = union([flagged, widened] as readonly AnyCodec[])
         expect(either.unsafeEncode({ a: '1.5' } as never)).toEqual({
             M: { a: { N: '1.5' } },
         })
@@ -600,11 +600,13 @@ describe('the held side is the write occupancy of a union option', () => {
     })
 
     it('refuses a legacy read of decimal beside an object that holds the same text at the name', () => {
-        const legacy = object({
-            a: withLegacyRead({ current: decimal, older: string }),
+        const widened = object({
+            a: legacy({ current: decimal, older: string }),
         })
-        expect(viewsDisjoint(legacy.def, object({ a: string }).def)).toBe(false)
-        expect(() => declare([legacy, object({ a: string })])).toThrow(
+        expect(viewsDisjoint(widened.def, object({ a: string }).def)).toBe(
+            false,
+        )
+        expect(() => declare([widened, object({ a: string })])).toThrow(
             CodecError,
         )
     })
@@ -665,12 +667,12 @@ describe('the held side is the write occupancy of a union option', () => {
 
     /**
      * **An older reader runs only where the wire side holds it.** The held side of an adapter is
-     * read through `encode` alone, so a `withLegacyRead` there widens no read. The same wrapper at
+     * read through `encode` alone, so a `legacy` there widens no read. The same wrapper at
      * the inner codec reads an older form, so a set of that element has no law.
      */
     it('builds a set of an element whose held side carries an older reader, and refuses one whose inner codec carries it', () => {
         const older = { decode: (at: unknown) => String(at) }
-        const carried = withLegacyRead({ current: string, older })
+        const carried = legacy({ current: string, older })
         const asHeld = { encode: (v: string) => v, decode: (v: string) => v }
         const onOuter = held(string, carried, asHeld)
         const onInner = held(carried, string, asHeld)
@@ -678,7 +680,7 @@ describe('the held side is the write occupancy of a union option', () => {
             codecOfTerm({ kind: 'set', elem: onOuter.def }),
         ).not.toThrow()
         expect(() => codecOfTerm({ kind: 'set', elem: onInner.def })).toThrow(
-            /cannot carry `withLegacyRead`/,
+            /cannot carry `legacy`/,
         )
     })
 })

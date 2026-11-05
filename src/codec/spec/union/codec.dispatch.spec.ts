@@ -11,12 +11,12 @@ import type { Option } from '../../codec'
 import {
     boolean,
     decimal,
+    fill,
     meet,
     number,
     object,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { altSem, optionOfTerm } from '../../denote'
 import { failed } from '../../result'
@@ -323,7 +323,7 @@ describe('a union whose tag sits under a fallback field decodes as attempting do
     // view. The row must still reach the option that the stand-in names.
     const tagged = union([
         object({
-            kind: withLegacyRead({ current: string('A'), whenMissing: 'A' }),
+            kind: fill(string('A'), 'A'),
             a: string,
         }),
         object({ kind: string('B'), b: string }),

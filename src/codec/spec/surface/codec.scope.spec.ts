@@ -18,9 +18,11 @@ import {
     exclude,
     extract,
     type FreeOf,
+    fill,
     held,
     item,
     item as itemOf,
+    legacy,
     list,
     nullable,
     nullValue,
@@ -35,7 +37,6 @@ import {
     spread,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import type { RefSlot, Term } from '../../term'
 import { freeNamesOf, recursionUse, sameTerm } from '../../term'
@@ -295,9 +296,9 @@ describe('the free names of a codec', () => {
             decode: (v: unknown) => String(v),
         }),
         refine: refine(ref('a'), (v: unknown): v is string => v !== ''),
-        legacy: withLegacyRead({ current: ref('a'), older }),
+        legacy: legacy({ current: ref('a'), older }),
         fill: object({
-            f: withLegacyRead({ current: ref('b'), whenMissing: 'x' }),
+            f: fill(ref('b'), 'x'),
         }),
         nullable: nullable(ref('a')),
         dunion: discriminatedUnion('k', [
@@ -486,7 +487,7 @@ describe('a refusal inside a nested scope', () => {
 })
 
 /**
- * **A wall reaches no cycle.** A `held` or a `withLegacyRead` with an older reader reads its
+ * **A wall reaches no cycle.** A `held` or a `legacy` with an older reader reads its
  * argument through caller code at any depth. A wall over an entry on a cycle makes the flat system
  * non-contractive, so the host refuses the wall. A wall over an acyclic entry stays legal. The type
  * reads the cycle from the term of the entry, so each spelling below refuses in the type and at
@@ -503,8 +504,8 @@ describe('a wall reaches no cycle', () => {
             /`held` reads 'Json', an entry on a cycle/,
         )
         // @ts-expect-error a wall reaches no cycle, and 'Json' is on a cycle
-        expect(() => withLegacyRead({ current: Json, older })).toThrow(
-            /`withLegacyRead` reads 'Json', an entry on a cycle/,
+        expect(() => legacy({ current: Json, older })).toThrow(
+            /`legacy` reads 'Json', an entry on a cycle/,
         )
     })
 
@@ -525,8 +526,8 @@ describe('a wall reaches no cycle', () => {
         })
         expect(When.unsafeEncode('x')).toEqual({ S: 'x' })
         expect(held(Text, string, same).unsafeEncode('x')).toEqual({ S: 'x' })
-        expect(
-            withLegacyRead({ current: Text, older }).unsafeEncode('x'),
-        ).toEqual({ S: 'x' })
+        expect(legacy({ current: Text, older }).unsafeEncode('x')).toEqual({
+            S: 'x',
+        })
     })
 })

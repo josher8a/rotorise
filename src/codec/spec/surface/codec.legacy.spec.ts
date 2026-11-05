@@ -16,8 +16,10 @@ import {
     CodecError,
     decimal,
     dynamoNumber,
+    fill,
     held,
     item,
+    legacy,
     object,
     optional,
     ref,
@@ -25,7 +27,6 @@ import {
     scope,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
@@ -53,15 +54,9 @@ type Listing = {
 const Listing = item(
     object({
         id: string,
-        holding: withLegacyRead({
-            current: string('STORE_V1', 'STORE_V2'),
-            whenMissing: 'STORE_V1' as const,
-        }),
-        vendorId: withLegacyRead({
-            current: string('PICKUP', 'ACME'),
-            whenMissing: 'PICKUP' as const,
-        }),
-        rate: withLegacyRead({ current: decimal, older: string }),
+        holding: fill(string('STORE_V1', 'STORE_V2'), 'STORE_V1' as const),
+        vendorId: fill(string('PICKUP', 'ACME'), 'PICKUP' as const),
+        rate: legacy({ current: decimal, older: string }),
     }),
 )
 
@@ -70,10 +65,10 @@ const Listing = item(
  *
  * Two things at once. `older` asks for a reader and not a codec, because digits stored as `B` by a
  * migration nobody finished read back as a `Uint8Array` rather than the `string` `decimal` holds — and
- * converting that with `held` would mean writing an encode path `withLegacyRead` never calls, since it writes
+ * converting that with `held` would mean writing an encode path `legacy` never calls, since it writes
  * `current` and only `current`.
  *
- * And it takes *one* older encoding, so three encodings are two of these nested — `withLegacyRead` is itself
+ * And it takes *one* older encoding, so three encodings are two of these nested — `legacy` is itself
  * a reader. Not a union: a union needs its options to read back as different types so a value says
  * which it is, and every encoding of one attribute reads back as the same type by definition.
  */
@@ -82,9 +77,9 @@ describe('an older encoding held as something else', () => {
     const Priced = item(
         object({
             id: string,
-            price: withLegacyRead({
+            price: legacy({
                 current: decimal,
-                older: withLegacyRead({
+                older: legacy({
                     current: string,
                     older: {
                         decode: (at: AttributeValue) =>
@@ -182,7 +177,7 @@ describe('an attribute the row does not have', () => {
      */
     it('refuses a union beside an optional field, and declares it beside a required one', () => {
         const standIn = object({
-            a: withLegacyRead({ current: string, whenMissing: 'z' }),
+            a: fill(string, 'z'),
         })
         expect(() => union([standIn, object({ a: optional(string) })])).toThrow(
             CodecError,
@@ -197,7 +192,7 @@ describe('an attribute the row does not have', () => {
     /**
      * **A copy per read, so a mutable stand-in cannot be shared between entities.**
      *
-     * The declaration holds one value — that is what makes the rule `(withLegacyRead)`'s premise checkable
+     * The declaration holds one value — that is what makes the rule `(fill)`'s premise checkable
      * where the declaration is, rather than on whichever read reaches it first — and each read
      * that needs one gets a `structuredClone`. Both halves matter and this asserts both: the
      * value is right, and it is not the *same* value twice.
@@ -209,10 +204,7 @@ describe('an attribute the row does not have', () => {
         const C = item(
             object({
                 id: string,
-                tags: withLegacyRead({
-                    current: { ...listOfStrings },
-                    whenMissing: [],
-                }),
+                tags: fill({ ...listOfStrings }, []),
             }),
         )
         const a = C.unsafeDecode({ id: { S: 'a' } })
@@ -227,7 +219,7 @@ describe('an attribute the row does not have', () => {
         const C = item(
             object({
                 id: string,
-                tier: withLegacyRead({ current: string, whenMissing: 'FREE' }),
+                tier: fill(string, 'FREE'),
             }),
         )
         expect(C.unsafeDecode({ id: { S: 'a' } }).tier).toBe('FREE')
@@ -243,11 +235,8 @@ describe('an attribute the row does not have', () => {
     it('decodes a stand-in that holds a DynamoNumber to a value that encodes back', () => {
         const one = orThrow(DynamoNumber.from('1'))
         const C = object({
-            b: withLegacyRead({ current: dynamoNumber, whenMissing: one }),
-            bs: withLegacyRead({
-                current: array(dynamoNumber),
-                whenMissing: [one],
-            }),
+            b: fill(dynamoNumber, one),
+            bs: fill(array(dynamoNumber), [one]),
         })
         const read = C.unsafeDecode({ M: {} })
         expect(read.b).toBeInstanceOf(DynamoNumber)
@@ -278,7 +267,7 @@ describe('an attribute the row does not have', () => {
         const C = item(
             object({
                 id: string,
-                h: withLegacyRead({ current: holding, whenMissing: stand }),
+                h: fill(holding, stand),
             }),
         )
         const a = C.unsafeDecode({ id: { S: 'a' } })
@@ -300,10 +289,7 @@ describe('a stand-in for a recursive codec', () => {
                 object({ end: string }),
                 object({
                     name: string,
-                    next: withLegacyRead({
-                        current: ref('Leaf'),
-                        whenMissing: { end: 'x' },
-                    }),
+                    next: fill(ref('Leaf'), { end: 'x' }),
                 }),
             ]),
         })
@@ -325,10 +311,7 @@ describe('a stand-in for a recursive codec', () => {
                         object({ end: string }),
                         object({
                             name: string,
-                            next: withLegacyRead({
-                                current: ref('Ended'),
-                                whenMissing: { end: '' },
-                            }),
+                            next: fill(ref('Ended'), { end: '' }),
                         }),
                     ]),
                     (leaf): leaf is Leaf => !('end' in leaf) || leaf.end !== '',
@@ -356,10 +339,7 @@ describe('a stand-in check runs on the closed copy of the scope that binds every
             Tree: union([object({ end: string }), ref('Branch')]),
             Branch: object({
                 name: string,
-                next: withLegacyRead({
-                    current: ref('Tree'),
-                    whenMissing: { end: 'x' },
-                }),
+                next: fill(ref('Tree'), { end: 'x' }),
             }),
         })
         const value: Tree = { name: 'a', next: { end: 'b' } }
@@ -385,10 +365,7 @@ describe('a stand-in check runs on the closed copy of the scope that binds every
                 ]),
                 Branch: object({
                     name: string,
-                    next: withLegacyRead({
-                        current: ref('Tree'),
-                        whenMissing: { end: '' },
-                    }),
+                    next: fill(ref('Tree'), { end: '' }),
                 }),
             })
         expect(declare).toThrow(
@@ -408,23 +385,13 @@ describe('a stand-in verdict does not depend on which recursive entry is used fi
 
     const declare = async () => {
         vi.resetModules()
-        const {
-            CodecError,
-            object,
-            ref,
-            scope,
-            string,
-            union,
-            withLegacyRead,
-        } = await import('../../codec')
+        const { CodecError, fill, object, ref, scope, string, union } =
+            await import('../../codec')
         const { Tree, Branch } = scope({
             Tree: union([object({ end: string }), ref('Branch')]),
             Branch: object({
                 name: string,
-                next: withLegacyRead({
-                    current: ref('Tree'),
-                    whenMissing: { end: 'x' },
-                }),
+                next: fill(ref('Tree'), { end: 'x' }),
             }),
         })
         return { CodecError, Tree, Branch }
@@ -457,23 +424,13 @@ describe('a writable stand-in is accepted and fills, and an unwritable one refus
 
     const declare = async () => {
         vi.resetModules()
-        const {
-            CodecError,
-            object,
-            ref,
-            scope,
-            string,
-            union,
-            withLegacyRead,
-        } = await import('../../codec')
+        const { CodecError, fill, object, ref, scope, string, union } =
+            await import('../../codec')
         const { Tree, Branch } = scope({
             Tree: union([object({ end: string }), ref('Branch')]),
             Branch: object({
                 name: string,
-                next: withLegacyRead({
-                    current: ref('Tree'),
-                    whenMissing: { end: 'x' },
-                }),
+                next: fill(ref('Tree'), { end: 'x' }),
             }),
         })
         const missing = { M: { name: { S: 'a' } } }
@@ -495,16 +452,8 @@ describe('a writable stand-in is accepted and fills, and an unwritable one refus
 
     const declareUnwritable = async () => {
         vi.resetModules()
-        const {
-            CodecError,
-            object,
-            ref,
-            refine,
-            scope,
-            string,
-            union,
-            withLegacyRead,
-        } = await import('../../codec')
+        const { CodecError, fill, object, ref, refine, scope, string, union } =
+            await import('../../codec')
         const Tree = refine(
             union([object({ end: string }), ref('Branch')]),
             (tree: unknown): tree is Tree =>
@@ -516,10 +465,7 @@ describe('a writable stand-in is accepted and fills, and an unwritable one refus
         )
         const Branch = object({
             name: string,
-            next: withLegacyRead({
-                current: ref('Tree'),
-                whenMissing: { end: '' },
-            }),
+            next: fill(ref('Tree'), { end: '' }),
         })
         expect(() => scope({ Tree, Branch })).toThrow(
             /stand-in must be a value the codec it stands in for can write/,
@@ -600,8 +546,8 @@ describe('an attribute written in an older encoding', () => {
         )
     })
 
-    it('a withLegacyRead whose older reader throws refuses the read as a value', () => {
-        const Rate = withLegacyRead({
+    it('a legacy whose older reader throws refuses the read as a value', () => {
+        const Rate = legacy({
             current: decimal,
             older: {
                 decode: () => {
@@ -623,8 +569,8 @@ describe('an attribute written in an older encoding', () => {
 
     it('cannot be got backwards, because the roles are named', () => {
         // the whole point of the shape: `current` is the encoding the entity is in now
-        const toNumber = withLegacyRead({ current: decimal, older: string })
-        const toString = withLegacyRead({ current: string, older: decimal })
+        const toNumber = legacy({ current: decimal, older: string })
+        const toString = legacy({ current: string, older: decimal })
 
         expect(toNumber.unsafeDecode({ S: '1.5' })).toBe('1.5')
         expect(toNumber.unsafeEncode('1.5')).toEqual({ N: '1.5' })

@@ -15,7 +15,9 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    fill,
     item as itemOf,
+    legacy,
     list,
     never,
     number,
@@ -29,7 +31,6 @@ import {
     scope,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 
 const Delivery = object({
@@ -204,16 +205,48 @@ describe('a path that crosses a whole-value adapter', () => {
     it('a path that crosses an older reading is refused, because a path addresses the current shape only', () => {
         const Migrated = itemOf(
             object({
-                a: withLegacyRead({
+                a: legacy({
                     current: object({ x: decimal }),
                     older: { decode: () => ({ x: '0' }) },
                 }),
             }),
         )
-        // @ts-expect-error a path cannot go into `withLegacyRead`, at the type as at run time
+        // @ts-expect-error a path cannot go into `legacy`, at the type as at run time
         expect(() => atOf(Migrated, ['a', 'x'])).toThrow(
-            /a path cannot go into `withLegacyRead` at 'x'/,
+            /a path cannot go into `legacy` at 'x'/,
         )
+    })
+
+    it('a fill over a legacy read keeps the legacy read in the type and at run time', () => {
+        const Migrated = itemOf(
+            object({
+                a: fill(
+                    legacy({
+                        current: object({ x: decimal }),
+                        older: { decode: () => ({ x: '0' }) },
+                    }),
+                    { x: '0' },
+                ),
+            }),
+        )
+        // @ts-expect-error a path cannot go into `legacy`, at the type as at run time
+        expect(() => atOf(Migrated, ['a', 'x'])).toThrow(
+            /a path cannot go into `legacy` at 'x'/,
+        )
+        const body = object({
+            name: fill(legacy({ current: string, older: decimal }), 'none'),
+        }).def
+        expect(
+            body.kind === 'object' ? body.body.fields.name : undefined,
+        ).toEqual({
+            mark: 'fallback',
+            t: {
+                kind: 'legacy',
+                inner: { kind: 'string' },
+                r: expect.any(Function),
+            },
+            v: 'none',
+        })
     })
 })
 

@@ -15,6 +15,7 @@ import {
     held,
     item,
     item as itemOf,
+    legacy,
     list,
     mdunion,
     nullable,
@@ -27,7 +28,6 @@ import {
     scope,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { freeNamesOf } from '../../term'
 import { arbitraryOf, checkRoundTrip, rngFrom, shrinkOf } from '../../testing'
@@ -354,7 +354,7 @@ describe('a former directly over a ref', () => {
 
     it('accepts an older reader directly over a ref, and reads the older encoding', () => {
         const { Rate } = scope({
-            Rate: withLegacyRead({
+            Rate: legacy({
                 current: ref('Text'),
                 older: {
                     decode: (attribute) =>

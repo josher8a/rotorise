@@ -41,15 +41,7 @@
 import { createHash } from 'node:crypto'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec } from './codec'
-import {
-    boolean,
-    meet,
-    number,
-    object,
-    string,
-    union,
-    withLegacyRead,
-} from './codec'
+import { boolean, legacy, meet, number, object, string, union } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
@@ -550,7 +542,7 @@ const printerOf = (
                 return `refine(${sub(t.inner)}, ${predicateOf(is)})`
             }
             case 'legacy':
-                return `withLegacyRead({ current: ${sub(t.inner)}, older: { decode: (): never => { throw new Error('older') } } })`
+                return `legacy({ current: ${sub(t.inner)}, older: { decode: (): never => { throw new Error('older') } } })`
             // a `ref` that closes no cycle prints as a `ref` under its own scope, and not as its
             // target: the type level reads a key pinned through a `ref` as unpinned, so the print of the
             // target would hand the type a codec that the run time never reads. A clause prints the
@@ -577,7 +569,7 @@ const printerOf = (
                     if (f.mark === 'undefinable')
                         return `${keyText(k)}: undefinable(${x})`
                     if (f.mark === 'fallback')
-                        return `${keyText(k)}: withLegacyRead({ current: ${x}, whenMissing: ${valueText(f.v, at)} })`
+                        return `${keyText(k)}: fill(${x}, ${valueText(f.v, at)})`
                     return `${keyText(k)}: ${x}`
                 })
                 const spec = `{ ${fields.join(', ')} }`
@@ -786,7 +778,7 @@ const patternsOf = (
     const [first] = literal
     const firstLiteral = first?.[1][0]
     if (first !== undefined && firstLiteral !== undefined) {
-        const read = withLegacyRead({
+        const read = legacy({
             current: member(first[0], stringOf(firstLiteral)),
             older: {
                 decode: (): never => {
@@ -1149,7 +1141,7 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, held, item, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union } from '${library}/codec'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     `import type { Result } from '${library}/result'`,
@@ -1157,7 +1149,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union, withLegacyRead } from '${library}/codec'`,
+    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, fill, legacy, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",

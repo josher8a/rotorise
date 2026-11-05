@@ -16,6 +16,7 @@ import {
     decimal,
     discriminatedUnion,
     item as itemOf,
+    legacy,
     narrow,
     number,
     object,
@@ -27,7 +28,6 @@ import {
     scope,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 
 describe('the preconditions of a path are the stored admission of each clause', () => {
@@ -104,13 +104,13 @@ describe('the preconditions of a path are the stored admission of each clause', 
      * `termPreAt` does at `legacy`: the older reader reads every attribute, so the stored view of
      * the key is `opaque`. A refusal here states a rule that the model does not state.
      */
-    it('a clause key over withLegacyRead states that the attribute exists, as an opaque key does', () => {
+    it('a clause key over legacy states that the attribute exists, as an opaque key does', () => {
         const Untagged = itemOf(
             object({
                 u: union([object({ a: string }), object({ b: number })]),
             }),
         )
-        const older = withLegacyRead({ current: string, older: string })
+        const older = legacy({ current: string, older: string })
         expect(
             preconditionsOf(
                 atOf(narrow(atOf(Untagged, ['u']), object({ a: older })), [

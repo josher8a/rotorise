@@ -18,6 +18,7 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
+    legacy,
     list,
     nullable,
     nullValue,
@@ -28,7 +29,6 @@ import {
     refine,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { arbitraryOf, rngFrom, shrinkOf } from '../../testing'
 
@@ -51,7 +51,7 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['open object', object([string, optional(decimal)])],
     ['map', object({ a: string, b: number })],
     ['nullable', nullable(string)],
-    ['withLegacyRead', withLegacyRead({ current: decimal, older: string })],
+    ['legacy', legacy({ current: decimal, older: string })],
     ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],
     [
         'item',

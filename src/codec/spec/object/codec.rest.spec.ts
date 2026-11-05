@@ -11,6 +11,7 @@ import type { AnyCodec, Decoded } from '../../codec'
 import {
     CodecError,
     codecOfTerm,
+    fill,
     item as itemOf,
     list,
     number,
@@ -24,7 +25,6 @@ import {
     termOf,
     undefinable,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { failed, orThrow } from '../../result'
 import { checkMembersStable, checkRoundTrip } from '../../testing'
@@ -134,13 +134,7 @@ describe('an open object entry', () => {
         )
         expect(() =>
             // @ts-expect-error a stand-in marks a required object slot
-            object([
-                string,
-                withLegacyRead({
-                    current: string,
-                    whenMissing: 'current',
-                }),
-            ]),
+            object([string, fill(string, 'current')]),
         ).toThrow(
             /an open key entry must be optional, because a required wildcard means at least one matching key/,
         )
@@ -378,14 +372,9 @@ describe('the rest policy a definition records', () => {
         expect(() => termOf(optional(string) as unknown as AnyCodec)).toThrow(
             /marks a \*field\*/,
         )
-        expect(() =>
-            termOf(
-                withLegacyRead({
-                    current: string,
-                    whenMissing: 'x',
-                }) as unknown as AnyCodec,
-            ),
-        ).toThrow(/this position takes a term/)
+        expect(() => termOf(fill(string, 'x') as unknown as AnyCodec)).toThrow(
+            /this position takes a term/,
+        )
     })
 
     it('agrees with the policy the item codec reports', () => {

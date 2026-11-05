@@ -71,7 +71,7 @@ describe('the member a term stores', () => {
 
     /**
      * The equation `μ(w(c)) = μ(c)` for the wrappers. This is what keeps a key's attribute type stable
-     * under a refactor: putting a `refine` or a `withLegacyRead` around a sort key must not change what the
+     * under a refactor: putting a `refine` or a `legacy` around a sort key must not change what the
      * index is built on.
      */
     it('a wrapper stores what it wraps, so a key survives being wrapped', () => {
@@ -137,7 +137,7 @@ describe('the occupancy of a term', () => {
 
     /**
      * `held` writes where its held side does, because the held side restricts every value `f`
-     * receives, while its `g` only post-processes a read. `withLegacyRead`'s `r` widens exactly the
+     * receives, while its `g` only post-processes a read. `legacy`'s `r` widens exactly the
      * reading and adds no way to write.
      */
     it('an adapter writes where its held side does', () => {
@@ -222,7 +222,7 @@ describe('the tag a variant answers to', () => {
     })
 
     /**
-     * A `withLegacyRead` discriminator would fill an absent tag with a value no tag set vouched for, and
+     * A `fill` discriminator would fill an absent tag with a value no tag set vouched for, and
      * (C) would then re-encode a variant no tag selects; an `optional` one would let the tag be
      * absent altogether. Both name no tag, which is what makes the arity premise reachable.
      */

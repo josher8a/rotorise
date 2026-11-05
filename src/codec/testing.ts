@@ -523,7 +523,7 @@ const mutations = (item: AttributeMap): readonly Mutation[] => {
                 })
             }
         }
-        // and the attribute missing altogether, which `optional` and `withLegacyRead` must survive
+        // and the attribute missing altogether, which `optional` and `fill` must survive
         const { [key]: _dropped, ...without } = item
         out.push({ what: `'${key}' absent`, item: without })
     }

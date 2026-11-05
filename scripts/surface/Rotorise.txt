@@ -97,7 +97,6 @@ UnionCodec
 Untagged
 UntaggedSpec
 VariantOf
-WithLegacyReadOptions
 Writes
 WrittenBy
 andThen
@@ -113,11 +112,13 @@ everyEntry
 exclude
 extract
 failed
+fill
 held
 isNumeral
 isStoredNumeral
 item
 keyComponents
+legacy
 list
 mdunion
 meet
@@ -146,4 +147,3 @@ tableEntry
 tooDeeplyNested
 undefinable
 union
-withLegacyRead

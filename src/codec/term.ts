@@ -215,7 +215,7 @@ export type Term =
      * through it and reads no predicate. A finite set at a ground kind is a union of literals.
      */
     | { readonly kind: 'refine'; readonly inner: Term; readonly q: Refinement }
-    /** The rule `(withLegacyRead)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
+    /** The rule `(legacy)`: `r : Attr ⇀ Value`, the older reading, which widens `p` and never `e`. */
     | {
           readonly kind: 'legacy'
           readonly inner: Term
@@ -279,7 +279,7 @@ export type Body = {
 export type Field =
     | { readonly mark: 'req'; readonly t: Term }
     | { readonly mark: 'optional'; readonly t: Term }
-    /** `withLegacyRead` concludes `req`: the absence is in the row, never in the value. */
+    /** `fill` concludes `req`: the absence is in the row, never in the value. */
     | { readonly mark: 'fallback'; readonly t: Term; readonly v: unknown }
     /** The absence is in the row *and* in the value, and the key is still there. */
     | { readonly mark: 'undefinable'; readonly t: Term }
@@ -447,7 +447,7 @@ export const member = (t: Term): AttributeName | undefined => {
 /**
  * **The member that a term reads**, the bound of the stored side that a union's read filter needs.
  * The model's union reads through the first option that acts (`select`), so the filter keeps each
- * option that can act. A `withLegacyRead` reads its older form through caller code, so its read is
+ * option that can act. A `legacy` reads its older form through caller code, so its read is
  * not bounded by a member. Every other term reads the member that it writes.
  */
 export const readMember = (t: Term): AttributeName | undefined => {
@@ -597,7 +597,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
  * Whether a term reaches the null point, read off the term.
  *
  * `undefined` is *not determined by the term*, and it is what makes {@link nullable} refuse at
- * construction rather than guess. `withLegacyRead` answers it, because its older reader is the
+ * construction rather than guess. `legacy` answers it, because its older reader is the
  * caller's function. `refine` and `union` answer it through their subterms, as the next paragraph
  * says. A `held` answers from the slots it declares, and a `ref` reads through to its target. A
  * `ref` that no scope binds yet is a free variable, and the term does not determine whether a
@@ -767,7 +767,7 @@ export const resolvedTerm = (t: Term): Term | undefined => {
  * no value (`union([])` among them), and a `held` whose inner term holds no value, hold no value.
  *
  * Three forms stay out. A `refine` holds no value where its predicate admits nothing, and no
- * function decides that of a closure. A `withLegacyRead` has no held set in the model, and its older
+ * function decides that of a closure. A `legacy` has no held set in the model, and its older
  * reader reads values that the inner term does not hold. A list, an object or a set over a term
  * that holds no value holds none either, but the judgment refuses each of them where it is built.
  *
@@ -982,7 +982,7 @@ export const openRefusal = (t: Term): CodecError | undefined => {
  * - `1`: each cycle has an order, so each stage reads a shallower input;
  * - `2`: a cycle has no container on its path, so the recursion reads the input of its own entry;
  * - `3`: a cycle has an adapter on its path. Caller code makes the input of the inner term, at any
- *   depth. A `held` converts the value, and a `withLegacyRead` writes the older reader's answer.
+ *   depth. A `held` converts the value, and a `legacy` writes the older reader's answer.
  *
  * The model's guard refuses `2` and `3`. **A `ref` that no scope binds is a free variable**, and
  * closes no cycle: an open fragment holds no recursion yet, and the {@link scope} that binds the
@@ -1138,7 +1138,7 @@ export const throughRefs =
     }
 
 /**
- * **Whether a `withLegacyRead` occurs in the term.** The model states the read widening as
+ * **Whether a `legacy` occurs in the term.** The model states the read widening as
  * `Term.legacy`, and the rule `TOp.rule` of the judgement answers `none` at it, because the pair is not a partial
  * bijection. The law of `set`, `lawful_setCodec`, needs a lawful element, so no law covers a set
  * of a widened element, and `set` refuses one.

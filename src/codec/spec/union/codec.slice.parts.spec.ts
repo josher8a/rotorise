@@ -16,13 +16,13 @@ import {
     discriminatedUnion,
     exclude,
     extract,
+    fill,
     held,
     list,
     object,
     refine,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import type { Term } from '../../term'
 
@@ -336,12 +336,9 @@ describe('a dissection reads a union pattern by the parts of each option, as a p
     })
 })
 
-describe('a withLegacyRead field splits at its literals, as the plain field does', () => {
+describe('a fill field splits at its literals, as the plain field does', () => {
     const filled = object({
-        status: withLegacyRead({
-            current: string('AVAILABLE', 'ADOPTED'),
-            whenMissing: 'AVAILABLE',
-        }),
+        status: fill(string('AVAILABLE', 'ADOPTED'), 'AVAILABLE'),
     })
     const unknownPet = object({ chip: string })
     const pets = union([filled, unknownPet])

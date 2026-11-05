@@ -34,12 +34,12 @@ import {
     dynamoNumber,
     held,
     item,
+    legacy,
     number,
     object,
     refine,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { orThrow } from '../../result'
 import { checkRoundTrip } from '../../testing'
@@ -288,7 +288,7 @@ describe('branding survives, and it survives through the capability', () => {
  *
  * A stored set holds elements of one member of `S`, `N` or `B`. That is the store universe's rule,
  * the model's `SetElem` obligation, and it is the whole of the element check: the lift of a lawful
- * element is lawful whatever the element is. The host adds one refusal, a `withLegacyRead`
+ * element is lawful whatever the element is. The host adds one refusal, a `legacy`
  * element, because a read widening is not a lawful element, so no law covers the set of it.
  */
 describe('what a set cannot be built from', () => {
@@ -310,7 +310,7 @@ describe('what a set cannot be built from', () => {
      * spelling the refusal said did not exist. It is needed either way now, because `decimal.set()`
      * is a set of an adapter.
      *
-     * `withLegacyRead` is still refused and is still one the type cannot catch: it writes `S`, so
+     * `legacy` is still refused and is still one the type cannot catch: it writes `S`, so
      * `SetCapable`'s gate — which sees the attribute and never the base — hands it a `.set()`.
      * Closing that in the type needs a codec type generic in its definition, measured at 481 of
      * 968 signatures and rejected, so the runtime refusal stays for it.
@@ -354,7 +354,7 @@ describe('what a set cannot be built from', () => {
     })
 
     it('refuses a read widening, because no law covers the set of an element that is not lawful', () => {
-        const widened = withLegacyRead({ current: string, older: decimal })
+        const widened = legacy({ current: string, older: decimal })
         expect(() => refine(widened, isText).set()).toThrow(CodecError)
     })
 })

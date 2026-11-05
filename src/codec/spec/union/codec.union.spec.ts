@@ -13,6 +13,7 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    fill,
     held,
     item,
     narrow,
@@ -27,7 +28,6 @@ import {
     scope,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { accepts } from '../../denote'
 import { failed } from '../../result'
@@ -396,7 +396,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
      */
     it('accepts an object with a stand-in field beside a closed object that requires another name', () => {
         const standIn = object({
-            a: withLegacyRead({ current: string, whenMissing: 'stand-in' }),
+            a: fill(string, 'stand-in'),
         })
         const priced = object({ b: decimal })
         for (const either of [

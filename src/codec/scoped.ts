@@ -316,7 +316,7 @@ export const childAt = (side: Side, t: Term, closed: boolean): At =>
 
 /**
  * **The view of a term in place**, the model's `viewG`. A `held` reads its caller side, and a
- * `withLegacyRead` reads its inner term where it writes and `opaque` where it reads. A refinement
+ * `legacy` reads its inner term where it writes and `opaque` where it reads. A refinement
  * is a position over its inner term.
  */
 const viewAt = (side: Side, t: Term, closed: boolean): At => {
@@ -710,7 +710,7 @@ const fuelOf = (left: Side, right: Side): number =>
  * fuel of the two operands. `true` says that no datum is accepted by both positions at either
  * orientation. `false` states nothing: the test is sound, not complete.
  *
- * **A `held`, a `withLegacyRead` and `opaque` are disjoint only from the bottom.** The admission
+ * **A `held`, a `legacy` and `opaque` are disjoint only from the bottom.** The admission
  * of the first two is a function that no reader can read without running it, and `opaque` admits
  * every value. The views read a `held` ({@link viewOf}).
  *
@@ -1101,8 +1101,8 @@ const standInsAgree = (a: Field, b: Field): boolean =>
 
 /**
  * **The guard of a position at a path**, the model's `termPreAt`, as conjuncts: `in` for a literal
- * or a union of literals at one base, `type` for a ground base, `exists` for `opaque` and for
- * `withLegacyRead`, and `type M` with the conjuncts of each required key for an object. A `held`
+ * or a union of literals at one base, `type` for a ground base, `exists` for `opaque`, for
+ * `legacy` and for `fill`, and `type M` with the conjuncts of each required key for an object. A `held`
  * reads its stored side, and a refinement reads its inner term.
  *
  * **Each conjunct holds of each attribute that the position stores**, so the conjuncts are an upper
@@ -1302,7 +1302,7 @@ const storedLiteralAt = (side: Side, at: At): Term | undefined => {
 
 /**
  * **Whether the stored view of a position is `opaque`**, the model's `storedOpaqG` at the body of
- * the entry that the position names. A `withLegacyRead` reads every attribute, so the stored view
+ * the entry that the position names. A `legacy` reads every attribute, so the stored view
  * of the older reader is `opaque`.
  */
 const storedOpaqueAt = (side: Side, at: At): boolean => {

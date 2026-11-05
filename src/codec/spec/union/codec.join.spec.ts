@@ -18,8 +18,10 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    fill,
     held,
     item,
+    legacy,
     list,
     mdunion,
     meet,
@@ -35,7 +37,6 @@ import {
     exclude as typedExclude,
     extract as typedExtract,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { failed } from '../../result'
 import { RecursionRefused } from '../../term'
@@ -507,13 +508,13 @@ describe('a union refuses a thunk it must read at its own input, because the mod
      * binds the ref.** The read writes the older reader's answer through the inner term, and the
      * answer has any depth, so a container on the path bounds nothing.
      */
-    it('refuses a withLegacyRead between a recursive ref and the codec it names at the scope that binds the ref', () => {
+    it('refuses a legacy between a recursive ref and the codec it names at the scope that binds the ref', () => {
         const declare = () =>
             scope({
                 // @ts-expect-error a wall reaches no cycle, and this wall reads its own entry
                 Kids: object({
                     kids: array(
-                        withLegacyRead({
+                        legacy({
                             current: ref('Kids'),
                             older: { decode: () => ({ kids: [] }) as never },
                         }),
@@ -573,7 +574,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
     /**
      * **An adapter over a free `ref` builds an open fragment, and an adapter on a recursive path is
      * refused at the scope.** A cycle passes through a `ref`, and the former of each `held` and each
-     * `withLegacyRead` runs before the scope binds the name. So the former reads the `ref` as a
+     * `legacy` runs before the scope binds the name. So the former reads the `ref` as a
      * free variable, which holds no recursion yet. The scope binds the name, and the guard refuses
      * the cycle there with the term of the entry.
      */
@@ -588,18 +589,12 @@ describe('a union refuses a thunk it must read at its own input, because the mod
                 same as never,
             ) as unknown as AnyCodec
         const leg = (c: unknown) =>
-            withLegacyRead({
-                current: c as never,
-                older,
-            }) as unknown as AnyCodec
+            legacy({ current: c as never, older }) as unknown as AnyCodec
         const u = (xs: readonly unknown[]) =>
             union(xs as readonly AnyCodec[]) as unknown as AnyCodec
         const routes: readonly (readonly [string, () => unknown])[] = [
             ['a held over a free ref', () => u([h(unbound), string])],
-            [
-                'a withLegacyRead over a free ref',
-                () => u([leg(unbound), string]),
-            ],
+            ['a legacy over a free ref', () => u([leg(unbound), string])],
             [
                 'a held under an object',
                 () => u([object({ a: h(unbound) }), string]),
@@ -614,7 +609,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
                 () => scope({ L: h(object({ a: ref('L') })) }),
             ],
             [
-                'a ref to a withLegacyRead over an array of the ref',
+                'a ref to a legacy over an array of the ref',
                 () => scope({ L: leg(array(ref('L'))) }),
             ],
             [
@@ -680,7 +675,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
                     ]),
             ],
             [
-                'an mdunion member with a withLegacyRead',
+                'an mdunion member with a legacy',
                 () =>
                     u([
                         (mdunion as (...x: unknown[]) => unknown)(
@@ -735,7 +730,7 @@ describe('a union refuses a thunk it must read at its own input, because the mod
         // each route that a scope closes is a cycle, and each other route reads a free ref
         const closedByScope = new Set([
             'a ref to a held over an object of the ref',
-            'a ref to a withLegacyRead over an array of the ref',
+            'a ref to a legacy over an array of the ref',
             'an object above a ref to a held that closes the cycle',
             'two refs, the second to a held over the first',
             'a ref to a nested union',
@@ -797,7 +792,7 @@ describe("an accepted union's options never write one value, or read one attribu
     const one = DynamoNumber.from('1')
     const nonEmpty = refine(string, (s: string): s is string => s.length > 0)
     // an older reader that migrates `N` to text: a read side the declaration cannot see
-    const legacy = withLegacyRead({
+    const migrated = legacy({
         current: string,
         older: {
             decode: (attribute: AttributeValue) =>
@@ -823,7 +818,7 @@ describe("an accepted union's options never write one value, or read one attribu
         ['flip', flip],
         ['decimal.set()', decimal.set()],
         ['array(string)', array(string)],
-        ['legacy', legacy],
+        ['legacy', migrated],
         // a closure, and a list of adapters beside it that its inner term meets at the bottom
         ['numeral', refine(string, isNumeral as (s: string) => s is string)],
         ['array(decimal)', array(decimal)],
@@ -923,10 +918,10 @@ describe("an accepted union's options never write one value, or read one attribu
 
     it('refuses an older reader beside an option that reads the attribute it migrates', () => {
         expect(() =>
-            union([legacy, dynamoNumber] as unknown as readonly AnyCodec[]),
+            union([migrated, dynamoNumber] as unknown as readonly AnyCodec[]),
         ).toThrow(CodecError)
         expect(() =>
-            union([dynamoNumber, legacy] as unknown as readonly AnyCodec[]),
+            union([dynamoNumber, migrated] as unknown as readonly AnyCodec[]),
         ).toThrow(CodecError)
     })
 
@@ -1049,12 +1044,12 @@ describe('a union over an open fragment defers its decision to the scope, so no 
     const fragment = (inner: AnyCodec, standIn: unknown) =>
         build({
             a: number,
-            b: withLegacyRead({
-                current: build({
+            b: fill(
+                build({
                     a: optional(build({ a: inner, b: number }) as never),
                 }) as never,
-                whenMissing: standIn as never,
-            }),
+                standIn as never,
+            ),
         })
     const free = /reads 'undeclared' through a `ref` that no scope binds/
     const open = () => ref('undeclared') as unknown as AnyCodec

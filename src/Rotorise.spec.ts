@@ -1463,16 +1463,12 @@ describe('DynamoDB Utils', () => {
         const table = tableEntry<Entity>()({
             PK: [
                 'id',
-                [
-                    'data',
-                    (d: { name: string }) => d.name,
-                    { name: 'withLegacyRead' },
-                ],
+                ['data', (d: { name: string }) => d.name, { name: 'legacy' }],
             ],
         })
 
         expect(table.key('PK', { id: 'x', data: undefined })).toBe(
-            'ID#x#DATA#withLegacyRead',
+            'ID#x#DATA#legacy',
         )
     })
 })
@@ -1507,7 +1503,6 @@ describe('the published surface', () => {
         // deleted public names remain absent from the value and type surfaces
         'Slot',
         'fallback',
-        'legacy',
         'drop',
         'RestPolicy',
         'RestDeclaration',
@@ -1564,8 +1559,9 @@ describe('the published surface', () => {
             'discriminatedUnion',
             'exclude',
             'extract',
-            'withLegacyRead',
+            'fill',
             'held',
+            'legacy',
             'list',
             'nullValue',
             'nullable',

@@ -2,7 +2,7 @@
  * A pattern that reads an older encoding names the keys of its current form, and no other key.
  *
  * The opening of a pattern is open at every object, so an option with more keys fits the pattern
- * `object({ kind: string('dog') })`. A `withLegacyRead` around that object holds each pair of the
+ * `object({ kind: string('dog') })`. A `legacy` around that object holds each pair of the
  * current form, so the pattern reads through it. The type and the run time read the pattern as the
  * plain pattern, and each row states both.
  */
@@ -12,12 +12,12 @@ import {
     exclude,
     extract,
     fits,
+    legacy,
     number,
     object,
     string,
     termOf,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { sameTerm } from '../../term'
 
@@ -35,9 +35,9 @@ const wider = union([dog, cat])
 const equal = union([dogKey, catKey])
 
 const plain = dogKey
-const aroundObject = withLegacyRead({ current: dogKey, older })
+const aroundObject = legacy({ current: dogKey, older })
 const aroundSlot = object({
-    kind: withLegacyRead({ current: string('dog'), older: olderKind }),
+    kind: legacy({ current: string('dog'), older: olderKind }),
 })
 
 const same = (a: AnyCodec, b: AnyCodec) =>
@@ -95,7 +95,7 @@ describe('a pattern around an older reading is read as the plain pattern', () =>
     })
 
     it('fits an older reading of one reader at its current form', () => {
-        const wide = withLegacyRead({
+        const wide = legacy({
             current: dog,
             older: { decode: () => ({ kind: 'dog' as const, age: 1 }) },
         })
@@ -104,10 +104,10 @@ describe('a pattern around an older reading is read as the plain pattern', () =>
 
     it('keeps an option that reads older forms through the same older reading, in the type and at run time', () => {
         const reader = { decode: () => ({ kind: 'dog' as const, age: 1 }) }
-        const wide = withLegacyRead({ current: dog, older: reader })
+        const wide = legacy({ current: dog, older: reader })
         const adopted = object({ tag: string('adopted'), pet: wide })
         const options = union([adopted, object({ tag: string('stray') })])
-        const named = withLegacyRead({ current: dogKey, older: reader })
+        const named = legacy({ current: dogKey, older: reader })
         const kept = extract(options, object({ pet: named }))
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
             Decoded<typeof adopted>

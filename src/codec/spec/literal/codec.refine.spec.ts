@@ -3,7 +3,7 @@
  *
  * `refine` takes a predicate, which is what a brand *is*. Generation is a different concern: it only
  * matters when a property run happens, so demanding an example beside every predicate would tax
- * every declaration for something most of them never reach. The withLegacyRead filters the inner codec's
+ * every declaration for something most of them never reach. The search filters the inner codec's
  * values instead — and reports when that thins a run enough to matter.
  */
 import { describe, expect, it } from 'vitest'
@@ -97,7 +97,7 @@ describe('a predicate the inner codec never satisfies', () => {
     })
 })
 
-describe('the withLegacyRead is only reached from an arbitrary', () => {
+describe('the search is only reached from an arbitrary', () => {
     it('never runs while encoding or decoding', () => {
         const thin: string[] = []
         const sequence = refine(decimal, isSequence, {

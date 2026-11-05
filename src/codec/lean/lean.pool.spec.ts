@@ -30,9 +30,11 @@ import {
     dynamoNumber,
     exclude,
     extract,
+    fill,
     fits,
     held,
     item,
+    legacy,
     list,
     mdunion,
     meet,
@@ -52,7 +54,6 @@ import {
     string,
     undefinable,
     union,
-    withLegacyRead,
 } from '../codec'
 import { codecOfTerm, termOf } from '../denote'
 import type {
@@ -294,19 +295,18 @@ const draw = (depth: number): Entry => {
                     spec[at] = optional(c.codec)
                     parts.push(`${at}?:${c.name}`)
                 } else if (slot === 2) {
-                    let fill: unknown
+                    let filled: unknown
                     try {
-                        fill = arbitraryOf(c.codec, rng, 2)
+                        filled = arbitraryOf(c.codec, rng, 2)
                     } catch {
-                        fill = 'x'
+                        filled = 'x'
                     }
-                    spec[at] = withLegacyRead({
-                        current: c.codec,
-                        whenMissing: fill as never,
-                    })
-                    parts.push(`${at}~${JSON.stringify(fill) ?? 'u'}:${c.name}`)
+                    spec[at] = fill(c.codec, filled as never)
+                    parts.push(
+                        `${at}~${JSON.stringify(filled) ?? 'u'}:${c.name}`,
+                    )
                 } else if (slot === 3) {
-                    spec[at] = withLegacyRead({
+                    spec[at] = legacy({
                         current: c.codec,
                         older: { decode: () => 'older' as never },
                     })
@@ -440,7 +440,7 @@ const draw = (depth: number): Entry => {
             return {
                 name: `legacy(${c.name})`,
                 codec: erase(
-                    withLegacyRead({
+                    legacy({
                         current: c.codec,
                         older: { decode: () => 'o' as never },
                     }),
@@ -644,7 +644,7 @@ const covers: readonly Entry[] = (() => {
 /**
  * **The fills: two stand-ins at one name, equal and apart.** The random draw gives each fill a
  * stand-in of its own, so it rarely draws two equal ones. Each pair is two objects that declare
- * one name through `withLegacyRead`: two equal texts, two texts that differ, and two equal objects.
+ * one name through `fill`: two equal texts, two texts that differ, and two equal objects.
  * The meet of the first and of the third pair is the fill, and the meet of the second is refused.
  */
 const fills: readonly (readonly [Entry, Entry])[] = (() => {
@@ -652,19 +652,13 @@ const fills: readonly (readonly [Entry, Entry])[] = (() => {
     const text = (current: AnyCodec, whenMissing: string) =>
         erase(
             build({
-                a: withLegacyRead({
-                    current: current as never,
-                    whenMissing: whenMissing as never,
-                }),
+                a: fill(current as never, whenMissing as never),
             }),
         )
     const named = (nick: string) =>
         erase(
             object({
-                a: withLegacyRead({
-                    current: object({ nick: string }),
-                    whenMissing: { nick },
-                }),
+                a: fill(object({ nick: string }), { nick }),
             }),
         )
     const entry = (name: string, codec: AnyCodec): Entry => ({ name, codec })
@@ -928,7 +922,7 @@ const typeOnlySlices: readonly Slice[] = (() => {
  * meets at the bottom. Two literal sets under one adapter meet at the common literals.
  */
 const typeOnlyMeets: readonly MeetPair[] = (() => {
-    const widened = withLegacyRead({ current: string, older: decimal })
+    const widened = legacy({ current: string, older: decimal })
     return [
         [string, opaque('lossy')],
         [opaque('lossy'), string],
@@ -959,12 +953,12 @@ const presenceAndHolds: Slice = (() => {
     const cat = object({
         kind: string('cat'),
         nickname: optional(string),
-        name: withLegacyRead({ current: string, older: decimal }),
+        name: legacy({ current: string, older: decimal }),
         petIds: list(string, spread(string)),
     })
     const fish = object({
         kind: string('fish'),
-        name: withLegacyRead({ current: string, whenMissing: 'unnamed' }),
+        name: fill(string, 'unnamed'),
         price: string('free'),
     })
     return {
@@ -1483,9 +1477,7 @@ const legacyClause = (): PathVectors => ({
             'u',
             {
                 narrow: object({
-                    a: erase(
-                        withLegacyRead({ current: string, older: string }),
-                    ),
+                    a: erase(legacy({ current: string, older: string })),
                 }),
             },
             'a',

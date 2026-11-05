@@ -13,6 +13,7 @@ import {
     decimal,
     exclude,
     extract,
+    legacy,
     list,
     object,
     opaque,
@@ -21,7 +22,6 @@ import {
     string,
     undefinable,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { failed } from '../../result'
 
@@ -75,7 +75,7 @@ describe('the fit reads the order of the run time at each slot of an object', ()
     it('keeps in the exclusion a member whose slot reads an older encoding', () => {
         const aged = object({
             kind: string('cat'),
-            name: withLegacyRead({ current: string, older: decimal }),
+            name: legacy({ current: string, older: decimal }),
         })
         const rest = exclude(union([aged, dog]), object({ name: string }))
         expectTypeOf<Decoded<typeof aged>>().toMatchTypeOf<

@@ -21,12 +21,12 @@ import {
     CodecError,
     constantOf,
     decimal,
+    fill,
     held,
     number,
     optional,
     refine,
     string,
-    withLegacyRead,
 } from '../../codec'
 
 /**
@@ -115,12 +115,9 @@ describe('the type and the function agree on what is decided', () => {
      * the caller was asked for a component the runtime could have supplied — and it predated the
      * field types becoming declarations rather than being caused by it.
      */
-    it('on a withLegacyRead over a literal, which both call decided', () => {
+    it('on a fill over a literal, which both call decided', () => {
         const stood = {
-            TAG: withLegacyRead({
-                current: string('PET'),
-                whenMissing: 'PET' as const,
-            }),
+            TAG: fill(string('PET'), 'PET' as const),
             id: string,
         }
         attest<[ConstantAttributes<typeof stood>], ['TAG']>()

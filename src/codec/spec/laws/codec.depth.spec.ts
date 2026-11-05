@@ -22,8 +22,10 @@ import {
     at as atOf,
     CodecError,
     discriminatedUnion,
+    fill,
     held,
     item as itemOf,
+    legacy,
     list,
     narrow,
     nullable,
@@ -36,7 +38,6 @@ import {
     spread,
     string,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { native } from '../../native'
 
@@ -184,15 +185,15 @@ describe('the nesting bound around a typed container', () => {
             one,
         ],
         [
-            'a withLegacyRead with an older reader',
-            withLegacyRead({ current: array(opaque), older: array(string) }),
+            'a legacy with an older reader',
+            legacy({ current: array(opaque), older: array(string) }),
             1,
             one,
         ],
         [
-            'a withLegacyRead with a stand-in',
+            'a fill with a stand-in',
             object({
-                a: withLegacyRead({ current: array(opaque), whenMissing: [] }),
+                a: fill(array(opaque), []),
             }),
             2,
             (v) => ({ a: [v] }),

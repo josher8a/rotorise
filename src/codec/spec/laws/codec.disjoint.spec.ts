@@ -12,6 +12,7 @@ import {
     array,
     boolean,
     decimal,
+    fill,
     held,
     list,
     never,
@@ -26,7 +27,6 @@ import {
     string,
     undefinable,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { disjoint, viewsDisjoint } from '../../scoped'
 import type { Field, RefSlot, Term } from '../../term'
@@ -181,12 +181,12 @@ describe('two objects are disjoint where one name holds two fields apart', () =>
     })
 
     /**
-     * A `withLegacyRead` field reads a map without the name to its stand-in, so it requires the
+     * A `fill` field reads a map without the name to its stand-in, so it requires the
      * name on no side of a read.
      */
     it('keeps a stand-in field together with an optional field and with an empty object', () => {
         const standIn = object({
-            a: withLegacyRead({ current: string, whenMissing: 'x' }),
+            a: fill(string, 'x'),
         })
         expect(
             apart(termOf(object({ a: optional(boolean) })), termOf(standIn)),
@@ -202,7 +202,7 @@ describe('two objects are disjoint where one name holds two fields apart', () =>
 
     it('keeps a required field apart from a stand-in field whose terms are disjoint', () => {
         const standIn = object({
-            a: withLegacyRead({ current: string, whenMissing: 'x' }),
+            a: fill(string, 'x'),
         })
         expect(apart(termOf(object({ a: boolean })), termOf(standIn))).toBe(
             true,

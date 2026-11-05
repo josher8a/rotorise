@@ -15,9 +15,11 @@ import {
     dynamoNumber,
     exclude,
     extract,
+    fill,
     fits,
     held,
     item,
+    legacy,
     list,
     meet,
     meetOrdered,
@@ -35,7 +37,6 @@ import {
     termOf,
     undefinable,
     union,
-    withLegacyRead,
 } from '../../codec'
 import { failed, orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
@@ -186,13 +187,13 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * **A `withLegacyRead` side shares no absent row with a side that admits absence.** The stand-in
+     * **A `fill` side shares no absent row with a side that admits absence.** The stand-in
      * side decodes the absent row to the stand-in, and the other side to no value, so the meet drops
      * the row and the name is required. A required side holds no absent row either.
      */
-    it('requires a name that one factor reads through withLegacyRead', () => {
-        const fill = object({
-            a: withLegacyRead({ current: string('x', 'y'), whenMissing: 'x' }),
+    it('requires a name that one factor reads through fill', () => {
+        const filled = object({
+            a: fill(string('x', 'y'), 'x'),
         })
         const expected = object({ a: string('y') }).def
         for (const other of [
@@ -200,11 +201,11 @@ describe('the meet of two objects at a shared name', () => {
             object({ a: undefinable(string('y', 'z')) }),
             object({ a: string('y', 'z') }),
         ]) {
-            expect(meet(fill, other).def).toEqual(expected)
-            expect(meet(other, fill).def).toEqual(expected)
+            expect(meet(filled, other).def).toEqual(expected)
+            expect(meet(other, filled).def).toEqual(expected)
         }
         const plain = object({
-            a: withLegacyRead({ current: string, whenMissing: 'x' }),
+            a: fill(string, 'x'),
         })
         const required = meet(plain, object({ a: optional(string) }))
         expectTypeOf<Decoded<typeof required>>().toEqualTypeOf<{
@@ -218,15 +219,15 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * **An open block that narrows a `withLegacyRead` field makes the field required**: the open key
+     * **An open block that narrows a `fill` field makes the field required**: the open key
      * entry is an optional slot at the block, and the absent row has no pair on both sides.
      */
-    it('requires a withLegacyRead name that the open block of the other factor narrows', () => {
+    it('requires a fill name that the open block of the other factor narrows', () => {
         const both: AnyCodec = meet(
             // @ts-expect-error the type refuses an open factor
             object({}, [string, optional(string('x', 'y'))]),
             object({
-                a: withLegacyRead({ current: string, whenMissing: 'x' }),
+                a: fill(string, 'x'),
             }),
         )
         expect(failed(both.decode({ M: { a: { S: 'y' } } }))).toBe(false)
@@ -243,16 +244,10 @@ describe('the meet of two objects at a shared name', () => {
     it('meets two fills of one stand-in as that stand-in over the meet of the two codecs', () => {
         const both = meet(
             object({
-                a: withLegacyRead({
-                    current: string('x', 'y'),
-                    whenMissing: 'x',
-                }),
+                a: fill(string('x', 'y'), 'x'),
             }),
             object({
-                a: withLegacyRead({
-                    current: string('x', 'z'),
-                    whenMissing: 'x',
-                }),
+                a: fill(string('x', 'z'), 'x'),
             }),
         )
         expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<{
@@ -260,7 +255,7 @@ describe('the meet of two objects at a shared name', () => {
         }>()
         expect(both.def).toEqual(
             object({
-                a: withLegacyRead({ current: string('x'), whenMissing: 'x' }),
+                a: fill(string('x'), 'x'),
             }).def,
         )
         expect(both.decode({ M: {} })).toEqual({ a: 'x' })
@@ -268,10 +263,7 @@ describe('the meet of two objects at a shared name', () => {
 
         const named = (nick: string) =>
             object({
-                a: withLegacyRead({
-                    current: object({ nick: string }),
-                    whenMissing: { nick },
-                }),
+                a: fill(object({ nick: string }), { nick }),
             })
         const objects = meet(named('rex'), named('rex'))
         expect(objects.decode({ M: {} })).toEqual({ a: { nick: 'rex' } })
@@ -284,16 +276,10 @@ describe('the meet of two objects at a shared name', () => {
     it('writes the stand-in through a meet that is narrower than each current', () => {
         const both = meet(
             object({
-                a: withLegacyRead({
-                    current: string('x', 'y', 'w'),
-                    whenMissing: 'x',
-                }),
+                a: fill(string('x', 'y', 'w'), 'x'),
             }),
             object({
-                a: withLegacyRead({
-                    current: string('x', 'z', 'w'),
-                    whenMissing: 'x',
-                }),
+                a: fill(string('x', 'z', 'w'), 'x'),
             }),
         )
         expect(orThrow(both.encode({ a: 'x' }))).toEqual({
@@ -310,11 +296,11 @@ describe('the meet of two objects at a shared name', () => {
      * the slot is required over the meet of the two codecs, as a fill and `optional` meet.
      */
     it('meets two fills whose stand-ins differ at a required slot', () => {
-        const fill = (whenMissing: 'x' | 'y') =>
+        const filledAt = (whenMissing: 'x' | 'y') =>
             object({
-                a: withLegacyRead({ current: string('x', 'y'), whenMissing }),
+                a: fill(string('x', 'y'), whenMissing),
             })
-        const met = item(meet(fill('x'), fill('y')))
+        const met = item(meet(filledAt('x'), filledAt('y')))
         expect(failed(met.decode({}))).toBe(true)
         expect(orThrow(met.decode({ a: { S: 'x' } }))).toEqual({ a: 'x' })
     })
@@ -341,13 +327,14 @@ describe('the meet of two objects at a shared name', () => {
             decode: (at) => new Date(at),
         })
         const epoch = new Date(0)
-        const fill = (stand: Date) =>
-            object({ a: withLegacyRead({ current: when, whenMissing: stand }) })
+        const filledAt = (stand: Date) => object({ a: fill(when, stand) })
         expect(
-            failed(item(meet(fill(epoch), fill(new Date(1)))).decode({})),
+            failed(
+                item(meet(filledAt(epoch), filledAt(new Date(1)))).decode({}),
+            ),
         ).toBe(true)
         expect(
-            orThrow(item(meet(fill(epoch), fill(epoch))).decode({})),
+            orThrow(item(meet(filledAt(epoch), filledAt(epoch))).decode({})),
         ).toEqual({
             a: epoch,
         })
@@ -575,7 +562,7 @@ describe('the slots that the constructors refuse at never', () => {
      * **A slot nothing fills makes the term hold no value**, and the constructor refuses it.
      *
      * A slot is a position a value must fill: a fixed element of a tuple, and a `req` or
-     * `withLegacyRead` field. `never` already names the term that holds nothing, so a second spelling
+     * `fill` field. `never` already names the term that holds nothing, so a second spelling
      * for it is a declaration that looks like a schema and refuses every entity.
      */
     it('refuses a slot declared at never, at the constructor that holds it', () => {
@@ -639,22 +626,16 @@ describe('the slots that the constructors refuse at never', () => {
     })
 
     /**
-     * **`withLegacyRead` at `never` is refused twice, by two different rules.**
+     * **`fill` at `never` is refused twice, by two different rules.**
      *
-     * The type reaches it through the slot gate: a `withLegacyRead` name is always written. The runtime
-     * never gets that far, because `withLegacyRead`'s own older rule refuses a stand-in that the codec
+     * The type reaches it through the slot gate: a `fill` name is always written. The runtime
+     * never gets that far, because `fill`'s own older rule refuses a stand-in that the codec
      * it stands in for cannot write, and `never` writes nothing.
      */
-    it('refuses a withLegacyRead at never, at the type by the slot and at the runtime by the stand-in', () => {
+    it('refuses a fill at never, at the type by the slot and at the runtime by the stand-in', () => {
         expect(() =>
-            object({
-                a: string,
-                gone: withLegacyRead({
-                    current: never as never,
-                    // @ts-expect-error the slot gate refuses it at the type
-                    whenMissing: 'v',
-                }),
-            }),
+            // @ts-expect-error the slot gate refuses it at the type
+            object({ a: string, gone: fill(never as never, 'v' as never) }),
         ).toThrow(/stand-in must be a value/)
     })
 
@@ -812,13 +793,13 @@ describe('a thunk changes no verdict of the order', () => {
 
     /**
      * **A name that the pattern leaves to an `opaque` block is the top, written plain or behind a
-     * `ref`.** The stand-in of a `withLegacyRead` slot pairs the absent row with a value, and only
+     * `ref`.** The stand-in of a `fill` slot pairs the absent row with a value, and only
      * the top holds that pair, so the order reads the block at the node behind the thunk.
      */
     it('reads an opaque block behind a ref as the top of a stand-in slot', () => {
         const kind: AnyCodec = union([
             object({
-                a: withLegacyRead({ current: string, whenMissing: 'x' }),
+                a: fill(string, 'x'),
             }),
             object({ b: number }),
         ])
@@ -1068,7 +1049,7 @@ describe('the type of a meet reads the values that the run time keeps', () => {
             encode: (value: number) => value + 1,
             decode: (value: number) => value - 1,
         })
-        const widened = withLegacyRead({ current: string, older: decimal })
+        const widened = legacy({ current: string, older: decimal })
         expect(() => meet(decimal('1', '2'), decimal('2', '3'))).not.toThrow()
         expect(() => meet(decimal('1', '2'), decimal)).not.toThrow()
         expect(() => meet(number(1, 2), number)).not.toThrow()
@@ -1105,7 +1086,7 @@ describe('the type of a meet reads the values that the run time keeps', () => {
      * below, and the run time refuses it: the two options overlap through an adapter.
      */
     it('builds in the type an older reading below a field, and the run time refuses the union', () => {
-        const widened = withLegacyRead({ current: string, older: decimal })
+        const widened = legacy({ current: string, older: decimal })
         expect(() =>
             union([object({ x: widened }), object({ x: number })]),
         ).toThrow(/not shown compatible/)
@@ -1117,7 +1098,7 @@ describe('the type of a meet reads the values that the run time keeps', () => {
      * are not apart, and the decoded types share a value.
      */
     it('refuses at the call an older reading against a held literal', () => {
-        const widened = withLegacyRead({ current: string, older: decimal })
+        const widened = legacy({ current: string, older: decimal })
         // @ts-expect-error the older reading fits neither side, and the views overlap
         expect(() => meet(widened, decimal('1'))).toThrow(/`legacy` part/)
     })
@@ -1169,7 +1150,7 @@ describe('the type of a meet reads the values that the run time keeps', () => {
      * the meet.
      */
     it('meets a side below the current form of an older reading at that side', () => {
-        const widened = withLegacyRead({ current: string, older: decimal })
+        const widened = legacy({ current: string, older: decimal })
         expect(meet(widened, string('q')).def).toEqual(string('q').def)
         expect(meet(string('q'), widened).def).toEqual(string('q').def)
     })
@@ -1195,7 +1176,7 @@ describe('the presence of a slot in the meet and in the order of the slice', () 
             decode: (value: unknown) => unknown
         }
     const Legacy = object({
-        petId: withLegacyRead({ current: string, whenMissing: 'unknown' }),
+        petId: fill(string, 'unknown'),
     })
 
     /**
@@ -1216,7 +1197,7 @@ describe('the presence of a slot in the meet and in the order of the slice', () 
 
     it('meets two fills at the first fill, at the order of the slice, where the pattern holds the second', () => {
         const other = object({
-            petId: withLegacyRead({ current: string, whenMissing: 'stray' }),
+            petId: fill(string, 'stray'),
         })
         expect(loose(meetOrdered(Legacy, other)).decode({})).toEqual({
             petId: 'unknown',
@@ -1307,7 +1288,7 @@ describe('the presence lift in the type gives the answer of the run time', () =>
 
     it('keeps the fill when two slots of one type meet', () => {
         const Legacy = object({
-            petId: withLegacyRead({ current: string, whenMissing: 'unknown' }),
+            petId: fill(string, 'unknown'),
         })
         const Twice = meet(Legacy, Legacy)
         expectTypeOf(Twice.spec.petId.def.mark).toEqualTypeOf<'fallback'>()
