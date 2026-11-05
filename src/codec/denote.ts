@@ -2044,11 +2044,7 @@ const numberPolicy = (numbers: opaque.Numbers) => {
              * reach the store are the normal form of `DynamoNumber`, which is the form the store
              * returns: `1e21` is stored `1000000000000000000000`.
              */
-            return isNumeral(String(value))
-                ? DynamoNumber.from(String(value))
-                : new CodecError(
-                      `${value} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
-                  )
+            return DynamoNumber.fromNumber(value)
         }
         if (typeof value === 'bigint') {
             return unrecoverable(
