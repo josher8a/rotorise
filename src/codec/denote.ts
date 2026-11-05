@@ -60,6 +60,7 @@ import {
     RecursionRefused,
     readMember,
     recursionUse,
+    setMember as setMembers,
     storedAlternatives,
     unboundRefs,
     usedTargetOf,
@@ -195,9 +196,6 @@ const refusedBy = (q: Refinement, value: unknown): CodecError => {
     }
     return new CodecError(`${named} is not ${q.what}`)
 }
-
-/** The wire set that holds an element of each scalar member: `setMember`. */
-const setWire = { S: 'SS', N: 'NS', B: 'BS' } as const
 
 /**
  * **A member's assignment: one tag per key, read off the member's own body.**
@@ -1167,13 +1165,13 @@ export const denote = (def: Term): Pair => {
             const inner = codecOfTerm(def.elem)
             const one = elementMember(def.elem)
             if (one !== 'S' && one !== 'N' && one !== 'B') {
-                // `judge` refuses a set of any other member first, so this narrows `one` for `setWire`
+                // `judge` refuses a set of any other member first, so this narrows `one` for `setMember`
                 throw new CodecError(
                     'codecOfTerm received a set that the judge did not refuse',
                 )
             }
             const member = one
-            const setMember = setWire[one]
+            const setMember = setMembers[one]
             const carried = (value: unknown): Result<string | Uint8Array> =>
                 andThen(
                     inner.encode(value as never),

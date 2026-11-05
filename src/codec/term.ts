@@ -371,13 +371,16 @@ export const ground = {
 const setMemberOf = (
     element: AttributeName | undefined,
 ): AttributeName | undefined =>
-    element === 'S'
-        ? 'SS'
-        : element === 'N'
-          ? 'NS'
-          : element === 'B'
-            ? 'BS'
-            : undefined
+    element === 'S' || element === 'N' || element === 'B'
+        ? setMember[element]
+        : undefined
+
+/**
+ * **The model's `setMember`, as one table**: the wire set that holds an element of each scalar
+ * member. The run time reads it here, the denotation of a set reads it, and the path type reads it
+ * by `typeof`.
+ */
+export const setMember = { S: 'SS', N: 'NS', B: 'BS' } as const
 
 /**
  * The rule `(union)`'s member: `μ` where every option agrees, and `⊤` otherwise.

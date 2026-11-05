@@ -15,20 +15,16 @@ import type {
     Carrying,
     DynamoNumber as DynamoNumberOf,
 } from './attribute'
-import type { GroundKind, ground } from './term'
+import type { GroundKind, ground, setMember } from './term'
 
 type Some<X> = ['some', X]
 type None = ['none']
 
 // ── μG (Lang/ScopePath.lean) at DynamoDB ──
 type KindMember<K> = K extends GroundKind ? (typeof ground)[K]['member'] : never
-type SetMember<M> = M extends 'S'
-    ? 'SS'
-    : M extends 'N'
-      ? 'NS'
-      : M extends 'B'
-        ? 'BS'
-        : 'none'
+type SetMember<M> = M extends keyof typeof setMember
+    ? (typeof setMember)[M]
+    : 'none'
 /**
  * An entry of a scope is the model's \`ref\` where the entry reaches its own name, and its definition
  * elsewhere: the emitter prints an entry that closes no cycle as its body. So the member of an
