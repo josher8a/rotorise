@@ -18,8 +18,10 @@ import { describe, expect, it } from 'vitest'
 import type { ConstantAttributes } from '../../../Rotorise'
 import type { ObjectSlot } from '../../codec'
 import {
+    CodecError,
     constantOf,
     decimal,
+    held,
     number,
     optional,
     refine,
@@ -134,5 +136,22 @@ describe('the type and the function agree on what is decided', () => {
         const counted = { age: number(5), litter: number(1, 2), id: string }
         attest<[ConstantAttributes<typeof counted>], ['age']>()
         expect(decided(counted)).toEqual(['age'])
+    })
+
+    /**
+     * A caller's adapter over a literal owes that the pair cancels. One that refuses its own literal
+     * admits no value, so it decides none. The refusal is not a value, and a key built from it would
+     * hold a `CodecError` as a component.
+     */
+    it('on an adapter that refuses its own literal, which decides no value', () => {
+        const broken = {
+            kind: held(string('DOG'), string, {
+                encode: () => 'DOG' as const,
+                decode: () => new CodecError('this adapter reads no DOG'),
+            }),
+            id: string,
+        }
+        attest<[ConstantAttributes<typeof broken>], [never]>()
+        expect(decided(broken)).toEqual([])
     })
 })

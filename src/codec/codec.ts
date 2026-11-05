@@ -569,7 +569,10 @@ export const constantOf = (declared: ObjectSlot): unknown => {
     // caller's rather than the carrier's, so it is the inner literal's put back through the
     // adapter — well defined because `held` owes that the pair cancels.
     if (t.kind === 'held' && t.inner.kind === 'literal') {
-        return (t.g as (held: unknown) => unknown)(t.inner.v)
+        // a caller's adapter that refuses its own literal breaks the pair it owes, and decides no
+        // value: the codec refuses every row, and its encode and decode report the refusal
+        const value = (t.g as (held: unknown) => unknown)(t.inner.v)
+        return failed(value) ? undefined : value
     }
     return t.kind === 'literal' ? t.v : undefined
 }
