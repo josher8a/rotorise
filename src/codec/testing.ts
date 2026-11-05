@@ -842,7 +842,7 @@ const someUnknown = (
     rng: Rng,
     size: number,
     /** `exact` is the canonical `opaque`, which holds a number as a `DynamoNumber`. */
-    numbers: opaque.Numbers | 'exact',
+    numbers: opaque.Numbers | 'exact' | 'native',
 ): unknown => {
     const scalars: unknown[] = [
         null,
@@ -853,6 +853,10 @@ const someUnknown = (
     // a number is in the domain only once the caller has said what to do with `N`
     if (numbers === 'lossy') {
         scalars.push(pickFrom(rng, [0, 1, -1, 1.5, 0.1, -0.25, 1e20, 1e21]))
+    }
+    // inside the safe range, which is what `native` writes unless it is told to allow more
+    if (numbers === 'native') {
+        scalars.push(pickFrom(rng, [0, 1, -1, 1.5, 0.1, -0.25]))
     }
     if (numbers === 'exact') {
         scalars.push(orThrow(DynamoNumber.from(someDecimal(rng))))
@@ -1042,6 +1046,9 @@ export const arbitraryOf = (
                 return someUnknown(rng, size, 'lossy')
             if (def.via === 'opaqueRefuse')
                 return someUnknown(rng, size, 'refuse')
+            // `native` generates what `native` writes: a JS number that the SDK's default accepts,
+            // and no `DynamoNumber`, which `native` reads back as a JS number
+            if (def.via === 'native') return someUnknown(rng, size, 'native')
             readsGenerated++
             return def.g(
                 arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
@@ -1231,7 +1238,9 @@ export const shrinkOf = (
             // A caller who stated a shrink owns the answer, because a partial pair cannot be
             // shrunk through: the inner side would hand back values the conversion refuses
             if (def.shrink) return def.shrink(value as never)
-            if (isOpaqueSugar(def.via)) return shrinkUnknown(value)
+            if (isOpaqueSugar(def.via) || def.via === 'native') {
+                return shrinkUnknown(value)
+            }
             return shrinkOf(codecOfTerm(def.inner), def.f(value as never)).map(
                 (shrunk) => def.g(shrunk as never),
             )

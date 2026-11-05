@@ -464,23 +464,3 @@ export const tooDeeplyNested = (enclosing: number): string | undefined =>
     enclosing >= MAX_DOCUMENT_NESTING
         ? `nesting reaches ${enclosing + 1} levels of list and map, and DynamoDB stores at most ${MAX_DOCUMENT_NESTING} — the write would be rejected`
         : undefined
-
-/**
- * The position of the first member of a wire set that repeats an earlier member, or `undefined`.
- * DynamoDB refuses an `SS`, an `NS` or a `BS` that repeats a member, and returns none. A string
- * member compares by its text, and a binary member by its bytes. A JavaScript `Set` compares a
- * `Uint8Array` and a `DynamoNumber` by identity, so a `Set` does not exclude the repeat: two
- * `Uint8Array`s with one content are two members of the `Set` and one member of the `BS`.
- */
-export const repeatedAt = (
-    members: readonly (string | Uint8Array)[],
-): number | undefined => {
-    const seen = new Set<string>()
-    for (const [at, member] of members.entries()) {
-        const key =
-            typeof member === 'string' ? `S${member}` : `B${member.join(',')}`
-        if (seen.has(key)) return at
-        seen.add(key)
-    }
-    return undefined
-}

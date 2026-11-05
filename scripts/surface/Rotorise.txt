@@ -138,7 +138,6 @@ pin
 preconditions
 ref
 refine
-repeatedAt
 scope
 shapeOf
 spread

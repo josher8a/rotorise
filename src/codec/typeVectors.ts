@@ -523,6 +523,7 @@ const printerOf = (
                 }
                 if (t.via === 'opaqueLossy') return "opaque('lossy')"
                 if (t.via === 'opaqueRefuse') return "opaque('refuse')"
+                if (t.via === 'native') return 'native'
                 if (t.f === numberAdapter) {
                     if (t.inner.kind === 'number') return 'number'
                     const ns = numberLiterals(t.inner)
@@ -1143,6 +1144,7 @@ const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
     `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union } from '${library}/codec'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
+    `import { native } from '${library}/native'`,
     `import { orThrow } from '${library}/result'`,
     `import type { Result } from '${library}/result'`,
 ]
@@ -1151,6 +1153,7 @@ const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
     `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, fill, legacy, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
+    `import { native } from '${library}/native'`,
     `import { orThrow } from '${library}/result'`,
     "import * as C from './codecs'",
     // the keys that an attribute type admits, and a check that the type of `encode` admits one key

@@ -106,6 +106,7 @@ import {
     clauseForm,
     componentsOf,
     mapChildren,
+    namesOnePair,
     openRefusal,
     recursionUse,
     storedAlternatives,
@@ -1122,7 +1123,7 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          */
         case 'held':
             if (t.via !== 'decimalText' && scope.bound)
-                return `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.caller ${boundName(scope.bound.adapters, t.via ?? t.f, '')}, false) [])`
+                return `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.caller ${boundName(scope.bound.adapters, namesOnePair(t.via) ? t.via : t.f, '')}, false) [])`
             return t.via === 'decimalText'
                 ? `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.decimalText, false) [])`
                 : refuse(
@@ -2357,7 +2358,7 @@ const leanWord = (t: Term, bound: Bound): string =>
           ? '[]'
           : t.via === 'decimalText'
             ? '[(.decimalText, false)]'
-            : `[(.caller ${boundName(bound.adapters, t.via ?? t.f, '')}, false)]`
+            : `[(.caller ${boundName(bound.adapters, namesOnePair(t.via) ? t.via : t.f, '')}, false)]`
 
 /** A clause, as an `AltClause` over the names, and the word and the alternatives at each name. */
 const leanClause = (entries: readonly ClauseEntry[], at: string): string =>

@@ -2310,11 +2310,13 @@ const namedKind = (t: Term): string => {
     const pinned = literalAlternatives(t)
     return t.kind === 'opaq' || (t.kind === 'held' && isOpaqueSugar(t.via))
         ? 'opaque'
-        : pinned !== undefined
-          ? namedLiterals(literalForm(pinned.base, undefined), pinned)
-          : t.kind !== 'held' || t.outer.kind === 'opaq'
-            ? t.kind
-            : namedAdapter(t.inner, t.outer)
+        : t.kind === 'held' && t.via === 'native'
+          ? 'native'
+          : pinned !== undefined
+            ? namedLiterals(literalForm(pinned.base, undefined), pinned)
+            : t.kind !== 'held' || t.outer.kind === 'opaq'
+              ? t.kind
+              : namedAdapter(t.inner, t.outer)
 }
 
 /** A literal form with its alternatives, as the caller writes the call. */

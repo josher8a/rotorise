@@ -121,6 +121,16 @@ export type OpaqueSugar = 'opaqueLossy' | 'opaqueRefuse'
 export const isOpaqueSugar = (via: string | undefined): via is OpaqueSugar =>
     via === 'opaqueLossy' || via === 'opaqueRefuse'
 
+/**
+ * **Whether a `via` names one pair of functions**, which the model carries as one generator. The two
+ * policies and `decimalText` each name one pair. `native` names a family: each configuration of the
+ * marshaller holds its own closures, so the tag of a `native` is the pair of functions.
+ */
+export const namesOnePair = (
+    via: string | undefined,
+): via is 'decimalText' | OpaqueSugar =>
+    via === 'decimalText' || isOpaqueSugar(via)
+
 /** The terms. One variant per `Term.lean` constructor, under the model's names. */
 export type Term =
     | { readonly kind: 'string' }
@@ -190,7 +200,7 @@ export type Term =
            * in and is read by the certificate; this says which named pair the model carries and
            * is read by the emitter. One of them can be known without the other.
            */
-          readonly via?: 'decimalText' | OpaqueSugar
+          readonly via?: 'decimalText' | OpaqueSugar | 'native'
           /**
            * **The arbitrary and the shrinker, where the caller supplies them rather than the inner codec.**
            *
@@ -1147,14 +1157,15 @@ export const widensRead = (t: Term): boolean => reaches(t, ['legacy'])
 
 /**
  * **Whether two `held` terms are one adapter**: the tag test of the held row. The tag of a
- * library adapter is its `via` name, and the model carries one generator for each name. The tag of a caller's adapter is the pair of functions that
- * `held` builds once for each call, so two terms of one call are one adapter.
+ * library adapter that names one pair is its `via` name, and the model carries one generator for each
+ * name. The tag of any other adapter is the pair of functions, which `held` and `native` build once
+ * for each call, so two terms of one call are one adapter.
  */
 export const sameAdapter = (
     x: Extract<Term, { kind: 'held' }>,
     y: Extract<Term, { kind: 'held' }>,
 ): boolean =>
-    (x.via !== undefined && x.via === y.via) || (x.f === y.f && x.g === y.g)
+    (namesOnePair(x.via) && x.via === y.via) || (x.f === y.f && x.g === y.g)
 
 /**
  * **Whether two terms are one term**: one structure, with each `ref` read as its target, and each

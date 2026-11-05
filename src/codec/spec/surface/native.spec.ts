@@ -2,7 +2,7 @@
  * The ported marshaller, held against the one it was ported from.
  *
  * `native` reproduces `@aws-sdk/util-dynamodb`'s `convertToAttr` / `convertToNative` so a table
- * written by that marshaller can be read and written byte for byte while the schema and key layers
+ * written by that marshaller can be read and written as the same stored data while the schema and key layers
  * are adopted around it. A port is only worth having if it is faithful, and the only way to know
  * that is to ask the original.
  *
@@ -32,7 +32,15 @@ import type {
     SS,
 } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
-import { CodecError, opaque } from '../../codec'
+import {
+    CodecError,
+    fits,
+    item,
+    object,
+    opaque,
+    orThrow,
+    termOf,
+} from '../../codec'
 import { native } from '../../native'
 import { arbitraryOf, rngFrom } from '../../testing'
 
@@ -204,22 +212,43 @@ describe('the port agrees on every binary the SDK accepts', () => {
         ['empty Uint8Array', new Uint8Array(0)],
     ]
 
+    /**
+     * The SDK writes the view itself, and the store holds bytes. The port writes the `Uint8Array`
+     * over the same bytes, which is what the store returns, so a read-modify-write keeps the type.
+     */
+    const bytesOf = (view: unknown): Uint8Array =>
+        ArrayBuffer.isView(view)
+            ? new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
+            : new Uint8Array(view as ArrayBuffer)
+    const asBytes = (attribute: unknown): unknown => {
+        const stored = (attribute as { B?: unknown }).B
+        return stored === undefined ? attribute : { B: bytesOf(stored) }
+    }
+
     it.each(binaries.map(([name, value]) => ({ name, value })))(
-        'stores $name the same way',
+        'writes $name as the bytes the store returns',
         ({ value }) => {
-            expect(native.encode(value)).toEqual(sdk.convertToAttr(value))
+            expect(asBytes(native.encode(value))).toEqual(
+                asBytes(sdk.convertToAttr(value)),
+            )
         },
     )
 
     it.each(binaries.map(([name, value]) => ({ name, value })))(
-        'stores $name the same way with convertEmptyValues',
+        'writes $name as the bytes the store returns with convertEmptyValues',
         ({ value }) => {
             const options = { convertEmptyValues: true }
-            expect(native(options).encode(value)).toEqual(
-                sdk.convertToAttr(value, options),
+            expect(asBytes(native(options).encode(value))).toEqual(
+                asBytes(sdk.convertToAttr(value, options)),
             )
         },
     )
+
+    it('native writes a typed array as the bytes the store returns', () => {
+        const written = native.encode(Int16Array.from([1, 2]))
+        expect(written).toEqual({ B: Uint8Array.from([1, 0, 2, 0]) })
+        expect((written as { B: unknown }).B).toBeInstanceOf(Uint8Array)
+    })
 })
 
 /** One option at a time is not how anyone configures a marshaller. */
@@ -246,6 +275,31 @@ describe('the port agrees on combinations of options', () => {
         { nested: { deeper: [new Set(['a']), ''] } },
     ]
 
+    /**
+     * The SDK writes `1e30` as `1e+30`, and the store returns `1000000000000000000000000000000`.
+     * The port writes the second, so each side is compared in the form the store returns.
+     */
+    const stored = (attribute: unknown): unknown => {
+        if (typeof attribute !== 'object' || attribute === null)
+            return attribute
+        const one = attribute as Record<string, unknown>
+        if (typeof one.N === 'string') {
+            return { N: orThrow(DynamoNumber.from(one.N)).digits }
+        }
+        if (Array.isArray(one.L)) return { L: one.L.map(stored) }
+        if (typeof one.M === 'object' && one.M !== null) {
+            return {
+                M: Object.fromEntries(
+                    Object.entries(one.M).map(([key, held]) => [
+                        key,
+                        stored(held),
+                    ]),
+                ),
+            }
+        }
+        return attribute
+    }
+
     it.each(
         combinations.map((options) => ({
             name: JSON.stringify(options),
@@ -261,7 +315,7 @@ describe('the port agrees on combinations of options', () => {
                 expect(ours, JSON.stringify(value)).toBeInstanceOf(CodecError)
                 continue
             }
-            expect(ours, JSON.stringify(value)).toEqual(theirs)
+            expect(stored(ours), JSON.stringify(value)).toEqual(stored(theirs))
         }
     })
 })
@@ -352,17 +406,16 @@ describe('the port refuses four things the SDK does not', () => {
      * reading until they are repaired, which is what {@link native.Deviations} is for — so the
      * divergence is a default, not a wall.
      */
-    it('restores the SDK exactly, through deviations', () => {
+    it('reaches the numerals of the store through deviations, and no non-numeral', () => {
         const sdkLike = native(permissive, {
             writeNumber: (value) => ({ N: value.toString() }),
             readNumber: (digits) => Number(digits),
         })
-        expect(sdkLike.encode(5e-324)).toEqual(
-            sdk.convertToAttr(5e-324, permissive),
-        )
-        expect(sdkLike.decode({ N: '' } as never)).toBe(
-            sdk.convertToNative({ N: '' } as never),
-        )
+        expect(sdkLike.encode(1.5)).toEqual(sdk.convertToAttr(1.5, permissive))
+        expect(sdkLike.decode({ N: '1.5' })).toBe(1.5)
+        // the canonical opaque is under the pair, and it holds numerals only, in both directions
+        expect(sdkLike.encode(5e-324)).toBeInstanceOf(CodecError)
+        expect(sdkLike.decode({ N: '' } as never)).toBeInstanceOf(CodecError)
     })
 })
 
@@ -498,7 +551,6 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
         { name: 'a Set holding undefined', value: new Set(['a', undefined]) },
         { name: 'a Map holding undefined', value: new Map([['a', undefined]]) },
         { name: 'an empty Set', value: new Set() },
-        { name: 'a Set of booleans', value: new Set([true]) },
         { name: 'a class instance', value: new Pet() },
         { name: 'NaN inside a list', value: [[Number.NaN]] },
         {
@@ -527,6 +579,13 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
         )
     })
 
+    /** The canonical write owns the rule of a stored set, so its text is the text of the refusal. */
+    it('refuses a Set of booleans with the text of the canonical write', () => {
+        const refused = native.encode(new Set([true]))
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toMatch(/each holds one kind/)
+    })
+
     it('names DynamoNumber in the tail of a safe-range refusal', () => {
         const refused = native.encode(2 ** 60)
         expect((refused as CodecError).reason).toMatch(
@@ -544,14 +603,51 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
 
     it('writes NS from a Set of DynamoNumber, as the SDK does for a Set of NumberValue', () => {
         const digits = ['12345678901234567890', '1.5']
+        // the store holds a set without an order, and the canonical write sorts the members
         expect(
             native.encode(new Set(digits.map((d) => DynamoNumber.from(d)))),
-        ).toEqual({ NS: digits })
+        ).toEqual({ NS: [...digits].sort() })
         expect(
             sdk.convertToAttr(
                 new Set(digits.map((d) => sdk.NumberValueImpl.from(d))),
             ),
         ).toEqual({ NS: digits })
+    })
+})
+
+describe('native in a container', () => {
+    const pet = item(object({ x: native }))
+
+    it('native in a container writes and reads as native alone', () => {
+        expect(native.encode(1e20)).toBeInstanceOf(CodecError)
+        expect(pet.encode({ x: 1e20 })).toBeInstanceOf(CodecError)
+        expect(object({ x: native }).encode({ x: 1e20 })).toBeInstanceOf(
+            CodecError,
+        )
+        expect(pet.decode({ x: { N: '9007199254740993' } })).toEqual({
+            x: 9007199254740993n,
+        })
+    })
+
+    it('reads as a marshaller and not as opaque lossy, and two configurations are two adapters', () => {
+        expect(fits(termOf(native), termOf(opaque('lossy')))).toBe(false)
+        expect(fits(termOf(native), termOf(native))).toBe(true)
+        expect(
+            fits(termOf(native), termOf(native({ convertEmptyValues: true }))),
+        ).toBe(false)
+    })
+})
+
+describe('what native refuses and reads back', () => {
+    it('native refuses a set the store cannot hold', () => {
+        expect(native.encode(new Set(['a', 1]))).toBeInstanceOf(CodecError)
+        expect(native.encode(new Set([1, 1n]))).toBeInstanceOf(CodecError)
+    })
+
+    it('native reads back what it writes', () => {
+        const written = native.encode(1e-7)
+        expect(written).toEqual({ N: '0.0000001' })
+        expect(native.decode(written as never)).toBe(1e-7)
     })
 })
 
@@ -574,7 +670,7 @@ describe('a Set that repeats a stored member', () => {
         )
         expect(refused).toBeInstanceOf(CodecError)
         expect((refused as CodecError).reason).toMatch(
-            /The number 1 is twice in a Number Set \(NS\)/,
+            /holds one number two times/,
         )
     })
 
@@ -586,7 +682,7 @@ describe('a Set that repeats a stored member', () => {
         const refused = native.encode(twice)
         expect(refused).toBeInstanceOf(CodecError)
         expect((refused as CodecError).reason).toMatch(
-            /One value is twice in a Binary Set \(BS\)/,
+            /holds one byte sequence two times/,
         )
     })
 

@@ -2,8 +2,8 @@
  * The marshaller the table was probably written with.
  *
  * A port of `@aws-sdk/util-dynamodb`'s `convertToAttr` / `convertToNative`, so a table written by
- * that marshaller can be read and written byte for byte while the schema and key layers are adopted
- * around it. Its own entry point, because it is a migration aid rather than part of the library:
+ * that marshaller can be read and written as the same stored data while the schema and key layers are
+ * adopted around it. Its own entry point, because it is a migration aid rather than part of the library:
  *
  * ```ts
  * import { native } from 'rotorise/native'
@@ -16,13 +16,22 @@
  * `rotorise/testing` to prove each attribute as it is replaced.
  *
  * Verified against the real SDK: twenty values and three option sets, both directions, agreeing on
- * every one including the cases where the SDK throws — with **one deliberate divergence, in the
- * direction of the store**. `Carries('N')` is the numerals, not the finite doubles, and the SDK
- * checks only the latter: it will marshal `1e300` and `5e-324` into an `N` DynamoDB refuses, and
- * unmarshal `{ N: '' }` as `0` and `{ N: '0x10' }` as `16`. This gates both halves on the same
- * predicate every other term that touches an `N` uses, and refuses an empty `SS`/`NS`/`BS` on read
- * where the SDK hands back an empty `Set`. {@link native.Deviations} restores the SDK's exact
- * behaviour for a caller who wants the bytes and nothing else.
+ * every one including the cases where the SDK throws — with **deviations, in the direction of the
+ * store**.
+ *
+ * **The port writes the stored data of the SDK, and not its bytes.** The SDK writes the form that
+ * the caller holds, and the store returns a normal form. The port writes the normal form, through
+ * the canonical `opaque`. Three classes of request bytes differ: the members of a set, which the
+ * canonical write sorts; the spelling of a numeral, so `1e30` is `1000000000000000000000000000000`;
+ * and a typed array, an `ArrayBuffer` or a `DataView`, which is the `Uint8Array` of the same bytes.
+ *
+ * **Each half gates on the predicate of the canonical codec.** `Carries('N')` is the numerals, not
+ * the finite doubles, and the SDK checks only the latter: it will marshal `1e300` and `5e-324` into
+ * an `N` DynamoDB refuses, and unmarshal `{ N: '' }` as `0` and `{ N: '0x10' }` as `16`. The write
+ * gates on `isNumeral` of the digits and then writes the digits in normal form. The read gates on
+ * `isNumeral` and on the form that the store returns, so the value that the write produces always
+ * passes the read. Both halves refuse an empty `SS`/`NS`/`BS`, a set that repeats a member and a set
+ * with a member of another type, where the SDK hands back an empty `Set` or writes the set.
  */
 
 import type { ErrorMessage, show } from '../utils'
@@ -43,19 +52,13 @@ import {
     carrying,
     DynamoNumber,
     isNumeral,
-    repeatedAt,
+    memberOf,
     tooDeeplyNested,
 } from './attribute'
-import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
-import { andThen, CodecError, every, everyEntry } from './codec'
-import {
-    decodeWith,
-    opaqueTerms,
-    storedNumber,
-    storedTooDeeply,
-} from './denote'
-import { rendered } from './value'
+import { andThen, CodecError, every, everyEntry, failed } from './codec'
+import { codecOfTerm, opaqueTerms } from './denote'
+import { asRecord, rendered } from './value'
 
 /**
  * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
@@ -120,8 +123,8 @@ const nativeNumber = (
      * So this is a deliberate divergence from the SDK, in the direction of the store: `ran(e) ⊆ 𝔸`
      * is the obligation every term that writes an `N` carries, and `number`, `literal` and `opaque`
      * all gate on it. A marshaller that skipped it would be the one place in the package that
-     * certifies an attribute the model has no point for. `deviations.writeNumber` is there for a
-     * caller who wants the SDK's exact behaviour back, byte for byte.
+     * certifies an attribute the model has no point for. `deviations.writeNumber` changes how a
+     * number becomes digits, and the canonical write refuses digits that are no numeral.
      */
     const digits = value.toString()
     return isNumeral(digits)
@@ -131,141 +134,118 @@ const nativeNumber = (
           )
 }
 
-const nativeSet = (
-    value: ReadonlySet<unknown>,
-    options: native.Options,
-    write: (value: number | bigint) => Result<AttributeValue>,
-): Result<AttributeValue> => {
-    const members = options.removeUndefinedValues
-        ? [...value].filter((member) => member !== undefined)
-        : [...value]
-    if (!options.removeUndefinedValues && members.includes(undefined)) {
-        return new CodecError(
-            'Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.',
-        )
+/**
+ * The bytes of a binary value, as the `Uint8Array` that the store returns for them.
+ *
+ * The SDK stores a view of any element type, an `ArrayBuffer` and a `DataView` as `B`. The canonical
+ * write holds a `Uint8Array`, so the view becomes the `Uint8Array` over the same bytes. A `Blob`
+ * and a `File` hold their bytes behind a promise, and a synchronous write cannot read them.
+ */
+const bytesOf = (value: unknown): Result<Uint8Array> => {
+    if (value instanceof Uint8Array) return value
+    if (ArrayBuffer.isView(value)) {
+        return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
     }
-    if (members.length === 0) {
-        return options.convertEmptyValues
-            ? carrying('NULL', true)
-            : new CodecError(
-                  'Pass a non-empty set, or options.convertEmptyValues=true.',
-              )
-    }
-
-    const first = members[0]
-    if (first instanceof DynamoNumber) {
-        if (!members.every((member) => member instanceof DynamoNumber)) {
-            return new CodecError(
-                'Only Number Set (NS), Binary Set (BS) or String Set (SS) are allowed.',
-            )
-        }
-        // a Set tells two DynamoNumber objects apart by identity, and the digits are normalised, so
-        // `1` and `1.0` arrive as two members with one numeral. DynamoDB refuses a set that repeats
-        // a member, and the SDK writes one from two NumberValue objects: a divergence of the same
-        // kind as the nesting bound
-        const digits = members.map((member) => member.digits)
-        const repeated = repeatedAt(digits)
-        return repeated === undefined
-            ? carrying('NS', digits)
-            : new CodecError(
-                  `The number ${digits[repeated]} is twice in a Number Set (NS), and DynamoDB refuses a set that repeats a member.`,
-              )
-    }
-    if (typeof first === 'number' || typeof first === 'bigint') {
-        return andThen(
-            every(members, (member) => write(member as number | bigint)),
-            (written) =>
-                carrying(
-                    'NS',
-                    written.map((one) => (one as { N: string }).N),
-                ),
-        )
-    }
-    if (typeof first === 'string') {
-        return carrying('SS', members as readonly string[])
-    }
-    if (isBinaryValue(first)) {
-        // the same divergence as the `NS` above: two `Uint8Array`s with one content are two members
-        // of the `Set`, and the SDK writes both
-        const bytes = members as readonly Uint8Array[]
-        return repeatedAt(bytes) === undefined
-            ? carrying('BS', bytes)
-            : new CodecError(
-                  'One value is twice in a Binary Set (BS), and DynamoDB refuses a set that repeats a member.',
-              )
-    }
+    if (value instanceof ArrayBuffer) return new Uint8Array(value)
     return new CodecError(
-        'Only Number Set (NS), Binary Set (BS) or String Set (SS) are allowed.',
+        `${rendered(value)} holds its bytes behind a promise, so a synchronous write cannot read them`,
     )
 }
 
 /**
- * A value, as `@aws-sdk/util-dynamodb`'s `convertToAttr` stores it.
+ * A value, as `@aws-sdk/util-dynamodb`'s `convertToAttr` reads it, handed to the canonical write.
  *
  * Ported from that implementation rather than from its documentation, branch for branch — including
  * the order the branches are tried in, which is observable: an `Array` is a list before it is an
  * object, and a `Map` is a map before a class instance is refused.
+ *
+ * **Value to value, and no attribute.** The result is a value that the canonical `opaque` writes: a
+ * number is a `DynamoNumber`, a `Map` and a class instance are a plain object, a binary view is a
+ * `Uint8Array`, and an empty value that `convertEmptyValues` reaches is `null`. The canonical
+ * write owns the attribute and the rule of a stored set, so a set with two kinds of member, an
+ * empty set and a set that repeats a member are its refusals, with its text.
  */
-const toNative = (
+const toCanonical = (
     value: unknown,
     options: native.Options,
-    write: (value: number | bigint) => Result<AttributeValue>,
+    write: (value: number | bigint) => Result<DynamoNumber>,
     /**
      * How many `L`/`M` this value already sits inside.
      *
-     * The SDK's marshaller has no such check and will hand DynamoDB a row it rejects. This is a
-     * deliberate divergence of the same kind as the `N` gate above: `native` mirrors the SDK's
-     * *shape*, not its willingness to write what the store refuses.
+     * The walk stops at the bound and hands the value on unchanged, so a cyclic value reaches the
+     * canonical write, which refuses it at the same bound. The SDK's marshaller has no such check
+     * and will hand DynamoDB a row it rejects: a deliberate divergence, in the direction of the
+     * store.
      */
     enclosing = 0,
-): Result<AttributeValue> => {
+): Result<unknown> => {
     if (value === undefined) {
         return new CodecError(
             'Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.',
         )
     }
-    if (value === null) return carrying('NULL', true)
+    if (value === null) return null
 
     if (Array.isArray(value)) {
+        if (tooDeeplyNested(enclosing)) return value
         const kept = value.filter(
             (item) =>
                 typeof item !== 'function' &&
                 (!options.removeUndefinedValues || item !== undefined),
         )
-        const deep = tooDeeplyNested(enclosing)
-        if (deep) return new CodecError(deep)
-        return andThen(
-            every(kept, (item) =>
-                toNative(item, options, write, enclosing + 1),
-            ),
-            (written) => carrying('L', written),
+        return every(kept, (item) =>
+            toCanonical(item, options, write, enclosing + 1),
         )
     }
 
     const named = (value as { constructor?: { name?: string } })?.constructor
         ?.name
-    if (named === 'Set')
-        return nativeSet(value as ReadonlySet<unknown>, options, write)
-    if (named === 'Map') {
-        const deep = tooDeeplyNested(enclosing)
-        if (deep) return new CodecError(deep)
+    if (named === 'Set') {
+        const members = options.removeUndefinedValues
+            ? [...(value as ReadonlySet<unknown>)].filter(
+                  (member) => member !== undefined,
+              )
+            : [...(value as ReadonlySet<unknown>)]
+        if (!options.removeUndefinedValues && members.includes(undefined)) {
+            return new CodecError(
+                'Pass options.removeUndefinedValues=true to remove undefined values from map/array/set.',
+            )
+        }
+        if (members.length === 0) {
+            return options.convertEmptyValues
+                ? null
+                : new CodecError(
+                      'Pass a non-empty set, or options.convertEmptyValues=true.',
+                  )
+        }
         return andThen(
-            everyEntry(
-                Object.fromEntries(value as Map<string, unknown>),
-                (held) => toNative(held, options, write, enclosing + 1),
+            every(members, (member) =>
+                typeof member === 'number' || typeof member === 'bigint'
+                    ? write(member)
+                    : isBinaryValue(member)
+                      ? bytesOf(member)
+                      : member,
             ),
-            (written) => carrying('M', written),
+            (written) => new Set(written),
+        )
+    }
+    if (named === 'Map') {
+        if (tooDeeplyNested(enclosing)) return value
+        return everyEntry(
+            Object.fromEntries(value as Map<string, unknown>),
+            (held) => toCanonical(held, options, write, enclosing + 1),
         )
     }
 
     // before the class-instance branch, as in the SDK, where `NumberValue` is a number and not a map
-    if (value instanceof DynamoNumber) return carrying('N', value.digits)
+    if (value instanceof DynamoNumber) return value
 
     const isPlain = named === 'Object' || (!named && typeof value === 'object')
     if (
         isPlain ||
         (options.convertClassInstanceToMap && typeof value === 'object')
     ) {
+        if (tooDeeplyNested(enclosing)) return value
         const kept: Record<string, unknown> = {}
         // `for…in`, as the SDK does: enumerable *and* inherited, which is what makes
         // `convertClassInstanceToMap` reach a prototype's own accessors
@@ -275,73 +255,92 @@ const toNative = (
             if (held === undefined && options.removeUndefinedValues) continue
             kept[key] = held
         }
-        const deep = tooDeeplyNested(enclosing)
-        if (deep) return new CodecError(deep)
-        return andThen(
-            everyEntry(kept, (held) =>
-                toNative(held, options, write, enclosing + 1),
-            ),
-            (written) => carrying('M', written),
+        return everyEntry(kept, (held) =>
+            toCanonical(held, options, write, enclosing + 1),
         )
     }
 
     if (isBinaryValue(value)) {
-        return (value as Uint8Array).length === 0 && options.convertEmptyValues
-            ? carrying('NULL', true)
-            : carrying('B', value as Uint8Array)
+        const bytes = bytesOf(value)
+        return !failed(bytes) &&
+            bytes.length === 0 &&
+            options.convertEmptyValues
+            ? null
+            : bytes
     }
-    if (typeof value === 'boolean') return carrying('BOOL', value)
+    if (typeof value === 'boolean') return value
     if (typeof value === 'number' || typeof value === 'bigint') {
         return write(value)
     }
     if (typeof value === 'string') {
-        return value.length === 0 && options.convertEmptyValues
-            ? carrying('NULL', true)
-            : carrying('S', value)
+        return value.length === 0 && options.convertEmptyValues ? null : value
     }
     return new CodecError(
         `Unsupported type passed: ${rendered(value)}. Pass options.convertClassInstanceToMap=true to marshall typeof object as map attribute.`,
     )
 }
 
-/** A stored number, as `convertToNative` reads it — a `bigint` outside the safe range. */
-const fromNativeNumber = (digits: string): Result<unknown> =>
-    /**
-     * **`Number` reads far more than an `N` carries**, and the SDK hands it the digits unchecked:
-     * `''` and whitespace are `0`, `'0x10'` is `16`, `'abc'` is `NaN`. Each is a value this codec's
-     * own `encode` now refuses, which is **(C)** failing — the pair's two halves disagreeing about
-     * what an `N` holds. `number` and `opaque` read through the same gate, and this is the third
-     * reader of an `N`. The gate admits the stored form only, so `'1.0'` is refused: the value read
-     * would write `'1'`, and the store returns no `'1.0'`.
-     *
-     * One gate is enough here, where `number` needs two. `number`'s second gate catches a numeral
-     * that rounds *out* of range on the way into a double; this reader hands a wide value back as a
-     * `bigint` of the very digits stored, and a narrow one is inside the safe range, so nothing it
-     * returns can fail to be writable again.
-     */
-    andThen(storedNumber(digits), () => {
-        const asNumber = Number(digits)
-        const wide =
-            asNumber > Number.MAX_SAFE_INTEGER ||
-            asNumber < Number.MIN_SAFE_INTEGER
-        if (!wide || !Number.isFinite(asNumber)) return asNumber
-        try {
-            return BigInt(digits)
-        } catch {
-            return new CodecError(
-                `${digits} can't be converted to BigInt. Set options.wrapNumbers to get string value.`,
-            )
-        }
-    })
+/**
+ * A stored number, as `convertToNative` reads it — a `bigint` outside the safe range.
+ *
+ * **The canonical read has already parsed the digits.** `Number` reads far more than an `N`
+ * carries: `''` and whitespace are `0`, `'0x10'` is `16`, `'abc'` is `NaN`, and the SDK hands it the
+ * digits unchecked. Each is a value that `native.encode` refuses, which is **(C)** failing: the
+ * pair's two halves would disagree about what an `N` holds. So the read refuses every `N` that is
+ * not in the form the store returns, before this function runs, and `'1.0'` is refused because the
+ * value read would write `'1'`. A caller's `readNumber` meets that same digit string, in normal form.
+ */
+const fromNativeNumber = (digits: string): Result<unknown> => {
+    const asNumber = Number(digits)
+    const wide =
+        asNumber > Number.MAX_SAFE_INTEGER || asNumber < Number.MIN_SAFE_INTEGER
+    if (!wide || !Number.isFinite(asNumber)) return asNumber
+    try {
+        return BigInt(digits)
+    } catch {
+        return new CodecError(
+            `${digits} can't be converted to BigInt. Set options.wrapNumbers to get string value.`,
+        )
+    }
+}
+
+/**
+ * The canonical value that the store holds, as the caller holds it: each `DynamoNumber` read by
+ * `readNumber`, in a set, a list and a map.
+ */
+const toHeld = (
+    read: unknown,
+    readNumber: (digits: string) => Result<unknown>,
+): Result<unknown> => {
+    if (read instanceof DynamoNumber) return readNumber(read.digits)
+    if (Array.isArray(read)) {
+        return every(read, (item) => toHeld(item, readNumber))
+    }
+    if (read instanceof Set) {
+        return andThen(
+            every([...read], (item) => toHeld(item, readNumber)),
+            (held) => new Set(held),
+        )
+    }
+    const record = asRecord(read)
+    return record === undefined
+        ? read
+        : everyEntry(record, (item) => toHeld(item, readNumber))
+}
 
 /**
  * The AWS SDK's marshaller, as a codec.
  *
  * A port of `@aws-sdk/util-dynamodb`'s `convertToAttr` / `convertToNative`, so a table written by
- * that marshaller can be read and written byte for byte while the schema and key layers are adopted
- * around it. Not the codec to reach for in new code — {@link opaque} refuses what this guesses at,
- * which is the point of declaring a schema — but the one that makes adopting the rest of this
- * package a change of shape rather than a change of data.
+ * that marshaller can be read and written as the same stored data while the schema and key layers
+ * are adopted around it. Not the codec to reach for in new code — {@link opaque} refuses what this
+ * guesses at, which is the point of declaring a schema — but the one that makes adopting the rest of
+ * this package a change of shape rather than a change of data.
+ *
+ * **A `held` over the canonical `opaque`**, with the closures of this configuration as its tag. A
+ * container that holds `native` reads that term, so `native` in an object writes and reads as
+ * `native` alone, and two configurations are two adapters. `f` takes the caller's value to the
+ * canonical value, and `g` takes the canonical value to the caller's.
  *
  * See {@link native.ItemEncode} for what it produces, as a type.
  */
@@ -349,19 +348,25 @@ const configured = (
     options: native.Options = {},
     deviations: native.Deviations = {},
 ): AttributeCodec<unknown> => {
-    const write =
+    const writeAttribute =
         deviations.writeNumber ??
         ((value: number | bigint) => nativeNumber(value, options))
+    const write = (value: number | bigint): Result<DynamoNumber> =>
+        andThen(writeAttribute(value), (written) =>
+            memberOf(written) === 'N'
+                ? DynamoNumber.from(written.N as string)
+                : new CodecError(
+                      'the number writer returned an attribute that is no N',
+                  ),
+        )
     const read = deviations.readNumber ?? fromNativeNumber
-    // reaches the construction site rather than `custom`, and has to: a marshaller describes itself
-    // as `opaque`, which is what tells the harness how to generate a value for it, and a
-    // hand-written codec cannot claim another kind's definition. This is inside the library, so it
-    // has the site that can
-    return codec<unknown, AttributeValue>({
-        def: opaqueTerms.lossy,
-        encode: (value) => toNative(value, options, write),
-        decode: (attribute) =>
-            storedTooDeeply(attribute, 0) ?? decodeWith(read)(attribute),
+    return codecOfTerm<unknown, AttributeValue>({
+        kind: 'held',
+        inner: opaqueTerms.canonical,
+        outer: opaqueTerms.canonical,
+        f: (value: unknown) => toCanonical(value, options, write),
+        g: (held: unknown) => toHeld(held, read),
+        via: 'native',
     })
 }
 
@@ -453,11 +458,10 @@ export namespace native {
      * where the SDK's would round it, and that single branch is the difference between two marshallers
      * writing the same bytes and reading them differently.
      *
-     * They are also the way *back* to the SDK. This port's own numbers deviate from it — both halves
-     * gate on `Carries('N')`, where the SDK checks a finite double on the way in and nothing at all
-     * on the way out — so a caller migrating a table that already holds `{ N: '1e300' }` passes
-     * `readNumber: Number` and gets the SDK's reading, non-numerals and all, until the rows are
-     * repaired.
+     * They change the number type, and they do not change the numerals. The canonical `opaque` is
+     * under the pair in both directions, so a `writeNumber` that returns a non-numeral is refused on
+     * write, and a stored `N` that is no numeral is refused before `readNumber` sees it. A caller
+     * migrating a table that holds such an `N` repairs the rows first.
      */
     export type Deviations = {
         /** How a stored `N` is read. The SDK's answer is a number, widening to `bigint`. */

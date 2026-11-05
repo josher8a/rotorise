@@ -26,7 +26,7 @@ import type {
     AttributeValue,
     StoredItem,
 } from './attribute'
-import { DynamoNumber, memberOf, repeatedAt } from './attribute'
+import { DynamoNumber, memberOf } from './attribute'
 import type { LiteralValue, Shape } from './codec'
 import type { Result } from './result'
 import { CodecError, failed } from './result'
@@ -278,6 +278,26 @@ export const readTags = (
         out[name] = one
     }
     return out
+}
+
+/**
+ * The position of the first member of a wire set that repeats an earlier member, or `undefined`.
+ * DynamoDB refuses an `SS`, an `NS` or a `BS` that repeats a member, and returns none. A string
+ * member compares by its text, and a binary member by its bytes. A JavaScript `Set` compares a
+ * `Uint8Array` and a `DynamoNumber` by identity, so a `Set` does not exclude the repeat: two
+ * `Uint8Array`s with one content are two members of the `Set` and one member of the `BS`.
+ */
+const repeatedAt = (
+    members: readonly (string | Uint8Array)[],
+): number | undefined => {
+    const seen = new Set<string>()
+    for (const [at, member] of members.entries()) {
+        const key =
+            typeof member === 'string' ? `S${member}` : `B${member.join(',')}`
+        if (seen.has(key)) return at
+        seen.add(key)
+    }
+    return undefined
 }
 
 /** The family of a wire set, named by its attribute member. */
