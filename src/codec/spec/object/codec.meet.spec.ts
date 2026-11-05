@@ -504,6 +504,15 @@ describe('a factor that lies below the other is the meet', () => {
         expect(defOf(meet(all, either))).toEqual(all.def)
         expect(defOf(meet(either, all))).toEqual(all.def)
     })
+
+    /** `never` is the bottom, so it lies below every factor and the meet is `never` itself. */
+    it('meets never and any factor at never, in the type and at run time', () => {
+        const pets = union([object({ name: string }), object({ age: number })])
+        expectTypeOf(meet(never, pets)).toEqualTypeOf(never)
+        expectTypeOf(meet(pets, never)).toEqualTypeOf(never)
+        expect(defOf(meet(never, pets))).toEqual(never.def)
+        expect(defOf(meet(pets, never))).toEqual(never.def)
+    })
 })
 
 describe('two lists meet on their aligned rows', () => {

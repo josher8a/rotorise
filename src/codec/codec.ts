@@ -1653,18 +1653,12 @@ type ArrayOver<C extends AnyCodec> = AttributeCodec<
  */
 type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
     ? false
-    : [D] extends [
-            { readonly codec: { readonly def: { readonly kind: 'never' } } },
-        ]
+    : // `never`, the node that a `ref` names, and each other form that holds no value
+      HoldsNoValue<
+            TermOf<D extends { readonly codec: infer C } ? C : D>
+        > extends true
       ? true
-      : [D] extends [{ readonly def: { readonly kind: 'never' } }]
-        ? true
-        : // the node that a `ref` names, and each other form that holds no value
-          HoldsNoValue<
-                TermOf<D extends { readonly codec: infer C } ? C : D>
-            > extends true
-          ? true
-          : false
+      : false
 
 /**
  * Whether any **declared** position of a list is `never`.
@@ -5196,11 +5190,9 @@ type Distribute<
     : []
 
 /** One meet needs no union around it; several are one flat union. */
-type MeetOfTwo<X, Y> = [X] extends [
-    { readonly def: { readonly kind: 'never' } },
-]
+type MeetOfTwo<X, Y> = [TermOf<X>] extends [['never']]
     ? X
-    : [Y] extends [{ readonly def: { readonly kind: 'never' } }]
+    : [TermOf<Y>] extends [['never']]
       ? Y
       : Distribute<FactorOptions<X>, FactorOptions<Y>> extends infer Ms extends
               readonly unknown[]
@@ -9241,14 +9233,8 @@ export const discriminatedUnion = <
  * It is the zero of `union`: an empty option is compatible with every option
  * (`Closed.pairwiseCompat_never_left`, `Closed.pairwiseCompat_never_right`), so `union([X, never])` is `X`.
  */
-export const never: AttributeCodec<never, never> & {
-    readonly def: { readonly kind: 'never' }
-} & TermMark<['never']> = codecOfTerm({ kind: 'never' }) as AttributeCodec<
-    never,
-    never
-> & {
-    readonly def: { readonly kind: 'never' }
-}
+export const never: AttributeCodec<never, never> & TermMark<['never']> =
+    codecOfTerm<never, never>({ kind: 'never' })
 
 /**
  * A union told apart by what each option holds, with no tag to switch on — `zod`'s `union`.
