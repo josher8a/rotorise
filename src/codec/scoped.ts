@@ -1090,9 +1090,10 @@ const bodiesAgree = (
 
 /**
  * **Two fields read a map without the name to one value**, or one of the two reads no such map. A
- * field with a fill reads such a map to its fill value. **The host admits two fills with one
- * fill value, and the model refuses every two fills**, because the model's constants have no
- * decidable equality. So a pair with a fill at one name on each side states no compatibility row.
+ * field with a fill reads such a map to its fill value. The model's `absentAgreeG` admits a fill
+ * beside a required slot, and two fills with one fill value, by decidable equality of the slot
+ * modes. It refuses a fill beside an `optional` or `undefinable` slot, and two fills with different
+ * fill values. Every other pair agrees. {@link fillEquals} reads the equality of two fill values.
  */
 const fillsAgree = (a: Field, b: Field): boolean =>
     a.mark === 'fill'
