@@ -6,15 +6,19 @@
  * `string` is not a `Price`, so the compiler refuses the spec. The brand has to be applied
  * somewhere, and the model already says where — a branded type of either kind ships a predicate.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import {
+    at,
     CodecError,
+    type Decoded,
     decimal,
     discriminatedUnion,
     item as itemOf,
     object,
     optional,
+    ref,
     refine,
+    scope,
     string,
 } from '../../codec'
 import {
@@ -260,5 +264,34 @@ describe('brands nested inside another entity', () => {
         const withFee = itemOf(object({ fee: optional(Fee) }))
         expect(withFee.unsafeEncode({})).toEqual({})
         expect(withFee.unsafeDecode({})).toEqual({})
+    })
+})
+
+/**
+ * A brand is the decoded type of the codec, wherever the codec stands. `at` and a scope read the
+ * decoded type off the term, so the term carries the narrowed type of a refinement.
+ */
+describe('a brand at a path and in a scope', () => {
+    const Owner = object({ userId: refine(string, isUserId) })
+
+    it('keeps the brand on the codec that at locates', () => {
+        const located = at(Owner, ['userId'])
+        expectTypeOf<Decoded<typeof located>>().toEqualTypeOf<UserId>()
+        expect(located.unsafeDecode({ S: 'u1' })).toBe('u1')
+    })
+
+    it('keeps the brand on an entry of a scope', () => {
+        const S = scope({
+            Owner: object({
+                userId: refine(string, isUserId),
+                referrer: optional(ref('Owner')),
+            }),
+        })
+        expectTypeOf<
+            Decoded<typeof S.Owner>['userId']
+        >().toEqualTypeOf<UserId>()
+        expect(S.Owner.unsafeDecode({ M: { userId: { S: 'u1' } } })).toEqual({
+            userId: 'u1',
+        })
     })
 })

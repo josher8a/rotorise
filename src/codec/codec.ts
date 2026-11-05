@@ -2038,8 +2038,11 @@ type RefineOptions<Narrow> = {
 }
 
 /**
- * A codec narrowed by a predicate. The term `['refine', Tm]` keeps the term under the predicate:
- * the members of a slice and the walk of `at` read a literal through a refinement.
+ * A codec narrowed by a predicate. The term `['refine', Tm, () => Narrow]` keeps the term under
+ * the predicate, so the members of a slice and the walk of `at` read a literal through a
+ * refinement. It keeps the narrowed type too, so a path and a scope decode the brand that the
+ * predicate proves. The type sits behind a function, where a walk of the term stops: a recursive
+ * type names its own term.
  */
 export function refine<
     Wide,
@@ -2051,7 +2054,9 @@ export function refine<
     inner: AttributeCodec<Wide, A> & TermMark<Tm> & Free<F>,
     is: (value: Wide) => value is Narrow,
     options?: RefineOptions<Narrow>,
-): Refined<Narrow, A, ['refine', Tm]> & TermMark<['refine', Tm]> & Free<F>
+): Refined<Narrow, A, ['refine', Tm, () => Narrow]> &
+    TermMark<['refine', Tm, () => Narrow]> &
+    Free<F>
 export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
     is: (value: Wide) => value is Narrow,
@@ -3484,7 +3489,7 @@ type StoredPinOf<N, E> = N extends ['prim', ['literal', unknown, infer V]]
         }[number]
           ? never
           : { [I in keyof Os]: StoredPinAt<Os[I], E> }[number]
-      : N extends ['refine', infer I]
+      : N extends ['refine', infer I, ...unknown[]]
         ? StoredPinAt<I, E>
         : [LibraryInner<N>] extends [never]
           ? never
@@ -5279,7 +5284,7 @@ type HeldPairRefused<A, B> = [
 type IsPart<N> = N extends ['held', ...unknown[]] | ['legacy', unknown]
     ? true
     : false
-type IsRefine<N> = N extends ['refine', unknown] ? true : false
+type IsRefine<N> = N extends ['refine', ...unknown[]] ? true : false
 /**
  * Whether two `held` nodes carry one adapter tag. The run time meets two literal sets under one
  * adapter at the common literals ({@link commonHeldLiterals}), before it reads the refusal. The
@@ -6460,7 +6465,7 @@ type Inexact<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
         ? InexactValue<V>
         : N extends ['union', infer Os extends unknown[]]
           ? InexactAll<{ [I in keyof Os]: OptionInexact<Os[I], E> }[number]>
-          : N extends ['refine', infer I]
+          : N extends ['refine', infer I, ...unknown[]]
             ? Inexact<I, E>
             : [LibraryInner<N>] extends [never]
               ? false
@@ -7182,7 +7187,7 @@ type BelowN<A, P, EA, EP, Seen extends readonly unknown[]> = HoldsNoValue<
                         >
                       : 'u'
                   : 'u'
-              : A extends ['refine', infer I]
+              : A extends ['refine', infer I, ...unknown[]]
                 ? BelowT<I, P, EA, EP, Seen>
                 : P extends ['legacy', infer I]
                   ? A extends ['legacy', infer AI]
@@ -8188,7 +8193,7 @@ type BadPatternKey<
  */
 type RefinedSlot<PC, Seen extends readonly unknown[] = []> = NodeOf<
     TermOf<PC>
-> extends ['refine', unknown]
+> extends ['refine', ...unknown[]]
     ? true
     : IsRef<TermOf<PC>> extends true
       ? [TermOf<PC>] extends [Seen[number]]

@@ -48,7 +48,7 @@ type StoredMember<T, Env = []> = T extends ['scope', infer D, infer K]
               ? 'L'
               : T extends ['held', unknown, infer I, unknown, unknown, unknown]
                 ? StoredMember<I, Env>
-                : T extends ['refine', infer I]
+                : T extends ['refine', infer I, ...unknown[]]
                   ? StoredMember<I, Env>
                   : T extends ['legacy', infer I]
                     ? StoredMember<I, Env>
@@ -445,13 +445,15 @@ type MembersAt<T, Env, Seen extends unknown[]> = T extends ['never']
           ? { [I in keyof Os]: MembersAt<Os[I], Env, Seen> }[number]
           : T extends ['held', unknown, infer I, ...unknown[]]
             ? MembersAt<I, Env, Seen>
-            : T extends ['refine' | 'legacy', infer I]
+            : T extends ['refine', infer I, ...unknown[]]
               ? MembersAt<I, Env, Seen>
-              : StoredMember<T, Env> extends infer M
-                ? M extends 'none'
-                    ? 'wide'
-                    : M
-                : never
+              : T extends ['legacy', infer I]
+                ? MembersAt<I, Env, Seen>
+                : StoredMember<T, Env> extends infer M
+                  ? M extends 'none'
+                      ? 'wide'
+                      : M
+                  : never
 
 type Opt<S> = S extends ['optional', unknown] ? true : false
 type FloatOf<S> = S extends `${infer N extends number}` ? N : number
@@ -482,8 +484,8 @@ type FloatLits<T> = T extends ['prim', ['literal', 'number', infer S]]
 
 /**
  * The decoded type of the codec at a frame, as a function of the term. An adapter of a caller
- * decodes to the decoded type of its outer term. A refinement decodes to the decoded type of its
- * inner term, because the term carries no predicate type.
+ * decodes to the decoded type of its outer term. A refinement decodes to the type that its
+ * predicate proves, and to the decoded type of its inner term where the predicate proves nothing.
  */
 export type DecodeFrame<F> = F extends [infer T, infer Env extends unknown[]]
     ? DecodeT<T, Env>
@@ -535,8 +537,10 @@ type DecodeT<
                         : G extends ['caller', 'opaqueLossy' | 'opaqueRefuse']
                           ? unknown
                           : DecodeT<O, Env, Seen>
-                    : T extends ['refine', infer I]
-                      ? DecodeT<I, Env, Seen>
+                    : T extends ['refine', infer I, () => infer N]
+                      ? unknown extends N
+                          ? DecodeT<I, Env, Seen>
+                          : N
                       : T extends ['legacy', infer I]
                         ? DecodeT<I, Env, Seen>
                         : T extends [
@@ -647,7 +651,7 @@ type RowG<L, LE, R, RE, A extends unknown[]> = EntryOf<L, LE> extends [
         ? true
         : L extends ['held', unknown, infer I, ...unknown[]]
           ? RowG<I, LE, R, RE, A>
-          : L extends ['refine', infer I]
+          : L extends ['refine', infer I, ...unknown[]]
             ? RowG<I, LE, R, RE, A>
             : L extends ['legacy', unknown] | ['opaq']
               ? RightG<L, LE, R, RE, A, ['none']>
@@ -680,7 +684,7 @@ type RightG<L, LE, R, RE, A extends unknown[], Fam> = EntryOf<R, RE> extends [
         ? true
         : R extends ['held', unknown, infer I, ...unknown[]]
           ? RightG<L, LE, I, RE, A, Fam>
-          : R extends ['refine', infer I]
+          : R extends ['refine', infer I, ...unknown[]]
             ? RightG<L, LE, I, RE, A, Fam>
             : R extends ['union', infer Os extends unknown[]]
               ? false extends {
