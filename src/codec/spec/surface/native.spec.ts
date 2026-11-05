@@ -324,6 +324,23 @@ describe('the port refuses four things the SDK does not', () => {
         },
     )
 
+    /**
+     * A refusal reaches a log line, so a refusal that holds the attribute writes the stored data
+     * into the log. The SDK names the key of an attribute with no member, and the port names
+     * neither the key nor the value.
+     */
+    it('names no stored value when it refuses an attribute with no member', () => {
+        const stored = { petName: 'Rex' } as never
+        expect(() => sdk.convertToNative(stored)).toThrow(
+            'Unsupported type passed: petName',
+        )
+        const refused = native.decode(stored)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toBe(
+            'an AttributeValue carrying no member',
+        )
+    })
+
     it('will not read an NS holding a non-numeral', () => {
         const stored = { NS: ['1', 'abc'] } as never
         expect(sdk.convertToNative(stored)).toEqual(new Set([1, Number.NaN]))

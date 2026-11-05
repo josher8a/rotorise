@@ -1944,54 +1944,69 @@ export const storedNumber = (carried: string): Result<DynamoNumber> =>
           )
 
 /**
+ * **Reads every attribute back, with the read of an `N` given.** The one walker of an untyped read:
+ * `opaque` reads an `N` as the `DynamoNumber` that the store holds, and `native` reads an `N` as
+ * the SDK does, or by a deviation of the caller. Nothing else differs between the two.
+ *
+ * DynamoDB has no empty `SS`, `NS` or `BS`, and no set that repeats a member, so an attribute that
+ * holds one was written by something else. Reading it would hand back a value that no writer of
+ * this library produces, so the read refuses it. A refusal names the member and no stored value:
+ * a log line that writes the refusal writes no stored data.
+ */
+export const decodeWith = (
+    read: (digits: string) => Result<unknown>,
+): ((attribute: AttributeValue) => Result<unknown>) => {
+    const walk = (attribute: AttributeValue): Result<unknown> => {
+        const member = memberOf(attribute)
+        switch (member) {
+            case 'NULL':
+                return null
+            case 'S':
+            case 'B':
+            case 'BOOL':
+                return attribute[member]
+            case 'N':
+                return read(attribute.N as string)
+            case 'NS':
+            case 'SS':
+            case 'BS': {
+                const members = attribute[member] as readonly (
+                    | string
+                    | Uint8Array
+                )[]
+                return members.length === 0
+                    ? new CodecError(
+                          `DynamoDB has no empty ${member}, so this attribute was not written by it`,
+                      )
+                    : repeatedAt(members) !== undefined
+                      ? new CodecError(
+                            `DynamoDB holds no ${member} that repeats a member, so this attribute was not written by it`,
+                        )
+                      : member === 'NS'
+                        ? andThen(
+                              every(members as readonly string[], read),
+                              (numbers) => new Set(numbers),
+                          )
+                        : new Set(members)
+            }
+            case 'L':
+                return every(attribute.L ?? [], walk)
+            case 'M':
+                return everyEntry(attribute.M ?? {}, walk)
+            default:
+                return new CodecError('an AttributeValue carrying no member')
+        }
+    }
+    return walk
+}
+
+/**
  * Reads every attribute back, and a number as the `DynamoNumber` that the store holds.
  *
  * `N` and `NS` read exactly: the canonical `opaque` writes both, so a read-modify-write keeps the
  * stored type. A `Set` of `DynamoNumber`s re-encodes as the `NS` it came from.
  */
-export const decodeUnknown = (attribute: AttributeValue): Result<unknown> => {
-    const member = memberOf(attribute)
-    switch (member) {
-        case 'NULL':
-            return null
-        case 'S':
-            return attribute[member]
-        case 'N':
-            return storedNumber(attribute.N as string)
-        case 'B':
-        case 'BOOL':
-            return attribute[member]
-        case 'NS':
-        case 'SS':
-        case 'BS': {
-            // as in `set`: encode has no empty set and no repeat to offer, so decode has none to return
-            const members = attribute[member] as readonly (
-                | string
-                | Uint8Array
-            )[]
-            return members.length === 0
-                ? new CodecError(
-                      `DynamoDB has no empty ${member}, so this attribute was not written by it`,
-                  )
-                : repeatedAt(members) !== undefined
-                  ? new CodecError(
-                        `DynamoDB holds no ${member} that repeats a member, so this attribute was not written by it`,
-                    )
-                  : member === 'NS'
-                    ? andThen(
-                          every(members as readonly string[], storedNumber),
-                          (read) => new Set(read),
-                      )
-                    : new Set(members)
-        }
-        case 'L':
-            return every(attribute.L ?? [], (x) => decodeUnknown(x))
-        case 'M':
-            return everyEntry(attribute.M ?? {}, (v) => decodeUnknown(v))
-        default:
-            return new CodecError('an AttributeValue carrying no member')
-    }
-}
+export const decodeUnknown = decodeWith(storedNumber)
 
 /**
  * **A numeric policy of `opaque`, as a walk that changes the number leaves and nothing else.**

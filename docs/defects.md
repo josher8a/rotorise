@@ -238,23 +238,6 @@ instantiations is not measured.
 
 ---
 
-## Known: the native reader writes the attribute into the text of an attribute with no member
-
-**Observation.** The native reader answers an attribute that carries no member with
-`No value defined:` and the JSON of the attribute. The reader copies the text that
-`@aws-sdk/util-dynamodb` throws when it reads the attribute to a native value. Measured 2026-11-02 with
-`npx vitest --run`:
-
-    native.decode({ petName: 'Rex' })
-      error: No value defined: {"petName":"Rex"}
-
-**Effect.** The text of the refusal carries the value of the input. A log line that writes the
-error writes the stored data.
-
-**Pin.** None.
-
----
-
 ## Known: the native writer refuses a boxed primitive that the SDK writes
 
 **Observation.** The SDK reads a value by the name of its constructor, so a boxed number, a boxed

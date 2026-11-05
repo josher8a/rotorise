@@ -27,7 +27,6 @@
 
 import type { ErrorMessage, show } from '../utils'
 import type {
-    AttributeMap,
     AttributeValue,
     B,
     BOOL,
@@ -44,14 +43,18 @@ import {
     carrying,
     DynamoNumber,
     isNumeral,
-    memberOf,
     repeatedAt,
     tooDeeplyNested,
 } from './attribute'
 import { codec } from './build'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
-import { opaqueTerms, storedNumber, storedTooDeeply } from './denote'
+import {
+    decodeWith,
+    opaqueTerms,
+    storedNumber,
+    storedTooDeeply,
+} from './denote'
 import { rendered } from './value'
 
 /**
@@ -332,76 +335,6 @@ const fromNativeNumber = (digits: string): Result<unknown> =>
     })
 
 /**
- * A stored set, refused when empty or when a member repeats.
- *
- * DynamoDB has no empty `SS`, `NS` or `BS`, so an item carrying one was written by something else —
- * and {@link nativeSet} refuses to write one, either erroring or storing `NULL`. Reading it would
- * hand back a value this codec's own `encode` cannot produce, which is **(C)** failing. The SDK
- * returns an empty `Set` for all three; this does not. A repeated member is the same case: DynamoDB
- * refuses a set that repeats a member, and the SDK reads one into a `Set` that drops a string repeat
- * and keeps a binary repeat.
- */
-const storedSet = <T extends string | Uint8Array>(
-    member: 'SS' | 'NS' | 'BS',
-    members: readonly T[],
-): Result<readonly T[]> =>
-    members.length === 0
-        ? new CodecError(
-              `DynamoDB has no empty ${member}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-          )
-        : repeatedAt(members) !== undefined
-          ? new CodecError(
-                `DynamoDB holds no ${member} that repeats a member, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-            )
-          : members
-
-/** A stored value, as `@aws-sdk/util-dynamodb`'s `convertToNative` reads it. */
-const fromNative = (
-    attribute: AttributeValue,
-    read: (digits: string) => Result<unknown>,
-): Result<unknown> => {
-    const member = memberOf(attribute)
-    const carried = (attribute as Record<string, unknown>)[member as string]
-    switch (member) {
-        case 'NULL':
-            return null
-        case 'BOOL':
-            return Boolean(carried)
-        case 'N':
-            return read(carried as string)
-        case 'B':
-        case 'S':
-            return carried
-        case 'L':
-            return every(carried as readonly AttributeValue[], (one) =>
-                fromNative(one, read),
-            )
-        case 'M':
-            return everyEntry(carried as AttributeMap, (one) =>
-                fromNative(one, read),
-            )
-        case 'NS':
-            return andThen(
-                andThen(
-                    storedSet(member, carried as readonly string[]),
-                    (members) => every(members, read),
-                ),
-                (read) => new Set(read),
-            )
-        case 'BS':
-        case 'SS':
-            return andThen(
-                storedSet(member, carried as readonly (string | Uint8Array)[]),
-                (members) => new Set(members),
-            )
-        default:
-            return new CodecError(
-                `No value defined: ${JSON.stringify(attribute)}`,
-            )
-    }
-}
-
-/**
  * The AWS SDK's marshaller, as a codec.
  *
  * A port of `@aws-sdk/util-dynamodb`'s `convertToAttr` / `convertToNative`, so a table written by
@@ -428,7 +361,7 @@ const configured = (
         def: opaqueTerms.lossy,
         encode: (value) => toNative(value, options, write),
         decode: (attribute) =>
-            storedTooDeeply(attribute, 0) ?? fromNative(attribute, read),
+            storedTooDeeply(attribute, 0) ?? decodeWith(read)(attribute),
     })
 }
 
