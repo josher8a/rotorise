@@ -4931,7 +4931,13 @@ const entryNames = (key: AnyCodec): string[] => {
                 ? [one.v]
                 : []
         })
-        if (names.length === term.options.length) return names
+        if (names.length === term.options.length) {
+            // a union with no option names no key, and an empty list of names is the wildcard
+            if (names.length > 0) return names
+            throw new CodecError(
+                'an object entry key is a union with no option, which names no key',
+            )
+        }
     }
     if (term?.kind === 'string') return []
     throw new CodecError(

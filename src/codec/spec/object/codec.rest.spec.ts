@@ -181,6 +181,17 @@ describe('an open object entry', () => {
             /an object entry key must be `string` or a string literal key set/,
         )
     })
+
+    /**
+     * An entry key declares the names that it pins. A union with no option pins no name, and an
+     * empty list of names is how the wildcard reads, so the entry once opened the object to every
+     * key. The key is a typo, as an empty option list is at a union of options.
+     */
+    it('refuses a key set with no name, which would read as the wildcard', () => {
+        expect(() => object([union([]), optional(string)])).toThrow(
+            'an object entry key is a union with no option, which names no key',
+        )
+    })
 })
 
 // An absent field writes no entry, so the map of an open object holds no `undefined` entry. The
