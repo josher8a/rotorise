@@ -1548,16 +1548,23 @@ export const guard = (
 ): RecursionRefused | undefined => {
     const use = recursionUse(t)
     if (use !== 2 && use !== 3) return undefined
-    const reason =
-        entry === undefined
-            ? use === 3
-                ? `this \`${t.kind}\` term holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`
-                : `this \`${t.kind}\` term reaches a recursive \`ref\` with no list or object between. A recursion there reads its own input and does not end. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`
-            : use === 3
-              ? `[scope] '${entry}' reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion`
-              : `[scope] '${entry}' reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`
-    return new RecursionRefused(t, use, reason)
+    return new RecursionRefused(
+        t,
+        use,
+        guardReason(
+            entry === undefined
+                ? `this \`${t.kind}\` term`
+                : `[scope] '${entry}'`,
+            use,
+        ),
+    )
 }
+
+/** The text of a refusal of the model's guard, at the subject that the caller names. */
+const guardReason = (subject: string, use: 2 | 3): string =>
+    use === 3
+        ? `${subject} reaches a recursion with an adapter (\`held\` or \`withLegacyRead\`) on its path. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion. Put no adapter on the path of a recursion`
+        : `${subject} reaches a recursion with no list or object on its path. The model's guard refuses a recursion that reads the input of its own entry. Put the recursion below a list or an object`
 
 /**
  * **The judgment of one node**: the refusal of the first host rule that the node breaks, or
@@ -1644,11 +1651,9 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
             if (unboundRefs(t.options).size > 0) return undefined
             for (const [at, option] of t.options.entries()) {
                 const use = recursionUse(option)
-                if (use >= 2)
+                if (use === 2 || use === 3)
                     return new CodecError(
-                        use === 3
-                            ? `option ${at + 1} of this union reaches a \`ref\` whose entry holds an adapter (\`held\` or \`withLegacyRead\`) between a recursive \`ref\` and the entry that the \`ref\` names. Caller code makes the input of the inner term at any depth, so the model's guard refuses the recursion, and this option is not shown compatible with the others. Put no adapter on the path of a recursion`
-                            : `option ${at + 1} of this union reaches a recursive \`ref\` where the union must read it. The model's guard refuses a recursion that reads the input of its own entry, so this option is not shown compatible with the others. Put the recursion below a list or an object`,
+                        guardReason(`option ${at + 1} of this union`, use),
                     )
             }
             for (const [at, x] of t.options.entries())
