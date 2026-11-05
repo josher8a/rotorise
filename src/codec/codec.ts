@@ -5600,73 +5600,58 @@ const aligned = (
 }
 
 /**
- * **Two slots at one name meet** at the meet of their codecs, and at the meet of their absences: the
- * pairs of a row that lacks the name, which each side decodes to its own value. A slot that one side
- * leaves undeclared is the open key entry of that side, an optional slot at the block. An `opaque`
- * block is the unit of the meet, so it keeps the declared slot as it is.
+ * **Two slots at one name meet** at the meet of their codecs, and at the meet of their presence. The
+ * presence of a slot is one element of the order of {@link absentBelow}, at the order of the walk,
+ * so the meet is the greatest lower bound in that order: the mark of the side that lies below the
+ * other, and `req` where neither side does. A slot that one side leaves undeclared is the open key
+ * entry of that side, an optional slot at the block, as {@link aligned} gives it. An `opaque` block
+ * is the unit of the meet, so it keeps the declared slot as it is.
  *
- * - A required slot holds no absent row, so a required side makes the slot required.
- * - A `withLegacyRead` side decodes the absent row to its stand-in, and an `optional` or an
- *   `undefinable` side decodes it to no value. The two share no pair at the absent row, so the
- *   slot is required.
- * - `optional` reads `{}` and `{ k: undefined }` as one value, and `undefinable` reads the absent
- *   row to `{ k: undefined }`. The two share that pair, so the slot is `undefinable`, as
- *   TypeScript reads `{ k?: X } & { k: X | undefined }`.
- * - A name that a closed side does not declare pairs the absent row with a value without the key,
- *   which an `undefinable` side refuses, so the slot is required.
- * - Two `withLegacyRead` sides share the absent row where the two stand-ins are one value
- *   ({@link standInEquals}), as the model's `absentAgreeG` admits two fills only there. The slot is
- *   the stand-in over the meet of the two codecs, which writes the stand-in because both codecs
- *   write it. The meet refuses two stand-ins that differ.
+ * At the `relation` order two fills meet at a fill only where the stand-ins are one value
+ * ({@link standInEquals}), as the model's `absentAgreeG` admits two fills only there. Two fills
+ * with different stand-ins, and a fill beside an `optional` slot, share no pair at the absent row,
+ * so the slot is required over the meet of the two codecs. At the `value` order a fill reads as a
+ * required slot, so it lies below `optional` and the fill stays.
  *
  * `undefined` where a required slot meets at `never`, and the object holds no value.
  */
 const meetSlots = (
-    name: string,
     left: ObjectSlot | AnyCodec,
     right: ObjectSlot | AnyCodec,
+    [mine, theirs]: readonly [Field, Field],
     declared: readonly [boolean, boolean],
     walk: MeetWalk,
 ): ObjectSlot | undefined => {
     if (left === right) return left
-    const [mine, theirs] = declared
     // an `opaque` open block is the unit of the meet, at the absent row too
-    if (!mine && resolvedTerm(termOf(entryCodec(left)))?.kind === 'opaq') {
+    if (
+        !declared[0] &&
+        resolvedTerm(termOf(entryCodec(left)))?.kind === 'opaq'
+    ) {
         return right
     }
-    if (!theirs && resolvedTerm(termOf(entryCodec(right)))?.kind === 'opaq') {
+    if (
+        !declared[1] &&
+        resolvedTerm(termOf(entryCodec(right)))?.kind === 'opaq'
+    ) {
         return left
     }
     const held = meetOfTwo(entryCodec(left), entryCodec(right), walk)
-    // a name that a closed side does not declare pairs the absent row with a value without the key
-    const absence = (slot: ObjectSlot | AnyCodec, here: boolean) =>
-        here
-            ? fieldOf(slot).mark
-            : holdsNoValue(termOf(entryCodec(slot)))
-              ? 'absent'
-              : 'optional'
-    const marks = new Set([absence(left, mine), absence(right, theirs)])
-    if (marks.size === 1 && marks.has('fallback')) {
-        const [mine, theirs] = [fieldOf(left), fieldOf(right)]
-        if (
-            mine.mark !== 'fallback' ||
-            theirs.mark !== 'fallback' ||
-            !standInEquals(mine.v, theirs.v)
-        ) {
-            throw new CodecError(
-                `[meet] both factors read '${name}' through \`withLegacyRead\`, and the stand-ins differ: the absent row has a meet only where the two stand-ins are one value`,
-            )
-        }
-        return withMissing(held, mine.v as Decoded<typeof held>)
+    const below = absentBelow(mine, theirs, walk.order)
+        ? mine
+        : absentBelow(theirs, mine, walk.order)
+          ? theirs
+          : undefined
+    switch (below?.mark) {
+        case 'fallback':
+            return withMissing(held, below.v as Decoded<typeof held>)
+        case 'undefinable':
+            return undefinable(held)
+        case 'optional':
+            return optional(held)
+        default:
+            return holdsNoValue(termOf(held)) ? undefined : held
     }
-    if (
-        marks.has('req') ||
-        marks.has('fallback') ||
-        (marks.has('absent') && marks.has('undefinable'))
-    ) {
-        return holdsNoValue(termOf(held)) ? undefined : held
-    }
-    return marks.has('undefinable') ? undefinable(held) : optional(held)
 }
 
 /**
@@ -5699,17 +5684,21 @@ const meetObjects = (
             Object.hasOwn(right.spec, name),
         ] as const
         const slot = meetSlots(
-            name,
             own(left.spec, name) ?? codecOfTerm(mine.t),
             own(right.spec, name) ?? codecOfTerm(theirs.t),
+            [mine, theirs],
             declared,
             walk,
         )
         if (slot === undefined) return never
+        // a closed result holds no name that no side declares and that holds no value. The rule reads
+        // the slot and not its term: `undefinable` over `never` holds the absent row with the key set
+        // to `undefined`, so the name stays, and only an `optional` slot over `never` drops
         if (
             rest === undefined &&
             !(declared[0] && declared[1]) &&
-            holdsNoValue(fieldOf(slot).t)
+            holdsNoValue(fieldOf(slot).t) &&
+            fieldOf(slot).mark === 'optional'
         )
             continue
         spec[name] = slot
@@ -8333,6 +8322,27 @@ const below = (
 }
 
 /**
+ * **A slot that may be absent is the join of its absent row and its present values.** `optional` and
+ * `undefinable` give the absent row, a slot of the same mark that holds no value, and the present
+ * values, a required slot. `req` and a fill give the slot whole. This is the one place that states
+ * the split: {@link joinParts} reads it as terms, and {@link underMark} writes the absent row as a
+ * codec.
+ */
+const presenceParts = (
+    field: Field,
+): { readonly absent?: Field; readonly present: Field } =>
+    field.mark === 'optional' || field.mark === 'undefinable'
+        ? {
+              absent: { mark: field.mark, t: { kind: 'never' } },
+              present: { mark: 'req', t: field.t },
+          }
+        : { present: field }
+
+/** The codec `held` under the presence mark that {@link presenceParts} splits: `undefinable` keeps the key. */
+const underMark = (mark: Field['mark'], held: AnyCodec) =>
+    mark === 'undefinable' ? undefinable(held) : optional(held)
+
+/**
  * The most parts that {@link joinParts} builds for one term. A term past the limit stays one part,
  * and `fits` errs towards no fit. The limit refuses, and the reason is the size: the parts of an
  * object are a product of the parts of its fields, so `n` boolean fields give `2^n` parts, and the
@@ -8377,22 +8387,16 @@ const joinParts = (t: Term): Term[] => {
         case 'object': {
             const rows = product(
                 Object.entries(t.body.fields).map(([name, field]) => {
-                    const parts = joinParts(field.t)
-                    return field.mark === 'optional'
-                        ? [
-                              [
-                                  name,
-                                  { mark: 'optional', t: { kind: 'never' } },
-                              ],
-                              ...parts.map((part): [string, Field] => [
-                                  name,
-                                  { mark: 'req', t: part },
-                              ]),
-                          ]
-                        : parts.map((part): [string, Field] => [
-                              name,
-                              { ...field, t: part },
-                          ])
+                    const { absent, present } = presenceParts(field)
+                    return [
+                        ...(absent === undefined
+                            ? []
+                            : [[name, absent] as [string, Field]]),
+                        ...joinParts(present.t).map((part): [string, Field] => [
+                            name,
+                            { ...present, t: part },
+                        ]),
+                    ]
                 }),
             )
             return rows === undefined
@@ -8672,10 +8676,7 @@ const splitBy = (
                 )
             })
             if (presence && refused) {
-                const absent =
-                    declared.mark === 'undefinable'
-                        ? undefinable(never)
-                        : optional(never)
+                const absent = underMark(declared.mark, never)
                 return [...splitSlot(name, entryCodec(slot), sub), absent].map(
                     (part) => ({
                         ...state,
@@ -8982,9 +8983,7 @@ const sliceSpec = (
                 const held = same ? presence.inner : (never as AnyCodec)
                 spec[name] = (list === entry.keep
                     ? held
-                    : presence.mark === 'undefinable'
-                      ? undefinable(held)
-                      : optional(held)) as unknown as ObjectSlot
+                    : underMark(presence.mark, held)) as unknown as ObjectSlot
                 continue
             }
             if (list.some((one) => one.rest !== undefined)) {
@@ -9002,9 +9001,7 @@ const sliceSpec = (
             if (entry.at === undefined) {
                 spec[name] = (presence === undefined || list === entry.keep
                     ? codec
-                    : presence.mark === 'undefinable'
-                      ? undefinable(codec)
-                      : optional(codec)) as unknown as ObjectSlot
+                    : underMark(presence.mark, codec)) as unknown as ObjectSlot
                 continue
             }
             const at = positions.get(name) ?? new Map<number, Term>()

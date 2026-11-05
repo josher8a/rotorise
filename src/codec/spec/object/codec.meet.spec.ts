@@ -13,10 +13,13 @@ import {
     CodecError,
     decimal,
     dynamoNumber,
+    exclude,
+    fits,
     held,
     item,
     list,
     meet,
+    meetOrdered,
     never,
     nullable,
     number,
@@ -28,6 +31,7 @@ import {
     scope,
     spread,
     string,
+    termOf,
     undefinable,
     union,
     withLegacyRead,
@@ -301,34 +305,26 @@ describe('the meet of two objects at a shared name', () => {
 
     /**
      * Two stand-ins that are two values share no pair at the absent row, because the two sides
-     * decode that row to two values. The refusal names the name and says that the stand-ins differ.
+     * decode that row to two values. The meet is total, as the intersection of the two graphs is:
+     * the slot is required over the meet of the two codecs, as a fill and `optional` meet.
      */
-    it('refuses a shared name whose two fills hold stand-ins that differ', () => {
-        expect(() =>
-            meet(
-                object({
-                    a: withLegacyRead({
-                        current: string('x', 'y'),
-                        whenMissing: 'x',
-                    }),
-                }),
-                object({
-                    a: withLegacyRead({
-                        current: string('x', 'y'),
-                        whenMissing: 'y',
-                    }),
-                }),
-            ),
-        ).toThrow(/'a'.*withLegacyRead.*stand-ins differ/)
+    it('meets two fills whose stand-ins differ at a required slot', () => {
+        const fill = (whenMissing: 'x' | 'y') =>
+            object({
+                a: withLegacyRead({ current: string('x', 'y'), whenMissing }),
+            })
+        const met = item(meet(fill('x'), fill('y')))
+        expect(failed(met.decode({}))).toBe(true)
+        expect(orThrow(met.decode({ a: { S: 'x' } }))).toEqual({ a: 'x' })
     })
 
     /**
      * **A stand-in that is no `Value` compares by identity.** A `Date`, a `Map` and a class instance
      * are plain objects to `Object.keys` and hold no own key, so a test by keys read two of them as
-     * one value. Two fills of two `Date` stand-ins that hold two instants have no meet. One `Date`
-     * object is one value, and the meet keeps it.
+     * one value. Two fills of two `Date` stand-ins that hold two instants meet at a required slot. One
+     * `Date` object is one value, and the meet keeps the fill.
      */
-    it('refuses two fills whose Date stand-ins hold two instants', () => {
+    it('meets two fills whose Date stand-ins hold two instants at a required slot', () => {
         const instant: StandardSchemaV1<Date> = {
             '~standard': {
                 version: 1,
@@ -346,10 +342,14 @@ describe('the meet of two objects at a shared name', () => {
         const epoch = new Date(0)
         const fill = (stand: Date) =>
             object({ a: withLegacyRead({ current: when, whenMissing: stand }) })
-        expect(() => meet(fill(epoch), fill(new Date(1)))).toThrow(
-            /'a'.*withLegacyRead.*stand-ins differ/,
-        )
-        expect(() => meet(fill(epoch), fill(epoch))).not.toThrow()
+        expect(
+            failed(item(meet(fill(epoch), fill(new Date(1)))).decode({})),
+        ).toBe(true)
+        expect(
+            orThrow(item(meet(fill(epoch), fill(epoch))).decode({})),
+        ).toEqual({
+            a: epoch,
+        })
     })
 
     /**
@@ -1185,5 +1185,75 @@ describe('a meet over a cyclic scope entry that is a union reads the options of 
         const both: Decoded<typeof met> = { x: 'a', v: 'a' }
         const back = orThrow(met.decode(orThrow(met.encode(both))))
         expect(back).toEqual(both)
+    })
+})
+
+describe('the presence of a slot in the meet and in the order of the slice', () => {
+    const loose = (codec: unknown) =>
+        item(codec as never) as unknown as {
+            decode: (value: unknown) => unknown
+        }
+    const Legacy = object({
+        petId: withLegacyRead({ current: string, whenMissing: 'unknown' }),
+    })
+
+    /**
+     * A fill reads as a required slot at the `value` order, so it lies below `optional` and the
+     * meet keeps the fill. A union around the pattern changes no answer.
+     */
+    it('meets a fill and an optional slot at the fill, at the order of the slice', () => {
+        const optionalId = object({ petId: optional(string) })
+        const wrapped = union([optionalId, object({ age: number })])
+        expect(loose(meetOrdered(Legacy, optionalId)).decode({})).toEqual({
+            petId: 'unknown',
+        })
+        expect(loose(meetOrdered(Legacy, wrapped)).decode({})).toEqual({
+            petId: 'unknown',
+        })
+        expect(fits(termOf(Legacy), termOf(optionalId))).toBe(true)
+    })
+
+    it('meets two fills at the first fill, at the order of the slice, where the pattern holds the second', () => {
+        const other = object({
+            petId: withLegacyRead({ current: string, whenMissing: 'stray' }),
+        })
+        expect(loose(meetOrdered(Legacy, other)).decode({})).toEqual({
+            petId: 'unknown',
+        })
+    })
+
+    /**
+     * `undefinable` pairs the absent row with `{ k: undefined }`, so a slot that holds the absent
+     * row splits at it, whatever the mark. `fits` and `exclude` read the same split.
+     */
+    it('splits undefinable at its absent row, as optional', () => {
+        const Pet = object({ nickname: undefinable(string) })
+        const Named = union([
+            object({ nickname: undefinable(number) }),
+            object({ nickname: string }),
+        ])
+        expect(fits(termOf(Pet), termOf(Named))).toBe(true)
+        expect(
+            termOf(
+                (exclude as (a: unknown, b: unknown) => AnyCodec)(
+                    union([Pet]),
+                    Named,
+                ),
+            ),
+        ).toEqual({ kind: 'never' })
+    })
+
+    /**
+     * An undeclared name of a closed side is an optional slot over the block of that side. The greatest
+     * lower bound of `optional(never)` and `undefinable(string)` is `undefinable(never)`, which
+     * holds the absent row with the key set to `undefined`.
+     */
+    it('meets an undeclared name of a closed option and an undefinable name at undefinable over never', () => {
+        const Closed = object({ petId: string })
+        const Named = object({ nickname: undefinable(string) })
+        expect(termOf(meetOrdered(Closed, Named))).toEqual(
+            termOf(object({ petId: string, nickname: undefinable(never) })),
+        )
+        expect(fits(termOf(Closed), termOf(Named))).toBe(false)
     })
 })
