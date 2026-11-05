@@ -105,6 +105,22 @@ describe('a recursive entity', () => {
         for (const value of smaller) expect(value).not.toEqual(tree)
     })
 
+    /**
+     * A counterexample shrinks through the option that admits it. A union reads an option that a
+     * `ref` names as the option itself, so a shrink that matched only an `object` option by its
+     * names returned nothing for the same value behind a `ref`.
+     */
+    it('shrinks a value of a union option that a ref names, as one written directly', () => {
+        const { Owner } = scope({
+            Owner: union([ref('Pet'), string]),
+            Pet: object({ name: string }),
+        })
+        const direct = union([object({ name: string }), string])
+        const pet = { name: 'REX' }
+        expect(shrinkOf(Owner, pet)).toEqual(shrinkOf(direct, pet))
+        expect(shrinkOf(Owner, pet).length).toBeGreaterThan(0)
+    })
+
     it('holds the round-trip law over generated trees', () => {
         checkRoundTrip(Category as never, {
             count: 50,

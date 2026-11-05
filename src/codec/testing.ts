@@ -1321,26 +1321,13 @@ export const shrinkOf = (
             return out
         }
         case 'union': {
-            // A union option is told apart by name only where the value carries names. Since
-            // `nullable` builds a union, a union value is now routinely a scalar or `null`, and
-            // there the admitting option is the one to shrink through.
-            if (typeof value !== 'object' || value === null) {
-                const only = def.options.find((option) =>
-                    accepts(codecOfTerm(option), value),
-                )
-                return only ? shrinkOf(codecOfTerm(only), value) : []
-            }
-            const names = new Set(
-                Object.keys(value as Record<string, unknown>).filter(
-                    (k) => (value as Record<string, unknown>)[k] !== undefined,
-                ),
+            // The option to shrink through is the one that admits the value, by the first match that
+            // the union's own encode makes. An option behind a `ref`, a `held` or a `refine` admits
+            // as an option written directly, which a match on the names of an object did not see
+            const only = def.options.find((option) =>
+                accepts(codecOfTerm(option), value),
             )
-            const chosen = def.options.find(
-                (option) =>
-                    option.kind === 'object' &&
-                    [...names].every((name) => name in option.body.fields),
-            )
-            return chosen ? shrinkOf(codecOfTerm(chosen), value) : []
+            return only ? shrinkOf(codecOfTerm(only), value) : []
         }
         case 'refine':
             return shrinkOf(codecOfTerm(def.inner), value).filter(holds(def.q))
