@@ -29,6 +29,7 @@ import {
     itemSem,
     judged,
     literalCodec,
+    literalTermOf,
     membersOf,
     membersTooDeeply,
     opaqueTerms,
@@ -1279,18 +1280,6 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
         }
     } = codecOfTerm({ kind: 'number' }) as never
 
-/** The held side of an adapter over a finite set of numerals: the texts it hands the caller. */
-const textsOf = (texts: readonly string[]): Term => {
-    const options: Term[] = [...new Set(texts)].map((v) => ({
-        kind: 'literal',
-        base: 'string',
-        v,
-    }))
-    return options.length === 1
-        ? (options[0] as Term)
-        : { kind: 'union', options }
-}
-
 /**
  * An adapter over {@link dynamoNumber}, one conversion wide, on both halves. `held` is defined
  * further down this file, so the term is built directly; the two are the same construction.
@@ -1341,7 +1330,10 @@ const decimalCall = (...allowed: readonly string[]) => {
     return numericAdapter<string>(
         termOf(literalCapability('number')(...stored) as AnyCodec),
         // the held side is the texts the adapter hands the caller, so the view is exact
-        textsOf(stored.map((held) => held.toString())),
+        literalTermOf(
+            'string',
+            stored.map((held) => held.toString()),
+        ),
         storedOnly,
         (held) => held.toString(),
         'decimalText',

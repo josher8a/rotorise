@@ -121,7 +121,7 @@ export const literalCodec = <T extends LiteralValue>(
  * what this form costs, and this form is flat in the number of alternatives. So the union is what
  * the term is and the call is what the caller writes.
  */
-const literalTermOf = (
+export const literalTermOf = (
     base: LiteralBase,
     allowed: readonly LiteralValue[],
 ): Term => {
