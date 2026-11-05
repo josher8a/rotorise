@@ -938,7 +938,12 @@ export const byTagSem = <V>(
                     `'${name}' chooses the variant and was not given`,
                 )
             }
-            out[name] = String(tag)
+            // a tag is its stored text, and a number spells that text through the carrier:
+            // `String(1e21)` is '1e+21', and the store holds '1000000000000000000000'
+            const text =
+                typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
+            if (failed(text)) return text
+            out[name] = String(text)
         }
         return out
     },

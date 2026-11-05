@@ -19,9 +19,11 @@ import { describe, expect, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
 import type { AnyObjectCodec } from '../../codec'
 import {
+    decimal,
     discriminatedUnion,
     item,
     mdunion,
+    number,
     object,
     ref,
     scope,
@@ -62,6 +64,30 @@ describe('two options answering to the same tag', () => {
                 object({ type: string('A'), y: string }),
             ]),
         ).toThrow(/two options answer to 'type' = 'A'/)
+    })
+
+    /** The lookup keys a tag by its text, so tags at two bases that print one text are one tag. */
+    it('is refused where the two tags are one text at two bases', () => {
+        const _wrong = () =>
+            // @ts-expect-error both options answer to '1'
+            discriminatedUnion('type', [
+                object({ type: number(1), x: string }),
+                object({ type: decimal('1'), y: string }),
+            ])
+        expect(typeof _wrong).toBe('function')
+        const _alsoWrong = () =>
+            // @ts-expect-error both options answer to '1'
+            discriminatedUnion('type', [
+                object({ type: string('1'), x: string }),
+                object({ type: number(1), y: string }),
+            ])
+        expect(typeof _alsoWrong).toBe('function')
+        expect(() =>
+            declare('type', [
+                object({ type: number(1), x: string }),
+                object({ type: decimal('1'), y: string }),
+            ]),
+        ).toThrow(/two options answer to 'type' = '1'/)
     })
 
     /**
@@ -235,5 +261,30 @@ describe('a tag declared through a ref', () => {
         expect(
             byKind.decode({ M: { kind: { S: 'pet' }, toy: { S: 't' } } }),
         ).toEqual({ kind: 'pet', toy: 't' })
+    })
+})
+
+/**
+ * The store holds a number tag in its normal text, and JS spells some numbers with an exponent:
+ * `String(1e21)` is '1e+21'. The write keys the tag by the stored text, as the read does.
+ */
+describe('a number tag that JS spells with an exponent', () => {
+    const Litter = discriminatedUnion('size', [
+        object({ size: number(1e21), name: string }),
+        object({ size: number(1e-7), name: string }),
+    ])
+
+    it('writes the variant that the read of the same item reaches', () => {
+        const stored = {
+            size: { N: '1000000000000000000000' },
+            name: { S: 'Rex' },
+        }
+        const read = item(Litter).decode(stored)
+        expect(read).toEqual({ size: 1e21, name: 'Rex' })
+        expect(item(Litter).encode({ size: 1e21, name: 'Rex' })).toEqual(stored)
+        expect(item(Litter).encode({ size: 1e-7, name: 'Rex' })).toEqual({
+            size: { N: '0.0000001' },
+            name: { S: 'Rex' },
+        })
     })
 })

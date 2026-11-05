@@ -6728,9 +6728,13 @@ type MultiTaggedAnywhere<
  * **At some key, not at the first.** Two members of a dissection are distinct when their
  * assignments differ anywhere, and asking that of every key at once is what makes the answer
  * independent of how the keys were written.
+ *
+ * **A tag is its text**, as the lookup keys it: `string('1')`, `number(1)` and `decimal('1')` each
+ * answer to '1'. The type spells a number as a template does, so a number with an exponent form
+ * differs from its stored text here.
  */
 type DiffersSomewhere<A, B, Ks extends readonly PropertyKey[]> = true extends {
-    [K in Ks[number]]: [TagsOf<A, K> & TagsOf<B, K>] extends [never]
+    [K in Ks[number]]: [`${TagsOf<A, K>}` & `${TagsOf<B, K>}`] extends [never]
         ? true
         : false
 }[Ks[number]]
