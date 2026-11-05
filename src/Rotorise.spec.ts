@@ -722,7 +722,7 @@ describe('DynamoDB Utils', () => {
                 GSI1SK: {
                     discriminator: 'a',
                     spec: {
-                        a2: 'b',
+                        a2: ['b'],
                         a1: [
                             'a',
                             'b',
@@ -774,7 +774,7 @@ describe('DynamoDB Utils', () => {
                   readonly PK: 'A-a2-B-2-C-VERDADERO' | 'A-a2-B-2-C-FALSO'
                   readonly SK: 2
                   readonly GSI1PK: 2
-                  readonly GSI1SK: 2
+                  readonly GSI1SK: 'B-2'
                   readonly GSI2PK: 2
               })
         >
@@ -864,7 +864,7 @@ describe('DynamoDB Utils', () => {
                 b: 2,
                 // z: 'never',
             }),
-        ).toBe(2)
+        ).toBe('B-2')
 
         expect(
             testTableEntry.key('GSI2PK', {

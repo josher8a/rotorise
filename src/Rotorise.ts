@@ -31,7 +31,8 @@ import {
     pathBuilder,
 } from './codec/codec'
 import { native } from './codec/native'
-import type { Field } from './codec/term'
+import type { Field, Term } from './codec/term'
+import { member } from './codec/term'
 import { own } from './codec/value'
 import type {
     DistributiveOmit,
@@ -927,12 +928,30 @@ type KeyLeaves<Spec> = string extends Spec
             ? KeyLeaves<ArmOfCases<C>>
             : never
 
-/** The members that the attributes of a key spec give. */
-type KeyMembers<E, Enc, Spec> = KeyLeaves<Spec> extends infer N
-    ? N extends string
-        ? MemberOfName<E, Enc, N>
-        : never
-    : never
+/** The arms of a key spec that are a list of components, at any depth of a match. */
+type KeyListArms<Spec> = string extends Spec
+    ? never
+    : Spec extends string
+      ? never
+      : Spec extends readonly unknown[]
+        ? 'S'
+        : Spec extends { spec: infer Arms }
+          ? KeyListArms<Arms[keyof Arms]>
+          : Spec extends { cases: infer C }
+            ? KeyListArms<ArmOfCases<C>>
+            : never
+
+/**
+ * The members that the arms of a key spec give. A list of components prints one string, so it is
+ * `S`, with a codec or without one.
+ */
+type KeyMembers<E, Enc, Spec> =
+    | KeyListArms<Spec>
+    | (KeyLeaves<Spec> extends infer N
+          ? N extends string
+              ? MemberOfName<E, Enc, N>
+              : never
+          : never)
 
 /**
  * One attribute that is a key, against its member. A key attribute of DynamoDB is `S`, `N` or `B`,
@@ -960,7 +979,7 @@ type NoKeyMember<
     Name extends string,
 > = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B`>
 
-/** A key spec against the members of its attributes. A list of components is `S` and needs no check. */
+/** A key spec against the members of its attributes. A list of components is `S` and joins the members of the arms. */
 type ValidateKeyCarrier<
     E,
     Enc,
@@ -2462,6 +2481,26 @@ const notAKey = (name: string): RotoriseError =>
     )
 
 /**
+ * The attribute that the first slot which writes the value gives, or the refusal of the last slot,
+ * or `undefined` where no slot holds the field. A slot is a codec, or a field that marks a codec.
+ */
+const keyAttribute = (
+    slots: readonly ObjectSlot[],
+    value: unknown,
+): AttributeValue | CodecError | undefined => {
+    let refused: CodecError | undefined
+    for (const slot of slots) {
+        const codec = ('codec' in slot ? slot.codec : slot) as {
+            readonly encode: (value: unknown) => AttributeValue | CodecError
+        }
+        const written = codec.encode(value)
+        if (!(written instanceof CodecError)) return written
+        refused = written
+    }
+    return refused
+}
+
+/**
  * A key as the attribute that an encoding wrote: `S`, `N` or `B`, and a refusal of any other member.
  * DynamoDB refuses an empty `S` or `B` value at a key of a table or an index, so the empty value is
  * refused here too. The refusal names the key and holds no value.
@@ -2485,11 +2524,6 @@ const keyOfAttribute = (
     }
     throw notAKey(name)
 }
-
-/** Two attributes that write the same member and the same text. */
-const sameAttribute = (a: AttributeValue, b: AttributeValue): boolean =>
-    memberOf(a) === memberOf(b) &&
-    String(Object.values(a)[0]) === String(Object.values(b)[0])
 
 /**
  * The top-level attribute that a key of one attribute reads at an item: the bare name of the spec,
@@ -3035,58 +3069,111 @@ export const tableEntry =
                 String(written) === String(constant))
 
         /**
-         * The attribute that the codec writes at one field of an item, as the row holds it.
+         * The member that the codec stores at a field, or `undefined` where the term states none.
          *
-         * An item codec writes the field alone. A tagged codec chooses its variant by the
-         * discriminator, so the patch carries the discriminator too. An item without the
-         * discriminator asks every variant. The variants that write the field agree on one
-         * attribute, or the key has no one member and the refusal names the field.
+         * `NULL` is the member of a value that gives no key, so it is no member of a key. A union
+         * that stores two other members stores the field as more than one type, which the key
+         * refuses.
          */
-        const writtenAt = (
-            codec: ItemCodecRuntime | TaggedRuntime,
-            field: string,
-            item: Record<string, unknown>,
-        ): AttributeValue | CodecError | undefined => {
-            const encoded = (
-                patch: Record<string, unknown>,
-            ): AttributeValue | CodecError | undefined => {
-                const map = codec.encodePartial(patch as never)
-                return map instanceof CodecError
-                    ? map
-                    : (map as AttributeMap)[field]
-            }
-            if (!isTagged(codec)) return encoded({ [field]: item[field] })
-            const tag = codec.discriminator
-            if (item[tag] !== undefined)
-                return encoded({ [tag]: item[tag], [field]: item[field] })
-            const found: AttributeValue[] = []
-            for (const variant of Object.keys(codec.spec)) {
-                const attribute = encoded({
-                    [tag]: variant,
-                    [field]: item[field],
-                })
+        const storedAt = (slot: ObjectSlot): Set<AttributeName> => {
+            const def = (slot as { readonly def: Term | Field }).def
+            const walk = (t: Term): Set<AttributeName> => {
+                if (t.kind === 'union')
+                    return new Set(t.options.flatMap((o) => [...walk(o)]))
                 if (
-                    attribute !== undefined &&
-                    !(attribute instanceof CodecError)
+                    t.kind === 'held' ||
+                    t.kind === 'refine' ||
+                    t.kind === 'legacy'
                 )
-                    found.push(attribute)
+                    return walk(t.inner)
+                const stored = member(t)
+                return new Set(stored === undefined ? [] : [stored])
             }
-            const [first, ...others] = found
-            if (first === undefined) return undefined
-            if (others.some((other) => !sameAttribute(first, other)))
-                throw new RotoriseError(
-                    `'${field}' is written as different attributes by different variants, and the item holds no '${tag}'. Give '${tag}' so that the key has one member.`,
-                )
-            return first
+            const found = walk('mark' in def ? def.t : def)
+            found.delete('NULL')
+            return found
         }
+
+        /**
+         * The slots that the codec declares at a top-level field: one for each variant that has it.
+         * An item that names its variant by the discriminator reads that variant alone.
+         */
+        const slotsAt = (
+            field: string,
+            item?: Record<string, unknown>,
+        ): ObjectSlot[] => {
+            if (attributes === undefined) return []
+            if (!isTagged(attributes)) {
+                const slot = own(attributes.spec, field)
+                return slot === undefined ? [] : [slot]
+            }
+            const named = item?.[attributes.discriminator]
+            const variants =
+                named === undefined
+                    ? Object.values(attributes.spec)
+                    : [own(attributes.spec, String(named))]
+            return variants
+                .map((variant) => variant && own(variant, field))
+                .filter((slot) => slot !== undefined)
+        }
+
+        /**
+         * The one member that a key stores, decided at construction from the codec.
+         *
+         * A list of components prints one string, so it is `S`. A top-level attribute takes the member
+         * that the codec stores at the attribute, in every variant that holds it. All arms of a key
+         * give one member, as the model gives one member to a key name. A path, a `null` arm and a
+         * field whose term states no member add none. An entry without a codec has no member here, and
+         * the run time reads the member of the value. The type refuses arms that disagree.
+         */
+        const memberOfKey = (
+            name: string,
+            spec: unknown,
+        ): AttributeName | undefined => {
+            const found = new Map<AttributeName, string>()
+            const arm = (value: unknown): void => {
+                if (isMatch(value)) {
+                    for (const next of Object.values(
+                        (value.spec ?? {}) as Record<string, unknown>,
+                    ))
+                        arm(next)
+                } else if (Array.isArray(value)) {
+                    found.set('S', 'a list of components')
+                } else if (typeof value === 'string' && !value.includes('.')) {
+                    for (const slot of slotsAt(value))
+                        for (const stored of storedAt(slot))
+                            if (!found.has(stored))
+                                found.set(
+                                    stored,
+                                    [...found.values()].includes(`'${value}'`)
+                                        ? `'${value}' in another variant`
+                                        : `'${value}'`,
+                                )
+                }
+            }
+            arm(spec)
+            const [first, second] = [...found]
+            if (second !== undefined) {
+                throw new RotoriseError(
+                    `'${name}' stores ${first?.[1]} as ${first?.[0]} and ${second[1]} as ${second[0]}. A key attribute has one type, so the arms of a key give one member.`,
+                )
+            }
+            return first?.[0]
+        }
+
+        /** The member of each key name, decided once. Construction refuses a key whose arms disagree. */
+        const keyMembers = new Map(
+            keys.map((key) => [key.name, memberOfKey(key.name, key.spec)]),
+        )
 
         /**
          * A built key as the attribute that carries it.
          *
          * A key of one top-level attribute of an entry with a codec takes the attribute that the
          * codec writes for that field, as the row holds it: a decimal that the codec writes as `N`
-         * is an `N` key. Any other key takes the member that `native` writes. A codec that has no
-         * `encodePartial` is no item codec, and its keys take the second rule.
+         * is an `N` key. The variants that hold the field store one member, so the first variant
+         * that writes the value gives the attribute, and the variant that the item names comes
+         * first. Any other key takes the member that `native` writes.
          */
         const carried = (
             name: string,
@@ -3101,12 +3188,17 @@ export const tableEntry =
             if (field === undefined) return asKey(name, value)
             const encoded =
                 written?.[field] ??
-                (attributes === undefined
-                    ? undefined
-                    : writtenAt(attributes, field, item))
-            return encoded === undefined
-                ? asKey(name, value)
-                : keyOfAttribute(name, encoded)
+                keyAttribute(slotsAt(field, item), item[field])
+            if (encoded === undefined) return asKey(name, value)
+            const stored = keyMembers.get(name)
+            // the member is decided at construction, so a write at another member is no key
+            if (
+                stored !== undefined &&
+                !(encoded instanceof CodecError) &&
+                memberOf(encoded) !== stored
+            )
+                throw notAKey(name)
+            return keyOfAttribute(name, encoded)
         }
 
         const keyUpdates = (

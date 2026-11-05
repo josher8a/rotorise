@@ -140,33 +140,29 @@ describe('the codec decides the member of a key of one top-level attribute', () 
             })
         })
 
-        it('refuses a key that the variants write as two members, where the item holds no discriminator', () => {
-            const Split = tableEntry<Tagged>()(
-                // @ts-expect-error the type refuses a key that two variants write as S and N
-                { PK: ['litterId'], GSI1SK: 'weight' },
-                {
-                    codec: item(
-                        discriminatedUnion('kind', [
-                            object({
-                                kind: string('DOG'),
-                                litterId: string,
-                                weight: decimal,
-                            }),
-                            object({
-                                kind: string('CAT'),
-                                litterId: string,
-                                weight: string,
-                            }),
-                        ]),
-                    ),
-                },
-            )
-            expect(() => Split.keyUpdates({ weight: '2.25' })).toThrow(
-                /written as different attributes by different variants/,
-            )
-            expect(
-                Split.keys(['GSI1SK'], { kind: 'CAT', weight: '2.25' }),
-            ).toEqual({ GSI1SK: { S: '2.25' } })
+        it('refuses at construction a key that the variants write as two members', () => {
+            const split = () =>
+                tableEntry<Tagged>()(
+                    // @ts-expect-error the type refuses a key that two variants write as S and N
+                    { PK: ['litterId'], GSI1SK: 'weight' },
+                    {
+                        codec: item(
+                            discriminatedUnion('kind', [
+                                object({
+                                    kind: string('DOG'),
+                                    litterId: string,
+                                    weight: decimal,
+                                }),
+                                object({
+                                    kind: string('CAT'),
+                                    litterId: string,
+                                    weight: string,
+                                }),
+                            ]),
+                        ),
+                    },
+                )
+            expect(split).toThrow(/arms of a key give one member/)
         })
     })
 
