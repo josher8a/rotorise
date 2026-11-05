@@ -482,7 +482,12 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
                 r,
             )
         }
-        default:
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+        case 'literal':
             return rightRows(
                 c,
                 restart,
@@ -494,6 +499,9 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
                     ),
                 r,
             )
+        // the arm for a kind that has no row is the build error, so a new kind is not a primitive
+        default:
+            return t satisfies never
     }
 }
 
@@ -1014,8 +1022,19 @@ const agreeRow = (k: Agreement, table: Table, l: At, r: At): boolean => {
                     ),
                 r,
             )
-        default:
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+        case 'literal':
+        case 'legacy':
+        case 'opaq':
+        case 'ref':
             return rightRows(k, restart, base, r)
+        // the arm for a kind that has no row is the build error
+        default:
+            return t satisfies never
     }
 }
 

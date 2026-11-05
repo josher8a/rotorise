@@ -1059,8 +1059,19 @@ export const mapChildren = (
         case 'legacy':
             return { ...t, inner: view(t.inner) }
         // a term with no child term reads as itself in every view
-        default:
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+        case 'literal':
+        case 'opaq':
+        case 'never':
+        case 'ref':
             return t
+        // the arm for a kind that has no row is the build error, so a new container is not a leaf
+        default:
+            return t satisfies never
     }
 }
 
@@ -1234,8 +1245,19 @@ export const sameTerm = (x: Term, y: Term): boolean => {
             // a `ref` with no target is equal to itself only, which the identity test above answers
             case 'ref':
                 return false
-            default:
+            // a kind that carries nothing is equal to the same kind
+            case 'string':
+            case 'number':
+            case 'boolean':
+            case 'binary':
+            case 'null':
+            case 'opaq':
+            case 'never':
                 return l.kind === r.kind
+            // the arm for a kind that has no row is the build error, so a new kind with a payload
+            // is not equal by its kind alone
+            default:
+                return l satisfies never
         }
     }
     return same(x, y)
@@ -1296,9 +1318,19 @@ export const childrenOf = (
         case 'refine':
         case 'legacy':
             return [t.inner]
-        // a ground kind, a literal, `opaque`, `never` and a `ref` hold no child term
-        default:
+        // a ground kind, a literal, `opaque` and `never` hold no child term
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+        case 'literal':
+        case 'opaq':
+        case 'never':
             return []
+        // the arm for a kind that has no row is the build error, so a new container is not a leaf
+        default:
+            return t satisfies never
     }
 }
 

@@ -1665,8 +1665,20 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
         // that binds it runs the guard, so the guard below would read a free name
         case 'ref':
             return undefined
-        default:
+        // a kind with no construction rule of its own reaches the guard only
+        case 'string':
+        case 'number':
+        case 'boolean':
+        case 'binary':
+        case 'null':
+        case 'literal':
+        case 'refine':
+        case 'opaq':
+        case 'never':
             break
+        // the arm for a kind that has no row is the build error, so a new kind states its rule
+        default:
+            return t satisfies never
     }
     // **A recursion that the model's guard refuses is refused where its term is declared.** A path
     // with no container reads the input of its own entry, and encode then overflows the stack. A
