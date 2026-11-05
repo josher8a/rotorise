@@ -64,6 +64,7 @@ import {
     targetOf,
 } from './term'
 import { arbitraryOf, rngFrom } from './testing'
+import { own } from './value'
 
 /** A term that this module cannot print as library calls. */
 export class TypeUnemittable extends Error {
@@ -819,7 +820,7 @@ const patternsOf = (
     }
     for (const name of named.keys()) {
         const field = (o: Term) =>
-            o.kind === 'object' ? o.body.fields[name] : undefined
+            o.kind === 'object' ? own(o.body.fields, name) : undefined
         if (
             !options.some((o) => holdsBoolean(field(o)?.t ?? { kind: 'never' }))
         )

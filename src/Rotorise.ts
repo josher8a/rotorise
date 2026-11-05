@@ -32,6 +32,7 @@ import {
 } from './codec/codec'
 import { native } from './codec/native'
 import type { Field } from './codec/term'
+import { own } from './codec/value'
 import type {
     DistributiveOmit,
     DistributivePick,
@@ -2584,7 +2585,7 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
 const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
     let agreed: unknown
     for (const name of Object.keys(codec.spec)) {
-        const found = codec.spec[name]?.[component]
+        const found = own(codec.spec, name)?.[component]
         const value = found && constantOf(found)
         if (value === undefined) return undefined
         if (agreed === undefined) agreed = value
@@ -2901,7 +2902,7 @@ export const tableEntry =
                   : (component: string) => {
                         // the spec and not `field`, which hands back the codec a member marks:
                         // the two marks are the answer here, so the declaration is what is read
-                        const found = attributes.spec[component]
+                        const found = own(attributes.spec, component)
                         return found && constantOf(found)
                     }
 
@@ -2948,7 +2949,7 @@ export const tableEntry =
             [...components].filter(
                 (component) =>
                     relatedToAny(component, Object.keys(changed)) &&
-                    !(component in decided),
+                    !Object.hasOwn(decided, component),
             )
 
         /**
@@ -2962,7 +2963,9 @@ export const tableEntry =
             given: Record<string, unknown>,
         ): Set<string> => {
             const block = new Set(
-                Object.keys(changed).filter((name) => !(name in decided)),
+                Object.keys(changed).filter(
+                    (name) => !Object.hasOwn(decided, name),
+                ),
             )
             for (let grew = true; grew; ) {
                 grew = false
@@ -2972,7 +2975,10 @@ export const tableEntry =
                     if (![...components].some((c) => relatedToAny(c, block)))
                         continue
                     for (const component of components) {
-                        if (component in decided || block.has(component))
+                        if (
+                            Object.hasOwn(decided, component) ||
+                            block.has(component)
+                        )
                             continue
                         block.add(component)
                         grew = true
@@ -3116,7 +3122,7 @@ export const tableEntry =
             // of that attribute. The message names the constant and never the written value
             for (const name of Object.keys(decided)) {
                 if (
-                    name in changed &&
+                    Object.hasOwn(changed, name) &&
                     !sameConstant(changed[name], decided[name])
                 ) {
                     throw new RotoriseError(
@@ -3145,7 +3151,7 @@ export const tableEntry =
                 for (const component of components) {
                     if (
                         relatedToAny(component, changedNames) &&
-                        !(component in decided)
+                        !Object.hasOwn(decided, component)
                     )
                         touches = true
                     else if (!holdsPath(component, givenNames)) lacks = true

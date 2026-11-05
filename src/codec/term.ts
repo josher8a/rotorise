@@ -27,7 +27,7 @@ import type {
     SetSlot,
 } from './codec'
 import { CodecError } from './result'
-import { asRecord, sameLiteral } from './value'
+import { asRecord, own, sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
@@ -1228,8 +1228,8 @@ export const sameTerm = (x: Term, y: Term): boolean => {
                 return (
                     names.length === Object.keys(r.body.fields).length &&
                     names.every((name) => {
-                        const one = l.body.fields[name]
-                        const other = r.body.fields[name]
+                        const one = own(l.body.fields, name)
+                        const other = own(r.body.fields, name)
                         return (
                             one !== undefined &&
                             other !== undefined &&

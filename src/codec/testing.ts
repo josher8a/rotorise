@@ -1280,7 +1280,9 @@ export const shrinkOf = (
             const held = value as Record<string, unknown>
             const out: Record<string, unknown>[] = []
             // a name the open block holds is optional, so it drops and it shrinks through the block
-            const open = Object.keys(held).filter((name) => !(name in fields))
+            const open = Object.keys(held).filter(
+                (name) => !Object.hasOwn(fields, name),
+            )
             const restCodec = rest && codecOfTerm(rest)
             // dropping a whole attribute is the bigger reduction, so try it first
             if (restCodec) {
@@ -1292,7 +1294,7 @@ export const shrinkOf = (
             for (const name in fields) {
                 const mark = fields[name]?.mark
                 if (mark !== 'optional' && mark !== 'undefinable') continue
-                if (!(name in held)) continue
+                if (!Object.hasOwn(held, name)) continue
                 if (mark === 'undefinable') {
                     if (held[name] === undefined) continue
                     out.push({ ...held, [name]: undefined })
@@ -1303,7 +1305,7 @@ export const shrinkOf = (
             }
             for (const name in fields) {
                 const field = fields[name]
-                if (field === undefined || !(name in held)) continue
+                if (field === undefined || !Object.hasOwn(held, name)) continue
                 for (const smaller of shrinkOf(
                     codecOfTerm(field.t),
                     held[name],

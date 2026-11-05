@@ -28,6 +28,7 @@ import {
     targetOf,
     unionAlternatives,
 } from './term'
+import { own } from './value'
 
 /** The term, or one of its two views. */
 type Mode = 'raw' | 'caller' | 'stored'
@@ -473,7 +474,7 @@ const row = (c: Ctx, table: Table, l: At, r: At): boolean => {
                               ) ||
                               Object.entries(u.body.fields).some(
                                   ([name, field]) =>
-                                      !(name in body.fields) &&
+                                      !Object.hasOwn(body.fields, name) &&
                                       markOf(field, c.right.mode) === 'req' &&
                                       block(childAt(c.right, field.t, closed)),
                               )
@@ -556,7 +557,7 @@ const slotAt = (
     name: string,
     closed: boolean,
 ): { readonly mark: 'req' | 'opt' | 'fill'; readonly at: At } => {
-    const field = b.fields[name]
+    const field = own(b.fields, name)
     if (field !== undefined)
         return {
             mark: markOf(field, side.mode),
@@ -1051,7 +1052,7 @@ const bodiesAgree = (
     closed: { readonly left: boolean; readonly right: boolean },
 ): boolean => {
     const fieldOf = (body: Body, name: string): Field =>
-        body.fields[name] ?? { mark: 'optional', t: body.rest ?? never }
+        own(body.fields, name) ?? { mark: 'optional', t: body.rest ?? never }
     const absent = (name: string) =>
         k.half === 'write' || standInsAgree(fieldOf(a, name), fieldOf(b, name))
     return (

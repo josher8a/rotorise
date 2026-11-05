@@ -74,6 +74,7 @@ import {
     expect,
     namedLiteral,
     namesOf,
+    own,
     rendered,
     sameLiteral,
     shapeOf,
@@ -220,7 +221,7 @@ export const assignmentOf = (
 ): Result<Readonly<Record<string, string>>> => {
     const out: Record<string, string> = {}
     for (const name of ks) {
-        const field = body.fields[name]
+        const field = own(body.fields, name)
         if (field === undefined) {
             return new CodecError(
                 `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them declares no '${name}' — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
@@ -389,7 +390,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
         encode: (held, enclosing = 0) => {
             const out: Record<string, AttributeValue> = {}
             for (const { name, pair: attribute, optional } of declared) {
-                const value = held[name]
+                const value = own(held, name)
                 if (value === undefined) {
                     if (optional) continue
                     return new CodecError(
@@ -402,7 +403,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
             }
             for (const name in held) {
                 const value = held[name]
-                if (name in of || value === undefined) continue
+                if (Object.hasOwn(of, name) || value === undefined) continue
                 // a closed body refuses an undeclared name on both sides, as the model's body does.
                 // A write that dropped the name read back a different value, and a union that
                 // admits by attempt reads this refusal to tell two closed options apart
@@ -430,7 +431,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 keyed,
                 absent,
             } of declared) {
-                const attribute = item[name]
+                const attribute = own(item, name)
                 if (attribute === undefined) {
                     // before the skip: the key survives an omitted attribute
                     if (keyed) {
@@ -455,7 +456,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 out[name] = read
             }
             for (const name in item) {
-                if (name in of) continue
+                if (Object.hasOwn(of, name)) continue
                 if (!restPair) {
                     return new CodecError(
                         `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
@@ -932,7 +933,7 @@ export const byTagSem = <V>(
     tagOf: (item) => {
         const out: Record<string, string> = {}
         for (const name of ks) {
-            const tag = item[name]
+            const tag = own(item, name)
             if (tag === undefined) {
                 return new CodecError(
                     `'${name}' chooses the variant and was not given`,
@@ -2368,7 +2369,7 @@ export const optionOfTerm = (def: Term): Option => {
         }
         const requires = [...declares].filter((name) =>
             bodies.every((body) => {
-                const field = body.fields[name]
+                const field = own(body.fields, name)
                 return !!field && alwaysWritten(field)
             }),
         )

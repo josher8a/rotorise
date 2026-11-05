@@ -48,6 +48,15 @@ export const asRecord = (
         : undefined
 }
 
+/**
+ * The value that a record holds at a name of its own, and `undefined` at any other name. A plain
+ * index reads the prototype chain, so `held.toString` is the inherited function and not a value.
+ */
+export const own = <T>(
+    record: Readonly<Record<string, T>>,
+    name: string,
+): T | undefined => (Object.hasOwn(record, name) ? record[name] : undefined)
+
 /** The kind of a value, read as coarsely as {@link carries} declares it. */
 export const shapeOf = (value: unknown): Shape | undefined =>
     typeof value === 'string'

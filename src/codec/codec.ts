@@ -109,6 +109,7 @@ import {
     describeShape,
     namedLiteral,
     namesOf,
+    own,
     readTags,
     sameLiteral,
 } from './value'
@@ -4727,7 +4728,7 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
                 if (value === undefined) continue
                 // a name the spec does not declare is written through the open entry, as `encode`
                 // writes it
-                const term = fields[name]?.t ?? itemDef.body.rest
+                const term = own(fields, name)?.t ?? itemDef.body.rest
                 if (!term) {
                     return new CodecError(`'${name}' is not an attribute`)
                 }
@@ -4973,7 +4974,7 @@ export function object(
             continue
         }
         for (const name of names) {
-            if (name in fields) {
+            if (Object.hasOwn(fields, name)) {
                 throw new CodecError(`'${name}' is declared more than once`)
             }
             fields[name] = slot
@@ -5585,7 +5586,10 @@ const aligned = (
     [left, right]: MeetReadings,
 ): readonly (readonly [string, Field, Field])[] => {
     const at = (body: Body, name: string, reading: MeetReading): Field =>
-        body.fields[name] ?? { mark: 'optional', t: blockOf(body, reading) }
+        own(body.fields, name) ?? {
+            mark: 'optional',
+            t: blockOf(body, reading),
+        }
     return [
         ...new Set([...Object.keys(a.fields), ...Object.keys(b.fields)]),
     ].map((name): readonly [string, Field, Field] => [
@@ -5690,11 +5694,14 @@ const meetObjects = (
         block === undefined || holdsNoValue(termOf(block)) ? undefined : block
     const spec: Record<string, ObjectSlot> = {}
     for (const [name, mine, theirs] of aligned(A.body, B.body, walk.readings)) {
-        const declared = [name in left.spec, name in right.spec] as const
+        const declared = [
+            Object.hasOwn(left.spec, name),
+            Object.hasOwn(right.spec, name),
+        ] as const
         const slot = meetSlots(
             name,
-            left.spec[name] ?? codecOfTerm(mine.t),
-            right.spec[name] ?? codecOfTerm(theirs.t),
+            own(left.spec, name) ?? codecOfTerm(mine.t),
+            own(right.spec, name) ?? codecOfTerm(theirs.t),
             declared,
             walk,
         )
@@ -8249,7 +8256,8 @@ const slotBelow = (
     wanted: Field,
     order: Order,
 ): boolean =>
-    (!(name in pattern.fields) && resolvedTerm(wanted.t)?.kind === 'opaq') ||
+    (!Object.hasOwn(pattern.fields, name) &&
+        resolvedTerm(wanted.t)?.kind === 'opaq') ||
     absentBelow(mine, wanted, order)
 
 /**
@@ -8646,18 +8654,18 @@ const splitBy = (
         const sub: Term = {
             kind: 'union',
             options: members.flatMap((m) => {
-                const field = m.body.fields[name]
+                const field = own(m.body.fields, name)
                 return field ? [field.t] : []
             }),
         }
 
         states = states.flatMap((state) => {
-            const slot = state[name]
+            const slot = own(state, name)
             if (slot === undefined) return [state]
             // a field that may be absent is the union of a present part and an absent part
             const declared = fieldOf(slot)
             const refused = members.some((m) => {
-                const field = m.body.fields[name]
+                const field = own(m.body.fields, name)
                 return (
                     field !== undefined &&
                     !absentBelow(declared, field, 'value')
@@ -8864,7 +8872,12 @@ const sliceSpec = (
         asWritten,
     )) {
         // a name that one side holds at its open block splits nowhere: it fits whole or not
-        if (!(name in node.body.fields && name in wantedObject.body.fields)) {
+        if (
+            !(
+                Object.hasOwn(node.body.fields, name) &&
+                Object.hasOwn(wantedObject.body.fields, name)
+            )
+        ) {
             if (
                 !slotBelow(name, wantedObject.body, mine, wanted, 'value') ||
                 !below(mine.t, wanted.t, 'value')
@@ -8877,7 +8890,7 @@ const sliceSpec = (
         // part, where the absent part has a codec: `optional` or `undefinable` at `never`. At the
         // `value` order a `withLegacyRead` slot is required, so the pattern refuses no absent row
         if (!slotBelow(name, wantedObject.body, mine, wanted, 'value')) {
-            const declared = piece.spec[name]
+            const declared = own(piece.spec, name)
             if (!presence || declared === undefined || !('codec' in declared)) {
                 leafFits = false
                 continue
@@ -8908,7 +8921,7 @@ const sliceSpec = (
             continue
         }
         if (below(mine.t, wanted.t, 'value')) continue
-        const slot = piece.spec[name]
+        const slot = own(piece.spec, name)
         if (slot === undefined || 'codec' in slot) {
             leafFits = false
             continue

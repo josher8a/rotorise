@@ -112,7 +112,7 @@ import {
     targetOf,
     throughRefs,
 } from './term'
-import { shapeOf } from './value'
+import { own, shapeOf } from './value'
 
 /**
  * A term, value or attribute the Lean model has no closed expression for.
@@ -2444,7 +2444,7 @@ const assignmentRows = (
         }
         // past `assignmentOf`, a tag is a `req` field that stores one alternative
         const entryAt = (key: string): ClauseEntry => {
-            const field = t.body.fields[key]
+            const field = own(t.body.fields, key)
             const alts = field && storedAlternatives(field.t)
             if (field === undefined || alts === undefined) {
                 throw new Error(
@@ -2793,7 +2793,7 @@ const graphChildOf = (
         }
         case 'object': {
             if (typeof s !== 'string') return []
-            const field = u.body.fields[s]
+            const field = own(u.body.fields, s)
             return [
                 step(
                     field ? field.t : (u.body.rest ?? nothingAt),
