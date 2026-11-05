@@ -5813,8 +5813,9 @@ const meetFactors = (
 
 /**
  * **The meet that reads the option as written and the pattern open.** The option `o` lies below the
- * pattern `p` ({@link fits}) exactly where this meet is `o`, and `o` overlaps `p` exactly where this
- * meet holds a value. A pattern has no decode of its own, so the walk reads the `value` order.
+ * pattern `p` ({@link fits}) exactly where this meet is `o`, up to a refinement and an older
+ * reading, whose functions the host cannot read, and `o` overlaps `p` exactly where this meet holds
+ * a value. A pattern has no decode of its own, so the walk reads the `value` order.
  */
 export const meetOrdered = (option: AnyCodec, pattern: AnyCodec): AnyCodec =>
     meetOfTwo(option, pattern, walkAt(asOrdered, 'value'))
