@@ -766,6 +766,18 @@ describe('fits splits the option into its parts before it reads a union pattern'
         expect(fits(termOf(list(boolean, string)), termOf(split))).toBe(true)
     })
 
+    it('fits an optional field to a union that holds its absent row in one option and its values in another', () => {
+        const pet = object({ k: optional(string) })
+        const split = union([
+            object({ k: string }),
+            object({ k: optional(number) }),
+        ])
+        expect(fits(termOf(pet), termOf(split))).toBe(true)
+        // the absent row is a part, and no option here admits it
+        const present = union([object({ k: string }), object({ k: number })])
+        expect(fits(termOf(pet), termOf(present))).toBe(false)
+    })
+
     it('does not fit a list of a base to the union of the lists of its literals, because the list holds mixed lists', () => {
         const split = union([array(boolean(true)), array(boolean(false))])
         expect(fits(termOf(array(boolean)), termOf(split))).toBe(false)

@@ -8351,7 +8351,9 @@ const PARTS_LIMIT = 1024
 
 /**
  * **The parts of the normal form of a term in the value order**: a finite join of join-prime
- * terms. `boolean` is `true ∨ false`. An object distributes over a union at a field, and a list
+ * terms. `boolean` is `true ∨ false`. An optional field is its absent row joined with its present
+ * values, an absent row being an optional field that holds no value. An object distributes over a
+ * union at a field, and a list
  * distributes over a union at a position of its prefix or suffix. A list of a union is one part,
  * because the list holds mixed lists. A refinement, an older reading, an adapter, a `ref` and a
  * set are one part: the host cannot read the first two, and the others hold no split of their own.
@@ -8383,12 +8385,24 @@ const joinParts = (t: Term): Term[] => {
             }))
         case 'object': {
             const rows = product(
-                Object.entries(t.body.fields).map(([name, field]) =>
-                    joinParts(field.t).map((part): [string, Field] => [
-                        name,
-                        { ...field, t: part },
-                    ]),
-                ),
+                Object.entries(t.body.fields).map(([name, field]) => {
+                    const parts = joinParts(field.t)
+                    return field.mark === 'optional'
+                        ? [
+                              [
+                                  name,
+                                  { mark: 'optional', t: { kind: 'never' } },
+                              ],
+                              ...parts.map((part): [string, Field] => [
+                                  name,
+                                  { mark: 'req', t: part },
+                              ]),
+                          ]
+                        : parts.map((part): [string, Field] => [
+                              name,
+                              { ...field, t: part },
+                          ])
+                }),
             )
             return rows === undefined
                 ? [t]
