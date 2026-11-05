@@ -45,6 +45,7 @@ import {
     DynamoNumber,
     isNumeral,
     memberOf,
+    repeatedAt,
     tooDeeplyNested,
 } from './attribute'
 import { codec } from './build'
@@ -160,13 +161,11 @@ const nativeSet = (
         // a member, and the SDK writes one from two NumberValue objects: a divergence of the same
         // kind as the nesting bound
         const digits = members.map((member) => member.digits)
-        const repeated = digits.find(
-            (numeral, at) => digits.indexOf(numeral) !== at,
-        )
+        const repeated = repeatedAt(digits)
         return repeated === undefined
             ? carrying('NS', digits)
             : new CodecError(
-                  `The number ${repeated} is twice in a Number Set (NS), and DynamoDB refuses a set that repeats a member.`,
+                  `The number ${digits[repeated]} is twice in a Number Set (NS), and DynamoDB refuses a set that repeats a member.`,
               )
     }
     if (typeof first === 'number' || typeof first === 'bigint') {
@@ -183,7 +182,14 @@ const nativeSet = (
         return carrying('SS', members as readonly string[])
     }
     if (isBinaryValue(first)) {
-        return carrying('BS', members as readonly Uint8Array[])
+        // the same divergence as the `NS` above: two `Uint8Array`s with one content are two members
+        // of the `Set`, and the SDK writes both
+        const bytes = members as readonly Uint8Array[]
+        return repeatedAt(bytes) === undefined
+            ? carrying('BS', bytes)
+            : new CodecError(
+                  'One value is twice in a Binary Set (BS), and DynamoDB refuses a set that repeats a member.',
+              )
     }
     return new CodecError(
         'Only Number Set (NS), Binary Set (BS) or String Set (SS) are allowed.',
@@ -326,14 +332,16 @@ const fromNativeNumber = (digits: string): Result<unknown> =>
     })
 
 /**
- * A stored set, refused when empty.
+ * A stored set, refused when empty or when a member repeats.
  *
  * DynamoDB has no empty `SS`, `NS` or `BS`, so an item carrying one was written by something else —
  * and {@link nativeSet} refuses to write one, either erroring or storing `NULL`. Reading it would
  * hand back a value this codec's own `encode` cannot produce, which is **(C)** failing. The SDK
- * returns an empty `Set` for all three; this does not.
+ * returns an empty `Set` for all three; this does not. A repeated member is the same case: DynamoDB
+ * refuses a set that repeats a member, and the SDK reads one into a `Set` that drops a string repeat
+ * and keeps a binary repeat.
  */
-const nonEmpty = <T>(
+const storedSet = <T extends string | Uint8Array>(
     member: 'SS' | 'NS' | 'BS',
     members: readonly T[],
 ): Result<readonly T[]> =>
@@ -341,7 +349,11 @@ const nonEmpty = <T>(
         ? new CodecError(
               `DynamoDB has no empty ${member}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
           )
-        : members
+        : repeatedAt(members) !== undefined
+          ? new CodecError(
+                `DynamoDB holds no ${member} that repeats a member, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
+            )
+          : members
 
 /** A stored value, as `@aws-sdk/util-dynamodb`'s `convertToNative` reads it. */
 const fromNative = (
@@ -371,7 +383,7 @@ const fromNative = (
         case 'NS':
             return andThen(
                 andThen(
-                    nonEmpty(member, carried as readonly string[]),
+                    storedSet(member, carried as readonly string[]),
                     (members) => every(members, read),
                 ),
                 (read) => new Set(read),
@@ -379,7 +391,7 @@ const fromNative = (
         case 'BS':
         case 'SS':
             return andThen(
-                nonEmpty(member, carried as readonly unknown[]),
+                storedSet(member, carried as readonly (string | Uint8Array)[]),
                 (members) => new Set(members),
             )
         default:

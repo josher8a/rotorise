@@ -182,6 +182,28 @@ describe('what it refuses, and what it tells you instead', () => {
         expect(() => opaque.unsafeEncode(new Set())).toThrow(CodecError)
     })
 
+    it('refuses a set that repeats a byte sequence, because DynamoDB refuses a repeat', () => {
+        const repeated = opaque.encode(
+            new Set([Uint8Array.of(1), Uint8Array.of(1)]),
+        )
+        expect(repeated).toBeInstanceOf(CodecError)
+        expect((repeated as CodecError).reason).toMatch(
+            /holds one byte sequence two times/,
+        )
+    })
+
+    it('reads no stored set that repeats a member, because DynamoDB writes none', () => {
+        for (const stored of [
+            { SS: ['a', 'a'] },
+            { NS: ['1', '1'] },
+            { BS: [Uint8Array.of(1), Uint8Array.of(1)] },
+        ]) {
+            const read = opaque.decode(stored)
+            expect(read).toBeInstanceOf(CodecError)
+            expect((read as CodecError).reason).toMatch(/that repeats a member/)
+        }
+    })
+
     it('refuses to read one back, for the same reason', () => {
         expect(() => opaque.unsafeDecode({ SS: [] })).toThrow(CodecError)
         expect(() => opaque.unsafeDecode({ BS: [] })).toThrow(CodecError)

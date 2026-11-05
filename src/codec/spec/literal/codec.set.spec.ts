@@ -12,15 +12,18 @@
  * this library mirrors reads `SS` back as a `Set` besides.
  */
 import { describe, expect, it } from 'vitest'
+import { DynamoNumber } from '../../attribute'
 import {
     array,
     binary,
     CodecError,
     decimal,
+    dynamoNumber,
     item,
     nullable,
     number,
     object,
+    orThrow,
     refine,
     string,
 } from '../../codec'
@@ -161,10 +164,45 @@ describe('what a set cannot hold', () => {
         })
     })
 
-    it('deduplicates by what is stored, which a Set alone does not', () => {
-        // two distinct members that write the same `N`: the set has two, the table holds one
-        expect(number.set().unsafeEncode(new Set([1, 1.0]))).toEqual({
-            NS: ['1'],
-        })
+    /**
+     * DynamoDB refuses a set that repeats a member. A `Set` compares a `Uint8Array` and a
+     * `DynamoNumber` by identity, so two members with one stored form reach `encode` as two. A
+     * merge would decode to a smaller set than the one written, so the codec refuses the set.
+     */
+    it('refuses a set whose members write one stored member, because DynamoDB refuses a repeat', () => {
+        const bytes = binary
+            .set()
+            .encode(new Set([Uint8Array.of(1), Uint8Array.of(1)]))
+        expect(bytes).toBeInstanceOf(CodecError)
+        expect((bytes as CodecError).reason).toBe(
+            'two members of this set write one B, and DynamoDB refuses a BS that repeats a member',
+        )
+        const numbers = dynamoNumber
+            .set()
+            .encode(
+                new Set([
+                    orThrow(DynamoNumber.from('1')),
+                    orThrow(DynamoNumber.from('1.0')),
+                ]),
+            )
+        expect(numbers).toBeInstanceOf(CodecError)
+        expect((numbers as CodecError).reason).toMatch(
+            /refuses a NS that repeats a member/,
+        )
+    })
+
+    it('reads no stored set that repeats a member, because DynamoDB writes none', () => {
+        const strings = string.set().decode({ SS: ['dog', 'dog'] })
+        expect(strings).toBeInstanceOf(CodecError)
+        expect((strings as CodecError).reason).toMatch(
+            /^DynamoDB holds no SS that repeats a member/,
+        )
+        const bytes = binary
+            .set()
+            .decode({ BS: [Uint8Array.of(1), Uint8Array.of(1)] })
+        expect(bytes).toBeInstanceOf(CodecError)
+        expect((bytes as CodecError).reason).toMatch(
+            /^DynamoDB holds no BS that repeats a member/,
+        )
     })
 })

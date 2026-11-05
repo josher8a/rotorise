@@ -538,7 +538,7 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
     })
 })
 
-describe('a Set of DynamoNumber that repeats a numeral', () => {
+describe('a Set that repeats a stored member', () => {
     /**
      * Two objects with one numeral are two members of a Set. The SDK writes both, and DynamoDB
      * refuses the set. The port refuses it, as it refuses a document past the nesting bound.
@@ -559,6 +559,32 @@ describe('a Set of DynamoNumber that repeats a numeral', () => {
         expect((refused as CodecError).reason).toMatch(
             /The number 1 is twice in a Number Set \(NS\)/,
         )
+    })
+
+    it('is refused as a Binary Set (BS) too, where the SDK writes both members', () => {
+        const twice = new Set([Uint8Array.of(1), Uint8Array.of(1)])
+        expect(sdk.convertToAttr(twice)).toEqual({
+            BS: [Uint8Array.of(1), Uint8Array.of(1)],
+        })
+        const refused = native.encode(twice)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toMatch(
+            /One value is twice in a Binary Set \(BS\)/,
+        )
+    })
+
+    it('reads no stored set that repeats a member, which DynamoDB never returns', () => {
+        for (const stored of [
+            { SS: ['a', 'a'] },
+            { NS: ['1', '1'] },
+            { BS: [Uint8Array.of(1), Uint8Array.of(1)] },
+        ]) {
+            const read = native.decode(stored)
+            expect(read).toBeInstanceOf(CodecError)
+            expect((read as CodecError).reason).toMatch(
+                /^DynamoDB holds no [SNB]S that repeats a member/,
+            )
+        }
     })
 })
 

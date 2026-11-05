@@ -26,6 +26,7 @@ import {
     isStoredNumeral,
     MAX_DOCUMENT_NESTING,
     memberOf,
+    repeatedAt,
     tooDeeplyNested,
 } from './attribute'
 import type { Codec } from './build'
@@ -1192,26 +1193,39 @@ export const denote = (def: Term): Pair => {
                                 `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
                             )
                           : andThen(every([...value], carried), (written) =>
-                                // sorted so what is stored does not depend on insertion order;
-                                // deduplicated already, because a `Set` is
-                                carrying(
-                                    setMember,
-                                    [...new Set(written)].sort() as never,
-                                ),
+                                // two members that write one stored member make a set that
+                                // DynamoDB refuses, and a merge would decode to a smaller set
+                                repeatedAt(written) !== undefined
+                                    ? new CodecError(
+                                          `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
+                                      )
+                                    : // sorted so what is stored does not depend on insertion order
+                                      carrying(
+                                          setMember,
+                                          [...written].sort() as never,
+                                      ),
                             ),
                 decode: (attribute) =>
                     andThen(
-                        andThen(expect(setMember, attribute), (members) =>
-                            (members as readonly unknown[]).length === 0
-                                ? new CodecError(
-                                      `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-                                  )
-                                : every(members as readonly unknown[], (raw) =>
-                                      inner.decode(
-                                          carrying(member, raw as never),
-                                      ),
-                                  ),
-                        ),
+                        andThen(expect(setMember, attribute), (carried) => {
+                            const members = carried as readonly (
+                                | string
+                                | Uint8Array
+                            )[]
+                            if (members.length === 0) {
+                                return new CodecError(
+                                    `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
+                                )
+                            }
+                            if (repeatedAt(members) !== undefined) {
+                                return new CodecError(
+                                    `DynamoDB holds no ${setMember} that repeats a member, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
+                                )
+                            }
+                            return every(members, (raw) =>
+                                inner.decode(carrying(member, raw as never)),
+                            )
+                        }),
                         (read) => new Set(read),
                     ),
             }
@@ -1842,12 +1856,17 @@ export const encodeUnknown = (
             return carrying('SS', (members as string[]).sort())
         }
         if (members.every((x) => x instanceof Uint8Array)) {
-            return carrying('BS', members as Uint8Array[])
+            // a `Set` keeps two `Uint8Array`s with one content as two members
+            return repeatedAt(members) === undefined
+                ? carrying('BS', members)
+                : new CodecError(
+                      'this set holds one byte sequence two times, as two `Uint8Array`s, and a `BS` holds each byte sequence one time',
+                  )
         }
         if (members.every((x) => x instanceof DynamoNumber)) {
             // the digits are normal, so two members that are one number have one spelling
             const digits = members.map((x) => (x as DynamoNumber).digits)
-            return new Set(digits).size === digits.length
+            return repeatedAt(digits) === undefined
                 ? carrying('NS', digits.sort())
                 : new CodecError(
                       'this set holds one number two times, as two `DynamoNumber`s, and an `NS` holds each number one time',
@@ -1930,23 +1949,28 @@ export const decodeUnknown = (attribute: AttributeValue): Result<unknown> => {
         case 'B':
         case 'BOOL':
             return attribute[member]
-        case 'NS': {
-            const carried = attribute.NS ?? []
-            return carried.length === 0
-                ? new CodecError(
-                      'DynamoDB has no empty NS, so this attribute was not written by it',
-                  )
-                : andThen(every(carried, storedNumber), (read) => new Set(read))
-        }
+        case 'NS':
         case 'SS':
         case 'BS': {
-            // as in `set`: encode has no empty set to offer, so decode has none to return
-            const members = attribute[member] as readonly unknown[]
+            // as in `set`: encode has no empty set and no repeat to offer, so decode has none to return
+            const members = attribute[member] as readonly (
+                | string
+                | Uint8Array
+            )[]
             return members.length === 0
                 ? new CodecError(
                       `DynamoDB has no empty ${member}, so this attribute was not written by it`,
                   )
-                : new Set(members)
+                : repeatedAt(members) !== undefined
+                  ? new CodecError(
+                        `DynamoDB holds no ${member} that repeats a member, so this attribute was not written by it`,
+                    )
+                  : member === 'NS'
+                    ? andThen(
+                          every(members as readonly string[], storedNumber),
+                          (read) => new Set(read),
+                      )
+                    : new Set(members)
         }
         case 'L':
             return every(attribute.L ?? [], (x) => decodeUnknown(x))
