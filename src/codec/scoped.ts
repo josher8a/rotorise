@@ -19,8 +19,8 @@ import {
     entryOrder,
     ground,
     isPrim,
-    literalAlternatives,
     memoClosed,
+    oneAlternative,
     otherShape,
     primsApart,
     sameAdapter,
@@ -1148,13 +1148,12 @@ export const guardAt = (
         }
         const t = at.t
         switch (t.kind) {
-            case 'literal': {
-                const alts = literalAlternatives(t)
-                if (alts) conjuncts.push({ segments, in: storedLiterals(alts) })
-                else
-                    refuse('a union of terms that are not literals at one base')
+            case 'literal':
+                conjuncts.push({
+                    segments,
+                    in: storedLiterals(oneAlternative(t)),
+                })
                 return
-            }
             case 'union': {
                 const options: Term[] = []
                 for (const option of t.options) {

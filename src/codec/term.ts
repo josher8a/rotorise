@@ -819,7 +819,7 @@ export const storedAlternatives = (t: Term): Alternatives | undefined => {
 }
 
 /** One literal, as the one-alternative set it pins. */
-const oneAlternative = (t: Literal): Alternatives =>
+export const oneAlternative = (t: Literal): Alternatives =>
     ({ kind: 'alternatives', base: t.base, ls: [t.v] }) as Alternatives
 
 /**
