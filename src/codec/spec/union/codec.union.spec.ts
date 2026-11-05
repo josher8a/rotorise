@@ -389,19 +389,19 @@ describe('the declaration guard, where a term is what the guard reads', () => {
     })
 
     /**
-     * **A closed body refuses a name it does not declare, on both sides.** The stand-in reads a
-     * map without `a`, so the stand-in field alone keeps nothing apart. `priced` requires `b`,
-     * and `standIn` is closed, so it neither writes nor reads a map that holds `b`. The two
+     * **A closed body refuses a name it does not declare, on both sides.** The fill value reads a
+     * map without `a`, so the fill field alone keeps nothing apart. `priced` requires `b`,
+     * and `filled` is closed, so it neither writes nor reads a map that holds `b`. The two
      * options share no value and no attribute, and the certificate accepts the pair.
      */
-    it('accepts an object with a stand-in field beside a closed object that requires another name', () => {
-        const standIn = object({
+    it('accepts an object with a fill field beside a closed object that requires another name', () => {
+        const filled = object({
             a: fill(string, 'stand-in'),
         })
         const priced = object({ b: decimal })
         for (const either of [
-            union([standIn, priced]),
-            union([priced, standIn]),
+            union([filled, priced]),
+            union([priced, filled]),
         ]) {
             expect(either.unsafeEncode({ a: 'x' })).toEqual({
                 M: { a: { S: 'x' } },

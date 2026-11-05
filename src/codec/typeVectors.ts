@@ -568,7 +568,7 @@ const printerOf = (
                         return `${keyText(k)}: optional(${x})`
                     if (f.mark === 'undefinable')
                         return `${keyText(k)}: undefinable(${x})`
-                    if (f.mark === 'fallback')
+                    if (f.mark === 'fill')
                         return `${keyText(k)}: fill(${x}, ${valueText(f.v, at)})`
                     return `${keyText(k)}: ${x}`
                 })
@@ -905,8 +905,8 @@ const sliceRoot = (
                 case 'optional':
                 case 'undefinable':
                     return `${f.mark}(${text})`
-                case 'fallback':
-                    return refuse(name, 'a stand-in slot in a pattern shape')
+                case 'fill':
+                    return refuse(name, 'a fill slot in a pattern shape')
             }
         }
         const argument = `{ ${Object.entries(fields)

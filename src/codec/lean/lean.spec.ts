@@ -113,7 +113,7 @@ import {
 } from '../lean'
 import { CodecError, failed, orThrow } from '../result'
 import type { RefSlot, Term } from '../term'
-import { cycleEntryOf, RecursionRefused, standInEquals } from '../term'
+import { cycleEntryOf, fillEquals, RecursionRefused } from '../term'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
 const erase = (codec: unknown): AnyCodec => codec as AnyCodec
@@ -356,7 +356,7 @@ describe('terms', () => {
             /a \*field\*, not a term/,
         )
         expect(() => leanClosedOf(erase(fill(string, 'x')))).toThrow(
-            /`optional`\/`fallback` denote `Field`/,
+            /`optional`\/`fill` denote `Field`/,
         )
         expect(entriesOf(erase(object({ a: optional(string) })))[0]).toContain(
             'Scoped.ObjectSlot.optional',
@@ -386,10 +386,10 @@ describe('terms', () => {
     })
 
     /**
-     * **A field's stand-in is a fill slot.** The stand-in is data, so it prints as a `Value`, and an
+     * **A field's fill value is a fill slot.** The fill value is data, so it prints as a `Value`, and an
      * older reader of a present value stays in the term.
      */
-    it('emits a missing-value field as a fill slot that carries its stand-in', () => {
+    it('emits a missing-value field as a fill slot that carries its fill value', () => {
         expect(
             entriesOf(
                 erase(
@@ -803,13 +803,13 @@ describe('values and attributes', () => {
     })
 })
 
-describe('the equality of two stand-ins', () => {
+describe('the equality of two fill values', () => {
     /**
-     * **Two stand-ins agree where the model reads one `Value`.** The host decides `standInEquals`
+     * **Two fill values agree where the model reads one `Value`.** The host decides `fillEquals`
      * and the emitter prints `leanValueOf`, so the equality of the host is the equality of the
      * printed `Value`, over each kind that the emitter reads.
      */
-    it('two stand-ins agree where the model reads one Value', () => {
+    it('two fill values agree where the model reads one Value', () => {
         const number = (text: string) => orThrow(DynamoNumber.from(text))
         const values: unknown[] = [
             'rex',
@@ -840,23 +840,21 @@ describe('the equality of two stand-ins', () => {
         for (const one of values) {
             for (const other of values) {
                 expect(
-                    standInEquals(one, other),
+                    fillEquals(one, other),
                     `${String(one)} against ${String(other)}`,
                 ).toBe(leanValueOf(one) === leanValueOf(other))
             }
         }
         // a `Finset` and a map have no order, and the printed text of each has one
         expect(
-            standInEquals(
+            fillEquals(
                 { nick: 'rex', tags: ['a'] },
                 { tags: ['a'], nick: 'rex' },
             ),
         ).toBe(true)
-        expect(standInEquals(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(
-            true,
-        )
+        expect(fillEquals(new Set(['a', 'b']), new Set(['b', 'a']))).toBe(true)
         expect(
-            standInEquals(
+            fillEquals(
                 new Set([number('1'), number('2')]),
                 new Set([number('2'), number('1')]),
             ),
@@ -1461,18 +1459,18 @@ const migratedString = erase(
     legacy({ current: string, older: { decode: () => 'older' as string } }),
 )
 /**
- * A field that reads an absent name as a stand-in. The corpus pairs it with the two verdicts the
+ * A field that reads an absent name as a fill value. The corpus pairs it with the two verdicts the
  * host pins (a closed object that requires another name; an `optional` and a `req` field at the
- * same name) and with each row of the stand-in test: beside `req`, beside `optional`, and beside a
+ * same name) and with each row of the fill value test: beside `req`, beside `optional`, and beside a
  * closed body.
  */
-const standIn = erase(object({ a: fill(string, 'stand-in') }))
+const filled = erase(object({ a: fill(string, 'stand-in') }))
 /**
- * A stand-in that one value states twice: a second codec with the text of `standIn`, a third with
+ * A fill value that one value states twice: a second codec with the text of `filled`, a third with
  * another text, and two with an object constant, equal at one value and apart at two objects.
  */
-const standInAgain = erase(object({ a: fill(string, 'stand-in') }))
-const standInOther = erase(object({ a: fill(string, 'other') }))
+const filledAgain = erase(object({ a: fill(string, 'stand-in') }))
+const filledOther = erase(object({ a: fill(string, 'other') }))
 const nameOf = (nick: string) =>
     erase(
         object({
@@ -1517,21 +1515,21 @@ const legacyDecimalRestNumber = erase(
         [string, optional(number)],
     ),
 )
-const fallbackPairs = <P>(
+const fillPairs = <P>(
     sep: string,
     make: (name: string, left: AnyCodec, right: AnyCodec) => P,
 ): P[] => [
-    make(`stand_in${sep}priced`, standIn, erase(object({ b: decimal }))),
+    make(`stand_in${sep}priced`, filled, erase(object({ b: decimal }))),
     make(
         `stand_in${sep}optional_boolean`,
-        standIn,
+        filled,
         erase(object({ a: optional(boolean) })),
     ),
-    make(`stand_in${sep}req_boolean`, standIn, erase(object({ a: boolean }))),
-    make(`stand_in${sep}req_string`, standIn, erase(object({ a: string }))),
-    make(`stand_in${sep}empty_object`, standIn, erase(object({}))),
-    make(`stand_in${sep}stand_in`, standIn, standInAgain),
-    make(`stand_in${sep}other_stand_in`, standIn, standInOther),
+    make(`stand_in${sep}req_boolean`, filled, erase(object({ a: boolean }))),
+    make(`stand_in${sep}req_string`, filled, erase(object({ a: string }))),
+    make(`stand_in${sep}empty_object`, filled, erase(object({}))),
+    make(`stand_in${sep}stand_in`, filled, filledAgain),
+    make(`stand_in${sep}other_stand_in`, filled, filledOther),
     make(`object_stand_in${sep}object_stand_in`, nameOf('rex'), nameOf('rex')),
     make(
         `object_stand_in${sep}other_object_stand_in`,
@@ -1654,7 +1652,7 @@ const separationPairs = (): readonly Separation[] => {
             left,
             right,
         })),
-        ...fallbackPairs('__vs__', (name, left, right) => ({
+        ...fillPairs('__vs__', (name, left, right) => ({
             name,
             left,
             right,
@@ -1747,7 +1745,7 @@ const disjointPairs = (): readonly DisjointPair[] => {
             left,
             right,
         })),
-        ...fallbackPairs('__disjoint__', (name, left, right) => ({
+        ...fillPairs('__disjoint__', (name, left, right) => ({
             name,
             left,
             right,
@@ -1943,11 +1941,11 @@ const readResolutions = (): readonly ReadResolution[] => {
                 return [{ name: `rr_${un}__${an}`, union: u, attribute }]
             }),
         ),
-        // the read value at an absent fill name: the stand-in, which a read vector cannot reach,
+        // the read value at an absent fill name: the fill value, which a read vector cannot reach,
         // because the codec's own encode always writes the name
         {
             name: 'rr_stand_in__open_empty',
-            union: standIn,
+            union: filled,
             attribute: { M: {} },
         },
     ]
@@ -2118,7 +2116,7 @@ describe('union resolution, model against library', () => {
         }
     })
 
-    it('reads an absent fill name as the stand-in, not as a refusal', () => {
+    it('reads an absent fill name as the fill value, not as a refusal', () => {
         const one = readResolutions().find(
             (r) => r.name === 'rr_stand_in__open_empty',
         )
@@ -2447,11 +2445,11 @@ describe("the declaration guard, against the model's classifier", () => {
     })
 
     /**
-     * **Two fills agree at absence where the stand-ins are one value.** The model reads a stand-in as
-     * a `Value`, and the host reads it through `standInEquals`, so two options at one name are
-     * compatible exactly where their stand-ins are equal: at a text and at an object.
+     * **Two fills agree at absence where the fill values are one value.** The model reads a fill value as
+     * a `Value`, and the host reads it through `fillEquals`, so two options at one name are
+     * compatible exactly where their fill values are equal: at a text and at an object.
      */
-    it('accepts two stand-ins that are one value and refuses two that are not, at a text and at an object', () => {
+    it('accepts two fill values that are one value and refuses two that are not, at a text and at an object', () => {
         const pairs = separationPairs()
         const formOf = (name: string) => {
             const pair = pairs.find((one) => one.name === name)
@@ -2660,7 +2658,7 @@ describe("the read side of every corpus codec, against the model's `p`", () => {
      *
      * No *value* is unspellable. `Value.num` carries a `WFNumeral`, so a numeral is a closed term
      * and a numeric value on the read side states like any other. No *term* is unspellable either:
-     * a field's stand-in prints as a fill slot. The empty list is pinned, because a first exclusion
+     * a field's fill value prints as a fill slot. The empty list is pinned, because a first exclusion
      * arriving is the thing worth failing on.
      */
     it('states a read vector for every codec whose term the model can spell', () => {

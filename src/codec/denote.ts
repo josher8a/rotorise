@@ -208,7 +208,7 @@ const refusedBy = (q: Refinement, value: unknown): CodecError => {
  *
  * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
  * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Closed.spec`
- * reads a field with a stand-in as required at the caller side.
+ * reads a field with a fill value as required at the caller side.
  *
  * The model reads a tag through `Calculus.pinOfG`, through a `refine` and through a `held` under
  * its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
@@ -365,7 +365,7 @@ export const carriedCodec = <Payload, Written, Read>(
  * turns `SlotMode` into a presence rule; here it is the three-way `mark`, read once per field per
  * direction, and there is no second place that asks what `optional` means.
  *
- * Whether a stand-in must be *copied* per read is settled once, at the declaration, rather than
+ * Whether a fill value must be *copied* per read is settled once, at the declaration, rather than
  * asked per item: {@link copiedPerRead} is a fact about this runtime and not about the term, which
  * is why it lives in the compiled form and not in {@link Field}.
  */
@@ -380,7 +380,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
             optional: !alwaysWritten(field),
             keyed: field.mark === 'undefinable',
             absent:
-                field.mark === 'fallback'
+                field.mark === 'fill'
                     ? { value: field.v, copy: copiedPerRead(field.v) }
                     : undefined,
         })

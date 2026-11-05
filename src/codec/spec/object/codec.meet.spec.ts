@@ -187,8 +187,8 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * **A `fill` side shares no absent row with a side that admits absence.** The stand-in
-     * side decodes the absent row to the stand-in, and the other side to no value, so the meet drops
+     * **A `fill` side shares no absent row with a side that admits absence.** The fill value
+     * side decodes the absent row to the fill value, and the other side to no value, so the meet drops
      * the row and the name is required. A required side holds no absent row either.
      */
     it('requires a name that one factor reads through fill', () => {
@@ -236,12 +236,12 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * **Two stand-ins share the absent row where they are one value**, and the meet of the two
-     * fills is the fill with that stand-in over the meet of the two codecs: the absent row decodes
-     * to the stand-in on both sides, so it decodes to the stand-in in the meet. A stand-in that is
+     * **Two fill values share the absent row where they are one value**, and the meet of the two
+     * fills is the fill with that fill value over the meet of the two codecs: the absent row decodes
+     * to the fill value on both sides, so it decodes to the fill value in the meet. A fill value that is
      * an object is one value at two objects of the same members.
      */
-    it('meets two fills of one stand-in as that stand-in over the meet of the two codecs', () => {
+    it('meets two fills of one fill value as that fill value over the meet of the two codecs', () => {
         const both = meet(
             object({
                 a: fill(string('x', 'y'), 'x'),
@@ -270,10 +270,10 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * **The meet of two fills writes the stand-in**, because each factor writes it, and the meet of
+     * **The meet of two fills writes the fill value**, because each factor writes it, and the meet of
      * two codecs writes each value that both write. Each current here is wider than the meet.
      */
-    it('writes the stand-in through a meet that is narrower than each current', () => {
+    it('writes the fill value through a meet that is narrower than each current', () => {
         const both = meet(
             object({
                 a: fill(string('x', 'y', 'w'), 'x'),
@@ -291,11 +291,11 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * Two stand-ins that are two values share no pair at the absent row, because the two sides
+     * Two fill values that are two values share no pair at the absent row, because the two sides
      * decode that row to two values. The meet is total, as the intersection of the two graphs is:
      * the slot is required over the meet of the two codecs, as a fill and `optional` meet.
      */
-    it('meets two fills whose stand-ins differ at a required slot', () => {
+    it('meets two fills whose fill values differ at a required slot', () => {
         const filledAt = (whenMissing: 'x' | 'y') =>
             object({
                 a: fill(string('x', 'y'), whenMissing),
@@ -306,12 +306,12 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
-     * **A stand-in that is no `Value` compares by identity.** A `Date`, a `Map` and a class instance
+     * **A fill value that is no `Value` compares by identity.** A `Date`, a `Map` and a class instance
      * are plain objects to `Object.keys` and hold no own key, so a test by keys read two of them as
-     * one value. Two fills of two `Date` stand-ins that hold two instants meet at a required slot. One
+     * one value. Two fills of two `Date` fill values that hold two instants meet at a required slot. One
      * `Date` object is one value, and the meet keeps the fill.
      */
-    it('meets two fills whose Date stand-ins hold two instants at a required slot', () => {
+    it('meets two fills whose Date fill values hold two instants at a required slot', () => {
         const instant: StandardSchemaV1<Date> = {
             '~standard': {
                 version: 1,
@@ -629,14 +629,14 @@ describe('the slots that the constructors refuse at never', () => {
      * **`fill` at `never` is refused twice, by two different rules.**
      *
      * The type reaches it through the slot gate: a `fill` name is always written. The runtime
-     * never gets that far, because `fill`'s own older rule refuses a stand-in that the codec
-     * it stands in for cannot write, and `never` writes nothing.
+     * never gets that far, because `fill`'s own older rule refuses a fill value that the codec
+     * it fills cannot write, and `never` writes nothing.
      */
-    it('refuses a fill at never, at the type by the slot and at the runtime by the stand-in', () => {
+    it('refuses a fill at never, at the type by the slot and at the runtime by the fill value', () => {
         expect(() =>
             // @ts-expect-error the slot gate refuses it at the type
             object({ a: string, gone: fill(never as never, 'v' as never) }),
-        ).toThrow(/stand-in must be a value/)
+        ).toThrow(/The fill value of `fill` must be a value/)
     })
 
     /** `array` and an open object are not slots: both admit their empty case, and that is a value. */
@@ -793,10 +793,10 @@ describe('a thunk changes no verdict of the order', () => {
 
     /**
      * **A name that the pattern leaves to an `opaque` block is the top, written plain or behind a
-     * `ref`.** The stand-in of a `fill` slot pairs the absent row with a value, and only
+     * `ref`.** The fill value of a `fill` slot pairs the absent row with a value, and only
      * the top holds that pair, so the order reads the block at the node behind the thunk.
      */
-    it('reads an opaque block behind a ref as the top of a stand-in slot', () => {
+    it('reads an opaque block behind a ref as the top of a fill slot', () => {
         const kind: AnyCodec = union([
             object({
                 a: fill(string, 'x'),
@@ -1291,7 +1291,7 @@ describe('the presence lift in the type gives the answer of the run time', () =>
             petId: fill(string, 'unknown'),
         })
         const Twice = meet(Legacy, Legacy)
-        expectTypeOf(Twice.spec.petId.def.mark).toEqualTypeOf<'fallback'>()
+        expectTypeOf(Twice.spec.petId.def.mark).toEqualTypeOf<'fill'>()
         expect(orThrow(item(Twice).decode({}))).toEqual({ petId: 'unknown' })
     })
 

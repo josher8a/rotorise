@@ -133,7 +133,7 @@ describe('an open object entry', () => {
             /an open key entry must be optional, because a required wildcard means at least one matching key/,
         )
         expect(() =>
-            // @ts-expect-error a stand-in marks a required object slot
+            // @ts-expect-error a fill value marks a required object slot
             object([string, fill(string, 'current')]),
         ).toThrow(
             /an open key entry must be optional, because a required wildcard means at least one matching key/,

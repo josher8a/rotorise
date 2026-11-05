@@ -642,8 +642,8 @@ const covers: readonly Entry[] = (() => {
 })()
 
 /**
- * **The fills: two stand-ins at one name, equal and apart.** The random draw gives each fill a
- * stand-in of its own, so it rarely draws two equal ones. Each pair is two objects that declare
+ * **The fills: two fill values at one name, equal and apart.** The random draw gives each fill a
+ * fill value of its own, so it rarely draws two equal ones. Each pair is two objects that declare
  * one name through `fill`: two equal texts, two texts that differ, and two equal objects.
  * The meet of the first and of the third pair is the fill, and the meet of the second is refused.
  */
@@ -941,7 +941,7 @@ const typeOnlyMeets: readonly MeetPair[] = (() => {
  * **The roots whose slots differ in presence, adapter and layout**, against the patterns that the
  * square puts to them: an `undefinable` or an `optional` slot, a `held` slot, a base slot, a list
  * with a prefix and a spread, a decimal literal set against a union of decimal literals, and a
- * pattern of two keys. The members hold an older reading, a stand-in, a list and a decimal union.
+ * pattern of two keys. The members hold an older reading, a fill value, a list and a decimal union.
  */
 const presenceAndHolds: Slice = (() => {
     const dog = object({

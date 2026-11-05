@@ -122,7 +122,7 @@ on a side keeps the declaration from showing that a value both admit is written 
 The type of `union` states no such refusal. Measured 2026-11-01 with `npx vitest --run` and
 `tsc --noEmit`:
 
-    union([object({ x: withLegacyRead({ current: string, older: decimal }) }), object({ x: number })])
+    union([object({ x: legacy({ current: string, older: decimal }) }), object({ x: number })])
       type checker: builds
       runtime:      throws, the two options are not shown compatible
 

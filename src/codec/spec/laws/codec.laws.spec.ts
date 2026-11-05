@@ -175,7 +175,7 @@ describe('held', () => {
  *
  * Each is a side condition that the judgement or the laws ask of a constructor that takes a caller's function or value.
  * Three are decidable from what the caller hands over and are now refused where the declaration is
- * — `fill`'s stand-in, `legacy`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
+ * — `fill`'s fill value, `legacy`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
  * decidable at all, so what is pinned here is the failure mode, which is the only thing a test can
  * say about an obligation nothing enforces.
  */
@@ -234,8 +234,8 @@ describe('the obligations a caller owes', () => {
         expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
     })
 
-    /** `fill`'s stand-in, now refused at the declaration. */
-    it('fill: a stand-in the codec cannot write is refused at construction', () => {
+    /** `fill`'s fill value, now refused at the declaration. */
+    it('fill: a fill value the codec cannot write is refused at construction', () => {
         expect(() => fill(string('A'), 'B' as 'A')).toThrow(CodecError)
         expect(() => fill(string('A'), 'A' as const)).not.toThrow()
     })
@@ -469,7 +469,7 @@ describe('a union of two options that share a node', () => {
     /**
      * **Two declarations of one adapter are two options.** The decision identifies a node that
      * the two options hold, and two declarations are two nodes. An adapter compares by syntax, so
-     * two stand-ins refuse. Two nodes of one structure refuse for the same reason.
+     * two fill values refuse. Two nodes of one structure refuse for the same reason.
      */
     it('refuses two declarations of one adapter', () => {
         expect(() => declare([legacyNumber(), legacyNumber()])).toThrow(
@@ -492,14 +492,14 @@ describe('optional', () => {
      * Not idempotent, because it is not derivable: a marker marks a declaration once.
      *
      * This read as an equation that held until the two markers were checked against each other. Only
-     * the outermost mark was ever read, so `optional(fill(c, v))` silently dropped the stand-in —
+     * the outermost mark was ever read, so `optional(fill(c, v))` silently dropped the fill value —
      * which makes nesting a thing to refuse rather than a law to state.
      */
     it('cannot wrap another marker', () => {
         const _wrong = () => [
             // @ts-expect-error a name is marked once
             optional(optional(string)),
-            // @ts-expect-error and `fill` is what "absent, with a stand-in" is called
+            // @ts-expect-error and `fill` is what "absent, with a fill value" is called
             optional(fill(string, 'x')),
             // @ts-expect-error in either order
             fill(optional(string), 'x'),
@@ -614,7 +614,7 @@ describe('what the wrappers preserve', () => {
         ],
         ['refine', refine(decimal, (_v): _v is string => true), '1.5'],
         [
-            'required slot without a stand-in',
+            'required slot without a fill value',
             legacy({ current: decimal, older: decimal }),
             '1.5',
         ],

@@ -169,20 +169,20 @@ describe('an attribute the row does not have', () => {
     })
 
     /**
-     * **A union reads a row without the name to one value, so a stand-in needs a partner that
-     * reads no such row.** The field with a stand-in reads a map without the name to a value
+     * **A union reads a row without the name to one value, so a fill value needs a partner that
+     * reads no such row.** The field with a fill value reads a map without the name to a value
      * with the name. An `optional` field reads the same map to a value without the name, so the
      * two options read one attribute to two values, and the order of the options would choose.
      * A `req` field reads no map without the name, so the two agree.
      */
     it('refuses a union beside an optional field, and declares it beside a required one', () => {
-        const standIn = object({
+        const filled = object({
             a: fill(string, 'z'),
         })
-        expect(() => union([standIn, object({ a: optional(string) })])).toThrow(
+        expect(() => union([filled, object({ a: optional(string) })])).toThrow(
             CodecError,
         )
-        const either = union([standIn, object({ a: string })])
+        const either = union([filled, object({ a: string })])
         expect(either.unsafeDecode({ M: {} })).toEqual({ a: 'z' })
         expect(either.unsafeDecode({ M: { a: { S: 'b' } } })).toEqual({
             a: 'b',
@@ -190,7 +190,7 @@ describe('an attribute the row does not have', () => {
     })
 
     /**
-     * **A copy per read, so a mutable stand-in cannot be shared between entities.**
+     * **A copy per read, so a mutable fill value cannot be shared between entities.**
      *
      * The declaration holds one value — that is what makes the rule `(fill)`'s premise checkable
      * where the declaration is, rather than on whichever read reaches it first — and each read
@@ -215,7 +215,7 @@ describe('an attribute the row does not have', () => {
     })
 
     /** A primitive is handed over as it is: there is nothing to copy and nothing to leak. */
-    it('does not copy a primitive stand-in', () => {
+    it('does not copy a primitive fill value', () => {
         const C = item(
             object({
                 id: string,
@@ -226,13 +226,13 @@ describe('an attribute the row does not have', () => {
     })
 
     /**
-     * **A decode is writable, so the copy keeps the class of each value in the stand-in.**
+     * **A decode is writable, so the copy keeps the class of each value in the fill value.**
      *
      * `structuredClone` turns an instance of a class the platform does not know into a plain
-     * object. A `DynamoNumber` stand-in then decoded to `{ digits: '1' }`, and the encode of that
+     * object. A `DynamoNumber` fill value then decoded to `{ digits: '1' }`, and the encode of that
      * decode refused it as not a `DynamoNumber`. The element of an array failed the same way.
      */
-    it('decodes a stand-in that holds a DynamoNumber to a value that encodes back', () => {
+    it('decodes a fill value that holds a DynamoNumber to a value that encodes back', () => {
         const one = orThrow(DynamoNumber.from('1'))
         const C = object({
             b: fill(dynamoNumber, one),
@@ -250,12 +250,12 @@ describe('an attribute the row does not have', () => {
      * **And the one value that cannot be copied is shared, rather than throwing on a read.**
      *
      * `structuredClone` refuses anything holding a function. No declared codec admits such a
-     * value — a stand-in comes from the value language, and all of that clones — but an adapter's
+     * value — a fill value comes from the value language, and all of that clones — but an adapter's
      * read hands back whatever its own function builds, so a codec can admit one. The
-     * cloneability is settled at the declaration, so this is a shared stand-in and not a
+     * cloneability is settled at the declaration, so this is a shared fill value and not a
      * `DataCloneError` arriving out of a `decode` months later.
      */
-    it('shares a stand-in structuredClone refuses, rather than failing the read', () => {
+    it('shares a fill value structuredClone refuses, rather than failing the read', () => {
         type Holder = { tag: string; run: () => number }
         const holding = held(string, anything<Holder>(), {
             encode: (value: Holder) => value.tag,
@@ -277,13 +277,13 @@ describe('an attribute the row does not have', () => {
 })
 
 /**
- * **A stand-in that the codec writes through a `ref`.** The scope that binds the `ref` checks the
- * stand-in on the closed copy. So an unwritable stand-in still refuses, at the scope.
+ * **A fill value that the codec writes through a `ref`.** The scope that binds the `ref` checks the
+ * fill value on the closed copy. So an unwritable fill value still refuses, at the scope.
  */
-describe('a stand-in for a recursive codec', () => {
+describe('a fill value for a recursive codec', () => {
     type Leaf = { end: string } | { name: string; next: Leaf }
 
-    it('a recursion with a stand-in encodes and decodes, and a read that lacks the attribute fills it', () => {
+    it('a recursion with a fill value encodes and decodes, and a read that lacks the attribute fills it', () => {
         const { Leaf } = scope({
             Leaf: union([
                 object({ end: string }),
@@ -303,7 +303,7 @@ describe('a stand-in for a recursive codec', () => {
         })
     })
 
-    it('an unwritable stand-in for a recursive codec refuses at the scope, and names the reason', () => {
+    it('an unwritable fill value for a recursive codec refuses at the scope, and names the reason', () => {
         const declare = () =>
             scope({
                 Ended: refine(
@@ -319,22 +319,22 @@ describe('a stand-in for a recursive codec', () => {
                 ),
             })
         expect(declare).toThrow(
-            /stand-in must be a value the codec it stands in for can write, and this `ref` refuses the stand-in: .*an end that is not empty/,
+            /The fill value of `fill` must be a value the codec it fills can write, and this `ref` refuses the fill value: .*an end that is not empty/,
         )
         expect(declare).not.toThrow(/\[object Object\]/)
     })
 })
 
 /**
- * **A stand-in across two entries.** `Branch` writes its stand-in through a `ref` to `Tree`, and
+ * **A fill value across two entries.** `Branch` writes its fill value through a `ref` to `Tree`, and
  * `Tree` reads `Branch` through a `ref`. The scope binds both names in its closed copy, then
- * checks the stand-in.
+ * checks the fill value.
  */
-describe('a stand-in check runs on the closed copy of the scope that binds every name it writes through', () => {
+describe('a fill check runs on the closed copy of the scope that binds every name it writes through', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
-    it('a writable stand-in encodes, decodes, and fills a missing attribute', () => {
+    it('a writable fill value encodes, decodes, and fills a missing attribute', () => {
         const { Tree } = scope({
             Tree: union([object({ end: string }), ref('Branch')]),
             Branch: object({
@@ -352,7 +352,7 @@ describe('a stand-in check runs on the closed copy of the scope that binds every
         })
     })
 
-    it('an unwritable stand-in refuses at the scope, and names the reason', () => {
+    it('an unwritable fill value refuses at the scope, and names the reason', () => {
         const declare = () =>
             scope({
                 Tree: union([
@@ -369,17 +369,17 @@ describe('a stand-in check runs on the closed copy of the scope that binds every
                 }),
             })
         expect(declare).toThrow(
-            /stand-in must be a value the codec it stands in for can write, and this `ref` refuses the stand-in: .*no option admits this value/,
+            /The fill value of `fill` must be a value the codec it fills can write, and this `ref` refuses the fill value: .*no option admits this value/,
         )
     })
 })
 
 /**
- * **The first use through either entry.** The scope runs the check of the stand-in before any use,
+ * **The first use through either entry.** The scope runs the check of the fill value before any use,
  * so the entry used first decides nothing. Each order runs in a fresh module instance, so no state
  * that an earlier use left in the module decides the verdict.
  */
-describe('a stand-in verdict does not depend on which recursive entry is used first', () => {
+describe('a fill verdict does not depend on which recursive entry is used first', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
@@ -399,7 +399,7 @@ describe('a stand-in verdict does not depend on which recursive entry is used fi
     const value: Branch = { name: 'a', next: { end: 'b' } }
 
     for (const first of ['Tree', 'Branch'] as const) {
-        it(`a writable stand-in encodes, decodes, and fills a missing attribute when ${first} is used first`, async () => {
+        it(`a writable fill value encodes, decodes, and fills a missing attribute when ${first} is used first`, async () => {
             const codecs = await declare()
             const written = codecs[first].encode(value)
             expect(written).not.toBeInstanceOf(codecs.CodecError)
@@ -415,10 +415,10 @@ describe('a stand-in verdict does not depend on which recursive entry is used fi
 /**
  * **Every order of first use.** The scope runs the check before any use, so the order of first use
  * decides nothing. A fragment stays open, whether its scope refuses or not, so each fragment
- * refuses each use, and no read returns the stand-in. Each order runs in a fresh module instance,
+ * refuses each use, and no read returns the fill value. Each order runs in a fresh module instance,
  * so no state that an earlier use left in the module decides the verdict.
  */
-describe('a writable stand-in is accepted and fills, and an unwritable one refuses each use, in every order of first use', () => {
+describe('a writable fill value is accepted and fills, and an unwritable one refuses each use, in every order of first use', () => {
     type Tree = { end: string } | Branch
     type Branch = { name: string; next: Tree }
 
@@ -468,7 +468,7 @@ describe('a writable stand-in is accepted and fills, and an unwritable one refus
             next: fill(ref('Tree'), { end: '' }),
         })
         expect(() => scope({ Tree, Branch })).toThrow(
-            /stand-in must be a value the codec it stands in for can write/,
+            /The fill value of `fill` must be a value the codec it fills can write/,
         )
         const missing = { M: { name: { S: 'a' } } }
         const uses = {
@@ -485,7 +485,7 @@ describe('a writable stand-in is accepted and fills, and an unwritable one refus
     }
 
     for (const order of orders) {
-        it(`an unwritable stand-in refuses each use, and no read returns the stand-in, in the order ${order.join(' > ')}`, async () => {
+        it(`an unwritable fill value refuses each use, and no read returns the fill value, in the order ${order.join(' > ')}`, async () => {
             const { CodecError, uses } = await declareUnwritable()
             for (const use of order) {
                 const got = uses[use]()
@@ -495,7 +495,7 @@ describe('a writable stand-in is accepted and fills, and an unwritable one refus
                 )
             }
         })
-        it(`a writable stand-in is accepted and fills a missing attribute, in the order ${order.join(' > ')}`, async () => {
+        it(`a writable fill value is accepted and fills a missing attribute, in the order ${order.join(' > ')}`, async () => {
             const { CodecError, uses } = await declare()
             for (const use of order) {
                 const got = uses[use]()

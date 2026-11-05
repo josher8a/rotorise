@@ -1036,26 +1036,26 @@ describe("extract and exclude partition a union's values and keep its answers", 
  * **A union over an open fragment defers its decision to the scope.** A `ref` that no scope binds
  * names a codec with no meaning yet, so the union holds no compatibility verdict and no guard
  * verdict. The construction accepts, each use refuses by name, and the scope that binds the name
- * decides. The pair has the shape of the pool's open fragments: a stand-in over a slot that reads
+ * decides. The pair has the shape of the pool's open fragments: a fill value over a slot that reads
  * the free `ref`.
  */
 describe('a union over an open fragment defers its decision to the scope, so no caller observes a compatibility or guard verdict on an open term', () => {
     const build = object as unknown as (spec: unknown) => AnyCodec
-    const fragment = (inner: AnyCodec, standIn: unknown) =>
+    const fragment = (inner: AnyCodec, fillValue: unknown) =>
         build({
             a: number,
             b: fill(
                 build({
                     a: optional(build({ a: inner, b: number }) as never),
                 }) as never,
-                standIn as never,
+                fillValue as never,
             ),
         })
     const free = /reads 'undeclared' through a `ref` that no scope binds/
     const open = () => ref('undeclared') as unknown as AnyCodec
 
     it('refuses the closed pair at compatibility, so the open pair has a verdict to defer', () => {
-        // two stand-ins that are two values: the stand-ins agree only where they are one value
+        // two fill values that are two values: the fill values agree only where they are one value
         expect(() =>
             union([
                 fragment(string, {}),

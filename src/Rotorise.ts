@@ -2388,11 +2388,11 @@ type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string | number
  * What one declared attribute decides, at the type level, with the two presence marks of a field read.
  *
  * The type half of {@link constantOf}, and it must give the same answer: a name that may be absent
- * decides nothing, a stand-in is written always so what it stands in for still decides, and the
+ * decides nothing, a fill value is written always so what it fills still decides, and the
  * constants spec is what holds the two together.
  */
 type ConstantValue<C> = C extends {
-    readonly def: { readonly mark: 'fallback' }
+    readonly def: { readonly mark: 'fill' }
     readonly codec: infer Marked
 }
     ? ConstantValue<Marked>

@@ -665,7 +665,7 @@ export const leanClosedOf = (
     if ('mark' in def) {
         return refuse(
             at,
-            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+            'a *field*, not a term — `optional`/`fill` denote `Field`, and no `Term` position accepts one',
         )
     }
     return leanClosedOfTerm(def, at, bound)
@@ -768,7 +768,7 @@ export const leanGraphOf = (
     if ('mark' in def) {
         return refuse(
             at,
-            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+            'a *field*, not a term — `optional`/`fill` denote `Field`, and no `Term` position accepts one',
         )
     }
     return leanGraphOfTerm(def, at, bound)
@@ -1145,17 +1145,17 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
  * An `ObjectSlot` — the field stratum, which is a *position* in a map and not a codec.
  *
  * **The slot has three constructors.** A name is required, optional, or filled: a fill is required
- * on the write and reads an absent name as its stand-in. The presence lattice reads the rest.
+ * on the write and reads an absent name as its fill value. The presence lattice reads the rest.
  */
 const leanSlotOf = (field: TermField, at: string, scope: At): string => {
     switch (field.mark) {
         case 'optional':
             return `${pre(scope)}ObjectSlot.optional (${leanTermOfTerm(field.t, at, scope)})`
         /**
-         * `ObjectSlot.fill`: the stand-in is data, so it prints as a `Value`. An older reader of a
+         * `ObjectSlot.fill`: the fill value is data, so it prints as a `Value`. An older reader of a
          * present value stays in the term, as `Term.legacy`.
          */
-        case 'fallback':
+        case 'fill':
             return `${pre(scope)}ObjectSlot.fill (${leanTermOfTerm(field.t, at, scope)}) (${leanValueOf(field.v, at)})`
         case 'req':
             return `${pre(scope)}ObjectSlot.req (${leanTermOfTerm(field.t, at, scope)})`
@@ -2251,7 +2251,7 @@ export const legacyReadOf = (
     if ('mark' in def) {
         return refuse(
             name,
-            'a *field*, not a term — `optional`/`fallback` denote `Field`, and no `Term` position accepts one',
+            'a *field*, not a term — `optional`/`fill` denote `Field`, and no `Term` position accepts one',
         )
     }
     const log = new Map<unknown, [AttributeValue, unknown][]>()

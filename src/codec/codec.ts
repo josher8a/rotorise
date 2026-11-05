@@ -78,6 +78,7 @@ import type { Body, Field, NameForm, NonEmpty, RefSlot, Term } from './term'
 import {
     clauseForm,
     closedCopy,
+    fillEquals,
     holdsNoValue,
     mapChildren,
     member as memberOf,
@@ -86,7 +87,6 @@ import {
     resolvedTerm,
     sameAdapter,
     sameTerm,
-    standInEquals,
     targetOf,
     throughRefs,
     unanimous,
@@ -137,7 +137,7 @@ export {
 declare const optionalMarker: unique symbol
 
 /** Type-level only, for the same reason as {@link optionalMarker}: the term carries the fact. */
-declare const fallbackMarker: unique symbol
+declare const fillMarker: unique symbol
 
 /** Type-level only, for the same reason as {@link optionalMarker}. */
 declare const undefinableMarker: unique symbol
@@ -546,7 +546,7 @@ export type SetSlot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
  *
  * The two presence marks answer differently and neither is the codec's answer. A name that may be absent
  * decides nothing about a key, because a key built from it would have no value to build from in the
- * rows that omit it. A stand-in is written always, so what it stands in for still decides.
+ * rows that omit it. A fill value is written always, so what it fills still decides.
  *
  * A reader of the term alone does not answer this. A term is what a codec has, a field is not a
  * codec, and the body is what holds a field — so this reads the mark first and the term second.
@@ -1985,7 +1985,7 @@ export type Refined<
  * `B`, the three a stored set is built from. `refine(legacy(…), p).set()` type-checks
  * and throws, because a read widening has no set in the model. That gap closes only by making the
  * codec type generic in its definition, which was measured at 481 of 968 signatures and rejected;
- * the runtime refusal in {@link set} is what stands in for it.
+ * the runtime refusal in {@link set} is what fills it.
  *
  * **One member at a time, and each test non-distributive.** Two shorter spellings were tried and
  * both admit `refine(union([string, number]), p).set()`, which is a set of an element writing two
@@ -2096,7 +2096,7 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
 /**
  * A field that stands in a value where the attribute is absent.
  *
- * Not a codec, for the reason {@link OptionalCodec} records. The stand-in is the marker's payload at
+ * Not a codec, for the reason {@link OptionalCodec} records. The fill value is the marker's payload at
  * the type level and `def.value` at run time, and the run-time side is the one {@link fill}
  * checks against the rule `(fill)`.
  */
@@ -2108,9 +2108,9 @@ type MissingCodec<
     // arguments drops it before a derivation over the spec can ask
     C = AttributeCodec<T, A>,
 > = {
-    readonly [fallbackMarker]: T
+    readonly [fillMarker]: T
     readonly codec: C
-    readonly def: Extract<Field, { readonly mark: 'fallback' }>
+    readonly def: Extract<Field, { readonly mark: 'fill' }>
 }
 
 /**
@@ -2119,17 +2119,17 @@ type MissingCodec<
  * Not {@link optional}: the entity always has it, the *data* may not — a row written before the
  * attribute existed. Replaces `item.channel ?? 'IN_STORE'` at every read site.
  *
- * **The stand-in must be writable by the codec it stands in for**, and that is checked here, at the
- * declaration. The model carries it as the premise `hfill` of `carrier_objectCodec`: the stand-in of a
+ * **The fill value must be writable by the codec it fills**, and that is checked here, at the
+ * declaration. The model carries it as the premise `hfill` of `carrier_objectCodec`: the fill value of a
  * `.fill` slot is in the write domain of its codec. The premise exists because the proof failed
- * without it: a row missing the attribute reads back as the stand-in, and if the inner codec cannot write that value the item cannot be written back —
+ * without it: a row missing the attribute reads back as the fill value, and if the inner codec cannot write that value the item cannot be written back —
  * **(C)** broken at the read, with the refusal surfacing on some later write rather than at the
  * declaration responsible for it. `fill(string('A'), 'B')` is the whole of it.
  *
- * The stand-in is a **value and not a thunk**, which is what makes the check possible here rather
- * than on whichever read happens to need it first. A stand-in that the codec writes through a
+ * The fill value is a **value and not a thunk**, which is what makes the check possible here rather
+ * than on whichever read happens to need it first. A fill value that the codec writes through a
  * {@link ref} that no scope binds is checked by the {@link scope} that binds the name. It does not become shared state for that: the
- * declaration holds one value and each read that needs one gets a copy of it, so a mutable stand-in
+ * declaration holds one value and each read that needs one gets a copy of it, so a mutable fill value
  * still cannot leak between entities. The copy keeps the class of each value, because a decode must
  * be writable: a `DynamoNumber` is shared, being immutable. Primitives are handed over as they are,
  * being unable to leak anything.
@@ -2140,24 +2140,25 @@ export const fill = <const C extends AnyCodec>(
     // a plain codec that never carries one
     inner: C,
     // `NoInfer` so the codec is the only thing that says what it holds. Inferring from both sites
-    // unified them, and a stand-in written `'A'` widens to `string`, which then refused the very
-    // codec it stands in for — invisible while the entity was declared first and pinned it itself
+    // unified them, and a fill value written `'A'` widens to `string`, which then refused the very
+    // codec it fills — invisible while the entity was declared first and pinned it itself
     value: NoInfer<Decoded<C>>,
 ): MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
     TermMark<['fill', TermOf<C>]> &
     Free<FreeOf<C>> => {
-    // The rule `(fill)`: the stand-in must be *writable*, or a row missing the name decodes to a
+    // The rule `(fill)`: the fill value must be *writable*, or a row missing the name decodes to a
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable from the
-    // declaration alone, which is why the stand-in is a value and not a thunk
-    const standsFor = inner as unknown as AnyCodec
-    // **A stand-in that the codec writes through an unbound `ref` is checked by the scope**, on the
+    // declaration alone, which is why the fill value is a value and not a thunk
+    const filledCodec = inner as unknown as AnyCodec
+    // **A fill value that the codec writes through an unbound `ref` is checked by the scope**, on the
     // closed copy, because the write reads through the ref
-    if (unboundRefs([termOf(standsFor)]).size === 0) standIn(standsFor, value)
+    if (unboundRefs([termOf(filledCodec)]).size === 0)
+        checkFill(filledCodec, value)
     const attribute = inner as unknown as AttributeCodec<Decoded<C>>
     return {
         codec: attribute,
-        def: { mark: 'fallback', t: termOf(inner), v: value },
+        def: { mark: 'fill', t: termOf(inner), v: value },
     } as unknown as MissingCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue,
@@ -2167,11 +2168,11 @@ export const fill = <const C extends AnyCodec>(
         Free<FreeOf<C>>
 }
 
-/** The refusal of a stand-in that the codec it stands in for cannot write. */
-const standIn = (standsFor: AnyCodec, value: unknown): void => {
+/** The refusal of a fill value that the codec it fills cannot write. */
+const checkFill = (filledCodec: AnyCodec, value: unknown): void => {
     let refusal: CodecError | undefined
     try {
-        const written = standsFor.encode(value as never)
+        const written = filledCodec.encode(value as never)
         refusal = failed(written) ? written : undefined
     } catch (thrown) {
         // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
@@ -2181,14 +2182,14 @@ const standIn = (standsFor: AnyCodec, value: unknown): void => {
     }
     if (refusal) {
         throw new CodecError(
-            `\`fill\`'s stand-in must be a value the codec it stands in for can write, and this \`${standsFor.def.kind}\` refuses the stand-in: ${refusal.message}. A row missing the attribute would read back as it and then refuse on the way out`,
+            `The fill value of \`fill\` must be a value the codec it fills can write, and this \`${filledCodec.def.kind}\` refuses the fill value: ${refusal.message}. A row missing the attribute would read back as the fill value and then refuse on the way out`,
         )
     }
 }
 
 /**
  * The refusal in the type of a wall argument whose term reaches an entry on a cycle. The overload
- * of `fill` carries no refusal, because a stand-in alone builds no wall. A `fill` over a `legacy` read refuses
+ * of `fill` carries no refusal, because a fill value alone builds no wall. A `fill` over a `legacy` read refuses
  * through the wall of `legacy`.
  */
 type WallOver<W extends string, C> = [CycleEntryOf<TermOf<C>>] extends [never]
@@ -2613,7 +2614,7 @@ type SlotInScope<S, Defs> = [FreeOf<S>] extends [never]
     ? S
     : S extends { readonly codec: infer C }
       ? TermOf<C> extends ['ref', infer N extends keyof Defs]
-          ? S extends { readonly [fallbackMarker]: infer T }
+          ? S extends { readonly [fillMarker]: infer T }
               ? MissingCodec<
                     T,
                     AttributeOf<ClosedRef<Defs, N>> & AttributeValue,
@@ -2621,7 +2622,7 @@ type SlotInScope<S, Defs> = [FreeOf<S>] extends [never]
                 > &
                     TermMark<['fill', ScopeTerm<Defs, N>]>
               : MarkLike<S, ClosedRef<Defs, N>>
-          : S extends { readonly [fallbackMarker]: unknown }
+          : S extends { readonly [fillMarker]: unknown }
             ? S
             : Deep<C, Defs> extends infer D extends AnyCodec
               ? MarkLike<S, D>
@@ -2744,7 +2745,7 @@ export function ref(name: string): unknown {
  * container on its path, or with an adapter on its path, is refused. A `ref` to a name that `defs`
  * does not declare is refused. Then each check that reads through a `ref` runs on the closed copy:
  * the check of a `union` with a `ref` option, which a `nullable` over a `ref` builds, the index of
- * a dissection whose tag reads a `ref`, and the stand-in of a `fill` that writes through
+ * a dissection whose tag reads a `ref`, and the fill value of a `fill` that writes through
  * a `ref`.
  *
  * **A scope closes a copy, by lexical scope.** Each entry is the codec of its closed term. A `ref`
@@ -2794,7 +2795,7 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
         judged(copy, false)
         if (copy.kind === 'object')
             for (const f of Object.values(copy.body.fields))
-                if (f.mark === 'fallback') standIn(codecOfTerm(f.t), f.v)
+                if (f.mark === 'fill') checkFill(codecOfTerm(f.t), f.v)
         const ks = keySets.get(copy)
         if (ks !== undefined && copy.kind === 'union')
             dissectionOf(copy, ks).resolution()
@@ -2837,7 +2838,7 @@ const entryOf = (codec: AnyCodec, kind: Term['kind'] | undefined): object =>
  * anything to be missing from, and each of those refuses this because a field is not a codec — the
  * member for a value that may be stored as `NULL` in one of them is {@link nullable}. Marking a
  * marked declaration is refused the same way: `fill(c, v)` is the attribute that may be absent
- * and has a stand-in, and it is what both nestings meant.
+ * and has a fill value, and it is what both nestings meant.
  */
 export const optional = <const C extends AnyCodec>(
     inner: C,
@@ -2872,7 +2873,7 @@ export const optional = <const C extends AnyCodec>(
  *
  * It is the stricter of the pair: `optional` reads both `{}` and `{ k: undefined }` back as `{}`,
  * so **(R)** holds for it modulo that identification, while here the round trip is an equality. It
- * takes on no premise of its own — unlike {@link fill}, which must check its stand-in is
+ * takes on no premise of its own — unlike {@link fill}, which must check its fill value is
  * writable because it writes one.
  */
 export const undefinable = <const C extends AnyCodec>(
@@ -4551,7 +4552,7 @@ export const preconditions = (located: {
 /**
  * One declared attribute, with the questions about its declaration already answered.
  *
- * Whether an attribute may be absent and what stands in for it are facts about the spec, not about
+ * Whether an attribute may be absent and what fills it are facts about the spec, not about
  * the row being read, so they are settled once when the codec is built.
  */
 export type Declared = {
@@ -4622,7 +4623,7 @@ const objectFromMap = <
 ): ObjectCodec<Spec, Rest> => {
     // the marker off each declared attribute, once — the term. What the two directions walk is
     // the *compiled* form of it, which `bodySem` builds and which carries one thing the term does
-    // not: whether a stand-in has to be copied per read, a fact about this runtime and not about
+    // not: whether a fill value has to be copied per read, a fact about this runtime and not about
     // the declaration.
     const fields: Record<string, Field> = {}
     const declaredSpec = spec as unknown as Record<string, ObjectSlot>
@@ -4987,8 +4988,8 @@ type StoredMembers<C> = AttributeOf<C> extends infer W
  * {@link absentBelow} at the `relation` order, and the meet takes the mark of the side that lies
  * below the other, and `req` where neither side does: `undefinable` lies below `optional`, a
  * required slot lies below each slot, and a fill lies below no other mark. Two fills keep the fill
- * where the two slots are one type. The type reads no stand-in, so the run time decides where two
- * fills of one type hold two stand-ins, and it gives `req` there.
+ * where the two slots are one type. The type reads no fill value, so the run time decides where two
+ * fills of one type hold two fill values, and it gives `req` there.
  */
 type MeetSlot<A, B> = MeetCodecs<Marks<A>, Marks<B>> extends infer M
     ? MeetMark<SlotMark<A>, SlotMark<B>> extends infer K
@@ -5020,7 +5021,7 @@ type MarkedMeet<
             TermMark<['optional', TermOf<C>]>
 
 /** The presence mark of a slot. */
-type SlotMark<S> = S extends { readonly [fallbackMarker]: unknown }
+type SlotMark<S> = S extends { readonly [fillMarker]: unknown }
     ? 'fill'
     : S extends { readonly [undefinableMarker]: true }
       ? 'undefinable'
@@ -5602,9 +5603,9 @@ const aligned = (
  * entry of that side, an optional slot at the block, as {@link aligned} gives it. An `opaque` block
  * is the unit of the meet, so it keeps the declared slot as it is.
  *
- * At the `relation` order two fills meet at a fill only where the stand-ins are one value
- * ({@link standInEquals}), as the model's `absentAgreeG` admits two fills only there. Two fills
- * with different stand-ins, and a fill beside an `optional` slot, share no pair at the absent row,
+ * At the `relation` order two fills meet at a fill only where the fill values are one value
+ * ({@link fillEquals}), as the model's `absentAgreeG` admits two fills only there. Two fills
+ * with different fill values, and a fill beside an `optional` slot, share no pair at the absent row,
  * so the slot is required over the meet of the two codecs. At the `value` order a fill reads as a
  * required slot, so it lies below `optional` and the fill stays.
  *
@@ -5638,7 +5639,7 @@ const meetSlots = (
           ? theirs
           : undefined
     switch (below?.mark) {
-        case 'fallback':
+        case 'fill':
             return fill(held, below.v as Decoded<typeof held>)
         case 'undefinable':
             return undefinable(held)
@@ -7310,7 +7311,7 @@ type BelowShape<A, P, EA, EP, Seen extends readonly unknown[]> = P extends [
               : 'f'
 /**
  * The slot of the option against the slot of the pattern: the absent row, then the term. At the
- * `value` order a stand-in counts no absent row, so a `fill` slot reads as a required one.
+ * `value` order a fill value counts no absent row, so a `fill` slot reads as a required one.
  * `undefinable` pairs the absent row with `{ k: undefined }`, which `optional` reads as `{}`.
  */
 type BelowSlot<M, W, EA, EP, Seen extends readonly unknown[]> = [M, W] extends [
@@ -7325,7 +7326,7 @@ type BelowSlot<M, W, EA, EP, Seen extends readonly unknown[]> = [M, W] extends [
           | BelowT<MT, WT, EA, EP, Seen>
       >
     : 'u'
-/** The presence mark of a field, where a stand-in counts as required at the `value` order. */
+/** The presence mark of a field, where a fill value counts as required at the `value` order. */
 type SlotMarkOf<F> = SlotOf<F> extends [infer M extends string, unknown]
     ? M extends 'fill'
         ? 'req'
@@ -7641,7 +7642,7 @@ type WholeField = { readonly whole: true }
 
 /**
  * Whether a field splits at presence: the pattern refuses the absent row of the field, which
- * {@link AbsentBelow} decides on the marks. A required field, and a stand-in at the `value` order,
+ * {@link AbsentBelow} decides on the marks. A required field, and a fill value at the `value` order,
  * hold no absent row.
  */
 type SplitsAtPresence<A, P> = AbsentBelow<
@@ -8221,7 +8222,7 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
 
 /**
  * **What the order compares at the absent row of a slot.** `relation` compares pairs of a stored
- * row and a decoded value, so a `fill` slot counts the absent row that its stand-in
+ * row and a decoded value, so a `fill` slot counts the absent row that its fill value
  * reads. The meet of two codecs reads it. `value` compares decoded values alone, because a pattern
  * has no decode of its own: a `fill` slot always gives a value, so the slot equals a
  * required slot, as the model's `AltClause.admitsC` reads a fill through `slotReq`. `fits`, the
@@ -8258,28 +8259,27 @@ const slotBelow = (
 /**
  * **Whether the pairs of the absent row that the slot `mine` holds are pairs of the slot
  * `wanted`.** A required slot holds no absent row. At the `relation` order, a `fill` slot
- * pairs the absent row with its stand-in, so it is below only a slot of the same stand-in. At the
+ * pairs the absent row with its fill value, so it is below only a slot of the same fill value. At the
  * `value` order, a `fill` slot is a required slot. `undefinable` pairs it with
  * `{ k: undefined }`, which `optional` reads as `{}`. `optional`, and a name that a closed object
  * does not declare, pair it with a value without the key, which `undefinable` refuses.
  */
 const absentBelow = (mine: Field, wanted: Field, order: Order): boolean => {
-    // at the `value` order a stand-in counts no absent row, so the slot reads as a required slot
+    // at the `value` order a fill value counts no absent row, so the slot reads as a required slot
     const read = (f: Field): Field =>
-        order === 'value' && f.mark === 'fallback' ? { mark: 'req', t: f.t } : f
+        order === 'value' && f.mark === 'fill' ? { mark: 'req', t: f.t } : f
     const [m, w] = [read(mine), read(wanted)]
     switch (w.mark) {
         case 'req':
             return m.mark === 'req'
-        case 'fallback':
+        case 'fill':
             return (
-                m.mark === 'req' ||
-                (m.mark === 'fallback' && standInEquals(m.v, w.v))
+                m.mark === 'req' || (m.mark === 'fill' && fillEquals(m.v, w.v))
             )
         case 'undefinable':
             return m.mark === 'req' || m.mark === 'undefinable'
         case 'optional':
-            return m.mark !== 'fallback'
+            return m.mark !== 'fill'
     }
 }
 

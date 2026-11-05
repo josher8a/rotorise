@@ -181,35 +181,31 @@ describe('two objects are disjoint where one name holds two fields apart', () =>
     })
 
     /**
-     * A `fill` field reads a map without the name to its stand-in, so it requires the
+     * A `fill` field reads a map without the name to its fill value, so it requires the
      * name on no side of a read.
      */
-    it('keeps a stand-in field together with an optional field and with an empty object', () => {
-        const standIn = object({
+    it('keeps a fill field together with an optional field and with an empty object', () => {
+        const filled = object({
             a: fill(string, 'x'),
         })
         expect(
-            apart(termOf(object({ a: optional(boolean) })), termOf(standIn)),
+            apart(termOf(object({ a: optional(boolean) })), termOf(filled)),
         ).toBe(false)
-        expect(apart(termOf(standIn), termOf(standIn))).toBe(false)
+        expect(apart(termOf(filled), termOf(filled))).toBe(false)
         expect(
             apart(
-                body({ x: { mark: 'fallback', t: termOf(string), v: 'd' } }),
+                body({ x: { mark: 'fill', t: termOf(string), v: 'd' } }),
                 body({}),
             ),
         ).toBe(false)
     })
 
-    it('keeps a required field apart from a stand-in field whose terms are disjoint', () => {
-        const standIn = object({
+    it('keeps a required field apart from a fill field whose terms are disjoint', () => {
+        const filled = object({
             a: fill(string, 'x'),
         })
-        expect(apart(termOf(object({ a: boolean })), termOf(standIn))).toBe(
-            true,
-        )
-        expect(apart(termOf(object({ a: string })), termOf(standIn))).toBe(
-            false,
-        )
+        expect(apart(termOf(object({ a: boolean })), termOf(filled))).toBe(true)
+        expect(apart(termOf(object({ a: string })), termOf(filled))).toBe(false)
     })
 
     /**

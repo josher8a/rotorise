@@ -318,9 +318,9 @@ describe('a union of options that pin distinct literals of any base decodes by t
     })
 })
 
-describe('a union whose tag sits under a fallback field decodes as attempting does', () => {
-    // A row that lacks the tag reads as the stand-in, so the tag is no required literal of the stored
-    // view. The row must still reach the option that the stand-in names.
+describe('a union whose tag sits under a fill field decodes as attempting does', () => {
+    // A row that lacks the tag reads as the fill value, so the tag is no required literal of the stored
+    // view. The row must still reach the option that the fill value names.
     const tagged = union([
         object({
             kind: fill(string('A'), 'A'),
@@ -339,7 +339,7 @@ describe('a union whose tag sits under a fallback field decodes as attempting do
         )
     })
 
-    it('reads a row that lacks the tag as the option that the stand-in names', () => {
+    it('reads a row that lacks the tag as the option that the fill value names', () => {
         const row: Row = { M: { a: { S: 'x' } } }
         expect(tagged.decode(row as AttributeValue)).toEqual({
             kind: 'A',

@@ -228,9 +228,7 @@ describe('the tag a variant answers to', () => {
      */
     it('a discriminator that may be absent or stood in for names no tag', () => {
         expect(failed(variant({ mark: 'optional', t: literal }))).toBe(true)
-        expect(failed(variant({ mark: 'fallback', t: literal, v: 'A' }))).toBe(
-            true,
-        )
+        expect(failed(variant({ mark: 'fill', t: literal, v: 'A' }))).toBe(true)
     })
 
     /** A tag is a stored string or numeral, so a literal at any other base names none. */

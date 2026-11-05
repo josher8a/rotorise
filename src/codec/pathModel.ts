@@ -625,7 +625,7 @@ type OptionsOf<F> = F extends [['union', infer Os extends unknown[]], infer Env]
  * **The graph decision of `narrow`, read on the terms**: the model's `Scoped.disjoint` at the
  * stored views of the clause and of an option, as `narrowAcross` reads it. The left operand is the
  * clause, and the right operand is the option. A `held` reads its inner term, an older reader reads
- * any attribute, and a `fallback` slot is optional. Below a guard a pair of entries is assumed apart
+ * any attribute, and a `fill` slot is optional. Below a guard a pair of entries is assumed apart
  * while the walk compares the two bodies: `A` holds the assumed pairs. `false` states nothing.
  * Two list shapes and the predicates of a refinement are not ported, and read as not apart.
  */
@@ -755,7 +755,7 @@ type FamG<Fam, R, RE, A extends unknown[]> = Fam extends ['prim', infer G]
                 ? true
                 : false
           : false
-/** Whether a slot holds its name in the stored view: `req` only, as a `fallback` may lack it. */
+/** Whether a slot holds its name in the stored view: `req` only, as a `fill` may lack it. */
 type IsReqT<S> = S extends ['req', unknown] ? true : false
 /** `pairX`: a pair of entries already assumed is apart, a new pair is assumed, and any other pair runs the row at the same fuel. */
 type PairG<X, XE, Y, YE, A extends unknown[]> = EntryOf<X, XE> extends [

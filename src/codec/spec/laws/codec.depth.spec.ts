@@ -191,7 +191,7 @@ describe('the nesting bound around a typed container', () => {
             one,
         ],
         [
-            'a fill with a stand-in',
+            'a fill with a fill value',
             object({
                 a: fill(array(opaque), []),
             }),

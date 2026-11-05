@@ -239,7 +239,7 @@ describe('a path that crosses a whole-value adapter', () => {
         expect(
             body.kind === 'object' ? body.body.fields.name : undefined,
         ).toEqual({
-            mark: 'fallback',
+            mark: 'fill',
             t: {
                 kind: 'legacy',
                 inner: { kind: 'string' },

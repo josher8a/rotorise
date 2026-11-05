@@ -106,7 +106,7 @@ describe('the type and the function agree on what is decided', () => {
     })
 
     /**
-     * A stand-in is written on **every** write, so the attribute still holds one value, and both
+     * A fill value is written on **every** write, so the attribute still holds one value, and both
      * halves say so.
      *
      * They did not until the mark carried the codec it marks. A field named that codec as an

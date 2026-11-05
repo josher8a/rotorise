@@ -17,6 +17,7 @@ import {
     childrenOf,
     componentsOf,
     entryOrder,
+    fillEquals,
     ground,
     isPrim,
     memoClosed,
@@ -24,7 +25,6 @@ import {
     otherShape,
     primsApart,
     sameAdapter,
-    standInEquals,
     targetOf,
     unionAlternatives,
 } from './term'
@@ -335,12 +335,12 @@ const viewAt = (side: Side, t: Term, closed: boolean): At => {
     return { kind: 'term', t, side, closed }
 }
 
-/** **The presence of a field in the view**: a `fallback` holds the name where it writes. */
+/** **The presence of a field in the view**: a `fill` holds the name where it writes. */
 const markOf = (field: Field, mode: Mode): 'req' | 'opt' | 'fill' => {
     switch (field.mark) {
         case 'req':
             return 'req'
-        case 'fallback':
+        case 'fill':
             return mode === 'raw' ? 'fill' : mode === 'caller' ? 'req' : 'opt'
         default:
             return 'opt'
@@ -1054,7 +1054,7 @@ const bodiesAgree = (
     const fieldOf = (body: Body, name: string): Field =>
         own(body.fields, name) ?? { mark: 'optional', t: body.rest ?? never }
     const absent = (name: string) =>
-        k.half === 'write' || standInsAgree(fieldOf(a, name), fieldOf(b, name))
+        k.half === 'write' || fillsAgree(fieldOf(a, name), fieldOf(b, name))
     return (
         Object.entries(a.fields).every(
             ([name, field]) =>
@@ -1090,14 +1090,14 @@ const bodiesAgree = (
 
 /**
  * **Two fields read a map without the name to one value**, or one of the two reads no such map. A
- * field with a fallback reads such a map to its stand-in. **The host admits two fallbacks with one
- * stand-in, and the model refuses every two fills**, because the model's constants have no
+ * field with a fill reads such a map to its fill value. **The host admits two fills with one
+ * fill value, and the model refuses every two fills**, because the model's constants have no
  * decidable equality. So a pair with a fill at one name on each side states no compatibility row.
  */
-const standInsAgree = (a: Field, b: Field): boolean =>
-    a.mark === 'fallback'
-        ? b.mark === 'req' || (b.mark === 'fallback' && standInEquals(a.v, b.v))
-        : b.mark !== 'fallback' || a.mark === 'req'
+const fillsAgree = (a: Field, b: Field): boolean =>
+    a.mark === 'fill'
+        ? b.mark === 'req' || (b.mark === 'fill' && fillEquals(a.v, b.v))
+        : b.mark !== 'fill' || a.mark === 'req'
 
 /**
  * **The guard of a position at a path**, the model's `termPreAt`, as conjuncts: `in` for a literal

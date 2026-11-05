@@ -235,7 +235,7 @@ describe('a clause is a literal at a base', () => {
 
     /**
      * **A pattern is a set of values.** A `fill` field always gives a value, because a row
-     * without the attribute reads back as the stand-in. So the slice reads the field as required,
+     * without the attribute reads back as the fill value. So the slice reads the field as required,
      * as `Calculus.AltClause.admitsC` reads a fill through `slotReq`, and the clause keeps the
      * member. The meet of two codecs counts the absent row, and there the field is not required.
      */

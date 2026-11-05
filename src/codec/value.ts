@@ -179,11 +179,11 @@ export const namedLiteral = (one: unknown): string =>
             : rendered(one)
 
 /**
- * A copy of a stand-in for one read, **that keeps the class of each value in the stand-in**.
+ * A copy of a fill value for one read, **that keeps the class of each value in the fill value**.
  *
  * A decode must be writable, and a copy that changes a class breaks that. `structuredClone` keeps
  * the class of a platform type and turns an instance of any other class into a plain object: a
- * `DynamoNumber` stand-in read back as `{ digits }`, and `dynamoNumber` refused to encode it.
+ * `DynamoNumber` fill value read back as `{ digits }`, and `dynamoNumber` refused to encode it.
  *
  * So this rebuilds the containers that `structuredClone` recurses into, and gives each other object
  * to `structuredClone`. Where the clone keeps the class, the clone is the copy. Where the clone
@@ -213,7 +213,7 @@ export const copied = (value: unknown): unknown => {
 }
 
 /**
- * Whether this stand-in has to be *copied* on each read that uses it, decided once.
+ * Whether this fill value has to be *copied* on each read that uses it, decided once.
  *
  * The declaration holds **one** value — that is what makes the rule `(fill)`'s premise checkable
  * where the declaration is — so handing that object out is handing every row the same object, and
@@ -223,9 +223,9 @@ export const copied = (value: unknown): unknown => {
  * Two reasons not to copy, and both are settled here rather than per read.
  *
  * A **primitive** cannot be mutated, so sharing one is safe and copying it is waste — and most
- * stand-ins are primitives.
+ * fill values are primitives.
  *
- * And a value `structuredClone` **refuses**. Ordinarily there is none: a stand-in is a value the
+ * And a value `structuredClone` **refuses**. Ordinarily there is none: a fill value is a value the
  * inner codec accepts, so it comes from the value language — arrays, plain objects, `Set`,
  * `Uint8Array` — and all of those clone. A `custom` term is the exception, because its admission
  * asks the caller's own pair, so a hand-written codec can legitimately admit a class instance with
