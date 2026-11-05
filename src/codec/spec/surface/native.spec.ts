@@ -590,6 +590,16 @@ describe('a Set that repeats a stored member', () => {
         )
     })
 
+    it('reads no stored set with a member of another type, and refuses without a throw', () => {
+        for (const stored of [{ SS: ['a', 1] }, { NS: [1] }, { BS: ['a'] }]) {
+            const read = native.decode(stored as never)
+            expect(read).toBeInstanceOf(CodecError)
+            expect((read as CodecError).reason).toMatch(
+                /^member \d+ of this [SNB]S is not/,
+            )
+        }
+    })
+
     it('reads no stored set that repeats a member, which DynamoDB never returns', () => {
         for (const stored of [
             { SS: ['a', 'a'] },

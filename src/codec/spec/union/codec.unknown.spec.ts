@@ -204,6 +204,16 @@ describe('what it refuses, and what it tells you instead', () => {
         }
     })
 
+    it('reads no stored set with a member of another type, and refuses without a throw', () => {
+        for (const stored of [{ SS: ['a', 1] }, { NS: [1] }, { BS: ['a'] }]) {
+            const read = opaque.decode(stored as never)
+            expect(read).toBeInstanceOf(CodecError)
+            expect((read as CodecError).reason).toMatch(
+                /^member \d+ of this [SNB]S is not/,
+            )
+        }
+    })
+
     it('refuses to read one back, for the same reason', () => {
         expect(() => opaque.unsafeDecode({ SS: [] })).toThrow(CodecError)
         expect(() => opaque.unsafeDecode({ BS: [] })).toThrow(CodecError)

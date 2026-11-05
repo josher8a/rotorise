@@ -26,7 +26,6 @@ import {
     isStoredNumeral,
     MAX_DOCUMENT_NESTING,
     memberOf,
-    repeatedAt,
     tooDeeplyNested,
 } from './attribute'
 import type { Codec } from './build'
@@ -66,12 +65,14 @@ import {
     usedTargetOf,
     widensRead,
 } from './term'
+import type { SetFamily, SetFault } from './value'
 import {
     asRecord,
     copied,
     copiedPerRead,
     describeShape,
     expect,
+    faultOfSet,
     namedLiteral,
     namesOf,
     own,
@@ -1192,23 +1193,27 @@ export const denote = (def: Term): Pair => {
                         ? new CodecError(
                               `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                           )
-                        : value.size === 0
-                          ? new CodecError(
-                                `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
-                            )
-                          : andThen(every([...value], carried), (written) =>
-                                // two members that write one stored member make a set that
-                                // DynamoDB refuses, and a merge would decode to a smaller set
-                                repeatedAt(written) !== undefined
+                        : andThen(every([...value], carried), (written) => {
+                              const fault = faultOfSet(setMember, written)
+                              return fault === undefined
+                                  ? // sorted so what is stored does not depend on insertion order
+                                    carrying(
+                                        setMember,
+                                        [...written].sort() as never,
+                                    )
+                                  : fault.fault === 'empty'
                                     ? new CodecError(
-                                          `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
+                                          `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
                                       )
-                                    : // sorted so what is stored does not depend on insertion order
-                                      carrying(
-                                          setMember,
-                                          [...written].sort() as never,
-                                      ),
-                            ),
+                                    : fault.fault === 'repeated'
+                                      ? // two members that write one stored member make a set
+                                        // that DynamoDB refuses, and a merge would decode to a
+                                        // smaller set
+                                        new CodecError(
+                                            `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
+                                        )
+                                      : setFaultError(setMember, fault)
+                          }),
                 decode: (attribute) =>
                     andThen(
                         andThen(expect(setMember, attribute), (carried) => {
@@ -1216,15 +1221,9 @@ export const denote = (def: Term): Pair => {
                                 | string
                                 | Uint8Array
                             )[]
-                            if (members.length === 0) {
-                                return new CodecError(
-                                    `DynamoDB has no empty ${setMember}, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-                                )
-                            }
-                            if (repeatedAt(members) !== undefined) {
-                                return new CodecError(
-                                    `DynamoDB holds no ${setMember} that repeats a member, so this attribute was not written by it; a set this codec would refuse to write is not one it can read`,
-                                )
+                            const fault = faultOfSet(setMember, members)
+                            if (fault !== undefined) {
+                                return setFaultError(setMember, fault)
                             }
                             return every(members, (raw) =>
                                 inner.decode(carrying(member, raw as never)),
@@ -1870,28 +1869,41 @@ export const encodeUnknown = (
 
     if (value instanceof Set) {
         const members = [...value]
-        if (members.length === 0) {
-            return new CodecError('DynamoDB has no empty set')
+        const written = (
+            family: SetFamily,
+            stored: readonly (string | Uint8Array)[],
+            repeated: string,
+        ): Result<AttributeValue> => {
+            const fault = faultOfSet(family, stored)
+            return fault === undefined
+                ? carrying(family, [...stored].sort() as never)
+                : fault.fault === 'empty'
+                  ? new CodecError('DynamoDB has no empty set')
+                  : fault.fault === 'repeated'
+                    ? new CodecError(repeated)
+                    : setFaultError(family, fault)
         }
-        if (members.every((x) => typeof x === 'string')) {
-            return carrying('SS', (members as string[]).sort())
+        // an empty set has every kind, so the rule of the set names it
+        if (members.every((x): x is string => typeof x === 'string')) {
+            return written('SS', members, 'this set holds one string two times')
         }
-        if (members.every((x) => x instanceof Uint8Array)) {
+        if (members.every((x): x is Uint8Array => x instanceof Uint8Array)) {
             // a `Set` keeps two `Uint8Array`s with one content as two members
-            return repeatedAt(members) === undefined
-                ? carrying('BS', members)
-                : new CodecError(
-                      'this set holds one byte sequence two times, as two `Uint8Array`s, and a `BS` holds each byte sequence one time',
-                  )
+            return written(
+                'BS',
+                members,
+                'this set holds one byte sequence two times, as two `Uint8Array`s, and a `BS` holds each byte sequence one time',
+            )
         }
-        if (members.every((x) => x instanceof DynamoNumber)) {
+        if (
+            members.every((x): x is DynamoNumber => x instanceof DynamoNumber)
+        ) {
             // the digits are normal, so two members that are one number have one spelling
-            const digits = members.map((x) => (x as DynamoNumber).digits)
-            return repeatedAt(digits) === undefined
-                ? carrying('NS', digits.sort())
-                : new CodecError(
-                      'this set holds one number two times, as two `DynamoNumber`s, and an `NS` holds each number one time',
-                  )
+            return written(
+                'NS',
+                members.map((x) => x.digits),
+                'this set holds one number two times, as two `DynamoNumber`s, and an `NS` holds each number one time',
+            )
         }
         return new CodecError(
             'a set writes `SS`, `BS` or `NS`, and each holds one kind: every member a string, every member binary, or every member a `DynamoNumber`',
@@ -1953,6 +1965,19 @@ export const storedNumber = (carried: string): Result<DynamoNumber> =>
           )
 
 /**
+ * The refusal of a stored set that breaks its rule. The text names the family and the position of
+ * the member, and no stored value: a log line that writes the refusal writes no stored data.
+ */
+const setFaultError = (family: SetFamily, fault: SetFault): CodecError =>
+    new CodecError(
+        fault.fault === 'empty'
+            ? `DynamoDB has no empty ${family}, so this attribute was not written by it`
+            : fault.fault === 'repeated'
+              ? `DynamoDB holds no ${family} that repeats a member, so this attribute was not written by it`
+              : `member ${fault.at} of this ${family} is not ${family === 'BS' ? 'binary' : 'a string'}, so this attribute was not written by DynamoDB`,
+    )
+
+/**
  * **Reads every attribute back, with the read of an `N` given.** The one walker of an untyped read:
  * `opaque` reads an `N` as the `DynamoNumber` that the store holds, and `native` reads an `N` as
  * the SDK does, or by a deviation of the caller. Nothing else differs between the two.
@@ -1979,24 +2004,16 @@ export const decodeWith = (
             case 'NS':
             case 'SS':
             case 'BS': {
-                const members = attribute[member] as readonly (
-                    | string
-                    | Uint8Array
-                )[]
-                return members.length === 0
-                    ? new CodecError(
-                          `DynamoDB has no empty ${member}, so this attribute was not written by it`,
-                      )
-                    : repeatedAt(members) !== undefined
-                      ? new CodecError(
-                            `DynamoDB holds no ${member} that repeats a member, so this attribute was not written by it`,
+                const members: readonly unknown[] = attribute[member] ?? []
+                const fault = faultOfSet(member, members)
+                return fault !== undefined
+                    ? setFaultError(member, fault)
+                    : member === 'NS'
+                      ? andThen(
+                            every(members as readonly string[], read),
+                            (numbers) => new Set(numbers),
                         )
-                      : member === 'NS'
-                        ? andThen(
-                              every(members as readonly string[], read),
-                              (numbers) => new Set(numbers),
-                          )
-                        : new Set(members)
+                      : new Set(members)
             }
             case 'L':
                 return every(attribute.L ?? [], walk)

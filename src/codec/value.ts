@@ -1,7 +1,7 @@
 /**
  * The value side, under the pair.
  *
- * Thirteen helpers that both `codec.ts` and `denote.ts` need, in the one module that can hold them.
+ * The helpers that `codec.ts`, `denote.ts` and `native.ts` need, in the one module that can hold them.
  *
  * **They are here for a structural reason, and the reason is worth stating because the grouping is
  * not thematic.** `denote.ts` builds every constructor's pair and `codec.ts`'s constructors take
@@ -26,7 +26,7 @@ import type {
     AttributeValue,
     StoredItem,
 } from './attribute'
-import { DynamoNumber, memberOf } from './attribute'
+import { DynamoNumber, memberOf, repeatedAt } from './attribute'
 import type { LiteralValue, Shape } from './codec'
 import type { Result } from './result'
 import { CodecError, failed } from './result'
@@ -278,4 +278,42 @@ export const readTags = (
         out[name] = one
     }
     return out
+}
+
+/** The family of a wire set, named by its attribute member. */
+export type SetFamily = 'SS' | 'NS' | 'BS'
+
+/** What a stored set breaks, and where. A name and a position, never a member. */
+export type SetFault =
+    | { readonly fault: 'empty' }
+    | { readonly fault: 'mistyped'; readonly at: number }
+    | { readonly fault: 'repeated'; readonly at: number }
+
+const isWireMember = (member: unknown): member is string | Uint8Array =>
+    typeof member === 'string' || member instanceof Uint8Array
+
+/**
+ * **The rule of a stored set**, stated once: it is non-empty, each member has the type of the
+ * family, and no member repeats. An `SS` holds strings, an `NS` holds numerals as strings, and a
+ * `BS` holds `Uint8Array`s. `undefined` where the set obeys the rule.
+ *
+ * Every writer of a wire set asks it before the write, and every reader asks it after the read.
+ * A reader meets members of any type, because an attribute from outside the program is unparsed
+ * data, so the type is part of the rule and not a premise.
+ */
+export const faultOfSet = (
+    family: SetFamily,
+    members: readonly unknown[],
+): SetFault | undefined => {
+    if (members.length === 0) return { fault: 'empty' }
+    const mistyped = members.findIndex((member) =>
+        family === 'BS'
+            ? !(member instanceof Uint8Array)
+            : typeof member !== 'string',
+    )
+    if (mistyped >= 0) return { fault: 'mistyped', at: mistyped }
+    const repeated = repeatedAt(members.filter(isWireMember))
+    return repeated === undefined
+        ? undefined
+        : { fault: 'repeated', at: repeated }
 }

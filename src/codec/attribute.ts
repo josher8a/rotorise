@@ -471,8 +471,6 @@ export const tooDeeplyNested = (enclosing: number): string | undefined =>
  * member compares by its text, and a binary member by its bytes. A JavaScript `Set` compares a
  * `Uint8Array` and a `DynamoNumber` by identity, so a `Set` does not exclude the repeat: two
  * `Uint8Array`s with one content are two members of the `Set` and one member of the `BS`.
- *
- * Every writer of a wire set asks it before the write, and every reader asks it after the read.
  */
 export const repeatedAt = (
     members: readonly (string | Uint8Array)[],
