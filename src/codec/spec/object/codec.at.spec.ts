@@ -7,7 +7,12 @@
  * disagree. `at` derives both from one expression, so they cannot.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { type Attribute, type AttributeValue, memberOf } from '../../attribute'
+import {
+    type Attribute,
+    type AttributeMap,
+    type AttributeValue,
+    memberOf,
+} from '../../attribute'
 import {
     array,
     at as atOf,
@@ -440,9 +445,9 @@ describe('the attribute that the codec at a path writes', () => {
         expect(memberOf(wrong)).toBe('N')
     })
 
-    it('the root of an item writes a row and no attribute, so the root keeps the wide type', () => {
+    it('the root of an item writes a row and no attribute, so the root types the row', () => {
         const root = atOf(itemOf(object({ name: string })), [])
         expect(root.unsafeEncode({ name: 'a' })).toEqual({ name: { S: 'a' } })
-        expectTypeOf(root.unsafeEncode).returns.toEqualTypeOf<AttributeValue>()
+        expectTypeOf(root.unsafeEncode).returns.toEqualTypeOf<AttributeMap>()
     })
 })

@@ -14,9 +14,12 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    exclude,
+    extract,
     held,
     item,
     legacy,
+    mdunion,
     nullable,
     number,
     object,
@@ -143,5 +146,64 @@ describe('the row that tableEntry writes is the row that the codec of the entry 
         const row = Entry.unsafeToItem(meta)
         const encoded = Attributes.unsafeEncode(meta)
         expectTypeOf(row.extra).toEqualTypeOf(encoded.extra)
+    })
+})
+
+describe('a slice keeps the rest of each variant that it keeps', () => {
+    const Pets = discriminatedUnion('kind', [
+        object({ kind: string('dog') }, [string, optional(string)]),
+        object({ kind: string('cat'), lives: number }),
+    ])
+    const Sized = mdunion(
+        ['kind', 'size'],
+        [
+            object({ kind: string('dog'), size: string('big') }, [
+                string,
+                optional(string),
+            ]),
+            object({
+                kind: string('dog'),
+                size: string('small'),
+                lives: number,
+            }),
+        ],
+    )
+
+    it('admits an undeclared name in the extract of a tagged union', () => {
+        const dogs = extract(Pets, object({ kind: string('dog') }))
+        expect(dogs.unsafeEncode({ kind: 'dog', nickname: 'Rex' })).toEqual({
+            M: { kind: { S: 'dog' }, nickname: { S: 'Rex' } },
+        })
+        expectTypeOf<{ kind: 'dog'; nickname: string }>().toMatchTypeOf<
+            Decoded<typeof dogs>
+        >()
+    })
+
+    it('admits an undeclared name in the exclude of a tagged union', () => {
+        const notCats = exclude(Pets, object({ kind: string('cat') }))
+        expect(notCats.unsafeEncode({ kind: 'dog', nickname: 'Rex' })).toEqual({
+            M: { kind: { S: 'dog' }, nickname: { S: 'Rex' } },
+        })
+        expectTypeOf<{ kind: 'dog'; nickname: string }>().toMatchTypeOf<
+            Decoded<typeof notCats>
+        >()
+    })
+
+    it('admits an undeclared name in the extract of a dissection', () => {
+        const bigs = extract(Sized, object({ size: string('big') }))
+        expect(
+            bigs.unsafeEncode({ kind: 'dog', size: 'big', nickname: 'Rex' }),
+        ).toEqual({
+            M: {
+                kind: { S: 'dog' },
+                size: { S: 'big' },
+                nickname: { S: 'Rex' },
+            },
+        })
+        expectTypeOf<{
+            kind: 'dog'
+            size: 'big'
+            nickname: string
+        }>().toMatchTypeOf<Decoded<typeof bigs>>()
     })
 })

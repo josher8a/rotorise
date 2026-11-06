@@ -3570,6 +3570,9 @@ declare const itemTermMarker: unique symbol
 /** Type-level only, for the same reason as {@link optionalMarker}. */
 declare const locatedFrom: unique symbol
 
+/** Type-level only: the rest of each member of a dissection, which a slice keeps with the member. */
+declare const restsMarker: unique symbol
+
 /**
  * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
  * marker, and no other codec carries it: an object codec has a `spec` too, so `spec` does not tell
@@ -3881,23 +3884,27 @@ type StartOfItem<C> = C extends {
 
 /**
  * **The located codec at a place.** The decoded type is a function of the first frame, and the
- * attribute is the member that the model reads there. The root of an item writes a row, and keeps
- * the wide `AttributeValue`. A place where the type knows no frame keeps the decoded type and the
+ * attribute is the member that the model reads there. The root of an item is an item reading: it
+ * writes a row and reads a row. A place where the type knows no frame keeps the decoded type and the
  * wide `AttributeValue`. A place that holds no one codec is a codec that refuses each value on use,
  * so a `narrow` that keeps several options continues, and `at(l, [])` refuses where it ends.
  */
 type FocusAt<H, R extends RootKind> = H extends Wide
     ? AnyCodec & { readonly [locatedFrom]?: [Wide, R] }
     : H extends ['term', infer Fs, unknown, unknown, infer Root]
-      ? (
-            Root extends true
-                ? AttributeValue
-                : TermPathEncoded<Fs>
-        ) extends infer A extends AttributeValue
-          ? [KindOfFrames<Fs>] extends ['resolved']
-              ? LocatedCodec<Exclude<TermPathValue<Fs>, undefined>, A, H, R>
-              : LocatedCodec<unknown, AttributeValue, H, R>
-          : never
+      ? Root extends true
+          ? LocatedRow<
+                [KindOfFrames<Fs>] extends ['resolved']
+                    ? Exclude<TermPathValue<Fs>, undefined>
+                    : unknown,
+                H,
+                R
+            >
+          : TermPathEncoded<Fs> extends infer A extends AttributeValue
+            ? [KindOfFrames<Fs>] extends ['resolved']
+                ? LocatedCodec<Exclude<TermPathValue<Fs>, undefined>, A, H, R>
+                : LocatedCodec<unknown, AttributeValue, H, R>
+            : never
       : H extends ['path', infer T, unknown]
         ? LocatedCodec<Exclude<T, undefined>, AttributeValue, H, R>
         : // a refused place follows a refusal of the type, and keeps the codec usable after it
@@ -4112,6 +4119,7 @@ export type DissectedCodec<
     Ks extends readonly string[],
     Specs extends readonly unknown[],
     F extends string = never,
+    Rests extends readonly unknown[] = [],
 > = {
     readonly encode: (this: Closed, value: T) => Result<Attribute<'M'>>
     readonly decode: (this: Closed, attribute: AttributeValue) => Result<T>
@@ -4122,6 +4130,8 @@ export type DissectedCodec<
     readonly [itemMarker]: [Dissected<T, Ks, Specs> & Free<F>]
     /** The free names of this codec. Type-level only. */
     readonly [freeMarker]?: [F]
+    /** The rest of each member, which a slice keeps with the member. Type-level only. */
+    readonly [restsMarker]?: [Rests]
 }
 
 /**
@@ -4146,7 +4156,8 @@ export type Dissection<
           DerivedVariants<SpecsOf<Options>, RestsOf<Options>>,
           Ks,
           SpecsOf<Options>,
-          FreeOf<Options[number]>
+          FreeOf<Options[number]>,
+          RestsOf<Options>
       >
 
 export type UnionCodec<
@@ -4215,21 +4226,32 @@ type SliceTerm<D, Kept extends readonly unknown[]> = [
  * type is what the slice narrows, and the runtime is what refuses the assignment.
  */
 type Slice<C, P, Keep extends boolean> = C extends DiscriminatedCodec<
-    infer _T,
+    infer T,
     infer D,
     infer Spec,
     infer _F
 >
     ? DiscriminatedCodec<
-          VariantsOf<KeptByTag<Spec, P, Keep>>,
+          KeptVariants<T, D, KeptByTag<Spec, P, Keep>>,
           D,
           KeptByTag<Spec, P, Keep>
       >
-    : C extends DissectedCodec<infer _T, infer Ks, infer Specs, infer _F>
+    : C extends DissectedCodec<
+            infer _T,
+            infer Ks,
+            infer Specs,
+            infer _F,
+            infer Rests
+        >
       ? DissectedCodec<
-            DerivedVariants<Extracted<Specs, P, Keep>>,
+            DerivedVariants<
+                Extracted<Specs, P, Keep>,
+                ExtractedRests<Specs, Rests, P, Keep>
+            >,
             Ks,
-            Extracted<Specs, P, Keep>
+            Extracted<Specs, P, Keep>,
+            never,
+            ExtractedRests<Specs, Rests, P, Keep>
         >
       : C extends UnionCodec<
               infer _T,
@@ -4301,6 +4323,16 @@ export type LocatedCodec<
      * The place where this codec sits, which {@link at} and {@link narrow} continue, and the kind
      * of the root that the walk started from, which {@link path} reads. Type-level only.
      */
+    readonly [locatedFrom]?: [P, R]
+}
+
+/** The codec at the root of an item reading: it writes a row and reads a row, and keeps its place. */
+type LocatedRow<T, P, R extends RootKind> = {
+    readonly encode: (this: Closed, value: T) => Result<AttributeMap>
+    readonly decode: (this: Closed, item: StoredItem) => Result<T>
+    readonly unsafeEncode: (this: Closed, value: T) => AttributeMap
+    readonly unsafeDecode: (this: Closed, item: StoredItem) => T
+    readonly def: Term
     readonly [locatedFrom]?: [P, R]
 }
 
@@ -4478,8 +4510,19 @@ const locate = (
             frontier = next
         }
         reached = { frontier, cycles }
-        // a clause at the root narrows the values, and the item codec writes each value
-        // of a kept option as that option writes it
+        // the root of an item stays an item reading. A clause at the root keeps the options that it
+        // does not separate, and the reading of the kept options refuses a row of a dropped option
+        if (segments.length === 0 && whole) {
+            const [only, ...others] = frontier as [AnyCodec, ...AnyCodec[]]
+            if (frontier.length === 1 && only === root) return root
+            // the walk carries each codec as an `AnyCodec`, and the reading of the kept options is
+            // one, which it is at run time as the root is
+            return (others.length === 0
+                ? item(only as never)
+                : item(
+                      union(frontier as never) as never,
+                  )) as unknown as AnyCodec
+        }
         if (segments.length === 0) return root
         const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
         // the item root is no level, and each segment past the first crosses one L or M. Any
@@ -8289,6 +8332,37 @@ export type Extracted<
           ...Extracted<Tail, P, Keep>,
       ]
     : []
+
+/** The rests of the members that {@link Extracted} keeps, in step with the specs. */
+export type ExtractedRests<
+    Specs extends readonly unknown[],
+    Rests extends readonly unknown[],
+    P,
+    Keep extends boolean = true,
+> = Specs extends readonly [
+    infer Head,
+    ...infer Tail extends readonly unknown[],
+]
+    ? Rests extends readonly [
+          infer RestHead,
+          ...infer RestTail extends readonly unknown[],
+      ]
+        ? [
+              ...(KeepsFit<Keep, FitsSpec<Head, P>> extends true
+                  ? [RestHead]
+                  : []),
+              ...ExtractedRests<Tail, RestTail, P, Keep>,
+          ]
+        : []
+    : []
+
+/**
+ * The entity of the members that a tag table keeps, read off the entity of the whole union, so a
+ * member keeps the rest that it declares.
+ */
+type KeptVariants<T, D, Kept> = {
+    [K in keyof Kept]: VariantOf<T, D & keyof T, K>
+}[keyof Kept]
 
 /** The members of a tag table a pattern keeps, keyed as they were. */
 export type KeptByTag<Spec, P, Keep extends boolean = true> = {
