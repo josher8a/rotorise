@@ -151,8 +151,11 @@ describe('and the pair is testable against the marshaller in the repo', () => {
             checkAgainst(holder as never, drifted as never, {
                 count: 200,
                 seed: 1,
+                // the pair reads an `N` as its digits, so a value that it read is a numeral text
                 filter: (value) =>
-                    typeof value === 'number' && !failed(exact.encode(value)),
+                    typeof value === 'string' &&
+                    value !== '' &&
+                    Number.isFinite(Number(value)),
             }),
         ).toThrow(CodecError)
     })

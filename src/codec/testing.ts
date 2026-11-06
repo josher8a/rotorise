@@ -356,10 +356,12 @@ export const checkDecodesAreWritable = <T>(
         }
     }
     for (let i = 0; i < count; i++) {
-        const before = readsGenerated
-        const raw = arbitraryOf(subject as never, rng, size) as T
-        const throughRead = readsGenerated !== before
-        const value = refine ? refine(raw) : raw
+        const { value, throughRead } = generated<T>(
+            subject as never,
+            rng,
+            size,
+            refine,
+        )
         if (filter && !filter(value)) {
             discard('the filter rejected the value')
             i--
@@ -371,7 +373,7 @@ export const checkDecodesAreWritable = <T>(
             encoded = subject.unsafeEncode(value)
         } catch (error) {
             // a value the pair's own read produced is one (C) says it can write back
-            if (throughRead && !refine) {
+            if (throughRead) {
                 throw new CodecError(
                     '(C) fails: a value the codec read cannot be encoded.\n' +
                         `  seed     = ${seed}, case ${i}\n` +
@@ -820,6 +822,12 @@ const shrinkSequence = <T>(
     return out
 }
 
+/** The shrinks of a value that a partial map gave: none where the map refused. */
+const shrinkThrough = (
+    mapped: unknown,
+    shrink: (inner: unknown) => readonly unknown[],
+): readonly unknown[] => (failed(mapped) ? [] : shrink(mapped))
+
 const pickFrom = <T>(rng: Rng, values: readonly T[]): T =>
     values[Math.floor(rng() * values.length)] as T
 
@@ -842,7 +850,7 @@ const someUnknown = (
     rng: Rng,
     size: number,
     /** `exact` is the canonical `opaque`, which holds a number as a `DynamoNumber`. */
-    numbers: opaque.Numbers | 'exact' | 'native',
+    numbers: opaque.Numbers | 'exact',
 ): unknown => {
     const scalars: unknown[] = [
         null,
@@ -853,10 +861,6 @@ const someUnknown = (
     // a number is in the domain only once the caller has said what to do with `N`
     if (numbers === 'lossy') {
         scalars.push(pickFrom(rng, [0, 1, -1, 1.5, 0.1, -0.25, 1e20, 1e21]))
-    }
-    // inside the safe range, which is what `native` writes unless it is told to allow more
-    if (numbers === 'native') {
-        scalars.push(pickFrom(rng, [0, 1, -1, 1.5, 0.1, -0.25]))
     }
     if (numbers === 'exact') {
         scalars.push(orThrow(DynamoNumber.from(someDecimal(rng))))
@@ -929,20 +933,20 @@ const THIN_SEARCH = 0.5
  * does not fail — it silently shrinks the search — so it says so once; `onThinSearch` routes that
  * somewhere other than the console.
  */
-const bySampling = <Wide, Narrow extends Wide>(
-    draw: (rng: Rng, size: number) => Wide,
+const bySampling = <Wide, Narrow extends Wide, Context>(
+    draw: (rng: Rng, size: number, context: Context) => Wide,
     is: (value: Wide) => value is Narrow,
     what: string,
     onThinSearch?: (what: string, rate: number) => void,
-): ((rng: Rng, size: number) => Narrow) => {
+): ((rng: Rng, size: number, context: Context) => Narrow) => {
     let attempts = 0
     let accepted = 0
     let warned = false
 
-    return (rng, size) => {
+    return (rng, size, context) => {
         for (let i = 0; i < SAMPLE_LIMIT; i++) {
             attempts++
-            const candidate = draw(rng, size)
+            const candidate = draw(rng, size, context)
             if (!is(candidate)) continue
 
             accepted++
@@ -973,14 +977,34 @@ const bySampling = <Wide, Narrow extends Wide>(
  * counts to one and forgets — so a thin search would never be reported. Keyed on the def, which is
  * the codec's identity here.
  */
-const samplers = new WeakMap<object, (rng: Rng, size: number) => unknown>()
+const samplers = new WeakMap<
+    object,
+    (rng: Rng, size: number, drew: Draws) => unknown
+>()
 
 /**
- * How many values the arbitrary has produced through a `held` read. A check reads it before and
- * after one generation: a value that came through a read is one the pair produced, so a codec
- * that then declines to write it fails (C) rather than declining a stranger.
+ * What one generation drew: how many values the arbitrary produced through a `held` read. A value
+ * that came through a read is one the pair produced, so a codec that then declines to write it fails
+ * (C) rather than declining a stranger.
  */
-let readsGenerated = 0
+type Draws = { reads: number }
+
+/**
+ * A value of the codec, and whether it came through the read of the pair. One condition decides it:
+ * the value is the raw draw, so a value that `refine` repaired is a stranger and a value that
+ * `refine` handed back as it was is not.
+ */
+const generated = <T>(
+    subject: AnyCodec,
+    rng: Rng,
+    size: number,
+    refine?: (raw: T) => T,
+): { readonly value: T; readonly throughRead: boolean } => {
+    const drew: Draws = { reads: 0 }
+    const raw = draw(subject, rng, size, drew) as T
+    const value = refine ? refine(raw) : raw
+    return { value, throughRead: drew.reads > 0 && value === raw }
+}
 
 /** Whether each `ref` lies on a cycle. A closed codec binds each `ref` one time. */
 const onCycle = new WeakMap<Term, boolean>()
@@ -999,10 +1023,14 @@ const closesCycle = (t: Term): boolean => {
  * Dispatches on {@link Term}, so a codec kind that grows an arbitrary grows it here rather than
  * in the codec itself. `size` bounds recursion.
  */
-export const arbitraryOf = (
+export const arbitraryOf = (codec: AnyCodec, rng: Rng, size: number): unknown =>
+    draw(codec, rng, size, { reads: 0 })
+
+const draw = (
     codec: AnyCodec,
     rng: Rng,
     size: number,
+    drew: Draws,
 ): unknown => {
     const def = termOf(codec)
     switch (def.kind) {
@@ -1046,12 +1074,18 @@ export const arbitraryOf = (
                 return someUnknown(rng, size, 'lossy')
             if (def.via === 'opaqueRefuse')
                 return someUnknown(rng, size, 'refuse')
-            // `native` generates what `native` writes: a JS number that the SDK's default accepts,
-            // and no `DynamoNumber`, which `native` reads back as a JS number
-            if (def.via === 'native') return someUnknown(rng, size, 'native')
-            readsGenerated++
-            return def.g(
-                arbitraryOf(codecOfTerm(def.inner), rng, size) as never,
+            // the derived rule: the read of the pair, over a value of the inner codec. A read that
+            // refuses the value is a partial `g`, so the draw is made again
+            for (let tries = 0; tries < SAMPLE_LIMIT; tries++) {
+                const read = def.g(
+                    draw(codecOfTerm(def.inner), rng, size, drew) as never,
+                )
+                if (failed(read)) continue
+                drew.reads++
+                return read
+            }
+            throw new CodecError(
+                `the read of this adapter refused ${SAMPLE_LIMIT} values of its inner codec, so a value of it cannot be generated; pass \`arbitrary\` to say what one looks like`,
             )
         case 'set': {
             /**
@@ -1065,19 +1099,24 @@ export const arbitraryOf = (
              * recursive walk of the element's definition, once per value.
              */
             const element = codecOfTerm(def.elem)
-            return someSet(rng, element, () => arbitraryOf(element, rng, size))
+            return someSet(rng, element, () => draw(element, rng, size, drew))
         }
         case 'list': {
             const one = (element: Term) =>
-                arbitraryOf(codecOfTerm(element), rng, Math.max(0, size - 1))
+                draw(codecOfTerm(element), rng, Math.max(0, size - 1), drew)
             const spread = def.spread
             // the declared positions have an arity to hit; the spread has none, so its length is
             // generated the way a list's always was
-            const middle = spread
-                ? Array.from({ length: Math.floor(rng() * 3) }, () =>
-                      one(spread),
-                  )
-                : []
+            // the length is drawn before the bound is read, so a draw at the bound leaves the
+            // stream of the others as it was. At the bound the spread is empty, which is how a
+            // recursion through a list stops
+            const length = spread ? Math.floor(rng() * 3) : 0
+            const middle =
+                spread === undefined
+                    ? []
+                    : Array.from({ length: size <= 0 ? 0 : length }, () =>
+                          one(spread),
+                      )
             return [...def.pre.map(one), ...middle, ...def.suf.map(one)]
         }
         case 'object': {
@@ -1095,10 +1134,11 @@ export const arbitraryOf = (
             const restCodec = rest && codecOfTerm(rest)
             if (restCodec) {
                 for (let extra = Math.floor(rng() * 3); extra > 0; extra--) {
-                    out[`rest${extra}`] = arbitraryOf(
+                    out[`rest${extra}`] = draw(
                         restCodec,
                         rng,
                         Math.max(0, size - 1),
+                        drew,
                     )
                 }
             }
@@ -1113,15 +1153,16 @@ export const arbitraryOf = (
                     out[name] = undefined
                     continue
                 }
-                out[name] = arbitraryOf(codecOfTerm(field.t), rng, size)
+                out[name] = draw(codecOfTerm(field.t), rng, size, drew)
             }
             return out
         }
         case 'union':
-            return arbitraryOf(
+            return draw(
                 codecOfTerm(pickFrom(rng, def.options)),
                 rng,
                 size,
+                drew,
             )
         case 'refine': {
             const q = def.q
@@ -1129,27 +1170,28 @@ export const arbitraryOf = (
             let sample = samplers.get(def)
             if (!sample) {
                 sample = bySampling(
-                    (r: Rng, sz: number) =>
-                        arbitraryOf(codecOfTerm(def.inner), r, sz),
+                    (r: Rng, sz: number, context: Draws) =>
+                        draw(codecOfTerm(def.inner), r, sz, context),
                     q.is as (value: unknown) => value is unknown,
                     q.what,
                     q.onThinSearch,
                 )
                 samplers.set(def, sample)
             }
-            return sample(rng, size)
+            return sample(rng, size, drew)
         }
         case 'legacy':
-            return arbitraryOf(codecOfTerm(def.inner), rng, size)
+            return draw(codecOfTerm(def.inner), rng, size, drew)
         case 'ref':
             // a `ref` that closes a cycle goes one level shallower each time, which is what stops a
             // recursive entity generating forever: the optional attribute that recurses is dropped
             // once the budget runs out. Any other `ref` spells its target in place, so it draws as
             // its target draws
-            return arbitraryOf(
+            return draw(
                 codecOfTerm(usedTargetOf(def)),
                 rng,
                 closesCycle(def) ? size - 1 : size,
+                drew,
             )
         // the one term with no inhabitant, so a property quantified over it has no input. A throw
         // and not a value: the switch's return type admits `undefined`, and falling through would
@@ -1238,12 +1280,15 @@ export const shrinkOf = (
             // A caller who stated a shrink owns the answer, because a partial pair cannot be
             // shrunk through: the inner side would hand back values the conversion refuses
             if (def.shrink) return def.shrink(value as never)
-            if (isOpaqueSugar(def.via) || def.via === 'native') {
-                return shrinkUnknown(value)
-            }
-            return shrinkOf(codecOfTerm(def.inner), def.f(value as never)).map(
-                (shrunk) => def.g(shrunk as never),
-            )
+            if (isOpaqueSugar(def.via)) return shrinkUnknown(value)
+            // `f` and `g` are partial maps: a value that `f` refuses has no shrink through the
+            // inner codec, and a candidate that `g` refuses is no candidate
+            return shrinkThrough(def.f(value as never), (inner) =>
+                shrinkOf(codecOfTerm(def.inner), inner),
+            ).flatMap((shrunk) => {
+                const back = def.g(shrunk as never)
+                return failed(back) ? [] : [back]
+            })
         case 'set':
             // shrunk as a sequence and handed back as a set, which is what it is
             return shrinkSequence(
@@ -1458,10 +1503,12 @@ export const checkAgainst = <T>(
 ): void => {
     const rng = rngFrom(seed)
     for (let i = 0; i < count; i++) {
-        const before = readsGenerated
-        const raw = arbitraryOf(subject as unknown as AnyCodec, rng, size) as T
-        const throughRead = readsGenerated !== before
-        const entity = refine(raw)
+        const { value: entity, throughRead } = generated<T>(
+            subject as unknown as AnyCodec,
+            rng,
+            size,
+            refine,
+        )
         if (!filter(entity)) continue
 
         // Refusals are part of the comparison, for the reason `checkEquivalent` gives: two
@@ -1479,7 +1526,7 @@ export const checkAgainst = <T>(
         }
         if (ours.refused) {
             // both refuse a value the codec's own read produced: (C) fails for the codec
-            if (throughRead && entity === raw) {
+            if (throughRead) {
                 throw new CodecError(
                     `(C) fails: the codec cannot write ${show(entity)}, a value its own read produced, with seed ${seed}: ${ours.why}`,
                 )
@@ -1588,9 +1635,11 @@ export const checkEquivalent = <T>(
 ): void => {
     const rng = rngFrom(seed)
     for (let i = 0; i < count; i++) {
-        const before = readsGenerated
-        const value = arbitraryOf(a as unknown as AnyCodec, rng, size) as T
-        const throughRead = readsGenerated !== before
+        const { value, throughRead } = generated<T>(
+            a as unknown as AnyCodec,
+            rng,
+            size,
+        )
 
         const written = a.encode(value)
         const alsoWritten = b.encode(value)

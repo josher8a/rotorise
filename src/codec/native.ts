@@ -57,8 +57,8 @@ import {
 } from './attribute'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry, failed } from './codec'
-import { codecOfTerm, opaqueTerms } from './denote'
-import { asRecord, rendered } from './value'
+import { codecOfTerm, mapNumberLeaves, opaqueTerms } from './denote'
+import { rendered } from './value'
 
 /**
  * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
@@ -153,6 +153,32 @@ const bytesOf = (value: unknown): Result<Uint8Array> => {
 }
 
 /**
+ * Whether a member of a list, a map or a set is kept: the SDK drops a function, and drops `undefined`
+ * where `removeUndefinedValues` is set. The list, the `Map` and the object read this one rule.
+ */
+const keepsEntry = (held: unknown, options: native.Options): boolean =>
+    typeof held !== 'function' &&
+    (held !== undefined || !options.removeUndefinedValues)
+
+/** The entries of a record that the SDK keeps, as {@link keepsEntry} reads them. */
+const keptEntries = (
+    record: Record<string, unknown>,
+    options: native.Options,
+): Record<string, unknown> =>
+    Object.fromEntries(
+        Object.entries(record).filter(([, held]) => keepsEntry(held, options)),
+    )
+
+/** The enumerable properties of a value, own and inherited, as a `for…in` reads them. */
+const enumerable = (
+    value: Record<string, unknown>,
+): Record<string, unknown> => {
+    const entries: [string, unknown][] = []
+    for (const key in value) entries.push([key, value[key]])
+    return Object.fromEntries(entries)
+}
+
+/**
  * A value, as `@aws-sdk/util-dynamodb`'s `convertToAttr` reads it, handed to the canonical write.
  *
  * Ported from that implementation rather than from its documentation, branch for branch — including
@@ -188,11 +214,7 @@ const toCanonical = (
 
     if (Array.isArray(value)) {
         if (tooDeeplyNested(enclosing)) return value
-        const kept = value.filter(
-            (item) =>
-                typeof item !== 'function' &&
-                (!options.removeUndefinedValues || item !== undefined),
-        )
+        const kept = value.filter((item) => keepsEntry(item, options))
         return every(kept, (item) =>
             toCanonical(item, options, write, enclosing + 1),
         )
@@ -232,7 +254,10 @@ const toCanonical = (
     if (named === 'Map') {
         if (tooDeeplyNested(enclosing)) return value
         return everyEntry(
-            Object.fromEntries(value as Map<string, unknown>),
+            keptEntries(
+                Object.fromEntries(value as Map<string, unknown>),
+                options,
+            ),
             (held) => toCanonical(held, options, write, enclosing + 1),
         )
     }
@@ -241,22 +266,13 @@ const toCanonical = (
     if (value instanceof DynamoNumber) return value
 
     const isPlain = named === 'Object' || (!named && typeof value === 'object')
-    if (
-        isPlain ||
-        (options.convertClassInstanceToMap && typeof value === 'object')
-    ) {
+    if (isPlain) {
         if (tooDeeplyNested(enclosing)) return value
-        const kept: Record<string, unknown> = {}
         // `for…in`, as the SDK does: enumerable *and* inherited, which is what makes
         // `convertClassInstanceToMap` reach a prototype's own accessors
-        for (const key in value as Record<string, unknown>) {
-            const held = (value as Record<string, unknown>)[key]
-            if (typeof held === 'function') continue
-            if (held === undefined && options.removeUndefinedValues) continue
-            kept[key] = held
-        }
-        return everyEntry(kept, (held) =>
-            toCanonical(held, options, write, enclosing + 1),
+        return everyEntry(
+            keptEntries(enumerable(value as Record<string, unknown>), options),
+            (held) => toCanonical(held, options, write, enclosing + 1),
         )
     }
 
@@ -268,12 +284,26 @@ const toCanonical = (
             ? null
             : bytes
     }
-    if (typeof value === 'boolean') return value
+    // a boxed primitive is its primitive, by `constructor.name`, as the SDK reads it
+    if (typeof value === 'boolean' || named === 'Boolean') {
+        return (value as boolean | boolean).valueOf()
+    }
     if (typeof value === 'number' || typeof value === 'bigint') {
         return write(value)
     }
-    if (typeof value === 'string') {
-        return value.length === 0 && options.convertEmptyValues ? null : value
+    if (named === 'Number') return write((value as number).valueOf())
+    if (typeof value === 'string' || named === 'String') {
+        const text = String(value)
+        return text.length === 0 && options.convertEmptyValues ? null : text
+    }
+    // the last branch, as in the SDK: a binary view, a boolean, a number and a string are no class
+    // instance
+    if (options.convertClassInstanceToMap && typeof value === 'object') {
+        if (tooDeeplyNested(enclosing)) return value
+        return everyEntry(
+            keptEntries(enumerable(value as Record<string, unknown>), options),
+            (held) => toCanonical(held, options, write, enclosing + 1),
+        )
     }
     return new CodecError(
         `Unsupported type passed: ${rendered(value)}. Pass options.convertClassInstanceToMap=true to marshall typeof object as map attribute.`,
@@ -311,22 +341,13 @@ const fromNativeNumber = (digits: string): Result<unknown> => {
 const toHeld = (
     read: unknown,
     readNumber: (digits: string) => Result<unknown>,
-): Result<unknown> => {
-    if (read instanceof DynamoNumber) return readNumber(read.digits)
-    if (Array.isArray(read)) {
-        return every(read, (item) => toHeld(item, readNumber))
-    }
-    if (read instanceof Set) {
-        return andThen(
-            every([...read], (item) => toHeld(item, readNumber)),
-            (held) => new Set(held),
-        )
-    }
-    const record = asRecord(read)
-    return record === undefined
-        ? read
-        : everyEntry(record, (item) => toHeld(item, readNumber))
-}
+): Result<unknown> =>
+    mapNumberLeaves(
+        read,
+        (stored) => readNumber(stored.digits),
+        (members, walk) =>
+            andThen(every([...members], walk), (held) => new Set(held)),
+    )
 
 /**
  * The AWS SDK's marshaller, as a codec.

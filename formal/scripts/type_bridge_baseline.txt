@@ -13,20 +13,20 @@
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   declaration  one constant of the generated codecs file: the run time built each one.
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|20f6d97843|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|22507207dc|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|280579ecc4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|2c2859150d|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|32a0080315|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|3a44071f4a|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|4665f76c84|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|5175e3f279|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|522f5b796a|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|53878c2fa6|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
+exclude|refuse|5c5a259014|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|6b66abcf53|exclude({ a: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|72ec0ef433|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|936b69a440|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|9944b84cc4|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-exclude|refuse|99c94cdb28|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|9baa0da3ff|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|b4874c77ef|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|bc3e508b81|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1

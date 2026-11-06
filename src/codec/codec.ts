@@ -5324,9 +5324,9 @@ type HeldPairRefused<A, B> = [
                 > extends true
                   ? false
                   : ApartG<
-                          CallerView<NA>,
+                          CallerView<NA, TermOf<Marks<A>>>,
                           [],
-                          CallerView<NB>,
+                          CallerView<NB, TermOf<Marks<B>>>,
                           [],
                           []
                       > extends true
@@ -5337,14 +5337,21 @@ type HeldPairRefused<A, B> = [
     : false
 /**
  * The caller view of a node, as `callerApart` reads the terms: a `held` reads its outer term, an
- * older reading reads its current form, and any other node is its own caller view. The outer term of
- * a foreign schema is `opaque`, which overlaps each view.
+ * older reading reads its current form, and any other node is its own caller view. That view is the
+ * term `T` of the factor, and not the node, because the term holds the scope that binds its names.
+ * The outer term of a foreign schema is `opaque`, which overlaps each view.
  */
-type CallerView<N> = N extends ['held', unknown, unknown, infer O, ...unknown[]]
+type CallerView<N, T> = N extends [
+    'held',
+    unknown,
+    unknown,
+    infer O,
+    ...unknown[],
+]
     ? O
     : N extends ['legacy', infer Current]
       ? Current
-      : N
+      : T
 /** Whether a node is a part that no meet reads: a `held` or an older reading. */
 type IsPart<N> = N extends ['held', ...unknown[]] | ['legacy', unknown]
     ? true

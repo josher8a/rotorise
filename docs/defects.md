@@ -235,22 +235,3 @@ literals cannot be sliced by a pattern that splits the set.
 
 **Pin.** None. A pin compiles a literal set of 89 at one field in the suite, and its cost in
 instantiations is not measured.
-
----
-
-## Known: the native writer refuses a boxed primitive that the SDK writes
-
-**Observation.** The SDK reads a value by the name of its constructor, so a boxed number, a boxed
-boolean and a boxed text each write the member of the primitive. The port reads a number, a boolean
-and a text by the type of the primitive, and refuses a boxed object of the three. Measured 2026-11-03 with
-`npx vitest --run` and `@aws-sdk/util-dynamodb` beside the port:
-
-    native.encode(new Number(5))         port: Unsupported type passed: 5    SDK: { N: '5' }
-    native.encode(new Boolean(true))     port: Unsupported type passed: true SDK: { BOOL: true }
-    native.encode(new String('a'))       port: Unsupported type passed: a    SDK: { S: 'a' }
-
-**Effect.** A document that holds a boxed primitive writes through the SDK and is refused by the
-port. The port writes no item that the store refuses.
-
-**Pin.** None. The pool of the law in `src/codec/spec/surface/native.spec.ts` that compares the
-text of a refusal with the SDK leaves the boxed primitives out.

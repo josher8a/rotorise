@@ -2055,6 +2055,30 @@ export const decodeWith = (
 export const decodeUnknown = decodeWith(storedNumber)
 
 /**
+ * **The map over the `DynamoNumber` leaves of a canonical value.** The `g` of a `held` over the
+ * canonical `opaque` is this walk: a `DynamoNumber` is a leaf, a list and a map are walked, and a
+ * `Set` follows the rule of the caller, because a policy refuses a numeric set and `native` reads
+ * each member. Any other value is read as it is.
+ */
+export const mapNumberLeaves = (
+    read: unknown,
+    leaf: (number: DynamoNumber) => Result<unknown>,
+    set: (
+        members: ReadonlySet<unknown>,
+        walk: (value: unknown) => Result<unknown>,
+    ) => Result<unknown>,
+): Result<unknown> => {
+    const walk = (value: unknown): Result<unknown> => {
+        if (value instanceof DynamoNumber) return leaf(value)
+        if (Array.isArray(value)) return every(value, walk)
+        if (value instanceof Set) return set(value, walk)
+        const record = asRecord(value)
+        return record === undefined ? value : everyEntry(record, walk)
+    }
+    return walk(read)
+}
+
+/**
  * **A numeric policy of `opaque`, as a walk that changes the number leaves and nothing else.**
  *
  * Each policy is a `held` over the canonical `opaque`. `f` walks the caller's value to the
@@ -2129,50 +2153,42 @@ const numberPolicy = (numbers: opaque.Numbers) => {
         return value
     }
 
-    const outOf = (read: unknown): Result<unknown> => {
-        if (read instanceof DynamoNumber) {
-            if (numbers === 'refuse') {
-                return unrecoverable(
-                    `the stored number '${read.digits}'`,
-                    refuseText,
-                )
-            }
+    const outOf = (read: unknown): Result<unknown> =>
+        mapNumberLeaves(
+            read,
+            (stored) => {
+                if (numbers === 'refuse') {
+                    return unrecoverable(
+                        `the stored number '${stored.digits}'`,
+                        refuseText,
+                    )
+                }
+                /**
+                 * The second gate is not redundant: `Number('9.9…E+125')` rounds *up* past the
+                 * maximum, so a numeral the store holds can read back as a value nothing here can
+                 * write, which is **(C)** failing.
+                 */
+                const number = Number(stored.digits)
+                return isNumeral(String(number))
+                    ? number
+                    : new CodecError(
+                          `'${stored.digits}' reads back as ${number}, which is outside what DynamoDB stores, so it cannot be written again`,
+                      )
+            },
             /**
-             * The second gate is not redundant: `Number('9.9…E+125')` rounds *up* past the
-             * maximum, so a numeral the store holds can read back as a value nothing here can
-             * write, which is **(C)** failing.
+             * **A member this policy cannot write is a member it cannot read.** A numeric `Set` is
+             * refused on the way in, so an `NS` has no write path, and reading one would re-encode
+             * as `SS`. That is **(MP)** failing, and `Calculus.Alg.Lawful.no_read_without_write` proves
+             * the general form.
              */
-            const number = Number(read.digits)
-            return isNumeral(String(number))
-                ? number
-                : new CodecError(
-                      `'${read.digits}' reads back as ${number}, which is outside what DynamoDB stores, so it cannot be written again`,
-                  )
-        }
-        if (Array.isArray(read)) return every(read, outOf)
-        /**
-         * **A member this policy cannot write is a member it cannot read.** A numeric `Set` is
-         * refused on the way in, so an `NS` has no write path, and reading one would re-encode
-         * as `SS`. That is **(MP)** failing, and `Calculus.Alg.Lawful.no_read_without_write` proves
-         * the general form.
-         */
-        if (read instanceof Set) {
-            return [...read].some((x) => x instanceof DynamoNumber)
-                ? unrecoverable(
-                      'a stored set of numbers',
-                      "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
-                  )
-                : read
-        }
-        if (
-            typeof read === 'object' &&
-            read !== null &&
-            !(read instanceof Uint8Array)
-        ) {
-            return everyEntry(read as Record<string, unknown>, outOf)
-        }
-        return read
-    }
+            (members) =>
+                [...members].some((x) => x instanceof DynamoNumber)
+                    ? unrecoverable(
+                          'a stored set of numbers',
+                          "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
+                      )
+                    : members,
+        )
 
     return {
         f: (value: unknown) => into(value, 0),
