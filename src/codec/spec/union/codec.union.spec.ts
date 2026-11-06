@@ -259,7 +259,7 @@ describe('the NULL point', () => {
         expect(nullValue.unsafeDecode({ NULL: true })).toBeNull()
     })
 
-    it('holds nothing else', () => {
+    it('refuses an attribute that is not NULL', () => {
         expect(() => nullValue.unsafeDecode({ S: 'x' })).toThrow(CodecError)
     })
 

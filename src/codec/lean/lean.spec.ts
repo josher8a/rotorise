@@ -756,7 +756,7 @@ describe('what cannot be emitted', () => {
 })
 
 describe('values and attributes', () => {
-    it('emits the scalars', () => {
+    it('emits each scalar value and each scalar attribute as the term that the model reads', () => {
         expect(leanValueOf('hi')).toBe('Value.str "hi"')
         expect(leanValueOf(true)).toBe('Value.bool true')
         expect(leanValueOf(null)).toBe('Value.null')
@@ -2079,7 +2079,7 @@ describe('union resolution, model against library', () => {
      * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
      * adds the resolutions of the unions it takes part in.
      */
-    it('offers 450 write pairs and every one of 481 read pairs', () => {
+    it('the emitter drops no union resolution: it offers 450 write pairs and every one of 481 read pairs', () => {
         expect(writeResolutions().length).toBe(450)
         const reads = readResolutions()
         expect(reads.length).toBe(481)
@@ -2131,7 +2131,7 @@ describe('union resolution, model against library', () => {
      * `Attr.m` of the item. Each row states the read of the index as the read of the union, both
      * where a member reads the item and where the index refuses the item.
      */
-    it('reads an item through the index of its tags as the union of its members reads it', () => {
+    it('reads an item through the index of its tags as the union of its members reads it, and the emitter drops none of the 90 item reads', () => {
         const reads = itemReads()
         expect(reads.length).toBe(90)
         const byName = new Map(reads.map((one) => [one.name, one] as const))
@@ -2328,7 +2328,7 @@ describe('the legacy read gate, against the model', () => {
         )
     })
 
-    it('emits them for the gate to elaborate', () => {
+    it('the emitter drops none of the 2392 legacy reads, so the gate elaborates each', () => {
         const reads = legacyReads()
         expect(reads.length).toBe(2392)
         if (process.env.EMIT_LEAN_REFUSALS) {

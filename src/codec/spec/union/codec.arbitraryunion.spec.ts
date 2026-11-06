@@ -119,7 +119,7 @@ describe('mixed kinds', () => {
         expect(Note.unsafeEncode('bare')).toEqual({ S: 'bare' })
     })
 
-    it('reads either back', () => {
+    it('reads a map and a bare string back as the value that was written', () => {
         expect(Note.unsafeDecode({ S: 'bare' })).toBe('bare')
         expect(
             Note.unsafeDecode({ M: { at: { S: 'now' }, text: { S: 't' } } }),

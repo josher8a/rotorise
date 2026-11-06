@@ -92,7 +92,7 @@ describe('a numeric tag', () => {
         object({ kind: number(1), listedAt: string }),
     ])
 
-    it('chooses the variant', () => {
+    it('writes the variant that the numeric tag names, with the tag as an N', () => {
         expect(item(Rows).unsafeEncode({ kind: 1, listedAt: 'now' })).toEqual({
             kind: { N: '1' },
             listedAt: { S: 'now' },

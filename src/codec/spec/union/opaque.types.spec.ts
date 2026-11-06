@@ -221,7 +221,7 @@ describe('what opaque reads back, as a type and as a function', () => {
         return failed(out) ? 'refused' : out
     }
 
-    it('on the scalars', () => {
+    it('reads NULL, S, BOOL and B back as null, string, boolean and Uint8Array, in the type and at run time', () => {
         attest<[opaque.Decode<NULL>], [null]>()
         attest<[opaque.Decode<S>], [string]>()
         attest<[opaque.Decode<BOOL>], [boolean]>()

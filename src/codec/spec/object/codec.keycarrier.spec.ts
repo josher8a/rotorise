@@ -12,7 +12,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
-import { binary, nullable, number, string } from '../../codec'
+import { binary, nullable, number, opaque, string, union } from '../../codec'
 
 /** What a consumer writes: the narrowing of a result. */
 const isError = (value: unknown): value is Error => value instanceof Error
@@ -197,5 +197,24 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
         expect(() =>
             Tags.toItem({ tagId: new Uint8Array([1]), petId: 'p1', nick: '' }),
         ).toThrow(RotoriseError)
+    })
+})
+
+describe('a key has the one member that construction decided', () => {
+    /**
+     * `opaque` states no member in its term, so a union of `string` and `opaque` decides `S` at
+     * construction. A `Uint8Array` that reaches the write past the type is a value that `opaque`
+     * writes as `B`. A key of another member than the decided member would give a table one key
+     * attribute of two types, so the write refuses it and names the key.
+     */
+    it('refuses a write at another member than the decided member, and names the key', () => {
+        const Mixed = tableEntry<{ id: string; name: string }>()(
+            { PK: 'id' },
+            { codec: { id: union([string, opaque]) as never, name: string } },
+        )
+        const past = new Uint8Array([1]) as never
+        expect(() => Mixed.toItem({ id: past, name: 'x' })).toThrow(
+            "'PK' is built from a value that DynamoDB cannot store as a key",
+        )
     })
 })

@@ -139,7 +139,7 @@ describe('K1: at from an object is at from its item', () => {
 })
 
 describe('K2: at from a union, a list, a tuple and a record reaches the codec of the longer path', () => {
-    it('a union root', () => {
+    it('at from a union root reaches the codec that the longer path reaches', () => {
         const short = at(narrow(Pay, object({ tender: string('CARD') })), [
             'card',
             'last4',
@@ -158,7 +158,7 @@ describe('K2: at from a union, a list, a tuple and a record reaches the codec of
         expectTypeOf(short.unsafeEncode).toEqualTypeOf(long.unsafeEncode)
     })
 
-    it('a list root', () => {
+    it('at from a list root reaches the codec that the longer path reaches', () => {
         const short = at(Legs, [2, 'deliveredAt'])
         const long = at(itemOf(Adoption), [
             'shipment',
@@ -173,7 +173,7 @@ describe('K2: at from a union, a list, a tuple and a record reaches the codec of
         expectTypeOf(short.unsafeEncode).toEqualTypeOf(long.unsafeEncode)
     })
 
-    it('a tuple root', () => {
+    it('at from a tuple root reaches the codec that the longer path reaches', () => {
         const short = at(Pair, [1, 'id'])
         const long = at(itemOf(Adoption), ['pair', 1, 'id'])
         expect(path(short)).toEqual([1, 'id'])
@@ -183,7 +183,7 @@ describe('K2: at from a union, a list, a tuple and a record reaches the codec of
         expectTypeOf(short.unsafeEncode).toEqualTypeOf(long.unsafeEncode)
     })
 
-    it('a record root', () => {
+    it('at from a record root reaches the codec that the longer path reaches', () => {
         const short = at(Prices, ['eur', 'amount'])
         const long = at(itemOf(Adoption), ['prices', 'eur', 'amount'])
         expect(path(short)).toEqual(['eur', 'amount'])

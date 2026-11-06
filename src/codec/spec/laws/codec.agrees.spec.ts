@@ -33,7 +33,7 @@ describe('a list that mixes an adapter and a plain term agrees with itself', () 
     }
 
     for (const [name, shape] of Object.entries(shapes))
-        it(`holds for ${name}`, () => {
+        it(`a list with ${name} agrees with itself`, () => {
             expect(agree(termOf(shape), termOf(shape))).toBe(true)
         })
 })

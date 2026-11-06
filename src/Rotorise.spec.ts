@@ -123,7 +123,7 @@ describe('Exact<> with discriminated unions', () => {
 })
 
 describe('DynamoDB Utils', () => {
-    it('CompositeKeyParams', () => {
+    it('CompositeKeyParams requires the components up to the depth, and makes each later component optional', () => {
         attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
             null as any as CompositeKeyParams<
                 { a: string; b: number; c: boolean },
@@ -154,7 +154,7 @@ describe('DynamoDB Utils', () => {
         attest.instantiations([2010, 'instantiations'])
     })
 
-    it('CompositeKeyBuilder', () => {
+    it('CompositeKeyBuilder types the key as the template of its components, joined by the separator', () => {
         attest<`A#${string}#B#${number}#C#${boolean}`>(
             null as any as CompositeKeyBuilder<
                 { a: string; b: number; c: boolean },
@@ -289,7 +289,7 @@ describe('DynamoDB Utils', () => {
         attest.instantiations([5746, 'instantiations'])
     })
 
-    it('tableEntry', () => {
+    it('tableEntry joins the key components with the separator, and reads an entry back as the entity', () => {
         type Entity =
             | { a: 'a1'; b: 1; c: true; z: 'never' }
             | { a: 'a2'; b: 2; c: true; z: 'never' }
@@ -891,7 +891,7 @@ describe('DynamoDB Utils', () => {
         attest.instantiations([19066, 'instantiations'])
     })
 
-    test('real world example', () => {
+    test('a union of many variants over one large record types the key of each tag, within the instantiation count', () => {
         type BigUnion =
             | 'A'
             | 'B'
@@ -1189,7 +1189,7 @@ describe('DynamoDB Utils', () => {
         ).toBe('A-a2')
     })
 
-    test('heterogenous keys schema', () => {
+    test('a key schema over variants that type one attribute differently gives a transform the union of those types', () => {
         const base = tableEntry<
             { a: 'a1'; b: 1n; extra: 'extra' } | { a: 'a2'; b: 2 }
         >()

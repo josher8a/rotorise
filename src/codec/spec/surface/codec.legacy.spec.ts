@@ -325,6 +325,17 @@ describe('a fill value for a recursive codec', () => {
     })
 })
 
+describe('a fill value that makes the codec throw', () => {
+    it('is refused at `fill`, because a row missing the attribute would read back as a value that cannot be written', () => {
+        const strict = refine(string, (_text): _text is string => {
+            throw new Error('the predicate read the fill value')
+        })
+        expect(() => fill(strict, 'x')).toThrow(
+            /The fill value of `fill` must be a value the codec it fills can write, and this `refine` refuses the fill value: the predicate read the fill value/,
+        )
+    })
+})
+
 /**
  * **A fill value across two entries.** `Branch` writes its fill value through a `ref` to `Tree`, and
  * `Tree` reads `Branch` through a `ref`. The scope binds both names in its closed copy, then

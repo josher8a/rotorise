@@ -36,7 +36,7 @@ const readers: readonly (readonly [string, AnyCodec, readonly string[]])[] = [
 
 describe('a numeric read refuses a numeral that the store would not return, so every read writes back', () => {
     for (const [name, codec, holds] of readers) {
-        it(`at ${name}`, () => {
+        it(`${name} refuses a numeral that the store would not return, and writes back what it holds`, () => {
             for (const text of refused) {
                 const read = codec.decode({ N: text })
                 expect(failed(read) && read.message).toBe(reason(text))

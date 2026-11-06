@@ -165,6 +165,23 @@ describe('selection reads every key', () => {
         expect(failed(read)).toBe(true)
         expect(String(read)).toMatch(/'enormous' is not a variant of 'size'/)
     })
+
+    /**
+     * Where each tag names some member and no member carries all of them, the combination is what
+     * failed. Reading the stored item as the member that matches one key would give a value that
+     * the codec cannot write back.
+     */
+    it('refuses a combination of tags that no member carries, where each tag names a member', () => {
+        const read = pair.decode({
+            kind: { S: 'food' },
+            size: { S: 'large' },
+            gram: { BOOL: true },
+        })
+        expect(failed(read)).toBe(true)
+        expect(String(read)).toMatch(
+            /no variant carries kind='food', size='large'/,
+        )
+    })
 })
 
 describe('neither the keys nor the members carry an order', () => {
