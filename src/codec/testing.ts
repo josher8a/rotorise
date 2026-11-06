@@ -228,6 +228,40 @@ export type CheckOptions<T = unknown> = {
 }
 
 /**
+ * The options of a check with their defaults, and the draw that each check reads: one value of the
+ * codec, repaired by `refine`, that `filter` accepts. A value that the filter rejects, or that the
+ * check cannot use, is counted by `discard`, and a run that discards too many is reported and not
+ * spun on, so a filter that rejects every value cannot give a check that compares nothing.
+ */
+const resolved = <T>({
+    count = 100,
+    seed = 0x5eed,
+    size = 4,
+    equals = structuralEquals,
+    refine = (value: T) => value,
+    filter = () => true,
+}: CheckOptions<T> = {}) => {
+    const rng = rngFrom(seed)
+    const maxDiscards = Math.max(100, count * 10)
+    let discards = 0
+    const discard = (why: string): void => {
+        if (++discards > maxDiscards) {
+            throw new CodecError(
+                `${why} for ${discards} values with seed ${seed}, so the check has nothing to test; narrow the filter, or repair with refine`,
+            )
+        }
+    }
+    const next = (subject: AnyCodec) => {
+        for (;;) {
+            const drawn = generated<T>(subject, rng, size, refine)
+            if (filter(drawn.value)) return drawn
+            discard('the filter rejected the value')
+        }
+    }
+    return { count, seed, size, equals, refine, filter, rng, discard, next }
+}
+
+/**
  * `decode ∘ encode = id`, over generated entities.
  *
  * Generation is driven by the codec rather than the TypeScript type — see
@@ -239,32 +273,12 @@ export type CheckOptions<T = unknown> = {
  */
 export const checkRoundTrip = <T>(
     subject: Checkable<T>,
-    {
-        count = 100,
-        seed = 0x5eed,
-        size = 4,
-        equals = structuralEquals,
-        refine = (value: T) => value,
-        filter = () => true,
-    }: CheckOptions<T> = {},
+    options: CheckOptions<T> = {},
 ): void => {
-    const rng = rngFrom(seed)
-    const maxDiscards = Math.max(100, count * 10)
-    let discards = 0
+    const { count, seed, equals, refine, filter, next } = resolved(options)
 
     for (let i = 0; i < count; i++) {
-        const value = refine(
-            arbitraryOf(subject as unknown as AnyCodec, rng, size) as T,
-        )
-        if (!filter(value)) {
-            if (++discards > maxDiscards) {
-                throw new CodecError(
-                    `filter rejected ${discards} values with seed ${seed}; it is too narrow to search with, or refine should repair instead`,
-                )
-            }
-            i--
-            continue
-        }
+        const { value } = next(subject as unknown as AnyCodec)
         const failure = failureOf(subject, value, equals)
         if (!failure) continue
 
@@ -337,36 +351,11 @@ export const checkStable = <T>(
  */
 export const checkDecodesAreWritable = <T>(
     subject: Checkable<T>,
-    {
-        count = 100,
-        seed = 0x5eed,
-        size = 4,
-        refine,
-        filter,
-    }: CheckOptions<T> = {},
+    options: CheckOptions<T> = {},
 ): void => {
-    const rng = rngFrom(seed)
-    const maxDiscards = Math.max(100, count * 10)
-    let discards = 0
-    const discard = (why: string) => {
-        if (++discards > maxDiscards) {
-            throw new CodecError(
-                `${why} for ${discards} values with seed ${seed}, so the check has nothing to test; narrow the filter, or repair with refine`,
-            )
-        }
-    }
+    const { count, seed, discard, next } = resolved(options)
     for (let i = 0; i < count; i++) {
-        const { value, throughRead } = generated<T>(
-            subject as never,
-            rng,
-            size,
-            refine,
-        )
-        if (filter && !filter(value)) {
-            discard('the filter rejected the value')
-            i--
-            continue
-        }
+        const { value, throughRead } = next(subject as never)
 
         let encoded: AttributeMap
         try {
@@ -568,15 +557,9 @@ const membersOf = (value: AttributeValue): unknown => {
  */
 export const checkEncodePaths = <T, Spec>(
     subject: ItemCodec<T, Spec>,
-    {
-        count = 100,
-        seed = 0x5eed,
-        size = 4,
-        equals = structuralEquals,
-        refine = (value: T) => value,
-    }: CheckOptions<T> = {},
+    options: CheckOptions<T> = {},
 ): void => {
-    const rng = rngFrom(seed)
+    const { count, seed, equals, next } = resolved(options)
     const fail = (what: string, i: number, a: unknown, b: unknown) => {
         throw new CodecError(
             `${what} at case ${i} with seed ${seed}\n  ${JSON.stringify(a)}\n  ${JSON.stringify(b)}`,
@@ -584,9 +567,7 @@ export const checkEncodePaths = <T, Spec>(
     }
 
     for (let i = 0; i < count; i++) {
-        const value = refine(
-            arbitraryOf(subject as unknown as AnyCodec, rng, size) as T,
-        )
+        const { value } = next(subject as unknown as AnyCodec)
         const full = subject.unsafeEncode(value)
 
         if (!equals(subject.unsafeEncode(value), full)) {
@@ -1487,29 +1468,16 @@ export type Reference<T> = {
 export const checkAgainst = <T>(
     subject: Checkable<T>,
     reference: Reference<T>,
-    {
-        count = 100,
-        seed = 0x5eed,
-        size = 4,
-        refine = (value: T) => value,
-        filter = () => true,
-    }: {
-        readonly count?: number
-        readonly seed?: number
-        readonly size?: number
-        readonly refine?: (value: T) => T
-        readonly filter?: (value: T) => boolean
-    } = {},
+    options: Pick<
+        CheckOptions<T>,
+        'count' | 'seed' | 'size' | 'refine' | 'filter'
+    > = {},
 ): void => {
-    const rng = rngFrom(seed)
+    const { count, seed, next } = resolved(options)
     for (let i = 0; i < count; i++) {
-        const { value: entity, throughRead } = generated<T>(
+        const { value: entity, throughRead } = next(
             subject as unknown as AnyCodec,
-            rng,
-            size,
-            refine,
         )
-        if (!filter(entity)) continue
 
         // Refusals are part of the comparison, for the reason `checkEquivalent` gives: two
         // marshallers that store the same bytes but disagree about which values they *refuse* are
@@ -1626,14 +1594,9 @@ const show = (value: unknown): string =>
 export const checkEquivalent = <T>(
     a: AttributeCodec<T>,
     b: AttributeCodec<T>,
-    {
-        count = 100,
-        seed = 0x5eed,
-        size = 4,
-        equals = structuralEquals,
-    }: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
+    options: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
 ): void => {
-    const rng = rngFrom(seed)
+    const { count, seed, size, equals, rng } = resolved(options)
     for (let i = 0; i < count; i++) {
         const { value, throughRead } = generated<T>(
             a as unknown as AnyCodec,
@@ -1708,14 +1671,9 @@ export const checkIso = <C extends AnyCodec, T>(
         readonly encode: (value: T) => unknown
         readonly decode: (held: never) => T
     },
-    {
-        count = 100,
-        seed = 0x5eed,
-        size = 4,
-        equals = structuralEquals,
-    }: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
+    options: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
 ): void => {
-    const rng = rngFrom(seed)
+    const { count, seed, size, equals, rng } = resolved(options)
     for (let i = 0; i < count; i++) {
         const held = arbitraryOf(inner, rng, size)
         const back = adapt.encode(adapt.decode(held as never))

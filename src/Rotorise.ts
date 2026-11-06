@@ -3506,13 +3506,12 @@ export const tableEntry =
             andThen(
                 attributes.encode(item as never),
                 (written: AttributeMap) => {
-                    const entry = buildEntry(item as never)
                     // the keys are gathered into their own small object and merged in one spread.
                     // Adding them to a copy of the attributes one at a time is the same result and
                     // a hidden-class transition per key, on an object that already has thirty
                     const built: Record<string, AttributeValue> = {}
                     for (const name of keyNames) {
-                        const value = entry[name]
+                        const value = buildKey(name as never, item as never)
                         if (value !== undefined)
                             built[name] = carried(name, item, value, written)
                     }

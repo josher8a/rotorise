@@ -22,7 +22,12 @@ import {
 } from '../../codec'
 import type { native } from '../../native'
 import type { Reference } from '../../testing'
-import { checkAgainst, firstDifference } from '../../testing'
+import {
+    checkAgainst,
+    checkEncodePaths,
+    checkRoundTrip,
+    firstDifference,
+} from '../../testing'
 
 type Pet = { TAG: 'PET'; id: string; price: string; tags: ReadonlySet<string> }
 
@@ -463,5 +468,25 @@ describe('a codec against the SDK itself', () => {
         expect(() => sdk.marshall({ price: Number(wide) })).toThrow(
             /greater than Number.MAX_SAFE_INTEGER/,
         )
+    })
+})
+
+describe('a check that has nothing to test is refused, and is no green run', () => {
+    const Pet = itemOf(object({ petId: string }))
+    const theirs: Reference<{ petId: string }> = {
+        marshall: (pet) => ({ petId: { S: pet.petId } }),
+    }
+    const rejectsAll = { filter: () => false }
+
+    it('checkRoundTrip refuses a filter that rejects every value', () => {
+        expect(() => checkRoundTrip(Pet, rejectsAll)).toThrow(CodecError)
+    })
+
+    it('checkAgainst refuses a filter that rejects every value', () => {
+        expect(() => checkAgainst(Pet, theirs, rejectsAll)).toThrow(CodecError)
+    })
+
+    it('checkEncodePaths reads the filter, and refuses one that rejects every value', () => {
+        expect(() => checkEncodePaths(Pet, rejectsAll)).toThrow(CodecError)
     })
 })

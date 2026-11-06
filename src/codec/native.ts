@@ -31,7 +31,10 @@
  * gates on `isNumeral` of the digits and then writes the digits in normal form. The read gates on
  * `isNumeral` and on the form that the store returns, so the value that the write produces always
  * passes the read. Both halves refuse an empty `SS`/`NS`/`BS`, a set that repeats a member and a set
- * with a member of another type, where the SDK hands back an empty `Set` or writes the set.
+ * with a member of another family than the first member (a string among numbers, or a number among
+ * strings), where the SDK hands back an empty `Set` or writes the set. A set of numbers and bigints
+ * follows the SDK: the first member picks the writer, so `Set([1n, 2 ** 60])` writes `NS` and
+ * `Set([1, 2n ** 60n])` is refused as a number outside the safe range.
  */
 
 import type { ErrorMessage, show } from '../utils'
@@ -179,6 +182,26 @@ const enumerable = (
 }
 
 /**
+ * A number or a bigint in a set, as the writer of the first member writes it. The SDK writes a set of
+ * numbers with `convertToNumberAttr` on each member, which refuses a bigint outside the safe range,
+ * and a set of bigints with `convertToBigIntAttr`, which writes the digits of each member.
+ */
+const setNumber = (
+    member: number | bigint,
+    firstType: string,
+    write: (value: number | bigint) => Result<DynamoNumber>,
+    options: native.Options,
+): Result<DynamoNumber> => {
+    if (firstType === 'number' && typeof member === 'bigint') {
+        const checked = nativeNumber(Number(member), options)
+        return failed(checked) ? checked : write(member)
+    }
+    return firstType === 'bigint' && typeof member === 'number'
+        ? DynamoNumber.from(member.toString())
+        : write(member)
+}
+
+/**
  * A value, as `@aws-sdk/util-dynamodb`'s `convertToAttr` reads it, handed to the canonical write.
  *
  * Ported from that implementation rather than from its documentation, branch for branch — including
@@ -240,10 +263,13 @@ const toCanonical = (
                       'Pass a non-empty set, or options.convertEmptyValues=true.',
                   )
         }
+        // the SDK picks the writer from the first member, and each member goes through it. A number
+        // reads the range of a number, and a bigint writes its digits with no range
+        const first = members[0]
         return andThen(
             every(members, (member) =>
                 typeof member === 'number' || typeof member === 'bigint'
-                    ? write(member)
+                    ? setNumber(member, typeof first, write, options)
                     : isBinaryValue(member)
                       ? bytesOf(member)
                       : member,
@@ -265,7 +291,12 @@ const toCanonical = (
     // before the class-instance branch, as in the SDK, where `NumberValue` is a number and not a map
     if (value instanceof DynamoNumber) return value
 
-    const isPlain = named === 'Object' || (!named && typeof value === 'object')
+    // the SDK tests `!data.constructor`, so a value whose constructor is a string or a nameless class
+    // is no map unless `convertClassInstanceToMap` is set
+    const isPlain =
+        named === 'Object' ||
+        (!(value as { constructor?: unknown }).constructor &&
+            typeof value === 'object')
     if (isPlain) {
         if (tooDeeplyNested(enclosing)) return value
         // `for…in`, as the SDK does: enumerable *and* inherited, which is what makes
@@ -277,12 +308,12 @@ const toCanonical = (
     }
 
     if (isBinaryValue(value)) {
-        const bytes = bytesOf(value)
-        return !failed(bytes) &&
-            bytes.length === 0 &&
+        // the SDK tests `data.length`, which an `ArrayBuffer` and a `DataView` lack, so an empty one
+        // writes `B`. A typed array and a `Buffer` have a length, and an empty one writes `NULL`
+        return (value as { readonly length?: number }).length === 0 &&
             options.convertEmptyValues
             ? null
-            : bytes
+            : bytesOf(value)
     }
     // a boxed primitive is its primitive, by `constructor.name`, as the SDK reads it
     if (typeof value === 'boolean' || named === 'Boolean') {

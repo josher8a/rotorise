@@ -210,6 +210,9 @@ describe('the port agrees on every binary the SDK accepts', () => {
         ['ArrayBuffer', new ArrayBuffer(4)],
         ['DataView', new DataView(new ArrayBuffer(4))],
         ['empty Uint8Array', new Uint8Array(0)],
+        // the SDK tests `data.length`, which these two lack, so an empty one is a `B` and no `NULL`
+        ['empty ArrayBuffer', new ArrayBuffer(0)],
+        ['empty DataView', new DataView(new ArrayBuffer(0))],
     ]
 
     /**
@@ -552,6 +555,21 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
         { name: 'a Map holding undefined', value: new Map([['a', undefined]]) },
         { name: 'an empty Set', value: new Set() },
         { name: 'a class instance', value: new Pet() },
+        {
+            name: 'a class that has no name',
+            value: new (
+                [
+                    class {
+                        petName = 'Rex'
+                    },
+                ][0] as new () => object
+            )(),
+        },
+        // `constructor` is a string, so the SDK finds no `!data.constructor` and refuses the value
+        {
+            name: 'an object whose constructor is a string',
+            value: { constructor: 'Acme Kennels' },
+        },
         { name: 'NaN inside a list', value: [[Number.NaN]] },
         {
             name: 'undefined inside an object',
@@ -740,4 +758,40 @@ describe('the type says what the marshaller writes', () => {
         const declared: native.ItemEncode<Pet> = {} as Expected
         expect([derived, declared]).toHaveLength(2)
     })
+})
+
+describe('a set takes the writer of its first member, as the SDK does', () => {
+    const outcome = (written: () => unknown) => {
+        try {
+            return written()
+        } catch {
+            return 'refused'
+        }
+    }
+    const sets: readonly { name: string; value: ReadonlySet<unknown> }[] = [
+        {
+            name: 'a bigint, then an unsafe number',
+            value: new Set([1n, 2 ** 60]),
+        },
+        {
+            name: 'a number, then an unsafe bigint',
+            value: new Set([1, 2n ** 60n]),
+        },
+        { name: 'a bigint, then a number', value: new Set([1n, 2]) },
+        { name: 'a number, then a bigint', value: new Set([1, 2n]) },
+    ]
+
+    it.each(
+        [{}, { allowImpreciseNumbers: true }].flatMap((options) =>
+            sets.map(({ name, value }) => ({ name, value, options })),
+        ),
+    )(
+        'writes or refuses $name as the SDK does, with $options',
+        ({ value, options }) => {
+            const ours = native(options).encode(value)
+            expect(ours instanceof CodecError ? 'refused' : ours).toEqual(
+                outcome(() => sdk.convertToAttr(value, options)),
+            )
+        },
+    )
 })

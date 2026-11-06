@@ -4510,20 +4510,17 @@ const locate = (
             frontier = next
         }
         reached = { frontier, cycles }
-        // the root of an item stays an item reading. A clause at the root keeps the options that it
-        // does not separate, and the reading of the kept options refuses a row of a dropped option
-        if (segments.length === 0 && whole) {
+        // the root keeps its form. A clause at the root keeps the options that it does not separate,
+        // and the codec of the kept options refuses a value of a dropped option. The root of an item
+        // is an item reading, which the kept options read as a row
+        if (segments.length === 0) {
             const [only, ...others] = frontier as [AnyCodec, ...AnyCodec[]]
             if (frontier.length === 1 && only === root) return root
-            // the walk carries each codec as an `AnyCodec`, and the reading of the kept options is
+            const kept = others.length === 0 ? only : union(frontier as never)
+            // the walk carries each codec as an `AnyCodec`, and the codec of the kept options is
             // one, which it is at run time as the root is
-            return (others.length === 0
-                ? item(only as never)
-                : item(
-                      union(frontier as never) as never,
-                  )) as unknown as AnyCodec
+            return (whole ? item(kept as never) : kept) as unknown as AnyCodec
         }
-        if (segments.length === 0) return root
         const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
         // the item root is no level, and each segment past the first crosses one L or M. Any
         // other root is an attribute at level 0, and each segment crosses one L or M. Only an

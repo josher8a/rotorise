@@ -12,7 +12,16 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
-import { binary, nullable, number, opaque, string, union } from '../../codec'
+import {
+    binary,
+    held,
+    nullable,
+    number,
+    opaque,
+    string,
+    union,
+} from '../../codec'
+import type { StandardSchemaV1 } from '../../standard'
 
 /** What a consumer writes: the narrowing of a result. */
 const isError = (value: unknown): value is Error => value instanceof Error
@@ -216,5 +225,35 @@ describe('a key has the one member that construction decided', () => {
         expect(() => Mixed.toItem({ id: past, name: 'x' })).toThrow(
             "'PK' is built from a value that DynamoDB cannot store as a key",
         )
+    })
+})
+
+describe('a key follows its attribute in every path that writes a row', () => {
+    const dateSchema: StandardSchemaV1<Date> = {
+        '~standard': {
+            version: 1,
+            vendor: 'handwritten',
+            validate: (value) =>
+                value instanceof Date
+                    ? { value }
+                    : { issues: [{ message: 'not a Date' }] },
+        },
+    }
+    const bornAt = held(string, dateSchema, {
+        encode: (day: Date) => day.toISOString(),
+        decode: (text: string) => new Date(text),
+    })
+    const Born = tableEntry<{ petId: string; bornAt: Date }>()(
+        { PK: ['petId'], SK: 'bornAt' },
+        { codec: { petId: string, bornAt } },
+    )
+    const day = new Date('2020-01-01T00:00:00.000Z')
+
+    it('toItem writes the key that the codec writes for a held Date, as keys does', () => {
+        const written = Born.unsafeToItem({ petId: 'p1', bornAt: day })
+        expect(written.SK).toEqual({ S: '2020-01-01T00:00:00.000Z' })
+        expect(Born.keys(['SK'], { bornAt: day })).toEqual({
+            SK: { S: '2020-01-01T00:00:00.000Z' },
+        })
     })
 })

@@ -14,6 +14,7 @@ import {
     number,
     object,
     string,
+    union,
 } from '../../codec'
 
 const Pets = discriminatedUnion('kind', [
@@ -64,5 +65,40 @@ describe('a clause at the root refuses the row of an option that it dropped', ()
         expect(pets.decode(row({ kind: 'fox', cunning: 1 }))).toBeInstanceOf(
             CodecError,
         )
+    })
+})
+
+describe('a clause at the root of an attribute codec refuses the value of an option that it dropped', () => {
+    const Beasts = union([
+        object({ kind: string('dog'), bark: string }),
+        object({ kind: string('cat'), lives: number }),
+        object({ kind: string('fox'), cunning: number }),
+    ])
+    const stored = (kind: 'dog' | 'cat' | 'fox') =>
+        ({
+            dog: { M: { kind: { S: 'dog' }, bark: { S: 'w' } } },
+            cat: { M: { kind: { S: 'cat' }, lives: { N: '9' } } },
+            fox: { M: { kind: { S: 'fox' }, cunning: { N: '1' } } },
+        })[kind]
+
+    it('refuses an option that the clause dropped, and reads the one that it kept', () => {
+        const dogs = narrow(at(Beasts, []), object({ kind: string('dog') }))
+        expect(dogs.decode(stored('cat'))).toBeInstanceOf(CodecError)
+        expect(dogs.unsafeDecode(stored('dog'))).toEqual({
+            kind: 'dog',
+            bark: 'w',
+        })
+    })
+
+    it('reads each option that it kept, and refuses the others', () => {
+        const some = narrow(
+            at(Beasts, []),
+            object({ kind: string('dog', 'cat') }),
+        )
+        expect(some.unsafeDecode(stored('cat'))).toEqual({
+            kind: 'cat',
+            lives: 9,
+        })
+        expect(some.decode(stored('fox'))).toBeInstanceOf(CodecError)
     })
 })
