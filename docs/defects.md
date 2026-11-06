@@ -235,3 +235,34 @@ literals cannot be sliced by a pattern that splits the set.
 
 **Pin.** None. A pin compiles a literal set of 89 at one field in the suite, and its cost in
 instantiations is not measured.
+
+---
+
+## Known: the options of a slice type follow the union order of the compiler
+
+**Observation.** A slice splits an option one key at a time. The run time reads the keys in the
+order of the declaration. The type reads the keys through `KeyTuple`, which builds a tuple from a
+union, and the order of a union is the order of the type identities of the compiler. TypeScript 7
+orders `'p' | 'q' | 'w'` as `["p", "q", "w"]`. TypeScript 6 orders it as `["w", "q", "p"]`. Measured
+2026-11-06 with `npm run check` (TypeScript 7) and `npx tsc --noEmit` (TypeScript 6):
+
+    const lit = (k, v) => object({ [k]: string(v) })
+    const X = object({ p: union([lit('t','A'), lit('t','B'), lit('t','C')]),
+                       q: union([lit('u','X'), lit('u','Y')]), w: union([lit('s','1'), lit('s','2')]) })
+    const m1 = object({ p: lit('t','A') })
+    const m2 = object({ q: lit('u','Y'), w: lit('s','1') })
+    const m3 = object({ p: lit('t','B'), w: lit('s','2') })
+    exclude(X, union([m1, m2, m3]))
+      runtime:    3 options
+      TypeScript 7: 3 options
+      TypeScript 6: 2 options
+
+**Effect.** On TypeScript 6, a slice whose pattern splits two or more keys can type a tuple of
+options that differs from the options of the value. TypeScript 5 is not measured. The decoded
+type admits the same rows on each compiler, because each tuple covers the same rows. A sort of the keys in the type
+gives one order on each compiler. Each form of the sort that was tried stops at TS5114 on
+TypeScript 7 and TS2589 on TypeScript 6.
+
+**Pin.** `src/codec/spec/union/codec.slice.cover.spec.ts` asserts the options of the fold of
+three patterns at run time only. `npm run check` and `npx tsc --noEmit` check the type of the
+other rows of the spec, which agree on both compilers.
