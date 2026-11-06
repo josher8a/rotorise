@@ -15,15 +15,21 @@
  */
 import { attest } from '@ark/attest'
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import type { ConstantAttributes } from '../../../Rotorise'
+import { tableEntry } from '../../../Rotorise'
 import type { ObjectSlot } from '../../codec'
 import {
+    boolean,
     CodecError,
     constantOf,
     decimal,
+    discriminatedUnion,
     fill,
     held,
+    item,
     number,
+    object,
     optional,
     refine,
     string,
@@ -150,5 +156,84 @@ describe('the type and the function agree on what is decided', () => {
         }
         attest<[ConstantAttributes<typeof broken>], [never]>()
         expect(decided(broken)).toEqual([])
+    })
+
+    /**
+     * A `boolean` literal decides one value, as a number literal does, and the function reads it.
+     * The type asked for a text or a number only, so it asked for a component that the function
+     * could supply.
+     */
+    it('on a single-valued boolean, which decides', () => {
+        const spec = { vaccinated: boolean(true), id: string }
+        attest<[ConstantAttributes<typeof spec>], ['vaccinated']>()
+        expect(decided(spec)).toEqual(['vaccinated'])
+    })
+})
+
+describe('the variants of a tagged codec decide a constant that they all state', () => {
+    it('on a number that every variant states, which decides, and on two numbers, which decide nothing', () => {
+        const agree = {
+            DOG: { kind: string('DOG'), litter: number(1) },
+            CAT: { kind: string('CAT'), litter: number(1) },
+        }
+        const differ = {
+            DOG: { kind: string('DOG'), litter: number(1) },
+            CAT: { kind: string('CAT'), litter: number(2) },
+        }
+        attest<[ConstantAttributes<typeof agree>], ['litter']>()
+        attest<[ConstantAttributes<typeof differ>], [never]>()
+    })
+
+    it('on a boolean that every variant states, which decides', () => {
+        const agree = {
+            DOG: { kind: string('DOG'), vaccinated: boolean(true) },
+            CAT: { kind: string('CAT'), vaccinated: boolean(true) },
+        }
+        attest<[ConstantAttributes<typeof agree>], ['vaccinated']>()
+    })
+
+    /**
+     * A constant that an adapter puts back is a new object at each read, so the variants state one
+     * constant where their two objects print the same. A single codec decides it, and the variants
+     * decide it as well.
+     */
+    it('on an adapter that gives a new object at each read, so keyUpdates asks for no component of it', () => {
+        const adoptedOn = () =>
+            held(string('2026-01-01'), z.date(), {
+                encode: (day: Date) =>
+                    day.toISOString().slice(0, 10) as '2026-01-01',
+                decode: (text: string) => new Date(text),
+            })
+        const Pets = tableEntry<{
+            kind: 'DOG' | 'CAT'
+            adoptedOn: Date
+            petId: string
+        }>()(
+            { PK: ['adoptedOn', 'petId'] },
+            {
+                codec: item(
+                    discriminatedUnion('kind', [
+                        object({
+                            kind: string('DOG'),
+                            adoptedOn: adoptedOn(),
+                            petId: string,
+                        }),
+                        object({
+                            kind: string('CAT'),
+                            adoptedOn: adoptedOn(),
+                            petId: string,
+                        }),
+                    ]),
+                ) as never,
+            },
+        )
+        const patch = (
+            Pets as never as {
+                keyUpdates: (change: Record<string, unknown>) => {
+                    set: Record<string, unknown>
+                }
+            }
+        ).keyUpdates({ petId: 'p1' })
+        expect(Object.keys(patch.set)).toEqual(['PK'])
     })
 })

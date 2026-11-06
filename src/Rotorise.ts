@@ -10,6 +10,7 @@ import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     Closed,
+    ConstantBoolean,
     ConstantNumber,
     ConstantText,
     Encoded,
@@ -2370,6 +2371,7 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
             [K in keyof Spec]: ConstantValue<Spec[K]> extends infer Only extends
                 | string
                 | number
+                | boolean
                 ? IsUnion<Only> extends true
                     ? never
                     : K
@@ -2399,7 +2401,10 @@ type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
  * would let a variant that decides nothing be outvoted, where `unknown` absorbs. One silent variant
  * is enough.
  */
-type ConstantOrAny<C> = ConstantValue<C> extends infer V extends string | number
+type ConstantOrAny<C> = ConstantValue<C> extends infer V extends
+    | string
+    | number
+    | boolean
     ? V
     : unknown
 
@@ -2417,7 +2422,9 @@ type ConstantValue<C> = C extends {
     ? ConstantValue<Marked>
     : [ConstantText<C>] extends [never]
       ? [ConstantNumber<C>] extends [never]
-          ? unknown
+          ? [ConstantBoolean<C>] extends [never]
+              ? unknown
+              : ConstantBoolean<C>
           : ConstantNumber<C>
       : ConstantText<C>
 
@@ -2445,7 +2452,7 @@ type AgreedAttributes<Variants> = {
     > extends infer Said
         ? // bound once: what the variants say is asked for twice — is it a string at all, and is it
           // one string — and answering it walks every variant
-          [Said] extends [string]
+          [Said] extends [string | number | boolean]
             ? IsUnion<Said> extends true
                 ? never
                 : K
@@ -2610,6 +2617,22 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
     ]) && typeof (value as TaggedRuntime).discriminator === 'string'
 
 /**
+ * Whether two values are one constant, for a change that writes a decided attribute and for the
+ * variants of a tagged codec that decide one.
+ *
+ * A primitive constant is compared as it is. A constant that an adapter puts back, such as a
+ * decimal, is an object, so two of them are the same when they print the same: the key is built
+ * from that print.
+ */
+const sameConstant = (written: unknown, constant: unknown): boolean =>
+    Object.is(written, constant) ||
+    (typeof written === 'object' &&
+        written !== null &&
+        typeof constant === 'object' &&
+        constant !== null &&
+        String(written) === String(constant))
+
+/**
  * The value every variant writes at this attribute, when they all write the same one.
  *
  * The rule for a union is the rule for one codec, asked of each variant: one value, or none. A
@@ -2623,7 +2646,7 @@ const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
         const value = found && constantOf(found)
         if (value === undefined) return undefined
         if (agreed === undefined) agreed = value
-        else if (agreed !== value) return undefined
+        else if (!sameConstant(agreed, value)) return undefined
     }
     return agreed
 }
@@ -3052,21 +3075,6 @@ export const tableEntry =
                 'rewrite',
             )
         }
-
-        /**
-         * Whether a written value is the constant the codec decides.
-         *
-         * A primitive constant is compared as it is. A constant that an adapter puts back, such as a
-         * decimal, is an object, so two of them are the same when they print the same: the key is built
-         * from that print.
-         */
-        const sameConstant = (written: unknown, constant: unknown): boolean =>
-            Object.is(written, constant) ||
-            (typeof written === 'object' &&
-                written !== null &&
-                typeof constant === 'object' &&
-                constant !== null &&
-                String(written) === String(constant))
 
         /**
          * The member that the codec stores at a field, or `undefined` where the term states none.

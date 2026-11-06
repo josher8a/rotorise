@@ -1072,6 +1072,17 @@ export type ConstantNumber<C> = TermOf<C> extends FloatT<
         : never
     : never
 
+/**
+ * The boolean that a `boolean` literal pins, as `constantOf` answers it at run time. A union of
+ * values and any other term pin none.
+ */
+export type ConstantBoolean<C> = TermOf<C> extends LitT<
+    'boolean',
+    infer V extends boolean
+>
+    ? V
+    : never
+
 /** The literal capability, on every base. */
 const literalCapability =
     (base: LiteralBase) =>
