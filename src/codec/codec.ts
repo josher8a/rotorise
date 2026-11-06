@@ -5097,9 +5097,33 @@ type MeetCodecs<A, B> = [StoredMembers<A> & StoredMembers<B>] extends [never]
         ? A
         : [FitsCodec<B, A>] extends ['t']
           ? B
-          : [Decoded<A> & Decoded<B>] extends [never]
-            ? never
-            : MeetLiterals<A, B>
+          : [ArrayElement<A>] extends [never]
+            ? MeetByDecoded<A, B>
+            : [ArrayElement<B>] extends [never]
+              ? MeetByDecoded<A, B>
+              : MeetArrays<ArrayElement<A>, ArrayElement<B>>
+
+/** The element of an `array` codec, or `never` for any other codec. */
+type ArrayElement<C> = C extends { readonly [elementMarker]?: infer E }
+    ? unknown extends E
+        ? never
+        : E
+    : never
+
+/**
+ * **The meet of two arrays, at the type level**: the array of the meet of the two elements, as the
+ * run time builds it ({@link meetLists}, the model's `alignedRows`). Where the elements meet at
+ * `never`, the spread is `never` and the row of length zero stays, so the codec holds the empty
+ * list and is no `never`.
+ */
+type MeetArrays<EA, EB> = MeetOfTwo<EA, EB> extends infer M
+    ? ArrayOver<([M] extends [never] ? typeof never : M) & AnyCodec>
+    : never
+
+/** The meet of two codecs that share a member and fit neither way, by what they decode to. */
+type MeetByDecoded<A, B> = [Decoded<A> & Decoded<B>] extends [never]
+    ? never
+    : MeetLiterals<A, B>
 
 /**
  * **The meet of two literal sets, at the type level**: the codec of the common literals, as the run
@@ -5242,9 +5266,12 @@ type DropNever<Ms extends readonly unknown[]> = Ms extends readonly [
 ]
     ? [H] extends [never]
         ? DropNever<T>
-        : [TermOf<H>] extends [['never']]
-          ? DropNever<T>
-          : [H, ...DropNever<T>]
+        : [TermOf<H>] extends [never]
+          ? // an overlap of two codecs of two forms has no one term, and that is no meet at `never`
+            [H, ...DropNever<T>]
+          : [TermOf<H>] extends [['never']]
+            ? DropNever<T>
+            : [H, ...DropNever<T>]
     : []
 
 /** The flat union of the meets, or the one meet, or the bottom where each meet is at `never`. */

@@ -2242,11 +2242,11 @@ describe('fits is the order of the meet', () => {
     }
 
     /**
-     * **The stated limits.** Twenty-three pairs disagree, and each has a named cause.
+     * **The stated limits.** Twenty-four pairs disagree, and each has a named cause.
      *
      * - The refinement limit: `1.198 lr`, `1.428 rl`, `1.429 rl`, `1.431 rl`, `1.433 rl`,
-     *   `1.434 rl`, `1.435 rl`, `1.456 lr`, `1.561 rl`, `1.681 lr`, `4.848 rl`, `4.850 lr`,
-     *   `4.850 rl` and `4.928 rl`. The pattern holds a refinement. The meet refines the option
+     *   `1.434 rl`, `1.435 rl`, `1.456 lr`, `1.561 rl`, `1.681 lr`, `1.743 lr`, `4.848 rl`,
+     *   `4.850 lr`, `4.850 rl` and `4.928 rl`. The pattern holds a refinement. The meet refines the option
      *   by the predicate, and the host cannot read the predicate, so `fits` answers no, and the
      *   sample finds no value that the predicate refuses.
      * - The closure limit: `20261004.648 lr`, `20261004.969 rl`, `20261004.972 rl`, `4.590 rl`,
@@ -2305,6 +2305,7 @@ describe('fits is the order of the meet', () => {
             '1.455 rl',
             '1.476 lr',
             '1.478 lr',
+            '1.743 lr',
             '1.856 lr',
             '1.885 lr',
             '1.918 lr',

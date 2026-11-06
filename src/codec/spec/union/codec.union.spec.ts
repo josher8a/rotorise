@@ -718,6 +718,23 @@ describe('never', () => {
         })
     })
 
+    /**
+     * **The generator draws no value for a term that holds none.** A list spread over such a term is
+     * empty, as a field of an object is skipped, so a property over `array(never)` has inputs to test.
+     */
+    it('is generated with an empty list where the spread holds no value', () => {
+        const Litter = item(object({ id: string, kittens: array(never) }))
+        expect(() => checkRoundTrip(Litter, { count: 40 })).not.toThrow()
+    })
+
+    /** An option that holds no value is skipped, as a field of an object is skipped. */
+    it('is generated without the option that holds no value', () => {
+        const Pet = item(
+            object({ name: string, nickname: union([string, never]) }),
+        )
+        expect(() => checkRoundTrip(Pet, { count: 40 })).not.toThrow()
+    })
+
     /** `discriminatedUnion` over no options stays refused: an empty list is a mistake, not a term. */
     it('is the only name that reaches the term', () => {
         expect(() =>

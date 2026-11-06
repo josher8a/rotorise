@@ -1095,8 +1095,14 @@ const draw = (
             const middle =
                 spread === undefined
                     ? []
-                    : Array.from({ length: size <= 0 ? 0 : length }, () =>
-                          one(spread),
+                    : Array.from(
+                          {
+                              length:
+                                  size <= 0 || holdsNoValue(spread)
+                                      ? 0
+                                      : length,
+                          },
+                          () => one(spread),
                       )
             return [...def.pre.map(one), ...middle, ...def.suf.map(one)]
         }
@@ -1138,13 +1144,22 @@ const draw = (
             }
             return out
         }
-        case 'union':
+        case 'union': {
+            // an option that holds no value has nothing to draw, as a field of the object row; a
+            // union of no inhabited option draws through its options, and the `never` row refuses
+            const inhabited = def.options.filter((one) => !holdsNoValue(one))
             return draw(
-                codecOfTerm(pickFrom(rng, def.options)),
+                codecOfTerm(
+                    pickFrom(
+                        rng,
+                        inhabited.length > 0 ? inhabited : def.options,
+                    ),
+                ),
                 rng,
                 size,
                 drew,
             )
+        }
         case 'refine': {
             const q = def.q
             if (q.arbitrary) return q.arbitrary(rng, size)

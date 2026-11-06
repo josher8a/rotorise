@@ -10,22 +10,28 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import type { Decoded } from '../../codec'
 import {
+    array,
     at,
     CodecError,
     decimal,
     discriminatedUnion,
+    dynamoNumber,
     exclude,
     extract,
     held,
     item,
     legacy,
     mdunion,
+    meet,
     nullable,
+    nullValue,
     number,
     object,
     optional,
+    ref,
     scope,
     string,
+    union,
 } from '../../codec'
 import type { StandardSchemaV1 } from '../../standard'
 
@@ -205,5 +211,30 @@ describe('a slice keeps the rest of each variant that it keeps', () => {
             size: 'big'
             nickname: string
         }>().toMatchTypeOf<Decoded<typeof bigs>>()
+    })
+})
+
+describe('the meet of two lists keeps the row of length zero, in the type as in the run time', () => {
+    // a tree of tags: a tag, or a nest of trees
+    const { Tags } = scope({
+        Nest: array(ref('Tags')),
+        Tags: union([string('PUPPY'), ref('Nest')]),
+    })
+    // a count that a scope entry names
+    const { Count } = scope({ Count: ref('Weight'), Weight: dynamoNumber })
+    const Labels = union([Tags, decimal('1', '2.5')])
+    const Counts = array(union([Count, nullValue]))
+
+    it('holds the empty list where the elements of a scope entry and of an array meet at `never`', () => {
+        const both = meet(Labels, Counts)
+        const none: Decoded<typeof both> = []
+        expect(both.unsafeEncode(none)).toEqual({ L: [] })
+        expect(both.unsafeDecode({ L: [] })).toEqual([])
+    })
+
+    it('holds the empty list of two arrays whose elements meet at `never`', () => {
+        const both = meet(array(string('PUPPY')), array(dynamoNumber))
+        expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<readonly never[]>()
+        expect(both.unsafeDecode({ L: [] })).toEqual([])
     })
 })
