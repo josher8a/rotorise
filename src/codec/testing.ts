@@ -262,6 +262,22 @@ const resolved = <T>({
 }
 
 /**
+ * The refusal that **(C)** gives: a value that the codec's own read produced is a value that it can
+ * write back, so a codec that cannot write one fails the law. `who` names the codec, and `at` the
+ * case where the check numbers its cases.
+ */
+const unwritable = (
+    who: string,
+    value: unknown,
+    seed: number,
+    why: unknown,
+    at = '',
+): CodecError =>
+    new CodecError(
+        `(C) fails: ${who} cannot write ${show(value)}, a value its own read produced, with seed ${seed}${at}: ${why}`,
+    )
+
+/**
  * `decode ∘ encode = id`, over generated entities.
  *
  * Generation is driven by the codec rather than the TypeScript type — see
@@ -363,11 +379,12 @@ export const checkDecodesAreWritable = <T>(
         } catch (error) {
             // a value the pair's own read produced is one (C) says it can write back
             if (throughRead) {
-                throw new CodecError(
-                    '(C) fails: a value the codec read cannot be encoded.\n' +
-                        `  seed     = ${seed}, case ${i}\n` +
-                        `  value    = ${JSON.stringify(value)}\n` +
-                        `  encoding it said: ${(error as Error).message}`,
+                throw unwritable(
+                    'the codec',
+                    value,
+                    seed,
+                    (error as Error).message,
+                    `, case ${i}`,
                 )
             }
             // any other value the codec declines to write says nothing about (C)
@@ -1510,9 +1527,7 @@ export const checkAgainst = <T>(
         if (ours.refused) {
             // both refuse a value the codec's own read produced: (C) fails for the codec
             if (throughRead) {
-                throw new CodecError(
-                    `(C) fails: the codec cannot write ${show(entity)}, a value its own read produced, with seed ${seed}: ${ours.why}`,
-                )
+                throw unwritable('the codec', entity, seed, ours.why)
             }
             continue
         }
@@ -1611,13 +1626,9 @@ export const checkEquivalent = <T>(
     b: AttributeCodec<T>,
     options: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
 ): void => {
-    const { count, seed, size, equals, rng } = resolved(options)
+    const { count, seed, equals, next } = resolved<T>(options)
     for (let i = 0; i < count; i++) {
-        const { value, throughRead } = generated<T>(
-            a as unknown as AnyCodec,
-            rng,
-            size,
-        )
+        const { value, throughRead } = next(a as unknown as AnyCodec)
 
         const written = a.encode(value)
         const alsoWritten = b.encode(value)
@@ -1631,9 +1642,7 @@ export const checkEquivalent = <T>(
         if (failed(written) || failed(alsoWritten)) {
             // both refuse a value the first codec's own read produced: (C) fails for it
             if (throughRead) {
-                throw new CodecError(
-                    `(C) fails: the first codec cannot write ${show(value)}, a value its own read produced, with seed ${seed}: ${written}`,
-                )
+                throw unwritable('the first codec', value, seed, written)
             }
             continue
         }
@@ -1688,9 +1697,9 @@ export const checkIso = <C extends AnyCodec, T>(
     },
     options: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
 ): void => {
-    const { count, seed, size, equals, rng } = resolved(options)
+    const { count, seed, equals, next } = resolved<T>(options)
     for (let i = 0; i < count; i++) {
-        const held = arbitraryOf(inner, rng, size)
+        const { value: held } = next(inner)
         const back = adapt.encode(adapt.decode(held as never))
         if (!equals(back, held)) {
             throw new CodecError(

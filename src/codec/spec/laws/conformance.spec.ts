@@ -15,6 +15,7 @@ import {
     array,
     CodecError,
     decimal,
+    held,
     item as itemOf,
     number,
     object,
@@ -23,10 +24,15 @@ import {
 import type { native } from '../../native'
 import type { Reference } from '../../testing'
 import {
+    arbitraryOf,
     checkAgainst,
+    checkDecodesAreWritable,
     checkEncodePaths,
+    checkEquivalent,
+    checkIso,
     checkRoundTrip,
     firstDifference,
+    rngFrom,
 } from '../../testing'
 
 type Pet = { TAG: 'PET'; id: string; price: string; tags: ReadonlySet<string> }
@@ -488,5 +494,79 @@ describe('a check that has nothing to test is refused, and is no green run', () 
 
     it('checkEncodePaths reads the filter, and refuses one that rejects every value', () => {
         expect(() => checkEncodePaths(Pet, rejectsAll)).toThrow(CodecError)
+    })
+})
+
+describe('the checks draw through one draw, and say (C) in one form', () => {
+    const pool = object({ name: string, age: number })
+
+    it('checkIso draws the values that arbitraryOf draws, at the default options', () => {
+        const seen: unknown[] = []
+        checkIso(
+            pool,
+            {
+                encode: (value: unknown) => value,
+                decode: (held: never) => {
+                    seen.push(held)
+                    return held as unknown
+                },
+            },
+            { seed: 7, count: 5 },
+        )
+        const rng = rngFrom(7)
+        expect(seen).toEqual(
+            Array.from({ length: 5 }, () => arbitraryOf(pool, rng, 4)),
+        )
+    })
+
+    it('checkEquivalent draws the values that arbitraryOf draws, at the default options', () => {
+        const seen: unknown[] = []
+        const spy = {
+            ...pool,
+            encode: (value: never) => {
+                seen.push(value)
+                return pool.encode(value)
+            },
+        }
+        checkEquivalent(pool, spy as never, { seed: 7, count: 5 })
+        const rng = rngFrom(7)
+        expect(seen).toEqual(
+            Array.from({ length: 5 }, () => arbitraryOf(pool, rng, 4)),
+        )
+    })
+
+    /**
+     * A codec whose read produces a value that its write refuses: **(C)** fails. The text is one
+     * form in each check, with the codec named and the seed.
+     */
+    const refusing = held(string, string, {
+        encode: () => new CodecError('no write'),
+        decode: (text: string) => text,
+    })
+    const Refusing = itemOf(object({ name: refusing }))
+    const cFails =
+        /\(C\) fails: the (first )?codec cannot write .*, a value its own read produced, with seed 3/
+
+    it('checkDecodesAreWritable names the codec, the value, the seed and the case', () => {
+        expect(() => checkDecodesAreWritable(Refusing, { seed: 3 })).toThrow(
+            /\(C\) fails: the codec cannot write .*, a value its own read produced, with seed 3, case 0: /,
+        )
+    })
+
+    it('checkAgainst names the codec, the value and the seed', () => {
+        const reference: Reference<unknown> = {
+            marshall: () => {
+                throw new Error('no write')
+            },
+        }
+        expect(() => checkAgainst(Refusing, reference, { seed: 3 })).toThrow(
+            cFails,
+        )
+    })
+
+    it('checkEquivalent names the first codec, the value and the seed', () => {
+        expect(() => checkEquivalent(refusing, refusing, { seed: 3 })).toThrow(
+            /\(C\) fails: the first codec cannot write .*, a value its own read produced, with seed 3/,
+        )
     })
 })
