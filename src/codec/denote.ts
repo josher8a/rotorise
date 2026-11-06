@@ -33,7 +33,6 @@ import { codec } from './build'
 import type {
     AnyCodec,
     AttributeCodec,
-    Declared,
     LiteralBase,
     LiteralValue,
     ObjectSlot,
@@ -90,11 +89,9 @@ import {
  *   constructor the caller actually wrote.
  * - **`ℓ` is homogeneous at the base.** Free in the model — `NEFinset k.Carrier` — and not free
  *   here, because a spread of a plain array defeats the type. So it is a construction-time refusal.
- * - **`ℓ ⊆ D`** at the two bases that write an `N`. `number` reads through `Number.prototype
- *   .toString`; `decimal` is text already and has to be in the form the service returns, or the
- *   literal is one this codec could write and never read back.
+ * - **`ℓ ⊆ D`** at `number`. The carrier `DynamoNumber` discharges it where the value is made.
  *
- * All three are decided when the codec is built, because `ℓ` is data this library owns.
+ * Each premise is decided when the codec is built, because `ℓ` is data this library owns.
  */
 export const literalCodec = <T extends LiteralValue>(
     base: LiteralBase,
@@ -136,7 +133,7 @@ export const literalTermOf = (
 }
 
 /**
- * One literal's value, indexed by the base that carries it — {@link Literal}'s five variants.
+ * One literal's value, indexed by the base that carries it — {@link Literal}'s four variants.
  *
  * **`ℓ` is homogeneous at the base**, and the check is what narrows: a `typeof` test the checker
  * reads is the same test as a cast, with the narrowing kept. One value rather than a list, so
@@ -369,37 +366,39 @@ export const carriedCodec = <Payload, Written, Read>(
  * writes no map. So `denote`'s row wraps this in the member and `item` takes it as it is.
  *
  * **A field's mark is read here and nowhere else.** `mkField` in the model is the function that
- * turns `SlotMode` into a presence rule; here it is the three-way `mark`, read once per field per
- * direction, and there is no second place that asks what `optional` means.
+ * turns `SlotMode` into a presence rule. `SlotMode` is `req`, `opt` or `fill`, and here the `mark`
+ * has a fourth value, `undefinable`, which the model does not state. The mark is read once per
+ * field per direction, and there is no second place that asks what `optional` means.
  *
  * Whether a fill value must be *copied* per read is settled once, at the declaration, rather than
  * asked per item: {@link copiedPerRead} is a fact about this runtime and not about the term, which
  * is why it lives in the compiled form and not in {@link Field}.
  */
 export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
-    const declared: Declared[] = []
+    const declared: {
+        readonly name: string
+        readonly pair: Pair
+        readonly field: Field
+        readonly copy: boolean
+    }[] = []
     for (const name in of) {
         const field = of[name]
         if (field === undefined) continue
         declared.push({
             name,
             pair: pairOf(field.t),
-            optional: !alwaysWritten(field),
-            keyed: field.mark === 'undefinable',
-            absent:
-                field.mark === 'fill'
-                    ? { value: field.v, copy: copiedPerRead(field.v) }
-                    : undefined,
+            field,
+            copy: field.mark === 'fill' && copiedPerRead(field.v),
         })
     }
     const restPair = rest && pairOf(rest)
     return {
         encode: (held, enclosing = 0) => {
             const out: Record<string, AttributeValue> = {}
-            for (const { name, pair: attribute, optional } of declared) {
+            for (const { name, pair: attribute, field } of declared) {
                 const value = own(held, name)
                 if (value === undefined) {
-                    if (optional) continue
+                    if (!alwaysWritten(field)) continue
                     return new CodecError(
                         `'${name}' is required and was not given`,
                     )
@@ -434,29 +433,28 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
             for (const {
                 name,
                 pair: attributeCodec,
-                optional,
-                keyed,
-                absent,
+                field,
+                copy,
             } of declared) {
                 const attribute = own(item, name)
                 if (attribute === undefined) {
-                    // before the skip: the key survives an omitted attribute
-                    if (keyed) {
-                        out[name] = undefined
-                        continue
+                    switch (field.mark) {
+                        case 'undefinable':
+                            // before the skip: the key survives an omitted attribute
+                            out[name] = undefined
+                            continue
+                        case 'optional':
+                            continue
+                        case 'fill':
+                            // `copied` and not `structuredClone`: a decode must be writable, so
+                            // the copy keeps the class of each value, a `DynamoNumber` included
+                            out[name] = copy ? copied(field.v) : field.v
+                            continue
+                        case 'req':
+                            return new CodecError(
+                                `'${name}' is required and the item has no such attribute`,
+                            )
                     }
-                    if (optional) continue
-                    if (absent) {
-                        // `copied` and not `structuredClone`: a decode must be writable, so
-                        // the copy keeps the class of each value, a `DynamoNumber` included
-                        out[name] = absent.copy
-                            ? copied(absent.value)
-                            : absent.value
-                        continue
-                    }
-                    return new CodecError(
-                        `'${name}' is required and the item has no such attribute`,
-                    )
                 }
                 const read = attributeCodec.decode(attribute, enclosing)
                 if (failed(read)) return read.under(name)
@@ -817,9 +815,7 @@ export const altSem = (
      * option is admitted by attempt, as the model's meaning admits every option.
      */
     const forValue = (shape: Shape | undefined) => (option: Option) =>
-        option.declares
-            ? shape === 'map'
-            : !shape || option.carries.includes(shape)
+        !shape || option.carries.includes(shape)
 
     type T = unknown
 
@@ -862,11 +858,9 @@ export const altSem = (
         const names = carriedMap ? namesOf(carriedMap) : undefined
         return only(
             (option) =>
-                option.declares
-                    ? member === 'M'
-                    : option.member === undefined ||
-                      member === undefined ||
-                      option.member === member,
+                option.member === undefined ||
+                member === undefined ||
+                option.member === member,
             naming('this attribute', names),
             (option) => option.pair.decode(attribute, enclosing) as Result<T>,
         )
@@ -1392,8 +1386,8 @@ export const denote = (def: Term): Pair => {
         /**
          * The rule `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
          * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
-         * base is the index, so the row reaches it by denoting `{ kind: base }` — the five bases
-         * are exactly five term kinds.
+         * base is the index, so the row reaches it by denoting `{ kind: base }` — the four bases
+         * are exactly four term kinds.
          *
          * **What the base's own read gate buys, stated where it is now free.** The hand-written
          * row re-checked `isNumeral` before consulting `ℓ`, because `Number` is far more permissive
@@ -2123,7 +2117,7 @@ const numberPolicy = (numbers: opaque.Numbers) => {
         if (value instanceof DynamoNumber) {
             return unrecoverable(
                 'an instance of DynamoNumber',
-                'Only plain objects survive: `M` carries the own enumerable properties and nothing that says how to rebuild the instance. Convert it first — a `Date`, for example, is faithful as an ISO string.',
+                'A numeric policy of `opaque` holds a JS number and never a `DynamoNumber`. Declare the attribute with `dynamoNumber`, or hand over a JS number.',
             )
         }
         if (Array.isArray(value)) {
@@ -2361,7 +2355,7 @@ const namedKind = (t: Term): string => {
             ? namedLiterals(literalForm(pinned.base, undefined), pinned)
             : t.kind !== 'held' || t.outer.kind === 'opaq'
               ? t.kind
-              : namedAdapter(t.inner, t.outer)
+              : namedAdapter(t)
 }
 
 /** A literal form with its alternatives, as the caller writes the call. */
@@ -2374,12 +2368,13 @@ const namedLiterals = (form: string, alts: Alternatives): string =>
  * stores numerals and holds the texts. Otherwise the stored literals are the caller's. An adapter
  * over no ground base names the kinds of its held side. @see {@link namedKind}
  */
-const namedAdapter = (inner: Term, outer: Term): string => {
+const namedAdapter = (t: Extract<Term, { kind: 'held' }>): string => {
+    const { inner, outer } = t
     const stored = literalAlternatives(inner)
     const base = heldBase(inner) ?? stored?.base
     if (base === undefined) return occV(outer).join(' | ')
     const written = literalAlternatives(outer) ?? stored
-    const form = literalForm(base, outer)
+    const form = literalForm(base, t)
     return written === undefined ? form : namedLiterals(form, written)
 }
 
@@ -2401,13 +2396,13 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  * function of the term too.
  *
  * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
- * attribute pair, and that pair reads `codec`, `member`, `carries` and `declares` — it never reads
+ * attribute pair, and that pair reads `codec`, `member` and `carries` — it never reads
  * `item`. So the resolution is a function of the terms, and this is it.
  *
  * **The names come from the fields, not from a `spec`.** A `spec` is a caller's argument and a
- * `Field`'s `mark` is what that argument became, so `declares` and the names a message marks
- * optional are read from the term here. The names select no option: every option is attempted.
- * `declares` marks an object option, which the kind filter reads as a map, and a message names.
+ * `Field`'s `mark` is what that argument became, so the names that a message marks optional are
+ * read from the term here. The names select no option: every option is attempted. An object
+ * option has the member `M` and the kind `map`, which the filters read.
  *
  * The term decides, and every codec has one, so the former that built a codec classifies no
  * option.
@@ -2428,11 +2423,11 @@ export const optionOfTerm = (def: Term): Option => {
         const bodies = def.options.map(
             (o) => (o as Extract<Term, { kind: 'object' }>).body,
         )
-        const declares = new Set<string>()
+        const names = new Set<string>()
         for (const body of bodies) {
-            for (const name in body.fields) declares.add(name)
+            for (const name in body.fields) names.add(name)
         }
-        const requires = [...declares].filter((name) =>
+        const requires = [...names].filter((name) =>
             bodies.every((body) => {
                 const field = own(body.fields, name)
                 return !!field && alwaysWritten(field)
@@ -2444,8 +2439,7 @@ export const optionOfTerm = (def: Term): Option => {
             member: 'M',
             carries: ['map'],
             item: undefined,
-            declares,
-            describe: `${namedKind(def)} { ${[...declares]
+            describe: `${namedKind(def)} { ${[...names]
                 .map((name) => (requires.includes(name) ? name : `${name}?`))
                 .join(', ')} }`,
         }
@@ -2457,23 +2451,19 @@ export const optionOfTerm = (def: Term): Option => {
             member: readMember(def),
             carries: valueKinds(def),
             item: undefined,
-            declares: undefined,
             describe: namedKind(def),
         }
     }
-    const declares = new Set<string>()
     const fields = def.body.fields
-    for (const name in fields) declares.add(name)
     return {
         codec,
         pair,
         member: 'M',
         carries: ['map'],
         item: undefined,
-        declares,
         // an open block holds every undeclared name, and `...` names it
         describe: `{ ${[
-            ...[...declares].map((name) =>
+            ...Object.keys(fields).map((name) =>
                 alwaysWritten(fields[name] as Field) ? name : `${name}?`,
             ),
             ...(def.body.rest === undefined ? [] : ['...']),

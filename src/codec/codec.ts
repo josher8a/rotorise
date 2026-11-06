@@ -75,11 +75,20 @@ import {
     sideOf,
     storedApart,
 } from './scoped'
-import type { Body, Field, NameForm, NonEmpty, RefSlot, Term } from './term'
+import type {
+    Body,
+    Field,
+    NameForm,
+    NonEmpty,
+    Order,
+    RefSlot,
+    setMember,
+    Term,
+} from './term'
 import {
+    absentBelow,
     clauseForm,
     closedCopy,
-    fillEquals,
     holdsNoValue,
     mapChildren,
     member as memberOf,
@@ -538,7 +547,7 @@ export type Shape =
 /**
  * The `Value` **constructor** a term can write — {@link Shape} with the three set families split.
  *
- * The model's `SetSlot`, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
+ * A name of the host, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
  * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
  * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
  * was not by the coarser label.
@@ -1016,40 +1025,6 @@ const someAlternatives = <T extends LiteralValue>(
 }
 
 /**
- * Where a literal is stored, which follows from what it holds.
- *
- * Non-distributive on purpose: `'A' | 'B'` is `S`, `0 | 1` is `N`, and a set mixing the two is
- * `never` — a codec cannot write two members, and the type says so before the constructor has to.
- *
- * The default of {@link ConstantCodec}'s second parameter, and only the default. `decimal('1')`
- * holds a string and stores `N`, so it passes its attribute explicitly: this type is the *guess*
- * the new surface exists to stop making, kept because {@link literal} still makes it.
- */
-export type LiteralAttribute<T> = [T] extends [string]
-    ? Attribute<'S'>
-    : [T] extends [number]
-      ? Attribute<'N'>
-      : never
-
-/**
- * A literal with exactly one admissible value.
- *
- * Its own type records the value, which is what lets a caller that has no entity in hand — a key
- * being rebuilt, say — read the value off the schema rather than be handed it. A literal of two
- * or more values is an ordinary {@link AttributeCodec}: it narrows what is admissible without
- * deciding it.
- *
- * The codec holds no `constant` property, at the type or at run time. The value is a fact of the
- * term, and {@link ConstantOf} reads it there, as {@link constantOf} reads it at run time.
- */
-export type ConstantCodec<
-    T,
-    A extends AttributeValue = T extends LiteralValue
-        ? LiteralAttribute<T>
-        : AttributeValue,
-> = AttributeCodec<T, A>
-
-/**
  * **The constant that the term of a codec decides**, the type of {@link constantOf}, row for row: a
  * literal of one value, and a `held` over a literal of one value, a caller's adapter included. The
  * answer is the pair of the text that the literal names and the value that the codec decodes to, or
@@ -1180,10 +1155,7 @@ const literalCallOf = (
             if (term.inner.kind !== 'number') return undefined
             if (term.via === 'decimalText' && term.outer.kind === 'string')
                 return (...allowed) => decimalCall(...(allowed as string[]))
-            return term.via === undefined &&
-                term.outer.kind === 'number' &&
-                term.f === asFloat &&
-                term.g === asJsNumber
+            return term.via === 'float'
                 ? (...allowed) => numberCall(...(allowed as number[]))
                 : undefined
         default:
@@ -1219,7 +1191,7 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
     TermMark<BaseT<'string'>> & {
         <const T extends string>(
             only: T,
-        ): ConstantCodec<T, Attribute<'S'>> & TermMark<LitT<'string', T>>
+        ): AttributeCodec<T, Attribute<'S'>> & TermMark<LitT<'string', T>>
         <const L extends readonly string[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'S'>> &
@@ -1266,7 +1238,7 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
     TermMark<BaseT<'number'>> & {
         <const T extends DynamoNumber>(
             only: T,
-        ): ConstantCodec<T, Attribute<'N'>> &
+        ): AttributeCodec<T, Attribute<'N'>> &
             TermMark<LitT<'number', NumText<T>>>
         // a tuple, because inference unions no two object candidates: `readonly T[]` reads `T` off
         // the first numeral, and refuses a second numeral with another text
@@ -1298,7 +1270,7 @@ const numericAdapter = <T>(
     outer: Term,
     into: (value: T) => Result<DynamoNumber>,
     outOf: (held: DynamoNumber) => Result<T>,
-    via?: 'decimalText',
+    via?: 'decimalText' | 'float',
 ): AttributeCodec<T, Attribute<'N'>> =>
     codecOfTerm<T, Attribute<'N'>>({
         kind: 'held',
@@ -1368,7 +1340,7 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> &
     TermMark<DecimalT> & {
         <const T extends string>(
             only: T,
-        ): ConstantCodec<T, Attribute<'N'>> &
+        ): AttributeCodec<T, Attribute<'N'>> &
             TermMark<HeldT<LitT<'number', T>, LitT<'string', T>, 'decimalText'>>
         <const L extends readonly string[]>(
             ...allowed: L
@@ -1475,6 +1447,7 @@ const numberCall = (...allowed: readonly number[]) =>
         { kind: 'number' },
         asFloat,
         asJsNumber,
+        'float',
     )
 
 /**
@@ -1489,7 +1462,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> &
     TermMark<FloatT<BaseT<'number'>>> & {
         <const T extends number>(
             only: T,
-        ): ConstantCodec<T, Attribute<'N'>> &
+        ): AttributeCodec<T, Attribute<'N'>> &
             TermMark<FloatT<LitT<'number', FloatText<T>>>>
         <const L extends readonly number[]>(
             ...allowed: L
@@ -1508,6 +1481,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> &
     { kind: 'number' },
     asFloat,
     asJsNumber,
+    'float',
 ) as never
 
 /**
@@ -1521,7 +1495,7 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
     TermMark<BaseT<'boolean'>> & {
         <const T extends boolean>(
             only: T,
-        ): ConstantCodec<T, Attribute<'BOOL'>> & TermMark<LitT<'boolean', T>>
+        ): AttributeCodec<T, Attribute<'BOOL'>> & TermMark<LitT<'boolean', T>>
         <const L extends readonly boolean[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'BOOL'>> &
@@ -1568,7 +1542,7 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
         // a `Uint8Array` has no literal type: the bytes are unknown text at the type level
         (
             only: Uint8Array,
-        ): ConstantCodec<Uint8Array, Attribute<'B'>> &
+        ): AttributeCodec<Uint8Array, Attribute<'B'>> &
             TermMark<LitT<'binary', string>>
         (
             ...allowed: readonly Uint8Array[]
@@ -4561,24 +4535,6 @@ export const preconditions = (located: {
     )
 
 /**
- * One declared attribute, with the questions about its declaration already answered.
- *
- * Whether an attribute may be absent and what fills it are facts about the spec, not about
- * the row being read, so they are settled once when the codec is built.
- */
-export type Declared = {
-    readonly name: string
-    readonly pair: Pair
-    /** The attribute may be omitted — true for both `optional` and `undefinable`. */
-    readonly optional: boolean
-    /** On decode, an omitted attribute still gets its key, holding `undefined`. */
-    readonly keyed: boolean
-    readonly absent:
-        | { readonly value: unknown; readonly copy: boolean }
-        | undefined
-}
-
-/**
  * The marker taken off, once, at the declaration.
  *
  * A field names the codec it marks, so the two halves are that codec's and taking the mark off
@@ -6103,13 +6059,11 @@ export type EncodedVariants<Variants> = Variants extends readonly unknown[]
 export type SetOf<C> = SetAttribute<AttributeOf<C>>
 
 /** The set that holds an element of the attribute `A`, or `never`. `A` is asked whole, not by member. */
-type SetAttribute<A> = [A] extends [Attribute<'S'>]
-    ? SS
-    : [A] extends [Attribute<'N'>]
-      ? NS
-      : [A] extends [Attribute<'B'>]
-        ? BS
+type SetAttribute<A> = {
+    [M in keyof typeof setMember]: [A] extends [Attribute<M>]
+        ? Attribute<(typeof setMember)[M]>
         : never
+}[keyof typeof setMember]
 
 /**
  * The attribute a codec writes, as a type.
@@ -6662,8 +6616,6 @@ export type Option = {
     readonly carries: readonly Shape[]
     /** The whole-item reading, for object options only. */
     readonly item: ItemCodec<Record<string, unknown>, unknown> | undefined
-    /** The names it declares, for object options only. */
-    readonly declares: ReadonlySet<string> | undefined
     /** How it is named in a message — written the way it was declared. */
     readonly describe: string
 }
@@ -8306,17 +8258,6 @@ const sameForm = (a: NameForm, b: NameForm): boolean =>
         : sameAdapter(a.adapter, b.adapter))
 
 /**
- * **What the order compares at the absent row of a slot.** `relation` compares pairs of a stored
- * row and a decoded value, so a `fill` slot counts the absent row that its fill value
- * reads. The meet of two codecs reads it. `value` compares decoded values alone, because a pattern
- * has no decode of its own: a `fill` slot always gives a value, so the slot equals a
- * required slot, as the model's `AltClause.admitsC` reads a fill through `slotReq`. `fits`, the
- * slice and the pattern side of {@link meetOrdered} read it. The presence marks give one answer in
- * both orders.
- */
-type Order = 'relation' | 'value'
-
-/**
  * **The order of the slice**: whether every value that the term `a` decodes, as written, is a
  * value of the opening of the pattern `p`. `fits(a, p)` holds exactly where the meet that reads `a`
  * as written and `p` open ({@link meetOrdered}) is `a`, up to a refinement, whose predicate the
@@ -8324,33 +8265,6 @@ type Order = 'relation' | 'value'
  * {@link opened}.
  */
 export const fits = (a: Term, p: Term): boolean => below(a, opened(p), 'value')
-
-/**
- * **Whether the pairs of the absent row that the slot `mine` holds are pairs of the slot
- * `wanted`.** A required slot holds no absent row. At the `relation` order, a `fill` slot
- * pairs the absent row with its fill value, so it is below only a slot of the same fill value. At the
- * `value` order, a `fill` slot is a required slot. `undefinable` pairs it with
- * `{ k: undefined }`, which `optional` reads as `{}`. `optional`, and a name that a closed object
- * does not declare, pair it with a value without the key, which `undefinable` refuses.
- */
-const absentBelow = (mine: Field, wanted: Field, order: Order): boolean => {
-    // at the `value` order a fill value counts no absent row, so the slot reads as a required slot
-    const read = (f: Field): Field =>
-        order === 'value' && f.mark === 'fill' ? { mark: 'req', t: f.t } : f
-    const [m, w] = [read(mine), read(wanted)]
-    switch (w.mark) {
-        case 'req':
-            return m.mark === 'req'
-        case 'fill':
-            return (
-                m.mark === 'req' || (m.mark === 'fill' && fillEquals(m.v, w.v))
-            )
-        case 'undefinable':
-            return m.mark === 'req' || m.mark === 'undefinable'
-        case 'optional':
-            return m.mark !== 'fill'
-    }
-}
 
 /**
  * **The order of the meet**, on terms as they are written, on the fragment that the host decides.
@@ -9417,8 +9331,8 @@ const unionOf = (declared: Extract<Term, { kind: 'union' }>): Reading => {
      * An item is a map, so an option that writes anything else has nothing to contribute at the top
      * level. The type says so — {@link UnionCodec} replaces this with a message where it does not
      * apply — and the runtime is built either way rather than branching, because an option that could
-     * not be reached here also cannot be selected here: `declares` is what selects, and only an
-     * object option has it.
+     * not be reached here also cannot be selected here: `item` is what an all-object union reads,
+     * and only an object option has it.
      */
     const self = {
         [itemMark]: true as const,

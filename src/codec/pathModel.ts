@@ -654,14 +654,8 @@ type DecodeList<
     Suf extends unknown[],
     Env extends unknown[],
 > = Sp extends ['some', infer E]
-    ? Pre extends []
-        ? Suf extends []
-            ? readonly DecodeT<E, Env>[]
-            : readonly [
-                  ...DecodeTuple<Pre, Env>,
-                  ...DecodeT<E, Env>[],
-                  ...DecodeTuple<Suf, Env>,
-              ]
+    ? [Pre, Suf] extends [[], []]
+        ? readonly DecodeT<E, Env>[]
         : readonly [
               ...DecodeTuple<Pre, Env>,
               ...DecodeT<E, Env>[],

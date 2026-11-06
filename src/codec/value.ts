@@ -13,11 +13,11 @@
  * What they have in common is the level: each answers a question about a **value** or an
  * **attribute**, never about a term. Classifying a value, naming the shape a refusal reports,
  * reading the names an item carries, pulling a member out of an attribute, comparing two
- * alternatives, asking whether a codec already owns the null point.
+ * alternatives.
  *
  * Three helpers that look like these are **not** here — `literalCodec`, `encodeUnknown` and
  * `decodeUnknown`. Each builds a pair: the first reaches `codecOfTerm`, and the other two are
- * `opaque`'s two halves. They belong with the other pair builders and go there in the next pass.
+ * `opaque`'s two halves. They live in `denote.ts`, with the other pair builders.
  */
 
 import type {
@@ -342,9 +342,6 @@ export type SetFault =
     | { readonly fault: 'mistyped'; readonly at: number }
     | { readonly fault: 'repeated'; readonly at: number }
 
-const isWireMember = (member: unknown): member is string | Uint8Array =>
-    typeof member === 'string' || member instanceof Uint8Array
-
 /**
  * **The rule of a stored set**, stated once: it is non-empty, each member has the type of the
  * family, and no member repeats. An `SS` holds strings, an `NS` holds numerals as strings, and a
@@ -359,13 +356,18 @@ export const faultOfSet = (
     members: readonly unknown[],
 ): SetFault | undefined => {
     if (members.length === 0) return { fault: 'empty' }
-    const mistyped = members.findIndex((member) =>
+    const typed = (member: unknown): member is string | Uint8Array =>
         family === 'BS'
-            ? !(member instanceof Uint8Array)
-            : typeof member !== 'string',
-    )
-    if (mistyped >= 0) return { fault: 'mistyped', at: mistyped }
-    const repeated = repeatedAt(members.filter(isWireMember))
+            ? member instanceof Uint8Array
+            : typeof member === 'string'
+    const ofFamily = members.filter(typed)
+    if (ofFamily.length < members.length) {
+        return {
+            fault: 'mistyped',
+            at: members.findIndex((member) => !typed(member)),
+        }
+    }
+    const repeated = repeatedAt(ofFamily)
     return repeated === undefined
         ? undefined
         : { fault: 'repeated', at: repeated }

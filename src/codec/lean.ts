@@ -107,8 +107,10 @@ import {
     componentsOf,
     mapChildren,
     namesOnePair,
+    occV,
     openRefusal,
     recursionUse,
+    resolvedTerm,
     storedAlternatives,
     targetOf,
     throughRefs,
@@ -505,28 +507,15 @@ const shippedPredicates: ReadonlyMap<unknown, ShippedPredicate> = new Map<
 /**
  * Whether every value this term writes is a `Value.str`.
  *
- * The side condition on {@link shippedPredicates}. Deliberately a short whitelist rather than a
- * walk over `member`: a term whose written *attribute* is `S` is not the same as a term whose
- * accepted *value* is a string — `held` is the counterexample, and `opaque` writes whatever it is
- * handed. Recurses through `refine`, because a refinement writes where its inner term does.
+ * The side condition on {@link shippedPredicates}. The test reads {@link occV}, the slots of the
+ * values that a term writes, and not `member`: a term whose written *attribute* is `S` is not the
+ * same as a term whose accepted *value* is a string, and `held` is the counterexample. `occV`
+ * over-approximates, so a term that it calls string-only writes strings only. A term that holds
+ * no value is no string-only term.
  */
-const writesOnlyStrings = (t: Term | undefined): boolean => {
-    if (!t) return false
-    if (t.kind === 'string') return true
-    // an adapter answers from its held side: `decimal` hands the caller text, so a refinement
-    // outside it tests a string even though the base beneath writes a numeral
-    if (t.kind === 'held') return writesOnlyStrings(t.outer)
-    // read off the base rather than off the values. `decimal` was the second base writing text
-    // and is an adapter over `number` now, so `string` is the only one left
-    if (t.kind === 'literal') {
-        return t.base === 'string'
-    }
-    if (t.kind === 'refine') return writesOnlyStrings(t.inner)
-    // `string('1', '2')` is a union of literals, and a union writes only strings exactly where
-    // every option does
-    if (t.kind === 'union')
-        return t.options.length > 0 && t.options.every(writesOnlyStrings)
-    return false
+const writesOnlyStrings = (t: Term): boolean => {
+    const slots = occV(t)
+    return slots.length > 0 && slots.every((slot) => slot === 'string')
 }
 
 /* ── terms ───────────────────────────────────────────────────────────────────────────────── */
@@ -623,6 +612,18 @@ const boundName = (
     names.set(fn, made)
     return made
 }
+
+/**
+ * **The generator that the model names for a `held`**: `decimalText` for the pair that the model
+ * names, and `caller n` for every other pair. The index `n` is the name of the pair in `adapters`.
+ */
+const leanGenerator = (
+    t: Extract<Term, { kind: 'held' }>,
+    adapters: Map<unknown, string>,
+): string =>
+    t.via === 'decimalText'
+        ? '.decimalText'
+        : `.caller ${boundName(adapters, namesOnePair(t.via) ? t.via : t.f, '')}`
 
 /**
  * **How a vector closes a goal.** The kernel decides the goal, through `kernel_rfl%` of
@@ -1122,10 +1123,8 @@ const leanTermCore = (t: Term, at: string, scope: At): string => {
          * `held`, so the term prints no stored outer and no stored word.
          */
         case 'held':
-            if (t.via !== 'decimalText' && scope.bound)
-                return `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.caller ${boundName(scope.bound.adapters, namesOnePair(t.via) ? t.via : t.f, '')}, false) [])`
-            return t.via === 'decimalText'
-                ? `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (.decimalText, false) [])`
+            return t.via === 'decimalText' || scope.bound
+                ? `(${pre(scope)}Term.held false (${leanTermOfTerm(t.inner, at, below(scope, 'wall'))}) (${leanTermOfTerm(t.outer, at, below(scope, 'wall'))}) (${leanGenerator(t, scope.bound?.adapters ?? new Map())}, false) [])`
                 : refuse(
                       at,
                       "`Term.held` carries a word of adapter generators, and a table gives each generator two `Value → Value` functions: a quantified verdict binds an adapter that the model does not name as a generator `caller n`, and no evaluation vector prints one. An evaluation vector would have to run the adapter: a caller's closure has no name in the model, and a float adapter's content is binary64 rounding, the host axiom this development deleted. The model names one generator that this library ships, `decimalText`, whose pair is `numeralOfStoredText`/`textOfNumeral`",
@@ -2356,9 +2355,7 @@ const leanWord = (t: Term, bound: Bound): string =>
         ? leanWord(t.inner, bound)
         : t.kind !== 'held'
           ? '[]'
-          : t.via === 'decimalText'
-            ? '[(.decimalText, false)]'
-            : `[(.caller ${boundName(bound.adapters, namesOnePair(t.via) ? t.via : t.f, '')}, false)]`
+          : `[(${leanGenerator(t, bound.adapters)}, false)]`
 
 /** A clause, as an `AltClause` over the names, and the word and the alternatives at each name. */
 const leanClause = (entries: readonly ClauseEntry[], at: string): string =>
@@ -2730,10 +2727,10 @@ type GraphWalked = {
 }
 
 /** A term under its `ref`s, as the walk of `narrow` reads it, or nothing where a `ref` has no target. */
-const underRefs = (t: Term): Term | undefined =>
-    t.kind === 'ref'
-        ? ((u) => (u === undefined ? undefined : underRefs(u)))(targetOf(t))
-        : t
+const underRefs = (t: Term): Term | undefined => {
+    const node = resolvedTerm(t)
+    return node?.kind === 'ref' ? undefined : node
+}
 
 /**
  * **The model's frontier at one segment, over the graph of a printed option**: `childG`. A term

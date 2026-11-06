@@ -44,15 +44,11 @@ export type NonEmpty<T> = readonly [T, ...T[]]
 /**
  * The rule `(literal)`: a ground base, and **one** inhabitant of that base's carrier.
  *
- * **Five variants rather than one with a `base` field**, and that is the whole content. One
+ * **Four variants rather than one with a `base` field**, and that is the whole content. One
  * variant with `base: LiteralBase` beside `v: LiteralValue` admits
- * `{ base: 'decimal', v: 1 }` — a decimal literal whose value is a number, which nothing can
+ * `{ base: 'string', v: 1 }` — a string literal whose value is a number, which nothing can
  * encode. The model has no such term: `v` is a `k.Carrier`, so the base *indexes* the value. This
  * is that indexing, in the one form TypeScript has for it.
- *
- * `decimal` carries text, which is the reason the base is recorded at all: a decimal literal's
- * value is a string and it stores `N`, so neither the member nor the JS type of the value recovers
- * the base.
  *
  * **One value, and several values are a `union`.** `string('a', 'b')` builds
  * `union([string('a'), string('b')])`, whose members are separated because the values differ. The
@@ -123,13 +119,13 @@ export const isOpaqueSugar = (via: string | undefined): via is OpaqueSugar =>
 
 /**
  * **Whether a `via` names one pair of functions**, which the model carries as one generator. The two
- * policies and `decimalText` each name one pair. `native` names a family: each configuration of the
- * marshaller holds its own closures, so the tag of a `native` is the pair of functions.
+ * policies, `decimalText` and `float` each name one pair. `native` names a family: each configuration
+ * of the marshaller holds its own closures, so the tag of a `native` is the pair of functions.
  */
 export const namesOnePair = (
     via: string | undefined,
-): via is 'decimalText' | OpaqueSugar =>
-    via === 'decimalText' || isOpaqueSugar(via)
+): via is 'decimalText' | 'float' | OpaqueSugar =>
+    via === 'decimalText' || via === 'float' || isOpaqueSugar(via)
 
 /** The terms. One variant per `Term.lean` constructor, under the model's names. */
 export type Term =
@@ -200,7 +196,7 @@ export type Term =
            * in and is read by the certificate; this says which named pair the model carries and
            * is read by the emitter. One of them can be known without the other.
            */
-          readonly via?: 'decimalText' | OpaqueSugar | 'native'
+          readonly via?: 'decimalText' | 'float' | OpaqueSugar | 'native'
           /**
            * **The arbitrary and the shrinker, where the caller supplies them rather than the inner codec.**
            *
@@ -249,7 +245,7 @@ export type Term =
     | { readonly kind: 'ref'; readonly slot: RefSlot }
     /**
      * The rule `(opaque)`: the universal sum, and **total**. It holds a number as {@link DynamoNumber},
-     * which is the model's `WFNumeral`, so it writes every wire value. The two numeric policies
+     * which holds the digits of a `WFNumeral` in the stored form, so it writes every wire value. The two numeric policies
      * `'refuse'` and `'lossy'` are not terms of their own: each is a `held` over this term.
      */
     | { readonly kind: 'opaq' }
@@ -304,15 +300,8 @@ export type Field =
 export const fillEquals = (a: unknown, b: unknown): boolean => {
     if (Object.is(a, b)) return true
     if (a === null || a === undefined) return b === null || b === undefined
-    if (a instanceof DynamoNumber)
-        return b instanceof DynamoNumber && a.equals(b)
-    if (a instanceof Uint8Array) {
-        return (
-            b instanceof Uint8Array &&
-            a.length === b.length &&
-            a.every((x, i) => x === b[i])
-        )
-    }
+    if (a instanceof DynamoNumber || a instanceof Uint8Array)
+        return sameLiteral(a, b)
     if (a instanceof Set) {
         if (!(b instanceof Set) || a.size !== b.size) return false
         const rest = [...b]
@@ -343,6 +332,48 @@ export const fillEquals = (a: unknown, b: unknown): boolean => {
         )
     }
     return false
+}
+
+/**
+ * **What the order compares at the absent row of a slot.** `relation` compares pairs of a stored
+ * row and a decoded value, so a `fill` slot counts the absent row that its fill value
+ * reads. The meet of two codecs reads it. `value` compares decoded values alone, because a pattern
+ * has no decode of its own: a `fill` slot always gives a value, so the slot equals a
+ * required slot, as the model's `AltClause.admitsC` reads a fill through `slotReq`. `fits`, the
+ * slice and the pattern side of {@link meetOrdered} read it. The presence marks give one answer in
+ * both orders.
+ */
+export type Order = 'relation' | 'value'
+
+/**
+ * **Whether the pairs of the absent row that the slot `mine` holds are pairs of the slot
+ * `wanted`.** A required slot holds no absent row. At the `relation` order, a `fill` slot
+ * pairs the absent row with its fill value, so it is below only a slot of the same fill value. At the
+ * `value` order, a `fill` slot is a required slot. `undefinable` pairs it with
+ * `{ k: undefined }`, which `optional` reads as `{}`. `optional`, and a name that a closed object
+ * does not declare, pair it with a value without the key, which `undefinable` refuses.
+ */
+export const absentBelow = (
+    mine: Field,
+    wanted: Field,
+    order: Order,
+): boolean => {
+    // at the `value` order a fill value counts no absent row, so the slot reads as a required slot
+    const read = (f: Field): Field =>
+        order === 'value' && f.mark === 'fill' ? { mark: 'req', t: f.t } : f
+    const [m, w] = [read(mine), read(wanted)]
+    switch (w.mark) {
+        case 'req':
+            return m.mark === 'req'
+        case 'fill':
+            return (
+                m.mark === 'req' || (m.mark === 'fill' && fillEquals(m.v, w.v))
+            )
+        case 'undefinable':
+            return m.mark === 'req' || m.mark === 'undefinable'
+        case 'optional':
+            return m.mark !== 'fill'
+    }
 }
 
 /** Whether the row always carries this field's attribute. */
@@ -554,7 +585,6 @@ export const occV = (t: Term): readonly SetSlot[] => {
         case 'binary':
         case 'null':
             return [t.kind]
-        // `decimal` is held as text, which is why it lands on `string`
         case 'literal':
             return [t.base]
         // a set writes the wire family of each scalar slot its element writes. **An element slot
@@ -579,8 +609,7 @@ export const occV = (t: Term): readonly SetSlot[] => {
         // the held side restricts every value `f` receives
         case 'held':
             return occV(t.outer)
-        // a `ref` answers what its target answers. The model reads through on both projections,
-        // and only the member is lost
+        // a `ref` answers what its target answers
         case 'ref': {
             const target = targetOf(t)
             return target === undefined ? everySlot : occV(target)
@@ -677,22 +706,22 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
  * and share an inner value, and the base can no longer tell a clause at one from a member at the
  * other.
  *
- * The held side of the adapter is what parts them, because it is the slot the caller's value
- * lands in: `decimal` takes text and `number` takes a float over one carrier. So the form is the
- * base everywhere but `number`, and there it is read off the held side.
+ * The held side of the adapter is what parts them: `decimal` takes text and `number` takes a float
+ * over one carrier. So the form is the base everywhere but `number`, and there it is read off the
+ * held side of the adapter.
  */
 export type LiteralForm = LiteralBase | 'decimal' | 'dynamoNumber'
 
 /** @see {@link LiteralForm} */
 export const literalForm = (
     base: LiteralBase,
-    outer: Term | undefined,
+    adapter: Extract<Term, { kind: 'held' }> | undefined,
 ): LiteralForm =>
     base !== 'number'
         ? base
-        : outer === undefined
+        : adapter === undefined
           ? 'dynamoNumber'
-          : occV(outer).includes('string')
+          : occV(adapter.outer).includes('string')
             ? 'decimal'
             : 'number'
 
@@ -716,17 +745,17 @@ export type NameForm = {
  */
 export const clauseForm = (
     t: Term,
-    outer?: Term,
+    adapter?: Extract<Term, { kind: 'held' }>,
 ): Omit<NameForm, 'required'> | undefined => {
     const at = resolvedTerm(t)
     if (at?.kind === 'held') {
         // an `opaque` held side admits every kind, so it names no form
         if (at.outer.kind === 'opaq') return undefined
-        const pinned = clauseForm(at.inner, at.outer)
+        const pinned = clauseForm(at.inner, at)
         return pinned && { ...pinned, adapter: at }
     }
     const alts = at && literalAlternatives(at)
-    return alts && { alts, form: literalForm(alts.base, outer) }
+    return alts && { alts, form: literalForm(alts.base, adapter) }
 }
 
 /**
@@ -846,8 +875,8 @@ export const oneAlternative = (t: Literal): Alternatives =>
  * dissection the builder makes, measured.
  *
  * One option that is not a literal, or two at different bases, pins nothing — a union of
- * `string('a')` and `decimal('a')` is told apart by the member and not by the value, and no single
- * base describes it.
+ * `string('1')` and a `dynamoNumber` literal of `1` is told apart by the member and not by the
+ * value, and no single base describes it.
  */
 export const unionAlternatives = (
     options: readonly Term[],

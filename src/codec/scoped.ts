@@ -14,10 +14,10 @@
 import type { Precondition, StoredLiteral } from './codec'
 import type { Alternatives, Body, Field, NonEmpty, Term } from './term'
 import {
+    absentBelow,
     childrenOf,
     componentsOf,
     entryOrder,
-    fillEquals,
     ground,
     isPrim,
     memoClosed,
@@ -1090,15 +1090,13 @@ const bodiesAgree = (
 
 /**
  * **Two fields read a map without the name to one value**, or one of the two reads no such map. A
- * field with a fill reads such a map to its fill value. The model's `absentAgreeG` admits a fill
- * beside a required slot, and two fills with one fill value, by decidable equality of the slot
- * modes. It refuses a fill beside an `optional` or `undefinable` slot, and two fills with different
- * fill values. Every other pair agrees. {@link fillEquals} reads the equality of two fill values.
+ * field with a fill reads such a map to its fill value. The model's `absentAgreeG` admits two slots
+ * where one lies below the other at the absent row of the `relation` order ({@link absentBelow}). A
+ * required slot lies below a fill, a fill lies below a fill of one fill value, and a fill lies
+ * below no other slot. Every other pair agrees.
  */
 const fillsAgree = (a: Field, b: Field): boolean =>
-    a.mark === 'fill'
-        ? b.mark === 'req' || (b.mark === 'fill' && fillEquals(a.v, b.v))
-        : b.mark !== 'fill' || a.mark === 'req'
+    absentBelow(a, b, 'relation') || absentBelow(b, a, 'relation')
 
 /**
  * **The guard of a position at a path**, the model's `termPreAt`, as conjuncts: `in` for a literal

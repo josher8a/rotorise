@@ -41,7 +41,7 @@
 import { createHash } from 'node:crypto'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import type { AnyCodec } from './codec'
-import { boolean, legacy, meet, number, object, string, union } from './codec'
+import { boolean, legacy, meet, object, string, union } from './codec'
 import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
@@ -52,8 +52,10 @@ import {
     type Field,
     ground,
     leafKinds,
+    resolvedTerm,
     sameTerm,
     targetOf,
+    unionAlternatives,
 } from './term'
 import { arbitraryOf, rngFrom } from './testing'
 import { own } from './value'
@@ -180,26 +182,17 @@ const optionsOf = (t: Term): readonly Term[] =>
 
 /** The string literals of a term, or nothing where an option is no string literal. */
 const stringLiterals = (t: Term): readonly string[] | undefined => {
-    const out: string[] = []
-    for (const one of optionsOf(t)) {
-        if (one.kind !== 'literal' || one.base !== 'string') return undefined
-        out.push(one.v)
-    }
-    return out
+    const alts = unionAlternatives(optionsOf(t))
+    return alts?.base === 'string' ? alts.ls : undefined
 }
 
 /** The numeric literals of a term, as JS numbers, or nothing where an option is no numeral. */
 const numberLiterals = (t: Term): readonly number[] | undefined => {
-    const out: number[] = []
-    for (const one of optionsOf(t)) {
-        if (one.kind !== 'literal' || one.base !== 'number') return undefined
-        out.push(Number(String(one.v)))
-    }
-    return out
+    const alts = unionAlternatives(optionsOf(t))
+    return alts?.base === 'number'
+        ? alts.ls.map((one) => Number(String(one)))
+        : undefined
 }
-
-/** The float adapter of `number`, which the library ships and no `via` names. */
-const numberAdapter = number.def.kind === 'held' ? number.def.f : undefined
 
 /* ── the binders ─────────────────────────────────────────────────────────────────────────── */
 
@@ -326,11 +319,10 @@ const printerOf = (
 
     /** The term that a chain of `ref`s reaches. */
     const chase = (t: Term): Term => {
-        let u: Term | undefined = t
-        for (let i = 0; u?.kind === 'ref' && i < 64; i++) u = targetOf(u)
-        return u === undefined || u.kind === 'ref'
+        const node = resolvedTerm(t)
+        return node === undefined || node.kind === 'ref'
             ? refuse(at, 'a chain of thunks that returns no term')
-            : u
+            : node
     }
 
     /** An entry of a scope, as a member of the constant of the scope. */
@@ -524,7 +516,7 @@ const printerOf = (
                 if (t.via === 'opaqueLossy') return "opaque('lossy')"
                 if (t.via === 'opaqueRefuse') return "opaque('refuse')"
                 if (t.via === 'native') return 'native'
-                if (t.f === numberAdapter) {
+                if (t.via === 'float') {
                     if (t.inner.kind === 'number') return 'number'
                     const ns = numberLiterals(t.inner)
                     return ns === undefined

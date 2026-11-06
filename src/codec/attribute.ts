@@ -157,7 +157,7 @@ const accepted = (value: NumeralValue): boolean =>
  * trimming leading and trailing zeros, dropping `+`, expanding exponents, and keeping one spelling
  * of zero. Measured, not assumed: `codec.dynamodb.spec.ts` puts each form into an emulated table and
  * reads it back, the real service returned the same strings, and `dynamonumber.spec.ts` pins them.
- * `Numeral.Stored` in `formal/Calculus/Dynamo/Lang/Store.lean` is the same set.
+ * `Numeral.Stored` in `formal/Calculus/Dynamo/Lang/Adapters.lean` is the same set.
  */
 export const isStoredNumeral = (s: string): boolean =>
     s !== '-0' && /^-?(?:0|[1-9]\d*)(?:\.\d*[1-9])?$/.test(s) && isNumeral(s)
@@ -220,7 +220,9 @@ type TrimTrailingZeros<T extends string> = T extends `${infer Rest}0`
 // The two predicates above are properties of the carrier rather than of any codec, and until now
 // there was no carrier for them to be properties OF: `N` was carried as `string` at every surface,
 // so the predicate had to be re-checked at each boundary and the type never said it had passed.
-// `DynamoNumber` is that carrier. It is what `formal/Calculus/Dynamo/Domain.lean` calls `WFNumeral`.
+// `DynamoNumber` is that carrier. It holds the stored form of a `WFNumeral` from
+// `formal/Calculus/Dynamo/Domain.lean`: `from` normalises, so two spellings of one number are one
+// `DynamoNumber` and two `WFNumeral`s.
 
 /**
  * **An exact DynamoDB number.** The carrier `N` actually has: a numeral the service accepts,

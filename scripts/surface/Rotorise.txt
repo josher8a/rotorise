@@ -21,7 +21,6 @@ CompositeKeyBuilder
 CompositeKeyParams
 CompositeKeyParamsImpl
 ConstantAttributes
-ConstantCodec
 ConstantOf
 Decoded
 DerivedUnion
@@ -45,7 +44,6 @@ KeyRoles
 L
 ListOf
 ListWrites
-LiteralAttribute
 LiteralBase
 LiteralValue
 LocatedCodec

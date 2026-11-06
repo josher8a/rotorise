@@ -2431,7 +2431,7 @@ type DecidedValues<Spec> = {
  * The attributes whose codec admits exactly one value.
  *
  * Gated on the codec, not the entity type: `TAG: 'PET'` is a type and types are gone by the time a
- * key is built, whereas a {@link ConstantCodec} is still there at runtime. So the signature stops
+ * key is built, whereas a codec is still there at runtime. So the signature stops
  * asking for exactly what the implementation can supply. `never` without a codec.
  */
 export type ConstantAttributes<Spec> = [Spec] extends [undefined]
@@ -3586,7 +3586,6 @@ export type {
     Attributes,
     BinaryCodec,
     BooleanCodec,
-    ConstantCodec,
     ConstantOf,
     Decoded,
     DerivedUnion,
@@ -3603,7 +3602,6 @@ export type {
     ItemSpec,
     ListOf,
     ListWrites,
-    LiteralAttribute,
     LiteralBase,
     LiteralValue,
     LocatedCodec,

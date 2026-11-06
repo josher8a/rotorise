@@ -8,7 +8,7 @@
  * Disagreement is quiet in one direction and loud in the other. If the type says decided where the
  * function says not, `keyUpdates` does not ask the caller for that component and then throws at
  * runtime demanding it — a signature that promises something the implementation refuses. That is
- * exactly what a `ConstantCodec<'A' | 'B'>` used to do, because the type asked whether a constant
+ * exactly what a literal of two values used to do, because the type asked whether a constant
  * was *declared* rather than whether one value was admissible.
  *
  * The sibling walks have this test already — see `keycomponents.spec.ts`. This is the other pair.
