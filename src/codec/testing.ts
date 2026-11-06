@@ -362,8 +362,9 @@ export const checkStable = <T>(
  * The names are the point: a counterexample says which shape found it, and each shape is a class of
  * defect this project has actually had rather than a random perturbation.
  *
- * A failure to *decode* is never reported — refusing a mutated attribute is exactly right, and is
- * what most of these do. What is reported is a mutation that decodes and then cannot be encoded.
+ * A refusal of a mutated attribute, a `CodecError`, is never reported: refusing it is exactly right, and
+ * is what most of these do. What is reported is a mutation that decodes and then cannot be encoded,
+ * and a mutation that makes `decode` throw anything but a `CodecError`, because a refusal is a value.
  */
 export const checkDecodesAreWritable = <T>(
     subject: Checkable<T>,
@@ -397,8 +398,17 @@ export const checkDecodesAreWritable = <T>(
             let read: T
             try {
                 read = subject.unsafeDecode(item)
-            } catch {
-                continue // refusing it is the correct answer, and the common one
+            } catch (error) {
+                // refusing it is the correct answer, and the common one. A refusal is a value, so
+                // any other throw is a boundary that read a payload before it checked it
+                if (error instanceof CodecError) continue
+                throw new CodecError(
+                    'a refusal is not a value: decode threw an error that is no CodecError.\n' +
+                        `  mutation = ${what}\n` +
+                        `  seed     = ${seed}, case ${i}\n` +
+                        `  item     = ${JSON.stringify(item)}\n` +
+                        `  threw    = ${error instanceof Error ? `${error.constructor.name}: ${error.message}` : 'a value that is no Error'}`,
+                )
             }
             try {
                 subject.unsafeEncode(read)
@@ -429,16 +439,18 @@ type Mutation = { readonly what: string; readonly item: AttributeMap }
  */
 const SHAPES: readonly {
     readonly what: string
-    readonly to: (value: AttributeValue) => AttributeValue | undefined
+    readonly to: (
+        value: AttributeValue,
+    ) => { readonly value: unknown } | undefined
 }[] = [
     {
         // `set`'s encode refused this and its decode returned it for as long as both existed
         what: 'an empty set',
         to: (v) => {
             const m = memberOf(v)
-            if (m === 'SS') return { SS: [] }
-            if (m === 'NS') return { NS: [] }
-            if (m === 'BS') return { BS: [] }
+            if (m === 'SS') return { value: { SS: [] } }
+            if (m === 'NS') return { value: { NS: [] } }
+            if (m === 'BS') return { value: { BS: [] } }
             return undefined
         },
     },
@@ -446,32 +458,62 @@ const SHAPES: readonly {
         // the form DynamoDB normalises away, which `decimal` was writing and reading
         what: 'a denormalised N',
         to: (v) =>
-            memberOf(v) === 'N' ? { N: `${v.N as string}0` } : undefined,
+            memberOf(v) === 'N'
+                ? { value: { N: `${v.N as string}0` } }
+                : undefined,
     },
     {
         what: 'an N with a leading zero',
         to: (v) =>
-            memberOf(v) === 'N' ? { N: `0${v.N as string}` } : undefined,
+            memberOf(v) === 'N'
+                ? { value: { N: `0${v.N as string}` } }
+                : undefined,
     },
     {
         what: 'an N past the magnitude DynamoDB stores',
-        to: (v) => (memberOf(v) === 'N' ? { N: '1e126' } : undefined),
+        to: (v) =>
+            memberOf(v) === 'N' ? { value: { N: '1e126' } } : undefined,
     },
     {
         what: 'an N that is not a number at all',
-        to: (v) => (memberOf(v) === 'N' ? { N: 'NaN' } : undefined),
+        to: (v) => (memberOf(v) === 'N' ? { value: { N: 'NaN' } } : undefined),
     },
     {
         what: 'an empty list',
-        to: (v) => (memberOf(v) === 'L' ? { L: [] } : undefined),
+        to: (v) => (memberOf(v) === 'L' ? { value: { L: [] } } : undefined),
     },
     {
         what: 'an empty map',
-        to: (v) => (memberOf(v) === 'M' ? { M: {} } : undefined),
+        to: (v) => (memberOf(v) === 'M' ? { value: { M: {} } } : undefined),
     },
     {
         what: 'a string where a number was stored',
-        to: (v) => (memberOf(v) === 'N' ? { S: v.N as string } : undefined),
+        to: (v) =>
+            memberOf(v) === 'N' ? { value: { S: v.N as string } } : undefined,
+    },
+    {
+        // `String` of it throws, so a reader that renders a payload in a message throws with it
+        what: 'a null-prototype object as the payload',
+        to: (v) => {
+            const m = memberOf(v)
+            return m === 'S' || m === 'N'
+                ? { value: { [m]: Object.create(null) } }
+                : undefined
+        },
+    },
+    {
+        what: 'a null list entry',
+        to: (v) => (memberOf(v) === 'L' ? { value: { L: [null] } } : undefined),
+    },
+    {
+        what: 'an undefined list entry',
+        to: (v) =>
+            memberOf(v) === 'L' ? { value: { L: [undefined] } } : undefined,
+    },
+    {
+        what: 'a NULL that is false',
+        to: (v) =>
+            memberOf(v) === 'NULL' ? { value: { NULL: false } } : undefined,
     },
 ]
 
@@ -518,8 +560,19 @@ const positions = (
     return here
 }
 
+/**
+ * A value that `decode` must refuse as a value. The one cast of the pool: no shape is a value that
+ * DynamoDB produces, and the check feeds each one to `decode` on purpose, so the type of a row
+ * cannot hold it.
+ */
+const malformed = (value: unknown): never => value as never
+
 const mutations = (item: AttributeMap): readonly Mutation[] => {
-    const out: Mutation[] = []
+    // the row itself is no map, which a caller of `decode` can hand it past the type
+    const out: Mutation[] = [
+        { what: 'the row is undefined', item: malformed(undefined) },
+        { what: 'the row is null', item: malformed(null) },
+    ]
     for (const [key, attribute] of Object.entries(item)) {
         for (const { at, rebuild } of positions(attribute)) {
             for (const { what, to } of SHAPES) {
@@ -527,7 +580,10 @@ const mutations = (item: AttributeMap): readonly Mutation[] => {
                 if (!replaced) continue
                 out.push({
                     what: `${what}, at '${key}'`,
-                    item: { ...item, [key]: rebuild(replaced) },
+                    item: {
+                        ...item,
+                        [key]: rebuild(malformed(replaced.value)),
+                    },
                 })
             }
         }

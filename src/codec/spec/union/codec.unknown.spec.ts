@@ -29,7 +29,8 @@ import {
  */
 const holderFor = (attribute: AttributeCodec<unknown>): Checkable<unknown> => ({
     unsafeEncode: (value) => ({ v: attribute.unsafeEncode(value) }),
-    unsafeDecode: (item) => attribute.unsafeDecode(item.v as AttributeValue),
+    // a row that is no map reaches the attribute as `undefined`, and the attribute refuses it as a value
+    unsafeDecode: (item) => attribute.unsafeDecode(item?.v as AttributeValue),
     def: attribute.def,
 })
 
