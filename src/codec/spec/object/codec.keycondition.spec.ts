@@ -139,6 +139,38 @@ describe('a query that selects no partition or no prefix is refused', () => {
         ).toThrow("'GSI1SK' gives no key and no prefix for these attributes")
     })
 
+    it('refuses a sort component that follows an absent component, because the prefix would drop it', () => {
+        expect(() =>
+            Pets.keyCondition('GSI1', {
+                shelterId: 's1',
+                status: 'AVAILABLE',
+            }),
+        ).not.toThrow()
+        const Visits = tableEntry<{
+            petId: string
+            year: string
+            month: string
+            day: string
+        }>()(
+            { PK: ['petId'], SK: ['year', 'month', 'day'] },
+            { key: { partition: 'PK', sort: 'SK' } },
+        )
+        expect(() =>
+            Visits.keyCondition({ petId: 'p1', year: '2026', day: '05' }),
+        ).toThrow(
+            "'SK' gets 'day' and lacks 'month' before it, so the condition would drop 'day'",
+        )
+    })
+
+    it('keeps the prefix where the components that print lead the list', () => {
+        expect(
+            Pets.keyCondition('GSI1', {
+                shelterId: 's1',
+                status: 'AVAILABLE',
+            }).sort,
+        ).toEqual({ name: 'GSI1SK', beginsWith: { S: 'STATUS#AVAILABLE#' } })
+    })
+
     it('refuses an index name that the indexes option does not declare', () => {
         const untyped = Pets.keyCondition as (
             index: string,

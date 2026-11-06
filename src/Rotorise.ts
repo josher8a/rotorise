@@ -217,7 +217,8 @@ type CompositeKeyBuilderImpl<
  * Whether the depth keeps fewer components than the spec holds.
  *
  * The type half of the count in the run-time builder: the boundary follows a print that stops
- * before the last component. A depth that is no literal keeps the whole spec here, as the print does.
+ * before the last component. A depth of `number` is the default of the builder and keeps the whole
+ * spec. A call refuses a depth that is no literal non-negative integer, see {@link DepthRefusal}.
  */
 type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
     ? false
@@ -1223,6 +1224,24 @@ const valueAt = (attributes: object, path: string): unknown => {
     return current
 }
 
+/**
+ * Whether a component of a list prints for the attributes. A component with a transform prints where
+ * its value is not `undefined`. Any other component prints where its value is not `undefined`, `null`
+ * or `''`. A default stands for an absent value.
+ */
+const isPrinted = (
+    component: unknown,
+    attributes: Record<string, unknown>,
+): boolean => {
+    const [name, transform, Default] = Array.isArray(component)
+        ? component
+        : [component]
+    const value = valueAt(attributes, String(name)) ?? Default
+    return typeof transform === 'function'
+        ? value !== undefined
+        : value !== undefined && value !== null && value !== ''
+}
+
 /** The name that a component prints: the whole name of an attribute, or the last name of a path. */
 const printedName = (attributes: object, path: string): string =>
     (Object.hasOwn(attributes, path) ? path : (path.split('.').pop() ?? path))
@@ -1425,6 +1444,13 @@ const key =
             const fullLength = structure.length
 
             if (config?.depth !== undefined) {
+                // a depth that keeps no whole number of components has no key to print. The error
+                // names the key and holds no value.
+                if (!Number.isInteger(config.depth) || config.depth < 0) {
+                    throw new RotoriseError(
+                        `Key ${key.toString()}: depth is a non-negative integer`,
+                    )
+                }
                 structure = structure.slice(0, config.depth) as typeof structure
             }
             const composite: joinable[] = []
@@ -1462,7 +1488,13 @@ const key =
 
                 const value = valueAt(attributes, path) ?? Default
 
-                if (shape && value !== undefined) {
+                if (!isPrinted(keySpec, attributes)) {
+                    if (config?.allowPartial) break
+                    throw new RotoriseError(
+                        `buildCompositeKey: Attribute ${path} not found`,
+                    )
+                }
+                if (shape) {
                     const transformed = shape(value as never)
                     if (
                         typeof transformed === 'object' &&
@@ -1475,11 +1507,7 @@ const key =
                         push(`the name ${path}`, name)
                         push(path, transformed)
                     }
-                } else if (
-                    value !== undefined &&
-                    value !== null &&
-                    value !== ''
-                ) {
+                } else {
                     push(
                         tag === undefined
                             ? `the name ${path}`
@@ -1487,12 +1515,6 @@ const key =
                         tag ?? name,
                     )
                     push(path, value as joinable)
-                } else if (config?.allowPartial) {
-                    break
-                } else {
-                    throw new RotoriseError(
-                        `buildCompositeKey: Attribute ${path} not found`,
-                    )
                 }
                 printed++
             }
@@ -1578,6 +1600,27 @@ type ProcessSpecType<
 
 // Cache commonly used conditional types
 type SpecConfig<Spec> = Spec extends string ? never : SpecConfigShape
+
+/**
+ * The refusal of a depth that is no literal non-negative integer. A depth keeps that many components of
+ * the list, so `number` does not say which key the call builds, and a negative and a fraction keep
+ * no whole number of components. A depth of `0` keeps none, and the key is the empty prefix. The refusal lands on `depth`.
+ */
+type DepthRefusal<Config> = Config extends { depth: infer D extends number }
+    ? number extends D
+        ? {
+              depth: ErrorMessage<'[key] depth is a literal non-negative integer, and a number does not say how many components the key keeps'>
+          }
+        : `${D}` extends `${bigint}`
+          ? `${D}` extends `-${string}`
+              ? {
+                    depth: ErrorMessage<'[key] depth is a non-negative integer, and a negative depth keeps no whole number of components'>
+                }
+              : unknown
+          : {
+                depth: ErrorMessage<'[key] depth is a non-negative integer, and this depth keeps no whole number of components'>
+            }
+    : unknown
 
 type SpecConfigShape = {
     depth?: number | undefined
@@ -1788,7 +1831,7 @@ type TableEntryDefinition<
     >(
         key: Key,
         attributes: Attributes,
-        config?: Config,
+        config?: Config & DepthRefusal<Config>,
     ) => OptimizedBuiltKey<Attributes, Spec, Separator, Config_>
 
     /**
@@ -3291,6 +3334,40 @@ export const tableEntry =
         }
 
         /**
+         * The refusal of a component that prints after a component that does not. A partial key stops
+         * at the first absent component, so the prefix would drop the later component and select
+         * more items than the attributes name. The error names the two components and holds no value.
+         */
+        const refuseGap = (
+            name: string,
+            spec: unknown,
+            attributes: Record<string, unknown>,
+        ): void => {
+            let arm = spec
+            while (isMatch(arm)) {
+                const literal = valueAt(attributes, String(arm.discriminator))
+                arm =
+                    literal !== undefined &&
+                    Object.hasOwn(arm.spec, String(literal))
+                        ? arm.spec[String(literal)]
+                        : undefined
+            }
+            if (!Array.isArray(arm)) return
+            const absent = arm.findIndex((c) => !isPrinted(c, attributes))
+            const later =
+                absent < 0
+                    ? undefined
+                    : arm
+                          .slice(absent + 1)
+                          .find((c) => isPrinted(c, attributes))
+            if (later === undefined) return
+            const nameOf = (c: unknown) => String(Array.isArray(c) ? c[0] : c)
+            throw new RotoriseError(
+                `'${name}' gets '${nameOf(later)}' and lacks '${nameOf(arm[absent])}' before it, so the condition would drop '${nameOf(later)}' and select more items than the attributes name. Give '${nameOf(arm[absent])}' or leave '${nameOf(later)}' out.`,
+            )
+        }
+
+        /**
          * The condition on a sort key that the attributes give. Attributes that hold no component of
          * the key give no condition. Attributes that give every component give `equals`. Attributes
          * that give a leading part of a list give `beginsWith` with the boundary, so the prefix
@@ -3314,6 +3391,7 @@ export const tableEntry =
                     `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
                 )
             }
+            refuseGap(name, expanded[name], attributes)
             const bounded = buildKey(
                 name as never,
                 attributes as never,

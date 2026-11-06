@@ -147,6 +147,8 @@ the name of the index.
   with a trailing separator. The separator keeps `STATUS#AVAILABLE` from selecting
   `STATUS#AVAILABLE_SOON`.
 - Where the attributes hold no component of the sort key, the result has no sort condition.
+- A component that follows an absent component throws a `RotoriseError`: the prefix would drop the
+  component and select more items than the attributes name.
 - A later component without the first, or a `null` arm, selects nothing and throws a `RotoriseError`.
 
 ```ts
