@@ -135,8 +135,8 @@ const writeAt = (item: Item, path: string, value: unknown): Item => {
 
 /**
  * The parts of a spec for an item, as a second reading of the spec: the components cut to the
- * depth, up to and including the first component that the builder refuses. A component is absent
- * where its value is undefined, and, with no transform, where its value is null or empty. A
+ * depth, up to and including the first component that the builder refuses. A default stands for
+ * an undefined value only. A component is absent where its value is undefined, and, with no transform, where its value is null or empty. A
  * component is refused as a separator where one of its segments holds the separator.
  */
 const partsOf = (
@@ -157,7 +157,8 @@ const partsOf = (
                 ? second.tag
                 : undefined
         const printed = (name.split('.').pop() ?? name).toUpperCase()
-        const value = readAt(item, name) ?? fallback
+        const read = readAt(item, name)
+        const value = read === undefined ? fallback : read
         let part: KeyPart
         if (transform !== undefined && value !== undefined) {
             const out = transform(value)

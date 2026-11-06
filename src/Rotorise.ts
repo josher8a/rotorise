@@ -1024,6 +1024,27 @@ type ValidateKeyCarrier<
           : Spec
 
 /**
+ * The refusal of a key name that the codec declares. The codec writes no key name: the model derives
+ * the item for a codec whose write holds no key name (`write_row`), because the key is written over
+ * a field of that name and removed before a read. The refusal lands on the key. A codec of variants
+ * states the names that every variant states, and an open entry states none.
+ */
+type ValidateKeyNames<Schema, CodecSpec, CodecRest> =
+    string extends keyof Schema
+        ? unknown
+        : [CodecSpec] extends [undefined]
+          ? unknown
+          : string extends keyof EncodedAttributes<CodecSpec, CodecRest>
+            ? unknown // an open entry states no name that can be found
+            : {
+                  [K in keyof Schema &
+                      keyof EncodedAttributes<
+                          CodecSpec,
+                          CodecRest
+                      >]: ErrorMessage<`[tableEntry] '${K & string}' is a key of the schema and a field of the codec. The codec writes no key name, because the item holds each key name once. Rename the key or the field`>
+              }
+
+/**
  * Reads each key of one attribute against the member that the attribute is stored as. A boolean, an
  * object, a list, and an attribute that holds a string and a number are each refused on the
  * attribute that is wrong, and so are the arms of a match that give `S` in one arm and `N` in
@@ -1226,21 +1247,87 @@ const valueAt = (attributes: object, path: string): unknown => {
 }
 
 /**
- * Whether a component of a list prints for the attributes. A component with a transform prints where
- * its value is not `undefined`. Any other component prints where its value is not `undefined`, `null`
- * or `''`. A default stands for an absent value.
+ * What a component of a list prints for the attributes: the model's `Option Comp`. A component with
+ * a transform prints where its value is not `undefined`. Any other component prints where its value
+ * is not `undefined`, `null` or `''`. A default stands for `undefined` only, so a `null` is a value:
+ * the transform reads it, and a plain component refuses it. The component that prints gives its
+ * attribute, its tag, its transform and its value, and the component that does not gives `undefined`.
  */
-const isPrinted = (
+type Part = {
+    readonly path: string
+    readonly tag: string | undefined
+    readonly shape: ((value: never) => unknown) | undefined
+    readonly value: unknown
+}
+
+const partOf = (
     component: unknown,
     attributes: Record<string, unknown>,
-): boolean => {
+): Part | undefined => {
     const [name, transform, Default] = Array.isArray(component)
         ? component
         : [component]
-    const value = valueAt(attributes, String(name)) ?? Default
-    return typeof transform === 'function'
-        ? value !== undefined
-        : value !== undefined && value !== null && value !== ''
+    const path = String(name)
+    const read = valueAt(attributes, path)
+    const value = read === undefined ? Default : read
+    const shape = typeof transform === 'function' ? transform : undefined
+    const prints =
+        shape === undefined
+            ? value !== undefined && value !== null && value !== ''
+            : value !== undefined
+    if (!prints) return undefined
+    // a second slot that is an object gives the tag, and shapes no value
+    const tag =
+        typeof transform === 'object' && transform !== null
+            ? (transform as { tag: string }).tag
+            : undefined
+    return { path, tag, shape, value }
+}
+
+/** The parts of a list of components, in order: `Leaf.parts`. */
+const parts = (
+    components: readonly unknown[],
+    attributes: Record<string, unknown>,
+): (Part | undefined)[] =>
+    components.map((component) => partOf(component, attributes))
+
+/** The attribute that a component names. */
+const componentName = (component: unknown): string =>
+    String(Array.isArray(component) ? component[0] : component)
+
+/**
+ * What a key spec gives at the attributes: the model's `Arm`. A list of components is a `leaf`. A
+ * `null` gives no key. A name is an `attr`, and a path or a name is read from the attributes. A match
+ * selects an arm by the value of its discriminator, and the arm can be a match. A discriminator with
+ * no value, or a value that names no arm, is `missing`. The arm is read as an own property, so a
+ * literal that names a property of the prototype names no arm.
+ */
+type Arm =
+    | { readonly kind: 'leaf'; readonly components: readonly unknown[] }
+    | { readonly kind: 'null' }
+    | { readonly kind: 'attr'; readonly name: string }
+    | {
+          readonly kind: 'missing'
+          readonly discriminator: string
+          readonly named: boolean
+      }
+
+const select = (spec: unknown, attributes: Record<string, unknown>): Arm => {
+    let arm = spec
+    while (isMatch(arm)) {
+        const discriminator = String(arm.discriminator)
+        const literal = valueAt(attributes, discriminator)
+        if (literal === undefined)
+            return { kind: 'missing', discriminator, named: false }
+        arm = Object.hasOwn(arm.spec, String(literal))
+            ? arm.spec[String(literal)]
+            : undefined
+        if (arm === undefined)
+            return { kind: 'missing', discriminator, named: true }
+    }
+    if (arm === null) return { kind: 'null' }
+    if (Array.isArray(arm)) return { kind: 'leaf', components: arm }
+    return { kind: 'attr', name: String(arm) }
 }
 
 /** The name that a component prints: the whole name of an attribute, or the last name of a path. */
@@ -1393,56 +1480,24 @@ const key =
                     `Key ${key.toString()} not found in schema`,
                 )
             }
-            let structure: InputSpec<MergeIntersectionObject<Entity>>[]
-
-            if (Array.isArray(case_)) {
-                structure = case_
-            } else if (typeof case_ === 'object') {
-                // a match selects an arm by the value of its discriminator, and the arm can be a match.
-                // The arm is read as an own property, so a literal that names a property of the
-                // prototype names no arm. An error names the discriminator and holds no value.
-                let arm: unknown = case_
-                while (isMatch(arm)) {
-                    const discriminatorName = arm.discriminator
-                    const discriminator = valueAt(
-                        attributes,
-                        String(discriminatorName),
-                    )
-                    if (discriminator === undefined) {
-                        throw new RotoriseError(
-                            `Discriminator ${String(discriminatorName)} not found in the attributes`,
-                        )
-                    }
-                    const literal = String(discriminator)
-                    arm = Object.hasOwn(arm.spec, literal)
-                        ? arm.spec[literal]
-                        : undefined
-                    if (arm === undefined) {
-                        throw new RotoriseError(
-                            `Discriminator value of ${String(discriminatorName)} not found in the spec`,
-                        )
-                    }
-                }
-                if (arm === null) {
-                    return undefined
-                }
-
-                // an attribute arm holds the value of the attribute. `null` gives no key, as an
-                // attribute key gives none
-                if (!Array.isArray(arm)) {
-                    return (valueAt(attributes, String(arm)) ??
-                        undefined) as never
-                }
-
-                structure = arm as typeof structure
-            } else {
-                const value = valueAt(attributes, String(case_))
-                if (value == null) return undefined as never
-
-                return value as never
+            const arm = select(case_, attributes as Record<string, unknown>)
+            if (arm.kind === 'missing') {
+                // an error names the discriminator and holds no value
+                throw new RotoriseError(
+                    arm.named
+                        ? `Discriminator value of ${arm.discriminator} not found in the spec`
+                        : `Discriminator ${arm.discriminator} not found in the attributes`,
+                )
+            }
+            // a `null` arm gives no key, as an attribute key gives none
+            if (arm.kind === 'null') return undefined
+            if (arm.kind === 'attr') {
+                const value = valueAt(attributes, arm.name)
+                return (value === null ? undefined : value) as never
             }
 
-            const fullLength = structure.length
+            const fullLength = arm.components.length
+            let structure = arm.components
 
             if (config?.depth !== undefined) {
                 // a depth that keeps no whole number of components has no key to print. The error
@@ -1452,7 +1507,7 @@ const key =
                         `Key ${key.toString()}: depth is a non-negative integer`,
                     )
                 }
-                structure = structure.slice(0, config.depth) as typeof structure
+                structure = structure.slice(0, config.depth)
             }
             const composite: joinable[] = []
             let printed = 0
@@ -1473,30 +1528,22 @@ const key =
                 composite.push(segment)
             }
 
-            for (const keySpec of structure) {
-                const [key, transform, Default] = Array.isArray(keySpec)
-                    ? keySpec
-                    : [keySpec]
-                const path = String(key)
-                // a second slot that is an object gives the tag, and shapes no value
-                const tag =
-                    typeof transform === 'object' && transform !== null
-                        ? (transform as { tag: string }).tag
-                        : undefined
-                const shape =
-                    typeof transform === 'function' ? transform : undefined
-                const name = printedName(attributes, path)
-
-                const value = valueAt(attributes, path) ?? Default
-
-                if (!isPrinted(keySpec, attributes)) {
+            for (const [at, part] of parts(
+                structure,
+                attributes as Record<string, unknown>,
+            ).entries()) {
+                if (part === undefined) {
                     if (config?.allowPartial) break
                     throw new RotoriseError(
-                        `buildCompositeKey: Attribute ${path} not found`,
+                        `buildCompositeKey: Attribute ${componentName(structure[at])} not found`,
                     )
                 }
+                const { path, tag, shape, value } = part
+                const name = printedName(attributes, path)
                 if (shape) {
-                    const transformed = shape(value as never)
+                    const transformed = shape(value as never) as
+                        | joinable
+                        | { tag?: string; value: joinable }
                     if (
                         typeof transformed === 'object' &&
                         transformed !== null
@@ -1555,15 +1602,10 @@ const toEntry =
 
         for (const key_ in schema) {
             const val = buildKey(key_, item)
-            // a key of one attribute holds the value of the attribute, which can be a Uint8Array.
-            // DynamoDB refuses an empty S or B value at a key of a table or an index
-            const held: unknown = val
-            if (
-                held === '' ||
-                (held instanceof Uint8Array && held.length === 0)
-            )
-                throw notAKey(key_)
             if (val !== undefined) {
+                // a key of one attribute holds the value of the attribute, which can be a Uint8Array.
+                // `asKey` owns the rule of a key value: a non-empty `S`, an `N` or a non-empty `B`
+                asKey(key_, val)
                 entry[key_] = val satisfies string as never
             }
         }
@@ -2029,7 +2071,6 @@ type EncodedItem<
                     K,
                     false
                 >]: KeyAttribute<
-                    Entry[K & keyof Entry],
                     KeyMembers<
                         Entity,
                         EncodedAttributes<CodecSpec, CodecRest>,
@@ -2043,7 +2084,6 @@ type EncodedItem<
                     K,
                     true
                 >]?: KeyAttribute<
-                    Entry[K & keyof Entry],
                     KeyMembers<
                         Entity,
                         EncodedAttributes<CodecSpec, CodecRest>,
@@ -2055,21 +2095,10 @@ type EncodedItem<
       : never
 
 /**
- * The member that a key takes. A key of one attribute takes the member of its attribute, which
- * `Members` holds. A composite key is a joined string, so it takes `S`: a string is `S`, a number is
- * `N`, and a `Uint8Array` is `B`.
+ * The member that a key takes, which `Members` holds: the member of the attribute of a key of one
+ * attribute, and `S` for a composite key, a joined string.
  */
-type KeyAttribute<Value, Members = never> = [Members] extends [never]
-    ? Carrying<
-          Value extends string
-              ? 'S'
-              : Value extends number | bigint
-                ? 'N'
-                : Value extends Uint8Array
-                  ? 'B'
-                  : never
-      >
-    : Carrying<Members & AttributeName>
+type KeyAttribute<Members> = Carrying<Members & AttributeName>
 
 /**
  * A key the schema names, kept when whether it may be absent matches `Absent`.
@@ -2572,26 +2601,6 @@ const keyOfAttribute = (
 }
 
 /**
- * The top-level attribute that a key of one attribute reads at an item: the bare name of the spec,
- * or of the arm that a match selects. A list of components, a `null` arm and a path below the top
- * level read no field of the codec, so they give none.
- */
-const attributeOf = (
-    spec: unknown,
-    item: Record<string, unknown>,
-): string | undefined => {
-    let arm: unknown = spec
-    while (isMatch(arm)) {
-        const literal = valueAt(item, String(arm.discriminator))
-        arm =
-            literal !== undefined && Object.hasOwn(arm.spec, String(literal))
-                ? arm.spec[String(literal)]
-                : undefined
-    }
-    return typeof arm === 'string' && !arm.includes('.') ? arm : undefined
-}
-
-/**
  * The named members are present and callable.
  *
  * One object check instead of three, but the point is the `keys` parameter: it is
@@ -2829,7 +2838,8 @@ export const tableEntry =
         schema: Schema &
             ValidateSchema<Schema> &
             ValidatePaths<Schema, KeyedBy> &
-            ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest>,
+            ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest> &
+            ValidateKeyNames<Schema, CodecSpec, CodecRest>,
         ...[options]: [Separator] extends ['']
             ? [ErrorMessage<'Separator must not be an empty string'>]
             : [
@@ -3187,15 +3197,24 @@ export const tableEntry =
                 } else if (Array.isArray(value)) {
                     found.set('S', 'a list of components')
                 } else if (typeof value === 'string' && !value.includes('.')) {
-                    for (const slot of slotsAt(value))
-                        for (const stored of storedAt(slot))
-                            if (!found.has(stored))
+                    // a slot of two members is one field stored as two types. A second slot of the
+                    // field is another variant
+                    for (const [at, slot] of slotsAt(value).entries()) {
+                        const stored = storedAt(slot)
+                        if (stored.size > 1) {
+                            throw new RotoriseError(
+                                `'${name}' is built from '${value}', which is stored as more than one type (${[...stored].join(' and ')}). A key attribute has one type.`,
+                            )
+                        }
+                        for (const member of stored)
+                            if (!found.has(member))
                                 found.set(
-                                    stored,
-                                    [...found.values()].includes(`'${value}'`)
-                                        ? `'${value}' in another variant`
-                                        : `'${value}'`,
+                                    member,
+                                    at === 0
+                                        ? `'${value}'`
+                                        : `'${value}' in another variant`,
                                 )
+                    }
                 }
             }
             arm(spec)
@@ -3206,6 +3225,19 @@ export const tableEntry =
                 )
             }
             return first?.[0]
+        }
+
+        /**
+         * The codec writes no key name. The model derives the item for a codec whose write holds no
+         * key name (`write_row` premise `hdisj`): `toItem` writes the key over a field of that name,
+         * and `fromItem` removes the field before the decode. The refusal names the key, and holds no value.
+         */
+        for (const { name } of keys) {
+            if (slotsAt(name).length > 0) {
+                throw new RotoriseError(
+                    `'${name}' is a key of the schema and a field of the codec. The codec writes no key name, because the item holds each key name once. Rename the key or the field.`,
+                )
+            }
         }
 
         /** The member of each key name, decided once. Construction refuses a key whose arms disagree. */
@@ -3228,10 +3260,14 @@ export const tableEntry =
             value: unknown,
             written?: AttributeMap,
         ): Carrying<KeyMember> => {
+            const selected = select(expanded[name], item)
+            // a list of components, a `null` arm and a path below the top level read no field of the codec
             const field =
-                attributes === undefined
-                    ? undefined
-                    : attributeOf(expanded[name], item)
+                attributes !== undefined &&
+                selected.kind === 'attr' &&
+                !selected.name.includes('.')
+                    ? selected.name
+                    : undefined
             if (field === undefined) return asKey(name, value)
             const encoded =
                 written?.[field] ??
@@ -3248,21 +3284,18 @@ export const tableEntry =
             return keyOfAttribute(name, encoded)
         }
 
-        const keyUpdates = (
-            changed: Record<string, unknown>,
-        ): KeyUpdate<string> => {
-            const set: Record<string, AttributeValue> = {}
-            const remove: string[] = []
-            const given = { ...decided, ...changed }
-            const changedNames = Object.keys(changed)
-            const givenNames = Object.keys(given)
-
-            // the codec admits one value for a decided attribute, so any other value is not a write
-            // of that attribute. The message names the constant and never the written value
+        /**
+         * The attributes over the values that the codec decides, so no caller passes a decided
+         * component. The codec admits one value for a decided attribute, so any other value is not a
+         * write of that attribute. The message names the constant and never the given value.
+         */
+        const overDecided = (
+            given: Record<string, unknown>,
+        ): Record<string, unknown> => {
             for (const name of Object.keys(decided)) {
                 if (
-                    Object.hasOwn(changed, name) &&
-                    !sameConstant(changed[name], decided[name])
+                    Object.hasOwn(given, name) &&
+                    !sameConstant(given[name], decided[name])
                 ) {
                     throw new RotoriseError(
                         `'${name}' is decided by the codec as '${String(decided[name])}', and this change writes another value. The codec admits one value, so write '${String(decided[name])}' or leave '${name}' out.`,
@@ -3270,6 +3303,17 @@ export const tableEntry =
                     )
                 }
             }
+            return { ...decided, ...given }
+        }
+
+        const keyUpdates = (
+            changed: Record<string, unknown>,
+        ): KeyUpdate<string> => {
+            const set: Record<string, AttributeValue> = {}
+            const remove: string[] = []
+            const given = overDecided(changed)
+            const changedNames = Object.keys(changed)
+            const givenNames = Object.keys(given)
 
             for (const key of keys) {
                 const components =
@@ -3336,67 +3380,69 @@ export const tableEntry =
          */
         const refuseGap = (
             name: string,
-            spec: unknown,
-            attributes: Record<string, unknown>,
+            components: readonly unknown[],
+            printed: readonly (Part | undefined)[],
         ): void => {
-            let arm = spec
-            while (isMatch(arm)) {
-                const literal = valueAt(attributes, String(arm.discriminator))
-                arm =
-                    literal !== undefined &&
-                    Object.hasOwn(arm.spec, String(literal))
-                        ? arm.spec[String(literal)]
-                        : undefined
-            }
-            if (!Array.isArray(arm)) return
-            const absent = arm.findIndex((c) => !isPrinted(c, attributes))
-            const later =
-                absent < 0
-                    ? undefined
-                    : arm
-                          .slice(absent + 1)
-                          .find((c) => isPrinted(c, attributes))
-            if (later === undefined) return
-            const nameOf = (c: unknown) => String(Array.isArray(c) ? c[0] : c)
+            const absent = printed.indexOf(undefined)
+            const later = printed.findIndex(
+                (part, at) => at > absent && part !== undefined,
+            )
+            if (absent < 0 || later < 0) return
             throw new RotoriseError(
-                `'${name}' gets '${nameOf(later)}' and lacks '${nameOf(arm[absent])}' before it, so the condition would drop '${nameOf(later)}' and select more items than the attributes name. Give '${nameOf(arm[absent])}' or leave '${nameOf(later)}' out.`,
+                `'${name}' gets '${componentName(components[later])}' and lacks '${componentName(components[absent])}' before it, so the condition would drop '${componentName(components[later])}' and select more items than the attributes name. Give '${componentName(components[absent])}' or leave '${componentName(components[later])}' out.`,
             )
         }
 
         /**
-         * The condition on a sort key that the attributes give. Attributes that hold no component of
-         * the key give no condition. Attributes that give every component give `equals`. Attributes
-         * that give a leading part of a list give `beginsWith` with the boundary, so the prefix
-         * selects no key whose component only starts with the last value. A `null` arm and a list
-         * whose first component is absent select nothing, and are refused.
+         * The condition on a sort key that the attributes give. Attributes that hold no part of the
+         * key give no condition. Attributes that give every part give `equals`. Attributes that give a
+         * leading part of a list give `beginsWith` with the boundary, so the prefix selects no key
+         * whose component only starts with the last value. A `null` arm and a list whose first
+         * component is absent select nothing, and are refused. The attributes are read over the
+         * values that the codec decides.
          */
         const sortCondition = (
             name: string,
             attributes: Record<string, unknown>,
         ): SortCondition | undefined => {
-            const { components } = componentsOf(expanded[name], attributes)
-            if (![...components].some((c) => valueAt(attributes, c) != null))
-                return undefined
-            const printed = buildKey(
-                name as never,
-                attributes as never,
-                { allowPartial: true } as never,
-            )
-            if (printed === undefined || printed === '') {
-                throw new RotoriseError(
-                    `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
-                )
-            }
-            refuseGap(name, expanded[name], attributes)
-            const bounded = buildKey(
+            const arm = select(expanded[name], attributes)
+            const components =
+                arm.kind === 'leaf'
+                    ? arm.components
+                    : arm.kind === 'attr'
+                      ? [arm.name]
+                      : []
+            const printed = parts(components, attributes)
+            // a `null` arm and a missing arm have no part, so the names of the spec stand for the parts
+            const given =
+                arm.kind === 'null' || arm.kind === 'missing'
+                    ? [
+                          ...componentsOf(expanded[name], attributes)
+                              .components,
+                      ].some((c) => valueAt(attributes, c) !== undefined)
+                    : printed.some((part) => part !== undefined)
+            if (!given) return undefined
+            const built = buildKey(
                 name as never,
                 attributes as never,
                 { allowPartial: true, enforceBoundary: true } as never,
             )
-            return printed === bounded
-                ? { name, equals: carried(name, attributes, printed) }
-                : { name, beginsWith: carrying('S', String(bounded)) }
+            if (
+                built === undefined ||
+                built === '' ||
+                printed[0] === undefined
+            ) {
+                throw new RotoriseError(
+                    `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
+                )
+            }
+            refuseGap(name, components, printed)
+            return printed.every((part) => part !== undefined)
+                ? { name, equals: carried(name, attributes, built) }
+                : { name, beginsWith: carrying('S', String(built)) }
         }
+
+        const dropKeys = fromEntry(expanded)
 
         const definition = {
             keyUpdates,
@@ -3404,9 +3450,11 @@ export const tableEntry =
                 first: readonly string[] | Record<string, unknown>,
                 second?: Record<string, unknown>,
             ): AttributeMap => {
-                const [names, attributes] = Array.isArray(first)
+                const [names, given] = Array.isArray(first)
                     ? [first, second as Record<string, unknown>]
                     : [tableKeyNames, first as Record<string, unknown>]
+                // the codec decides a component, so no caller passes it
+                const attributes = overDecided(given)
 
                 if (names.length === 0) {
                     throw new RotoriseError(
@@ -3422,10 +3470,12 @@ export const tableEntry =
                 first: string | Record<string, unknown>,
                 second?: Record<string, unknown>,
             ): KeyCondition => {
-                const [index, attributes] =
+                const [index, passed] =
                     typeof first === 'string'
                         ? [first, second ?? {}]
                         : [undefined, first]
+                // the codec decides a component, so no caller passes it
+                const attributes = overDecided(passed)
                 const given =
                     index === undefined
                         ? roles
@@ -3453,7 +3503,7 @@ export const tableEntry =
                 }
             },
             toEntry: buildEntry as never,
-            fromEntry: fromEntry(expanded) as never,
+            fromEntry: dropKeys as never,
             key: buildKey as never,
             infer: chainableNoOpProxy as never,
             path: () => pathBuilder() as never,
@@ -3487,15 +3537,8 @@ export const tableEntry =
          * anything. Removing them here is what makes `fromItem` mean the same thing under every
          * policy.
          */
-        const fromItem = (item: AttributeMap) => {
-            // copied and stripped rather than rebuilt by omission: the copy is one intrinsic and
-            // the keys are few, where testing every attribute for membership is a lookup per
-            // attribute of every item read. `keyNames` is walked instead of `Object.keys(schema)`,
-            // which allocated the same list on every read
-            const withoutKeys: Record<string, AttributeValue> = { ...item }
-            for (const name of keyNames) delete withoutKeys[name]
-            return attributes.decode(withoutKeys) as Result<unknown>
-        }
+        const fromItem = (item: AttributeMap) =>
+            attributes.decode(dropKeys(item) as AttributeMap) as Result<unknown>
 
         return {
             ...definition,

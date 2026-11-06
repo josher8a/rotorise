@@ -206,11 +206,10 @@ describe('the variants of a tagged codec decide a constant that they all state',
                     day.toISOString().slice(0, 10) as '2026-01-01',
                 decode: (text: string) => new Date(text),
             })
-        const Pets = tableEntry<{
-            kind: 'DOG' | 'CAT'
-            adoptedOn: Date
-            petId: string
-        }>()(
+        const Pets = tableEntry<
+            | { kind: 'DOG'; adoptedOn: Date; petId: string }
+            | { kind: 'CAT'; adoptedOn: Date; petId: string }
+        >()(
             { PK: ['adoptedOn', 'petId'] },
             {
                 codec: item(
@@ -226,16 +225,10 @@ describe('the variants of a tagged codec decide a constant that they all state',
                             petId: string,
                         }),
                     ]),
-                ) as never,
+                ),
             },
         )
-        const patch = (
-            Pets as never as {
-                keyUpdates: (change: Record<string, unknown>) => {
-                    set: Record<string, unknown>
-                }
-            }
-        ).keyUpdates({ petId: 'p1' })
+        const patch = Pets.keyUpdates({ petId: 'p1' })
         expect(Object.keys(patch.set)).toEqual(['PK'])
     })
 })
