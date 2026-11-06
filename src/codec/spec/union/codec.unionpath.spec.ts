@@ -121,6 +121,7 @@ describe('a codec at a path into a union', () => {
             }),
         ])
         const Order = itemOf(object({ shipment: Shipment }))
+        // @ts-expect-error two predicates are two functions of the caller, so the type refuses the path as the run time does
         const label = at(Order, ['shipment', 'label'])
         expect(() => label.unsafeEncode('AB')).toThrow(
             /declared differently in different variants/,

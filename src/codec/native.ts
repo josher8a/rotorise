@@ -516,17 +516,13 @@ export namespace native {
               ? N
               : T extends string
                 ? OrNull<S, T, '', Empties>
-                : T extends Uint8Array
+                : T extends ArrayBufferView | ArrayBuffer
                   ? OrNull<B, unknown, never, Empties>
-                  : T extends ReadonlySet<infer Member>
+                  : T extends ReadonlySet<infer Member> & {
+                          readonly get?: never
+                      }
                     ? OrNull<
-                          Member extends string
-                              ? SS
-                              : Member extends number | bigint
-                                ? NS
-                                : Member extends Uint8Array
-                                  ? BS
-                                  : never,
+                          SetFamily<Dropped<Member, Drops>>,
                           unknown,
                           never,
                           Empties
@@ -535,11 +531,46 @@ export namespace native {
                       ? Dropped<Element, Drops> extends infer Kept
                           ? [Kept] extends [never]
                               ? ErrorMessage<'[native] a list holds `undefined`, which is refused unless `removeUndefinedValues` is set'>
-                              : L<EncodeWith<Kept, Empties, Drops>>
+                              : L<EncodeWith<Exclude<Kept, Fn>, Empties, Drops>>
                           : never
                       : T extends object
-                        ? M<ItemEncodeWith<T, Empties, Drops>>
+                        ? M<ItemEncodeWith<MapAsRecord<T>, Empties, Drops>>
                         : never
+
+    /**
+     * A `Map` reads as the record of its values, which is how the marshaller writes it. A `Map`
+     * satisfies `ReadonlySet` by structure, so the set branch refuses a type that has a `get`.
+     */
+    type MapAsRecord<T> = T extends ReadonlyMap<unknown, infer Value>
+        ? { readonly [key: string]: Value }
+        : T
+
+    /** A member that the marshaller drops from a map and from a list: a function. */
+    type Fn = (...args: never[]) => unknown
+
+    /**
+     * The wire set of the members that a set holds, or `never` where the set is refused: a member
+     * of two families, and a member that is `undefined` where nothing removes it.
+     */
+    type SetFamily<Member> = [Member] extends [never]
+        ? never
+        : (
+                Member extends string
+                    ? 'S'
+                    : Member extends number | bigint
+                      ? 'N'
+                      : Member extends ArrayBufferView | ArrayBuffer
+                        ? 'B'
+                        : 'X'
+            ) extends infer Family
+          ? [Family] extends ['S']
+              ? SS
+              : [Family] extends ['N']
+                ? NS
+                : [Family] extends ['B']
+                  ? BS
+                  : never
+          : never
 
     /**
      * The member, or `NULL` beside it where `convertEmptyValues` could reach.
@@ -601,14 +632,22 @@ export namespace native {
         Drops extends boolean,
     > = show<
         {
-            [K in keyof T as undefined extends T[K] ? never : K]: EncodeWith<
-                T[K],
-                Empties,
-                Drops
-            >
+            [K in keyof T as undefined extends T[K]
+                ? never
+                : [Extract<T[K], Fn>] extends [never]
+                  ? K
+                  : never]: EncodeWith<T[K], Empties, Drops>
         } & {
-            [K in keyof T as undefined extends T[K] ? K : never]?: EncodeWith<
-                Exclude<T[K], undefined>,
+            [K in keyof T as undefined extends T[K]
+                ? [Exclude<T[K], undefined | Fn>] extends [never]
+                    ? never
+                    : K
+                : [Extract<T[K], Fn>] extends [never]
+                  ? never
+                  : [Exclude<T[K], Fn>] extends [never]
+                    ? never
+                    : K]?: EncodeWith<
+                Exclude<T[K], undefined | Fn>,
                 Empties,
                 Drops
             >

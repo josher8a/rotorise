@@ -56,6 +56,7 @@ import type {
     ScopeWallCycle,
     SlotAt,
     StepFrames,
+    WidensRead,
 } from './pathModel'
 import {
     andThen,
@@ -270,8 +271,15 @@ type NumText<N> = N extends DynamoNumber<infer S> ? S : string
 type NumTexts<L extends readonly unknown[]> = {
     -readonly [I in keyof L]: NumText<L[I]>
 }
+/**
+ * The stored text of a number literal: the text that {@link DynamoNumber.from} gives the print of
+ * the number. A print with an exponent is `string`, which the type reads as inexact.
+ */
+type FloatText<N extends number> = NumText<
+    Extract<ReturnType<typeof DynamoNumber.from<`${N}`>>, DynamoNumber>
+>
 type FloatTexts<L extends readonly unknown[]> = {
-    -readonly [I in keyof L]: `${L[I] & number}`
+    -readonly [I in keyof L]: FloatText<L[I] & number>
 }
 type DecimalT = HeldT<BaseT<'number'>, BaseT<'string'>, 'decimalText'>
 type FloatT<I> = HeldT<I, BaseT<'number'>, ['caller', 'asFloat']>
@@ -1032,7 +1040,7 @@ export type LiteralAttribute<T> = [T] extends [string]
  * deciding it.
  *
  * The codec holds no `constant` property, at the type or at run time. The value is a fact of the
- * term, and {@link ConstantText} reads it there, as {@link constantOf} reads it at run time.
+ * term, and {@link ConstantOf} reads it there, as {@link constantOf} reads it at run time.
  */
 export type ConstantCodec<
     T,
@@ -1042,46 +1050,29 @@ export type ConstantCodec<
 > = AttributeCodec<T, A>
 
 /**
- * The text that the term of a codec pins to one value, or `never`. A string literal pins its value,
- * and a decimal literal pins the text that its adapter writes back. A union of values, a number
- * and any other term pin no text.
+ * **The constant that the term of a codec decides**, the type of {@link constantOf}, row for row: a
+ * literal of one value, and a `held` over a literal of one value, a caller's adapter included. The
+ * answer is the pair of the text that the literal names and the value that the codec decodes to, or
+ * `never` where the term decides none. The text tells two variants apart where their decoded types
+ * are one type, because the value of a caller's adapter is caller code and the type cannot read it.
+ * A literal whose value type is a union, a union of literals and any other term decide none.
  */
-export type ConstantText<C> = TermOf<C> extends LitT<
-    'string',
-    infer V extends string
->
-    ? V
-    : TermOf<C> extends HeldT<
-            LitT<'number', string>,
-            LitT<'string', infer V extends string>,
-            'decimalText'
-        >
-      ? V
+export type ConstantOf<C> = TermOf<C> extends [
+    'prim',
+    ['literal', string, infer V],
+]
+    ? ConstantPair<V, Decoded<C>>
+    : TermOf<C> extends [
+            'held',
+            false,
+            ['prim', ['literal', string, infer V]],
+            unknown,
+            [unknown, false],
+            [],
+        ]
+      ? ConstantPair<V, Decoded<C>>
       : never
-
-/**
- * The number that a `number` literal pins, as `constantOf` answers it at run time: the value that
- * the call named. The text of the literal is the print of that value, so reading it back gives the
- * same number. A union of values and any other term pin none.
- */
-export type ConstantNumber<C> = TermOf<C> extends FloatT<
-    LitT<'number', infer V extends string>
->
-    ? V extends `${infer N extends number}`
-        ? N
-        : never
-    : never
-
-/**
- * The boolean that a `boolean` literal pins, as `constantOf` answers it at run time. A union of
- * values and any other term pin none.
- */
-export type ConstantBoolean<C> = TermOf<C> extends LitT<
-    'boolean',
-    infer V extends boolean
->
-    ? V
-    : never
+type ConstantPair<V, D> = IsUnion<V> extends true ? never : [V, D]
 
 /** The literal capability, on every base. */
 const literalCapability =
@@ -1499,7 +1490,7 @@ export const number: AttributeCodec<number, Attribute<'N'>> &
         <const T extends number>(
             only: T,
         ): ConstantCodec<T, Attribute<'N'>> &
-            TermMark<FloatT<LitT<'number', `${T}`>>>
+            TermMark<FloatT<LitT<'number', FloatText<T>>>>
         <const L extends readonly number[]>(
             ...allowed: L
         ): AttributeCodec<L[number], Attribute<'N'>> &
@@ -1989,14 +1980,11 @@ export type Refined<
 /**
  * `.set()`, where the codec it sits on can be a set's element.
  *
- * The capability {@link set} decides at runtime, stated at the type as far as the type can see
- * it, which is not all the way. A codec's *type* is not generic in its definition: every codec
- * carries a `Term`, and none of them carries *which* one at the type. So `refine(...)`'s type
- * knows the attribute and never the term beneath, and the gate here is the attribute: `S`, `N` or
- * `B`, the three a stored set is built from. `refine(legacy(…), p).set()` type-checks
- * and throws, because a read widening has no set in the model. That gap closes only by making the
- * codec type generic in its definition, which was measured at 481 of 968 signatures and rejected;
- * the runtime refusal in {@link set} is what fills it.
+ * The capability {@link set} decides at runtime, stated at the type. Each codec type carries its
+ * term `Tm`, so the gate reads two facts. The attribute is `S`, `N` or `B`, the three that a stored
+ * set is built from. The term reaches no `legacy`, because a read widening has no set in the model
+ * ({@link WidensRead}). A `ref` in the term names an entry that the type cannot read, and the
+ * refusal in {@link set} decides there.
  *
  * **One member at a time, and each test non-distributive.** Two shorter spellings were tried and
  * both admit `refine(union([string, number]), p).set()`, which is a set of an element writing two
@@ -2020,10 +2008,15 @@ export type SetCapable<T, A extends AttributeValue, Tm = FreeTerm> = [
     SetAttribute<A>,
 ] extends [never]
     ? Record<never, never>
-    : {
-          readonly set: () => AttributeCodec<ReadonlySet<T>, SetAttribute<A>> &
-              TermMark<['set', Tm]>
-      }
+    : WidensRead<Tm> extends true
+      ? Record<never, never>
+      : {
+            readonly set: () => AttributeCodec<
+                ReadonlySet<T>,
+                SetAttribute<A>
+            > &
+                TermMark<['set', Tm]>
+        }
 
 /** What {@link refine} takes beside the inner codec and the predicate. */
 type RefineOptions<Narrow> = {
@@ -5214,17 +5207,59 @@ type Distribute<
     ? [...DistributeOne<H, Ys>, ...Distribute<T, Ys>]
     : []
 
-/** One meet needs no union around it; several are one flat union. */
+/** The meets without those at `never`, as `meetFactors` drops each option that meets at the bottom. */
+type DropNever<Ms extends readonly unknown[]> = Ms extends readonly [
+    infer H,
+    ...infer T extends readonly unknown[],
+]
+    ? [H] extends [never]
+        ? DropNever<T>
+        : [TermOf<H>] extends [['never']]
+          ? DropNever<T>
+          : [H, ...DropNever<T>]
+    : []
+
+/** The flat union of the meets, or the one meet, or the bottom where each meet is at `never`. */
+type MeetOptions<X, Y> = DropNever<
+    Distribute<FactorOptions<X>, FactorOptions<Y>>
+> extends infer Ms extends readonly unknown[]
+    ? Ms extends readonly []
+        ? never
+        : Ms extends readonly [infer One]
+          ? One
+          : UnionCodec<DerivedUnion<Ms>, Ms>
+    : never
+
+/**
+ * One meet needs no union around it; several are one flat union. A factor that lies below the
+ * other is the meet, and the run time tests the order of the whole factors before it distributes a
+ * union. So the type tests the order first where a factor is a union, as `meetFactors` does. The
+ * order is {@link BelowT} at the `value` order, and the run time reads the `relation` order, which
+ * differs at a `fill` slot only.
+ */
 type MeetOfTwo<X, Y> = [TermOf<X>] extends [['never']]
     ? X
     : [TermOf<Y>] extends [['never']]
       ? Y
-      : Distribute<FactorOptions<X>, FactorOptions<Y>> extends infer Ms extends
-              readonly unknown[]
-        ? Ms extends readonly [infer One]
-            ? One
-            : UnionCodec<DerivedUnion<Ms>, Ms>
-        : never
+      : [FactorOptions<X>, FactorOptions<Y>] extends [
+              readonly [unknown],
+              readonly [unknown],
+          ]
+        ? MeetOptions<X, Y>
+        : [MeetBelow<X, Y>] extends ['t']
+          ? X
+          : [MeetBelow<Y, X>] extends ['t']
+            ? Y
+            : MeetOptions<X, Y>
+
+/** The order of the meet: each factor reads open, as {@link meetFactors} reads it. */
+type MeetBelow<A, B> = BelowT<
+    OpenT<TermOf<Marks<A>>>,
+    OpenT<TermOf<Marks<B>>>,
+    [],
+    [],
+    []
+>
 
 /** More than two factors fold left. */
 type FoldMeet<Fs extends readonly unknown[]> = Fs extends readonly [
@@ -5256,9 +5291,9 @@ export type ValidateMeet<Fs extends readonly unknown[]> = [
  * refusal of `meetParts`: one top node is a `held` or an older part, no top node is a refinement,
  * the order holds in neither direction, and the two parts are apart in neither view. The order is
  * `'f'` in both directions ({@link FitsCodec}), and `'u'` in one direction is no refusal, because
- * the type cannot decide. The stored views are apart where {@link ApartG} says so. The caller views
- * overlap where a member of one decoded type is assignable to the other. A set against a byte
- * string is no overlap, because the run time may read two object types as apart. Two caller
+ * the type cannot decide. The stored views are apart where {@link ApartG} says so, and the caller
+ * views are apart where {@link ApartG} says so over the outer term of each part ({@link CallerView}),
+ * as `callerApart` reads the terms. Two caller
  * adapters meet at `'u'`: a caller's adapter against a caller's adapter is one adapter or two, and
  * the type cannot see which, so the run time builds the first and refuses the second. A `held` part
  * below a field of an object is no refusal here either, and the run time refuses it.
@@ -5288,15 +5323,28 @@ type HeldPairRefused<A, B> = [
                     []
                 > extends true
                   ? false
-                  : [
-                          | Extract<Decoded<A>, Decoded<B>>
-                          | Extract<Decoded<B>, Decoded<A>>,
-                      ] extends [never]
+                  : ApartG<
+                          CallerView<NA>,
+                          [],
+                          CallerView<NB>,
+                          [],
+                          []
+                      > extends true
                     ? false
                     : true
               : false
         : false
     : false
+/**
+ * The caller view of a node, as `callerApart` reads the terms: a `held` reads its outer term, an
+ * older reading reads its current form, and any other node is its own caller view. The outer term of
+ * a foreign schema is `opaque`, which overlaps each view.
+ */
+type CallerView<N> = N extends ['held', unknown, unknown, infer O, ...unknown[]]
+    ? O
+    : N extends ['legacy', infer Current]
+      ? Current
+      : N
 /** Whether a node is a part that no meet reads: a `held` or an older reading. */
 type IsPart<N> = N extends ['held', ...unknown[]] | ['legacy', unknown]
     ? true

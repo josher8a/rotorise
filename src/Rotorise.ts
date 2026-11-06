@@ -10,9 +10,7 @@ import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     Closed,
-    ConstantBoolean,
-    ConstantNumber,
-    ConstantText,
+    ConstantOf,
     Encoded,
     IsUnion,
     ItemCodec,
@@ -2394,7 +2392,9 @@ type KeyRefusal<Schema, Roles, Changed, Known, Given> = [
  */
 type DecidedValues<Spec> = {
     [K in ConstantAttributes<Spec>]: IsVariantSpec<Spec> extends true
-        ? AcrossVariants<Spec, K>
+        ? AcrossVariants<Spec, K> extends readonly [unknown, infer Value]
+            ? Value
+            : unknown
         : ConstantValue<Spec[K & keyof Spec]>
 }
 
@@ -2414,14 +2414,9 @@ export type ConstantAttributes<Spec> = [Spec] extends [undefined]
             // them decides neither — which is what `constantOf` answers at runtime. Asking only whether
             // a `constant` was declared had the type promise a component nobody needed to pass,
             // while the implementation went on to demand it
-            [K in keyof Spec]: ConstantValue<Spec[K]> extends infer Only extends
-                | string
-                | number
-                | boolean
-                ? IsUnion<Only> extends true
-                    ? never
-                    : K
-                : never
+            [K in keyof Spec]: [ConstantPairOf<Spec[K]>] extends [never]
+                ? never
+                : K
         }[keyof Spec]
 
 /**
@@ -2441,38 +2436,36 @@ type IsVariantSpec<Spec> = [Spec[keyof Spec]] extends [
     : true
 
 /**
+ * What one declared attribute decides, as {@link ConstantOf} reads it, with the two presence marks
+ * of a field read.
+ *
+ * The type half of {@link constantOf}: a name that may be absent decides nothing, and a fill value
+ * is written always, so what it fills still decides. The constants spec holds the two together.
+ */
+type ConstantPairOf<C> = C extends {
+    readonly def: { readonly mark: 'fill' }
+    readonly codec: infer Marked
+}
+    ? ConstantPairOf<Marked>
+    : ConstantOf<C>
+
+/** The value that a constant decides, or `unknown` where the attribute decides none. */
+type ConstantValue<C> = [ConstantPairOf<C>] extends [never]
+    ? unknown
+    : ConstantPairOf<C> extends readonly [unknown, infer Value]
+      ? Value
+      : unknown
+
+/**
  * A constant, or the fact that there is none.
  *
  * `unknown` rather than `never` because these are unioned across variants: `never` vanishes and
  * would let a variant that decides nothing be outvoted, where `unknown` absorbs. One silent variant
  * is enough.
  */
-type ConstantOrAny<C> = ConstantValue<C> extends infer V extends
-    | string
-    | number
-    | boolean
-    ? V
-    : unknown
-
-/**
- * What one declared attribute decides, at the type level, with the two presence marks of a field read.
- *
- * The type half of {@link constantOf}, and it must give the same answer: a name that may be absent
- * decides nothing, a fill value is written always so what it fills still decides, and the
- * constants spec is what holds the two together.
- */
-type ConstantValue<C> = C extends {
-    readonly def: { readonly mark: 'fill' }
-    readonly codec: infer Marked
-}
-    ? ConstantValue<Marked>
-    : [ConstantText<C>] extends [never]
-      ? [ConstantNumber<C>] extends [never]
-          ? [ConstantBoolean<C>] extends [never]
-              ? unknown
-              : ConstantBoolean<C>
-          : ConstantNumber<C>
-      : ConstantText<C>
+type ConstantOrAny<C> = [ConstantPairOf<C>] extends [never]
+    ? unknown
+    : ConstantPairOf<C>
 
 /** What the variants say about one attribute, collapsed. */
 type AcrossVariants<Variants, K> = {
@@ -2498,7 +2491,7 @@ type AgreedAttributes<Variants> = {
     > extends infer Said
         ? // bound once: what the variants say is asked for twice — is it a string at all, and is it
           // one string — and answering it walks every variant
-          [Said] extends [string | number | boolean]
+          [Said] extends [readonly [unknown, unknown]]
             ? IsUnion<Said> extends true
                 ? never
                 : K
@@ -3551,7 +3544,7 @@ export type {
     BinaryCodec,
     BooleanCodec,
     ConstantCodec,
-    ConstantText,
+    ConstantOf,
     Decoded,
     DerivedUnion,
     DerivedVariants,

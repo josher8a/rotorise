@@ -355,6 +355,7 @@ describe('what a set cannot be built from', () => {
 
     it('refuses a read widening, because no law covers the set of an element that is not lawful', () => {
         const widened = legacy({ current: string, older: decimal })
+        // @ts-expect-error the term reaches a `legacy`, so the type gives no `set`, as construction refuses
         expect(() => refine(widened, isText).set()).toThrow(CodecError)
     })
 })

@@ -143,10 +143,12 @@ describe('the type and the function agree on what is decided', () => {
 
     /**
      * A caller's adapter over a literal owes that the pair cancels. One that refuses its own literal
-     * admits no value, so it decides none. The refusal is not a value, and a key built from it would
-     * hold a `CodecError` as a component.
+     * admits no value, so the function decides none. The refusal is not a value, and a key built from
+     * it would hold a `CodecError` as a component. The type cannot read the function of a caller, so
+     * the type states the attribute as decided where the adapter breaks its pair. The codec refuses
+     * every row, so no write reaches the key.
      */
-    it('on an adapter that refuses its own literal, which decides no value', () => {
+    it('on an adapter that refuses its own literal, where the type reads no function', () => {
         const broken = {
             kind: held(string('DOG'), string, {
                 encode: () => 'DOG' as const,
@@ -154,7 +156,7 @@ describe('the type and the function agree on what is decided', () => {
             }),
             id: string,
         }
-        attest<[ConstantAttributes<typeof broken>], [never]>()
+        attest<[ConstantAttributes<typeof broken>], ['kind']>()
         expect(decided(broken)).toEqual([])
     })
 

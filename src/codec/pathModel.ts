@@ -333,6 +333,95 @@ type FrameSame<F, G> = (<X>() => X extends F ? 1 : 2) extends <
     ? true
     : false
 
+/**
+ * **Whether a term holds a caller wall** at any depth: a `held` of a caller's adapter, a `refine`
+ * or a `legacy`. Each wall holds a function of the caller, and the run time tells two functions
+ * apart by object identity, which no type carries. A `ref` is one entry in one scope, so a `ref`
+ * holds no wall of its own. A library adapter reads through to its inner term.
+ */
+type HasWall<T> = T extends ['refine', ...unknown[]] | ['legacy', unknown]
+    ? true
+    : T extends [
+            'held',
+            unknown,
+            infer I,
+            unknown,
+            [infer G, unknown],
+            ...unknown[],
+        ]
+      ? [G] extends [['caller']]
+          ? true
+          : HasWall<I>
+      : T extends ['union', infer Os extends unknown[]]
+        ? WallIn<Os>
+        : T extends ['set', infer E]
+          ? HasWall<E>
+          : T extends [
+                  'list',
+                  infer Pre extends unknown[],
+                  infer Sp,
+                  infer Suf extends unknown[],
+              ]
+            ? WallIn<
+                  [...Pre, ...(Sp extends ['some', infer E] ? [E] : []), ...Suf]
+              >
+            : T extends ['object', ['mk', infer F, infer W]]
+              ? WallIn<
+                    [
+                        ...{ [K in keyof F]: SlotTerm<F[K]> }[keyof F][],
+                        ...(W extends ['some', infer E] ? [E] : []),
+                    ]
+                >
+              : false
+type WallIn<Ts extends unknown[]> = Ts extends [infer H, ...infer R]
+    ? HasWall<H> extends true
+        ? true
+        : WallIn<R>
+    : true extends HasWall<Ts[number]>
+      ? true
+      : false
+
+/**
+ * **Whether a term reaches a `legacy`** at any depth, the type of `widensRead`. The walk reads
+ * through a `held` on both sides and through a `refine`. A `ref` is no node here: the term names an
+ * entry that the type cannot read, so the answer is `false` where the run time reads the entry.
+ */
+export type WidensRead<T> = T extends ['legacy', unknown]
+    ? true
+    : T extends ['held', unknown, infer I, infer O, ...unknown[]]
+      ? Or<WidensRead<I>, WidensRead<O>>
+      : T extends ['refine', infer I, ...unknown[]]
+        ? WidensRead<I>
+        : T extends ['union', infer Os extends unknown[]]
+          ? WidensIn<Os>
+          : T extends ['set', infer E]
+            ? WidensRead<E>
+            : T extends [
+                    'list',
+                    infer Pre extends unknown[],
+                    infer Sp,
+                    infer Suf extends unknown[],
+                ]
+              ? WidensIn<
+                    [
+                        ...Pre,
+                        ...(Sp extends ['some', infer E] ? [E] : []),
+                        ...Suf,
+                    ]
+                >
+              : T extends ['object', ['mk', infer F, infer W]]
+                ? WidensIn<
+                      [
+                          ...{ [K in keyof F]: SlotTerm<F[K]> }[keyof F][],
+                          ...(W extends ['some', infer E] ? [E] : []),
+                      ]
+                  >
+                : false
+type Or<A, B> = A extends true ? true : B
+type WidensIn<Ts extends unknown[]> = true extends WidensRead<Ts[number]>
+    ? true
+    : false
+
 type AllNever<Fs> = Fs extends [infer F, ...infer R]
     ? FrameNever<F> extends true
         ? AllNever<R>
@@ -370,7 +459,13 @@ export type KindOfFrames<Fs> = Fs extends [infer F, ...infer R]
             ? 'vacant'
             : 'someVariants'
         : AllSame<F, R> extends true
-          ? 'resolved'
+          ? R extends []
+              ? 'resolved'
+              : F extends [infer T, unknown]
+                ? HasWall<T> extends true
+                    ? 'ambiguous'
+                    : 'resolved'
+                : 'resolved'
           : 'ambiguous'
     : Fs extends []
       ? 'vacant'
@@ -627,7 +722,7 @@ type OptionsOf<F> = F extends [['union', infer Os extends unknown[]], infer Env]
  * clause, and the right operand is the option. A `held` reads its inner term, an older reader reads
  * any attribute, and a `fill` slot is optional. Below a guard a pair of entries is assumed apart
  * while the walk compares the two bodies: `A` holds the assumed pairs. `false` states nothing.
- * Two list shapes and the predicates of a refinement are not ported, and read as not apart.
+ * Two list shapes with no spread are ported ({@link ListApart}). A list with a spread reads as not apart.
  */
 /** An entry of a scope, as `['entry', D, K]` with its body and scope stack, or `None`. */
 type EntryOf<T, Env> = T extends ['scope', infer D, infer K]
@@ -665,8 +760,8 @@ type RowG<L, LE, R, RE, A extends unknown[]> = EntryOf<L, LE> extends [
                   ? RightG<L, LE, R, RE, A, ['prim', G]>
                   : L extends ['set', infer E]
                     ? RightG<L, LE, R, RE, A, ['set', E, LE]>
-                    : L extends ['list', unknown, unknown, unknown]
-                      ? RightG<L, LE, R, RE, A, ['list']>
+                    : L extends ['list', infer LP, infer LS, infer LU]
+                      ? RightG<L, LE, R, RE, A, ['list', LP, LS, LU, LE]>
                       : L extends ['object', ['mk', infer CF, infer CW]]
                         ? RightG<L, LE, R, RE, A, ['obj', CF, CW, LE]>
                         : false
@@ -711,10 +806,12 @@ type FamG<Fam, R, RE, A extends unknown[]> = Fam extends ['prim', infer G]
                   | ['object', unknown]
             ? true
             : false
-      : Fam extends ['list']
+      : Fam extends ['list', infer LP, infer LS, infer LU, infer LE]
         ? R extends ['prim', unknown] | ['set', unknown] | ['object', unknown]
             ? true
-            : false
+            : R extends ['list', infer RP, infer RS, infer RU]
+              ? ListApart<LP, LS, LU, LE, RP, RS, RU, RE, A>
+              : false
         : Fam extends ['obj', infer CF, infer CW, infer LE]
           ? R extends ['object', ['mk', infer F2, infer W2]]
               ? true extends
@@ -755,6 +852,37 @@ type FamG<Fam, R, RE, A extends unknown[]> = Fam extends ['prim', infer G]
                 ? true
                 : false
           : false
+/**
+ * **Two list shapes** (`listRowG`): one position is apart in the aligned rows at each common
+ * length. Two lists with no spread have one length each. Two lengths that differ share no row, so
+ * the lists are apart, and two equal lengths are apart where one position pair is apart. A spread
+ * on either side shares rows at many lengths, and the type answers `false` there: not apart.
+ */
+type ListApart<LP, LS, LU, LE, RP, RS, RU, RE, A extends unknown[]> = [
+    LS,
+    RS,
+] extends [['none'], ['none']]
+    ? [LP, LU, RP, RU] extends [
+          infer P extends unknown[],
+          infer U extends unknown[],
+          infer Q extends unknown[],
+          infer V extends unknown[],
+      ]
+        ? [...P, ...U]['length'] extends [...Q, ...V]['length']
+            ? ZipApart<[...P, ...U], LE, [...Q, ...V], RE, A>
+            : true
+        : false
+    : false
+type ZipApart<Xs, XE, Ys, YE, A extends unknown[]> = Xs extends [
+    infer X,
+    ...infer XR,
+]
+    ? Ys extends [infer Y, ...infer YR]
+        ? PairG<X, XE, Y, YE, A> extends true
+            ? true
+            : ZipApart<XR, XE, YR, YE, A>
+        : false
+    : false
 /** Whether a slot holds its name in the stored view: `req` only, as a `fill` may lack it. */
 type IsReqT<S> = S extends ['req', unknown] ? true : false
 /** `pairX`: a pair of entries already assumed is apart, a new pair is assumed, and any other pair runs the row at the same fuel. */
@@ -778,9 +906,11 @@ type PrimsApartT<G, G2> = G extends ['base' | 'literal', infer K, ...unknown[]]
                 ? G2 extends ['literal', unknown, infer V2]
                     ? K extends 'binary'
                         ? false
-                        : FrameSame<V, V2> extends true
+                        : string extends V | V2
                           ? false
-                          : true
+                          : FrameSame<V, V2> extends true
+                            ? false
+                            : true
                     : false
                 : false
             : true
