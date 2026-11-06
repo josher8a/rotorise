@@ -8,6 +8,7 @@
  * construction, because a refusal at the first write would leave the schema accepted. A key of a
  * path below the top level has no field of the codec and takes the member that `native` writes.
  */
+import { attest } from '@ark/attest'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
@@ -38,6 +39,16 @@ describe('a key of one attribute is refused at construction where the attribute 
             // @ts-expect-error a key attribute has one type
             GSI1PK: 'tag',
         })
+    })
+
+    it('names the refusal of a string or number attribute as more than one type, and not as no member', () => {
+        attest(() =>
+            tableEntry<{ petId: string; tag: string | number }>()({
+                PK: ['petId'],
+                // @ts-expect-error a key attribute has one type
+                GSI1PK: 'tag',
+            }),
+        ).type.errors('stored as more than one type')
     })
 
     it('refuses the arms of a match that give S in one arm and N in another', () => {

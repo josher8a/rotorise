@@ -35,6 +35,12 @@ describe('a depth is a non-negative integer', () => {
         expect(
             Pets.key('SK', attributes, { depth: 0, enforceBoundary: true }),
         ).toBe('')
+        expectTypeOf(
+            Pets.key('SK', attributes, { depth: 0, enforceBoundary: true }),
+        ).toEqualTypeOf<''>()
+        expectTypeOf(
+            Pets.key('SK', attributes, { depth: 0 }),
+        ).toEqualTypeOf<''>()
     })
 
     it.each([-1, 1.5, Number.NaN])(

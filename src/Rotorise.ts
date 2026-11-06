@@ -217,7 +217,8 @@ type CompositeKeyBuilderImpl<
  * Whether the depth keeps fewer components than the spec holds.
  *
  * The type half of the count in the run-time builder: the boundary follows a print that stops
- * before the last component. A depth of `number` is the default of the builder and keeps the whole
+ * before the last component. A print that holds no component has no boundary: it is the empty word.
+ * A depth of `number` is the default of the builder and keeps the whole
  * spec. A call refuses a depth that is no literal non-negative integer, see {@link DepthRefusal}.
  */
 type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
@@ -226,7 +227,7 @@ type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
       ? false
       : SliceFromStart<Spec, Deep> extends infer Kept extends readonly unknown[]
         ? Spec extends readonly unknown[]
-            ? Kept['length'] extends Spec['length']
+            ? Kept['length'] extends 0 | Spec['length']
                 ? false
                 : true
             : false
@@ -881,17 +882,19 @@ type KeyMember = 'S' | 'N' | 'B'
 
 /**
  * The member that `native` writes for a value: a string is `S`, a number is `N`, and a `Uint8Array`
- * is `B`.
+ * is `B`. A value of two of these types gives two members, and a value of any other type gives none.
  */
 type NativeMember<V> = [NonNullable<V>] extends [never]
     ? never
-    : [NonNullable<V>] extends [string]
-      ? 'S'
-      : [NonNullable<V>] extends [number | bigint]
-        ? 'N'
-        : [NonNullable<V>] extends [Uint8Array]
-          ? 'B'
+    : [NonNullable<V>] extends [string | number | bigint | Uint8Array]
+      ? NonNullable<V> extends infer Held
+          ? Held extends string
+              ? 'S'
+              : Held extends number | bigint
+                ? 'N'
+                : 'B'
           : never
+      : never
 
 /**
  * The member that the codec writes at a top-level field, over the options of a tagged codec. `NULL`
