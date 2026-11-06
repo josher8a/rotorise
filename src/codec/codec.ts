@@ -117,11 +117,13 @@ import type { ErrorMessage, show } from '../utils'
 import type { StandardOutput, StandardSchemaV1 } from './standard'
 import {
     describeShape,
+    itemRefusal,
     namedLiteral,
     namesOf,
     own,
     readTags,
     sameLiteral,
+    thrownReason,
 } from './value'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
@@ -2155,9 +2157,7 @@ const fillRefusal = (
         return failed(written) ? written : undefined
     } catch (thrown) {
         // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
-        return new CodecError(
-            thrown instanceof Error ? thrown.message : String(thrown),
-        )
+        return new CodecError(thrownReason(thrown))
     }
 }
 
@@ -2370,11 +2370,7 @@ const heldSide = (
                 try {
                     written = outer.encode(value as never)
                 } catch (thrown) {
-                    written = new CodecError(
-                        thrown instanceof Error
-                            ? thrown.message
-                            : String(thrown),
-                    )
+                    written = new CodecError(thrownReason(thrown))
                 }
                 return failed(written)
                     ? refused(at, 'a codec of this library', written.reason)
@@ -2419,7 +2415,7 @@ const heldSide = (
                 return refused(
                     at,
                     side,
-                    `\`validate\` threw: ${thrown instanceof Error ? thrown.message : String(thrown)}`,
+                    `\`validate\` threw: ${thrownReason(thrown)}`,
                 )
             }
         },
@@ -4670,6 +4666,7 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
 
         decode: (item) =>
             openRefusal(itemDef) ??
+            itemRefusal(item) ??
             membersTooDeeply(item, 0) ??
             (body.decode(
                 item as Readonly<Record<string, AttributeValue>>,
@@ -6411,6 +6408,7 @@ const dissectionOf = (
             ),
         decode: (item: StoredItem) =>
             openRefusal(unionDef) ??
+            itemRefusal(item) ??
             (andThen(andThen(readTags(item, ks), pick), (variant) =>
                 variant.decode(item),
             ) as Result<T>),
@@ -9166,6 +9164,8 @@ const unionOf = (declared: Extract<Term, { kind: 'union' }>): Reading => {
     const readItem = (item: StoredItem): Result<T> => {
         const open = openRefusal(declared)
         if (open) return open
+        const refused = itemRefusal(item)
+        if (refused) return refused
         const deep = membersTooDeeply(item, 0)
         if (deep) return deep
         const names = namesOf(item)

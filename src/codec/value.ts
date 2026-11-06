@@ -116,6 +116,24 @@ export const describeShape = (value: unknown): string =>
     `${shapeOf(value) ?? typeof value} \`${rendered(value)}\``
 
 /**
+ * The reason that a thrown value gives, for the refusal that a catch returns. The thrown value is
+ * the caller's code, so a value that is no `Error` renders through {@link rendered}.
+ */
+export const thrownReason = (thrown: unknown): string =>
+    thrown instanceof Error ? thrown.message : rendered(thrown)
+
+/**
+ * The refusal of a stored item that is no plain object, or `undefined`. A whole-item decode reads
+ * the item from outside the program, so each entry of a decode asks it before the first read.
+ */
+export const itemRefusal = (item: unknown): CodecError | undefined =>
+    asRecord(item) === undefined
+        ? new CodecError(
+              `an item is a plain object of attributes, and this is ${describeShape(item)}`,
+          )
+        : undefined
+
+/**
  * The names a value has, which is all the object matcher reads.
  *
  * A key whose value is `undefined` is not a name. That is the same rule in both directions —
@@ -292,7 +310,12 @@ export const readTag = (
             `'${discriminator}' chooses the variant, so it must be carried as 'S' or 'N', not '${member ?? 'none'}'`,
         )
     }
-    return attribute[member] as string
+    const payload = expect(member, attribute)
+    return failed(payload)
+        ? new CodecError(
+              `'${discriminator}' chooses the variant, and ${payload.message}`,
+          )
+        : payload
 }
 
 /**

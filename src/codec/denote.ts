@@ -78,6 +78,7 @@ import {
     rendered,
     sameLiteral,
     shapeOf,
+    thrownReason,
 } from './value'
 
 /**
@@ -507,11 +508,7 @@ export const heldThrough = (
                 return convert(value)
             } catch (thrown) {
                 return new CodecError(
-                    `the conversion for ${direction} this attribute threw: ${
-                        thrown instanceof Error
-                            ? thrown.message
-                            : String(thrown)
-                    }`,
+                    `the conversion for ${direction} this attribute threw: ${thrownReason(thrown)}`,
                 )
             }
         }
@@ -667,18 +664,13 @@ const storedKeyAt = (
         at = (at as { readonly M?: AttributeMap }).M?.[name]
         if (at === undefined) return undefined
     }
-    const stored = at as {
-        readonly S?: string
-        readonly N?: string
-        readonly BOOL?: boolean
-    }
-    return stored.S !== undefined
-        ? `S${stored.S}`
-        : stored.N !== undefined
-          ? `N${stored.N}`
-          : stored.BOOL !== undefined
-            ? `B${stored.BOOL}`
-            : undefined
+    // a payload of another type reads no key, and the attempt that follows refuses the attribute
+    const member = memberOf(at)
+    if (member !== 'S' && member !== 'N' && member !== 'BOOL') return undefined
+    const payload = expect(member, at)
+    return failed(payload)
+        ? undefined
+        : `${member === 'BOOL' ? 'B' : member}${payload}`
 }
 
 /**
@@ -1196,27 +1188,14 @@ export const denote = (def: Term): Pair => {
                         ? new CodecError(
                               `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                           )
-                        : andThen(every([...value], carried), (written) => {
-                              const fault = faultOfSet(setMember, written)
-                              return fault === undefined
-                                  ? // sorted so what is stored does not depend on insertion order
-                                    carrying(
-                                        setMember,
-                                        [...written].sort() as never,
-                                    )
-                                  : fault.fault === 'empty'
-                                    ? new CodecError(
-                                          `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
-                                      )
-                                    : fault.fault === 'repeated'
-                                      ? // two members that write one stored member make a set
-                                        // that DynamoDB refuses, and a merge would decode to a
-                                        // smaller set
-                                        new CodecError(
-                                            `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
-                                        )
-                                      : setFaultError(setMember, fault)
-                          }),
+                        : andThen(every([...value], carried), (written) =>
+                              // two members that write one stored member make a set that DynamoDB
+                              // refuses, and a merge would decode to a smaller set
+                              wireSet(setMember, written, {
+                                  empty: `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
+                                  repeated: `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
+                              }),
+                          ),
                 decode: (attribute) =>
                     andThen(
                         andThen(expect(setMember, attribute), (carried) => {
@@ -1232,7 +1211,21 @@ export const denote = (def: Term): Pair => {
                                 inner.decode(carrying(member, raw as never)),
                             )
                         }),
-                        (read) => new Set(read),
+                        (read) => {
+                            // the model's `setImage` refuses an image that is not injective, and
+                            // `Set` would merge the two members into one value
+                            const first = new Map<unknown, number>()
+                            for (const [at, one] of read.entries()) {
+                                const earlier = first.get(one)
+                                if (earlier !== undefined) {
+                                    return new CodecError(
+                                        `members ${earlier} and ${at} of this ${setMember} read to one value, and a set holds each value one time, so the value read would not write back as this attribute`,
+                                    )
+                                }
+                                first.set(one, at)
+                            }
+                            return new Set(read)
+                        },
                     ),
             }
         }
@@ -1300,11 +1293,7 @@ export const denote = (def: Term): Pair => {
                         older_ = older(attribute)
                     } catch (thrown) {
                         older_ = new CodecError(
-                            `the older reader threw: ${
-                                thrown instanceof Error
-                                    ? thrown.message
-                                    : String(thrown)
-                            }`,
+                            `the older reader threw: ${thrownReason(thrown)}`,
                         )
                     }
                     if (!failed(older_)) {
@@ -1473,7 +1462,7 @@ export const denote = (def: Term): Pair => {
                     value === null
                         ? carrying('NULL', true)
                         : new CodecError(
-                              `${JSON.stringify(value)} is not null, and this codec holds nothing else`,
+                              `${describeShape(value)} is not null, and this codec holds nothing else`,
                           ),
                 decode: (attribute) =>
                     andThen(expect('NULL', attribute), () => null),
@@ -1760,6 +1749,12 @@ export const storedTooDeeply = (
     attribute: AttributeValue,
     enclosing: number,
 ): CodecError | undefined => {
+    // a list member or a map member that is no attribute reads no container, and no codec reads it
+    if (asRecord(attribute) === undefined) {
+        return new CodecError(
+            `a stored member is ${describeShape(attribute)}, and an attribute is a plain object with one member`,
+        )
+    }
     // a payload of another type is the refusal of `expect`, so this walk reads the two containers only
     const list = Array.isArray(attribute.L) ? attribute.L : undefined
     const map = asRecord(attribute.M) as
@@ -1877,16 +1872,11 @@ export const encodeUnknown = (
             family: SetFamily,
             stored: readonly (string | Uint8Array)[],
             repeated: string,
-        ): Result<AttributeValue> => {
-            const fault = faultOfSet(family, stored)
-            return fault === undefined
-                ? carrying(family, [...stored].sort() as never)
-                : fault.fault === 'empty'
-                  ? new CodecError('DynamoDB has no empty set')
-                  : fault.fault === 'repeated'
-                    ? new CodecError(repeated)
-                    : setFaultError(family, fault)
-        }
+        ): Result<AttributeValue> =>
+            wireSet(family, stored, {
+                empty: 'DynamoDB has no empty set',
+                repeated,
+            })
         // an empty set has every kind, so the rule of the set names it
         if (members.every((x): x is string => typeof x === 'string')) {
             return written('SS', members, 'this set holds one string two times')
@@ -1967,6 +1957,26 @@ export const storedNumber = (carried: string): Result<DynamoNumber> =>
         : new CodecError(
               `'${carried}' is not a numeral, so this attribute was not written by DynamoDB`,
           )
+
+/**
+ * The wire set that a writer stores, or the refusal of the rule of a stored set. The writer gives
+ * the text of its own refusal of an empty set and of a repeated member. The members are sorted, so
+ * what is stored does not depend on insertion order.
+ */
+const wireSet = (
+    family: SetFamily,
+    stored: readonly (string | Uint8Array)[],
+    texts: { readonly empty: string; readonly repeated: string },
+): Result<AttributeValue> => {
+    const fault = faultOfSet(family, stored)
+    return fault === undefined
+        ? carrying(family, [...stored].sort() as never)
+        : fault.fault === 'empty'
+          ? new CodecError(texts.empty)
+          : fault.fault === 'repeated'
+            ? new CodecError(texts.repeated)
+            : setFaultError(family, fault)
+}
 
 /**
  * The refusal of a stored set that breaks its rule. The text names the family and the position of
