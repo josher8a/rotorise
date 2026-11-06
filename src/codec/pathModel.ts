@@ -334,6 +334,29 @@ type FrameSame<F, G> = (<X>() => X extends F ? 1 : 2) extends <
     : false
 
 /**
+ * The child terms of a node that the walks of a caller wall and of a read widening share: the
+ * options of a union, the element of a set, the positions of a list and the fields and the rest of an
+ * object. `never` where the node has no child. The run time reads the same children with `reaches`.
+ */
+type ChildTerms<T> = T extends ['union', infer Os extends unknown[]]
+    ? Os
+    : T extends ['set', infer E]
+      ? [E]
+      : T extends [
+              'list',
+              infer Pre extends unknown[],
+              infer Sp,
+              infer Suf extends unknown[],
+          ]
+        ? [...Pre, ...(Sp extends ['some', infer E] ? [E] : []), ...Suf]
+        : T extends ['object', ['mk', infer F, infer W]]
+          ? [
+                ...{ [K in keyof F]: SlotTerm<F[K]> }[keyof F][],
+                ...(W extends ['some', infer E] ? [E] : []),
+            ]
+          : never
+
+/**
  * **Whether a term holds a caller wall** at any depth: a `held` of a caller's adapter, a `refine`
  * or a `legacy`. Each wall holds a function of the caller, and the run time tells two functions
  * apart by object identity, which no type carries. A `ref` is one entry in one scope, so a `ref`
@@ -352,34 +375,11 @@ type HasWall<T> = T extends ['refine', ...unknown[]] | ['legacy', unknown]
       ? [G] extends [['caller']]
           ? true
           : HasWall<I>
-      : T extends ['union', infer Os extends unknown[]]
-        ? WallIn<Os>
-        : T extends ['set', infer E]
-          ? HasWall<E>
-          : T extends [
-                  'list',
-                  infer Pre extends unknown[],
-                  infer Sp,
-                  infer Suf extends unknown[],
-              ]
-            ? WallIn<
-                  [...Pre, ...(Sp extends ['some', infer E] ? [E] : []), ...Suf]
-              >
-            : T extends ['object', ['mk', infer F, infer W]]
-              ? WallIn<
-                    [
-                        ...{ [K in keyof F]: SlotTerm<F[K]> }[keyof F][],
-                        ...(W extends ['some', infer E] ? [E] : []),
-                    ]
-                >
-              : false
-type WallIn<Ts extends unknown[]> = Ts extends [infer H, ...infer R]
-    ? HasWall<H> extends true
-        ? true
-        : WallIn<R>
-    : true extends HasWall<Ts[number]>
-      ? true
-      : false
+      : [ChildTerms<T>] extends [never]
+        ? false
+        : true extends HasWall<ChildTerms<T>[number]>
+          ? true
+          : false
 
 /**
  * **Whether a term reaches a `legacy`** at any depth, the type of `widensRead`. The walk reads
@@ -388,39 +388,47 @@ type WallIn<Ts extends unknown[]> = Ts extends [infer H, ...infer R]
  */
 export type WidensRead<T> = T extends ['legacy', unknown]
     ? true
-    : T extends ['held', unknown, infer I, infer O, ...unknown[]]
-      ? Or<WidensRead<I>, WidensRead<O>>
-      : T extends ['refine', infer I, ...unknown[]]
-        ? WidensRead<I>
-        : T extends ['union', infer Os extends unknown[]]
-          ? WidensIn<Os>
-          : T extends ['set', infer E]
-            ? WidensRead<E>
-            : T extends [
-                    'list',
-                    infer Pre extends unknown[],
-                    infer Sp,
-                    infer Suf extends unknown[],
-                ]
-              ? WidensIn<
-                    [
-                        ...Pre,
-                        ...(Sp extends ['some', infer E] ? [E] : []),
-                        ...Suf,
-                    ]
-                >
-              : T extends ['object', ['mk', infer F, infer W]]
-                ? WidensIn<
-                      [
-                          ...{ [K in keyof F]: SlotTerm<F[K]> }[keyof F][],
-                          ...(W extends ['some', infer E] ? [E] : []),
-                      ]
-                  >
-                : false
+    : T extends ['scope', infer D, infer K]
+      ? WidensRead<D[K & keyof D]>
+      : T extends ['held', unknown, infer I, infer O, ...unknown[]]
+        ? Or<WidensRead<I>, WidensRead<O>>
+        : T extends ['refine', infer I, ...unknown[]]
+          ? WidensRead<I>
+          : [ChildTerms<T>] extends [never]
+            ? false
+            : true extends WidensRead<ChildTerms<T>[number]>
+              ? true
+              : false
 type Or<A, B> = A extends true ? true : B
-type WidensIn<Ts extends unknown[]> = true extends WidensRead<Ts[number]>
+
+/**
+ * **Whether a term owns the null point**, the type of `ownsNullOf`: `true`, `false`, or `'unknown'`
+ * where no term decides it. A `legacy` and a `held` that does not exclude null on both sides are
+ * unknown, because the answer lies in a function of the caller. A `ref` is no node here, so it
+ * answers `false`, and the caller reads the free names for the open case.
+ */
+export type OwnsNull<T> = T extends ['prim', ['base', 'null']] | ['opaq']
     ? true
-    : false
+    : T extends ['refine', infer I, ...unknown[]]
+      ? OwnsNull<I> extends false
+          ? false
+          : 'unknown'
+      : T extends ['held', unknown, infer I, infer O, ...unknown[]]
+        ? [OwnsNull<I>, OwnsNull<O>] extends [false, false]
+            ? false
+            : 'unknown'
+        : T extends ['union', infer Os extends unknown[]]
+          ? OwnsNullIn<Os>
+          : T extends ['legacy', unknown]
+            ? 'unknown'
+            : T extends ['scope', infer D, infer K]
+              ? OwnsNull<D[K & keyof D]>
+              : false
+type OwnsNullIn<Os extends unknown[]> = 'unknown' extends OwnsNull<Os[number]>
+    ? 'unknown'
+    : true extends OwnsNull<Os[number]>
+      ? true
+      : false
 
 type AllNever<Fs> = Fs extends [infer F, ...infer R]
     ? FrameNever<F> extends true
@@ -625,13 +633,15 @@ type DecodeT<
                           infer I,
                           infer O,
                           [infer G, unknown],
-                          unknown,
+                          infer H,
                       ]
                     ? G extends ['caller', 'asFloat']
                         ? FloatLits<I>
                         : G extends ['caller', 'opaqueLossy' | 'opaqueRefuse']
                           ? unknown
-                          : DecodeT<O, Env, Seen>
+                          : H extends [infer Out]
+                            ? Out
+                            : DecodeT<O, Env, Seen>
                     : T extends ['refine', infer I, () => infer N]
                       ? unknown extends N
                           ? DecodeT<I, Env, Seen>

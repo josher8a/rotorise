@@ -11,7 +11,8 @@ import type {
     AnyCodec,
     Closed,
     ConstantOf,
-    Encoded,
+    EncodedBy,
+    EncodedVariants,
     IsUnion,
     ItemCodec,
     ItemSpec,
@@ -2120,10 +2121,8 @@ type NamedKey<
  */
 type EncodedAttributes<CodecSpec, CodecRest> =
     IsVariantSpec<CodecSpec> extends true
-        ? { [V in keyof CodecSpec]: Encoded<CodecSpec[V]> }[keyof CodecSpec]
-        : CodecRest extends AnyCodec
-          ? Encoded<CodecSpec> & { readonly [name: string]: AttributeValue }
-          : Encoded<CodecSpec>
+        ? EncodedVariants<CodecSpec>
+        : EncodedBy<CodecSpec, CodecRest>
 
 /**
  * The primary key of the table: the name of the partition key, and the name of the sort key.

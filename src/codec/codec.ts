@@ -52,6 +52,7 @@ import type {
     Norm,
     OffersAt,
     OpenT,
+    OwnsNull,
     Same,
     ScopeWallCycle,
     SlotAt,
@@ -277,7 +278,18 @@ type LitsT<
 > = L extends readonly [infer One]
     ? LitT<K, One>
     : ['union', { -readonly [I in keyof L]: LitT<K, L[I]> }]
-type HeldT<I, O, G> = ['held', false, I, O, [G, false], []]
+/**
+ * The term of a `held`. `H` is the held type of a foreign schema, in a tuple: the schema is the top
+ * at run time, so only this marker carries its output, and `DecodeT` reads it from here.
+ */
+type HeldT<I, O, G, H extends unknown[] = []> = [
+    'held',
+    false,
+    I,
+    O,
+    [G, false],
+    H,
+]
 type NumText<N> = N extends DynamoNumber<infer S> ? S : string
 type NumTexts<L extends readonly unknown[]> = {
     -readonly [I in keyof L]: NumText<L[I]>
@@ -1045,7 +1057,7 @@ export type ConstantOf<C> = TermOf<C> extends [
             ['prim', ['literal', string, infer V]],
             unknown,
             [unknown, false],
-            [],
+            unknown,
         ]
       ? ConstantPair<V, Decoded<C>>
       : never
@@ -1318,6 +1330,21 @@ const decimalCall = (...allowed: readonly string[]) => {
 }
 
 /**
+ * The refusal in the type of a decimal literal that is not the stored spelling: the run time of
+ * {@link decimal} refuses the text that {@link DynamoNumber.from} gives another print. A text that
+ * is no literal reads as the stored spelling, so a spread of `string[]` stays legal.
+ */
+type StoredSpelling<T extends string> = string extends T
+    ? unknown
+    : [
+            NumText<
+                Extract<ReturnType<typeof DynamoNumber.from<T>>, DynamoNumber>
+            >,
+        ] extends [T]
+      ? unknown
+      : ErrorMessage<`[decimal] '${T}' is not the spelling DynamoDB stores, which returns the normalised form: no leading or trailing zeros, no exponent, no '+'`>
+
+/**
  * A decimal held as a string, stored as `N`. The codec for money — nothing becomes a JS number, so
  * nothing rounds.
  *
@@ -1340,11 +1367,11 @@ const decimalCall = (...allowed: readonly string[]) => {
 export const decimal: AttributeCodec<string, Attribute<'N'>> &
     TermMark<DecimalT> & {
         <const T extends string>(
-            only: T,
+            only: T & StoredSpelling<T>,
         ): AttributeCodec<T, Attribute<'N'>> &
             TermMark<HeldT<LitT<'number', T>, LitT<'string', T>, 'decimalText'>>
         <const L extends readonly string[]>(
-            ...allowed: L
+            ...allowed: L & { [I in keyof L]: StoredSpelling<L[I]> }
         ): AttributeCodec<L[number], Attribute<'N'>> &
             TermMark<
                 HeldT<LitsT<'number', L>, LitsT<'string', L>, 'decimalText'>
@@ -2292,7 +2319,8 @@ export const held = <
         HeldT<
             TermOf<C>,
             O extends StandardSchemaV1 ? ['opaq'] : TermOf<O>,
-            ['caller']
+            ['caller'],
+            O extends StandardSchemaV1 ? [StandardOutput<O>] : []
         >
     > &
     Free<FreeOf<C> | FreeOf<O>> => {
@@ -2866,6 +2894,16 @@ export const undefinable = <const C extends AnyCodec>(
     }) as unknown as UndefinableCodec<Decoded<C>, AttributeOf<C>, C>
 
 /**
+ * The refusal in the type of {@link nullable} over a term whose null point no term decides. The run
+ * time refuses at construction, unless a free name leaves the question open for the scope.
+ */
+type NullPointOver<Tm, F extends string> = [F] extends [never]
+    ? [OwnsNull<Tm>] extends ['unknown']
+        ? ErrorMessage<'[nullable] this term decides the null point by running a function, so whether the union would be certified is unknown. Write the wrapper inside instead, as in held(nullable(inner), outer, adapter)'>
+        : unknown
+    : unknown
+
+/**
  * A value that may be null, stored as `NULL` when it is — **unless `inner` already owns the null
  * point**, in which case this is `inner`'s own pair, untouched.
  *
@@ -2892,7 +2930,7 @@ export const nullable = <
     Tm = FreeTerm,
     F extends string = never,
 >(
-    inner: AttributeCodec<T, A> & TermMark<Tm> & Free<F>,
+    inner: AttributeCodec<T, A> & TermMark<Tm> & Free<F> & NullPointOver<Tm, F>,
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> &
     TermMark<['union', [Tm, BaseT<'null'>]]> &
     Free<F> => {
@@ -4099,13 +4137,13 @@ export type Dissection<
     Options extends readonly unknown[],
 > = Ks extends readonly [infer D extends string]
     ? DiscriminatedCodec<
-          DerivedVariants<SpecsOf<Options>>,
+          DerivedVariants<SpecsOf<Options>, RestsOf<Options>>,
           D,
           ByTag<SpecsOf<Options>, D>,
           FreeOf<Options[number]>
       >
     : DissectedCodec<
-          DerivedVariants<SpecsOf<Options>>,
+          DerivedVariants<SpecsOf<Options>, RestsOf<Options>>,
           Ks,
           SpecsOf<Options>,
           FreeOf<Options[number]>
@@ -6135,7 +6173,7 @@ type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
  * `undefined` from an optional key: an absent field writes no entry, so no entry holds `undefined`,
  * and the map stays an attribute that nests in another codec.
  */
-type EncodedBy<Spec, Rest> = [Rest] extends [undefined]
+export type EncodedBy<Spec, Rest> = [Rest] extends [undefined]
     ? Encoded<Spec>
     : Encoded<Spec> & {
           readonly [name: string]:
@@ -6572,9 +6610,22 @@ export type UntaggedSpec<T> = readonly ItemSpec<T>[]
  * stored side — a row is exactly one variant, so an attribute only one of them declares is not an
  * attribute the entity always has.
  */
-export type DerivedVariants<Specs extends readonly unknown[]> = {
-    [I in keyof Specs]: show<ObjectOf<Specs[I]>>
+export type DerivedVariants<
+    Specs extends readonly unknown[],
+    Rests extends readonly unknown[] = [],
+> = {
+    [I in keyof Specs]: DerivedItem<
+        Specs[I],
+        I extends keyof Rests ? Rests[I] : undefined
+    >
 }[number]
+
+/** The rest of each option: the codec of the attributes that its spec does not declare. */
+export type RestsOf<Options extends readonly unknown[]> = {
+    [I in keyof Options]: Options[I] extends { readonly rest: infer R }
+        ? R
+        : undefined
+}
 
 export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
     /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
@@ -9069,7 +9120,7 @@ export const discriminatedUnion = <
     discriminator: D,
     options: Options & EveryOptionTagged<SpecsOf<Options>, D>,
 ): DiscriminatedCodec<
-    DerivedVariants<SpecsOf<Options>>,
+    DerivedVariants<SpecsOf<Options>, RestsOf<Options>>,
     D,
     ByTag<SpecsOf<Options>, D>,
     FreeOf<Options[number]>

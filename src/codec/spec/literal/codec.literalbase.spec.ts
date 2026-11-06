@@ -121,6 +121,7 @@ describe('a decimal literal', () => {
             )
         }
         // and the write side is unmoved: a denormal numeral is still refused outright
+        // @ts-expect-error the type refuses a spelling that the store would return changed
         expect(() => decimal('1.50')).toThrow(CodecError)
         expect(() => decimal.unsafeEncode('1.50')).toThrow(CodecError)
     })
@@ -143,9 +144,13 @@ describe('a decimal literal', () => {
 
     /** `ℓ ⊆ D`, at the narrower `D` this base has. */
     it('refuses an alternative the service would normalise away', () => {
+        // @ts-expect-error the type refuses a spelling that the store would return changed
         expect(() => decimal('1.50')).toThrow(CodecError)
+        // @ts-expect-error the same
         expect(() => decimal('007')).toThrow(CodecError)
+        // @ts-expect-error the same
         expect(() => decimal('1e5')).toThrow(CodecError)
+        // @ts-expect-error the same, at the one alternative that is not a numeral
         expect(() => decimal('1', 'x')).toThrow(CodecError)
     })
 

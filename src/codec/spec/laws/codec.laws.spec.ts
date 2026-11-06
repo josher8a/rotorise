@@ -557,6 +557,7 @@ describe('nullable', () => {
             encode: (v: string) => (v === 'SENTINEL' ? null : v),
             decode: (v: string | null) => (v === null ? 'SENTINEL' : v),
         }
+        // @ts-expect-error the type refuses it too, because no term decides the null point
         expect(() => nullable(held(nullable(string), string, adapter))).toThrow(
             /held\(nullable\(inner\), outer, adapter\)/,
         )
