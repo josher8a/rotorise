@@ -132,16 +132,49 @@ export const namesOf = (held: Record<string, unknown>) => {
 
 type AttributeCarriesOf<K extends AttributeName> = Attribute<K>[K]
 
+/**
+ * What the payload of each member is, as a stored attribute holds it. A set holds an array, and
+ * {@link faultOfSet} reads each member of the array, because that check names the position.
+ */
+const payloadOf: {
+    readonly [K in AttributeName]: {
+        readonly holds: (payload: unknown) => boolean
+        readonly noun: string
+    }
+} = {
+    S: { holds: (p) => typeof p === 'string', noun: 'a string' },
+    N: { holds: (p) => typeof p === 'string', noun: 'a numeral string' },
+    B: { holds: (p) => p instanceof Uint8Array, noun: 'bytes' },
+    BOOL: { holds: (p) => typeof p === 'boolean', noun: 'a boolean' },
+    NULL: { holds: (p) => p === true, noun: 'true' },
+    L: { holds: Array.isArray, noun: 'an array' },
+    M: { holds: (p) => asRecord(p) !== undefined, noun: 'a plain object' },
+    SS: { holds: Array.isArray, noun: 'an array' },
+    NS: { holds: Array.isArray, noun: 'an array' },
+    BS: { holds: Array.isArray, noun: 'an array' },
+}
+
+/**
+ * The payload of the member `name` of an attribute. The attribute comes from outside the program,
+ * so the read refuses an attribute that lacks the member and an attribute whose payload is no
+ * value of the member.
+ */
 export const expect = <K extends AttributeName>(
     name: K,
     attribute: AttributeValue,
 ): Result<AttributeCarriesOf<K>> => {
     const carried = (attribute as Record<string, unknown>)[name]
-    return carried === undefined
-        ? new CodecError(
-              `expected attribute member '${name}', found '${memberOf(attribute) ?? 'none'}'`,
+    if (carried === undefined) {
+        return new CodecError(
+            `expected attribute member '${name}', found '${memberOf(attribute) ?? 'none'}'`,
+        )
+    }
+    const { holds, noun } = payloadOf[name]
+    return holds(carried)
+        ? (carried as AttributeCarriesOf<K>)
+        : new CodecError(
+              `the attribute member '${name}' holds ${describeShape(carried)}, and a stored '${name}' holds ${noun}`,
           )
-        : (carried as AttributeCarriesOf<K>)
 }
 
 /**

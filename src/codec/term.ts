@@ -820,12 +820,17 @@ export const holdsNoValue = (
  * A tag table wants the other one. `assignmentOf` builds the lookup a *stored* attribute is
  * matched against, so it wants the alternative under the adapter, and this is that reader. The two
  * are different questions and the split is why they are two functions.
+ *
+ * The reader is the model's `pinOfG`: it reads through each `refine`, then through one `held`, and
+ * the term under that `held` pins itself. A second adapter or a refinement under the first adapter
+ * pins nothing.
  */
 export const storedAlternatives = (t: Term): Alternatives | undefined => {
     const at = resolvedTerm(t)
-    return at?.kind === 'held'
-        ? storedAlternatives(at.inner)
-        : at && literalAlternatives(at)
+    if (at?.kind === 'refine') return storedAlternatives(at.inner)
+    if (at?.kind !== 'held') return at && literalAlternatives(at)
+    const inner = resolvedTerm(at.inner)
+    return inner && literalAlternatives(inner)
 }
 
 /** One literal, as the one-alternative set it pins. */
@@ -1215,9 +1220,7 @@ export const sameTerm = (x: Term, y: Term): boolean => {
             case 'held':
                 return (
                     r.kind === 'held' &&
-                    l.via === r.via &&
-                    l.f === r.f &&
-                    l.g === r.g &&
+                    sameAdapter(l, r) &&
                     l.arbitrary === r.arbitrary &&
                     l.shrink === r.shrink &&
                     same(l.inner, r.inner) &&

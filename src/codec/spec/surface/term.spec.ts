@@ -10,7 +10,16 @@
 import { describe, expect, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
-import { decimal, opaque, refine, string } from '../../codec'
+import {
+    at,
+    decimal,
+    object,
+    opaque,
+    refine,
+    string,
+    termOf,
+    union,
+} from '../../codec'
 import { assignmentOf } from '../../denote'
 import { failed, orThrow } from '../../result'
 import { flatOf } from '../../scoped'
@@ -21,6 +30,7 @@ import {
     member,
     occV,
     ownsNullOf,
+    sameTerm,
     unboundRefs,
 } from '../../term'
 
@@ -423,5 +433,28 @@ describe('the flat scope of a root', () => {
         const before = entries(root)
         slot.bound = { T: str }
         expect(entries(root)).toBeGreaterThan(before)
+    })
+})
+
+describe('two terms of one library adapter are one term', () => {
+    /**
+     * The tag of a library adapter that names one pair is its `via` name, so two calls of
+     * `decimal('1')` build two pairs of functions and one adapter. The held row of `sameTerm` reads
+     * the same test as `sameAdapter`, which the slice and the meet read.
+     */
+    it('equates two calls of decimal at one literal, and separates two literals', () => {
+        expect(sameTerm(termOf(decimal('1')), termOf(decimal('1')))).toBe(true)
+        expect(sameTerm(termOf(decimal('1')), termOf(decimal('2')))).toBe(false)
+    })
+
+    it('lets a path reach a name that two variants declare through one adapter', () => {
+        const prices = union([
+            object({ kind: string('DOG'), price: decimal('1') }),
+            object({ kind: string('CAT'), price: decimal('1') }),
+        ])
+        const located = at(prices, ['price'] as never) as unknown as {
+            encode: (value: unknown) => unknown
+        }
+        expect(located.encode('1')).toEqual({ N: '1' })
     })
 })

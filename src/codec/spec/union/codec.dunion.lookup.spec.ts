@@ -26,6 +26,7 @@ import {
     number,
     object,
     ref,
+    refine,
     scope,
     string,
 } from '../../codec'
@@ -285,6 +286,30 @@ describe('a number tag that JS spells with an exponent', () => {
         expect(item(Litter).encode({ size: 1e-7, name: 'Rex' })).toEqual({
             size: { N: '0.0000001' },
             name: { S: 'Rex' },
+        })
+    })
+})
+
+describe('a tag read through a refinement and one adapter, as the model reads a pin', () => {
+    /**
+     * `Calculus.pinOfG` reads through each `refine`, then through one `held`. A refined tag stores the
+     * literal under the refinement, so the lookup keys the option by that literal, and the refinement
+     * refuses the values that the predicate refuses after the lookup.
+     */
+    it('keys an option by the literal under a refinement', () => {
+        const isDog = (v: string): v is 'DOG' => v === 'DOG'
+        const Pets = item(
+            declare('kind', [
+                object({ kind: refine(string('DOG'), isDog), name: string }),
+                object({ kind: string('CAT'), lives: number }),
+            ]) as never,
+        ) as unknown as { decode: (stored: unknown) => unknown }
+        expect(Pets.decode({ kind: { S: 'DOG' }, name: { S: 'Rex' } })).toEqual(
+            { kind: 'DOG', name: 'Rex' },
+        )
+        expect(Pets.decode({ kind: { S: 'CAT' }, lives: { N: '9' } })).toEqual({
+            kind: 'CAT',
+            lives: 9,
         })
     })
 })

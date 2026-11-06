@@ -677,6 +677,19 @@ describe('a pattern that the host cannot read is refused', () => {
             )
         },
     )
+
+    /**
+     * **A pattern that splits nothing keeps a member with an open key entry whole.** The member
+     * changes in no part, so no half drops the entry. The pattern below names no kind that the
+     * owner holds, so `exclude` returns the member and `extract` returns no value.
+     */
+    it('keeps a member with an open key entry whole where the pattern splits nothing', () => {
+        const stranger = object({
+            owner: object({ type: string('VET') }),
+        })
+        expect(optionsOf(exclude(adopt, stranger))).toEqual([adopt.def])
+        expect(optionsOf(extract(adopt, stranger))).toEqual([])
+    })
 })
 
 /**

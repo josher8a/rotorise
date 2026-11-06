@@ -34,13 +34,13 @@ const counted = (all: readonly Option[]) => {
     const wrapped = all.map(
         (option): Option => ({
             ...option,
-            codec: {
-                ...option.codec,
-                decode: (attribute: AttributeValue) => {
+            pair: {
+                ...option.pair,
+                decode: (attribute: AttributeValue, enclosing: number) => {
                     calls.n++
-                    return option.codec.decode(attribute)
+                    return option.pair.decode(attribute, enclosing)
                 },
-            } as Option['codec'],
+            },
         }),
     )
     return { wrapped, calls }
@@ -66,8 +66,8 @@ const agreeOn = (all: readonly Option[], rows: readonly Row[]) => {
     const slow = altSem(all, false).pair.decode
     let decoded = 0
     for (const row of rows) {
-        const a = fast(row as AttributeValue)
-        const b = slow(row as AttributeValue)
+        const a = fast(row as AttributeValue, 0)
+        const b = slow(row as AttributeValue, 0)
         if (failed(b)) {
             expect(failed(a), JSON.stringify(row)).toBe(true)
             expect((a as { message: string }).message).toBe(
@@ -124,11 +124,11 @@ describe('a union of options that pin distinct literals decodes by the literals'
         const { wrapped, calls } = counted(optionsOf(cross))
         const last = crossRows[crossRows.length - 1] as Row
         expect(
-            failed(altSem(wrapped).pair.decode(last as AttributeValue)),
+            failed(altSem(wrapped).pair.decode(last as AttributeValue, 0)),
         ).toBe(false)
         expect(calls.n).toBe(1)
         calls.n = 0
-        altSem(wrapped, false).pair.decode(last as AttributeValue)
+        altSem(wrapped, false).pair.decode(last as AttributeValue, 0)
         expect(calls.n).toBe(crossRows.length)
     })
 
@@ -137,9 +137,11 @@ describe('a union of options that pin distinct literals decodes by the literals'
         const damaged: Row = { M: { ...row.M, daily: { S: 'not a number' } } }
         const fast = altSem(optionsOf(cross)).pair.decode(
             damaged as AttributeValue,
+            0,
         )
         const slow = altSem(optionsOf(cross), false).pair.decode(
             damaged as AttributeValue,
+            0,
         )
         expect(failed(fast)).toBe(true)
         expect((fast as { message: string }).message).toBe(
@@ -161,7 +163,7 @@ describe('a union whose options pin no distinct literals still decodes', () => {
         const all = optionsOf(shared)
         expect(agreeOn(all, pool(rows))).toBeGreaterThanOrEqual(2)
         const { wrapped, calls } = counted(all)
-        altSem(wrapped).pair.decode(rows[1] as AttributeValue)
+        altSem(wrapped).pair.decode(rows[1] as AttributeValue, 0)
         expect(calls.n).toBe(2)
     })
 
@@ -169,8 +171,8 @@ describe('a union whose options pin no distinct literals still decodes', () => {
         const mixed = union([string, number])
         const all = optionsOf(mixed)
         const decode = altSem(all).pair.decode
-        expect(decode({ S: 'a' })).toBe('a')
-        expect(decode({ N: '1' })).toBe(1)
+        expect(decode({ S: 'a' }, 0)).toBe('a')
+        expect(decode({ N: '1' }, 0)).toBe(1)
     })
 })
 
@@ -227,7 +229,7 @@ describe('a union of objects that differ only under a key decodes by the path', 
         const { wrapped, calls } = counted(optionsOf(orders))
         const last = valid[3] as Row
         expect(
-            failed(altSem(wrapped).pair.decode(last as AttributeValue)),
+            failed(altSem(wrapped).pair.decode(last as AttributeValue, 0)),
         ).toBe(false)
         expect(calls.n).toBe(1)
     })
@@ -243,7 +245,7 @@ describe('a union of options that pin distinct literals of any base decodes by t
         const { wrapped, calls } = counted(all)
         const last = valid[valid.length - 1] as Row
         expect(
-            failed(altSem(wrapped).pair.decode(last as AttributeValue)),
+            failed(altSem(wrapped).pair.decode(last as AttributeValue, 0)),
         ).toBe(false)
         expect(calls.n).toBe(1)
     }
@@ -310,8 +312,8 @@ describe('a union of options that pin distinct literals of any base decodes by t
             ]),
         )
         const row = { M: { v: { N: '2.0' }, b: { S: 'x' } } } as Row
-        const fast = altSem(all).pair.decode(row as AttributeValue)
-        const slow = altSem(all, false).pair.decode(row as AttributeValue)
+        const fast = altSem(all).pair.decode(row as AttributeValue, 0)
+        const slow = altSem(all, false).pair.decode(row as AttributeValue, 0)
         expect(failed(fast)).toBe(failed(slow))
         if (failed(fast) && failed(slow))
             expect(fast.message).toBe(slow.message)

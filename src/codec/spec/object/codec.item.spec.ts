@@ -11,6 +11,7 @@ import {
     mdunion,
     number,
     object,
+    optional,
     string,
     union,
 } from '../../codec'
@@ -76,5 +77,22 @@ describe('the reading of a union', () => {
         // @ts-expect-error the union can hold an `S`, so there is no item to read
         const write = item(either).unsafeEncode
         expect(write).toBeDefined()
+    })
+})
+
+describe('an attribute that holds undefined is absent on a read, as on a write', () => {
+    const pet = { petId: { S: 'p1' }, nickname: undefined }
+
+    it('is no undeclared name of a closed pet, because the write drops the name', () => {
+        const Pet = item(object({ petId: string }))
+        expect(
+            Pet.encode({ petId: 'p1', nickname: undefined } as never),
+        ).toEqual({ petId: { S: 'p1' } })
+        expect(Pet.decode(pet as never)).toEqual({ petId: 'p1' })
+    })
+
+    it('is no entry of the open block of a pet, which would read an attribute of no member', () => {
+        const Pet = item(object({ petId: string }, [string, optional(string)]))
+        expect(Pet.decode(pet as never)).toEqual({ petId: 'p1' })
     })
 })

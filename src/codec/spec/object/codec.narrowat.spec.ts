@@ -25,6 +25,7 @@ import {
     refine,
     scope,
     string,
+    termOf,
     union,
     valueKinds,
 } from '../../codec'
@@ -602,5 +603,32 @@ describe('a path keeps every item that the codec reads readable', () => {
         expect(atOf(kept, ['vaccine', 'lot']).unsafeEncode(7)).toEqual({
             N: '7',
         })
+    })
+
+    /**
+     * **A clause keeps a nested union whole.** The model's `narrowC` reads each option of the union
+     * as one closed codec and drops the option only where the view of the clause separates the
+     * whole option. A nested union is separated only where each of its options is separated, so a
+     * clause on one summand keeps the nested union with its other summands.
+     */
+    it('keeps a nested union whole where the clause separates only some of its options', () => {
+        const Pets = itemOf(
+            object({
+                owner: union([
+                    union([
+                        object({ kind: string('DOG'), tag: string }),
+                        object({ kind: string('CAT'), tag: number }),
+                    ]),
+                    object({ kind: string('BIRD'), tag: dynamoNumber }),
+                ]),
+            }),
+        )
+        const dogs = narrow(
+            atOf(Pets, ['owner']),
+            object({ kind: string('DOG') }),
+        )
+        const def = termOf(dogs)
+        expect(def.kind).toBe('union')
+        expect(def.kind === 'union' && def.options).toHaveLength(2)
     })
 })

@@ -236,6 +236,49 @@ describe('the meet of two objects at a shared name', () => {
     })
 
     /**
+     * **A meet is below each factor.** The factor `object({ a: fill })` refuses a row with a name that
+     * it does not declare, and a name that a factor leaves undeclared is an optional slot at its open
+     * block. The fill and that slot share no absent row, so the meet requires the name, as the
+     * spelling that declares the open slot does.
+     */
+    it('refuses a row that a factor refuses, where a fill meets an undeclared name', () => {
+        const filled = object({ a: fill(string, 'x') })
+        const named = meet(object({ k: string }), filled)
+        const declared = meet(
+            object({ k: string, a: optional(opaque) }),
+            filled,
+        )
+        const row = { M: { k: { S: '1' } } }
+        expect(failed(filled.decode(row))).toBe(true)
+        expect(failed(declared.decode(row))).toBe(true)
+        expect(failed(named.decode(row))).toBe(true)
+        expect(failed(named.decode({ M: { ...row.M, a: { S: 'y' } } }))).toBe(
+            false,
+        )
+        expectTypeOf<Decoded<typeof named>>().toEqualTypeOf<{
+            readonly k: string
+            readonly a: string
+        }>()
+        expect(named.def).toEqual(object({ k: string, a: string }).def)
+    })
+
+    /**
+     * **A fill stays where the meet writes the fill value.** The slice reads a fill as a required
+     * slot, so a required slot of the pattern lies above the fill. A pattern that refuses the fill
+     * value leaves no pair at the absent row, so the slot is required at the narrower codec. A
+     * pattern that admits the fill value keeps the fill.
+     */
+    it('keeps a fill in the ordered meet only where the met codec writes the fill value', () => {
+        const option = object({ petId: fill(string, 'unknown') })
+        expect(meetOrdered(option, object({ petId: string('y') })).def).toEqual(
+            object({ petId: string('y') }).def,
+        )
+        expect(
+            meetOrdered(option, object({ petId: string('unknown') })).def,
+        ).toEqual(object({ petId: fill(string('unknown'), 'unknown') }).def)
+    })
+
+    /**
      * **Two fill values share the absent row where they are one value**, and the meet of the two
      * fills is the fill with that fill value over the meet of the two codecs: the absent row decodes
      * to the fill value on both sides, so it decodes to the fill value in the meet. A fill value that is
@@ -792,11 +835,13 @@ describe('a thunk changes no verdict of the order', () => {
     })
 
     /**
-     * **A name that the pattern leaves to an `opaque` block is the top, written plain or behind a
-     * `ref`.** The fill value of a `fill` slot pairs the absent row with a value, and only
-     * the top holds that pair, so the order reads the block at the node behind the thunk.
+     * **A name that the pattern leaves to an `opaque` block is the top of a fill slot at the `value`
+     * order, written plain or behind a `ref`.** A pattern has no decode of its own, so the slice
+     * reads a fill slot as a required slot. The `meet` reads the `relation` order, where the fill and
+     * the open block share no absent row, so the meet refuses the name: see the meet of two objects
+     * at a shared name.
      */
-    it('reads an opaque block behind a ref as the top of a fill slot', () => {
+    it('reads an opaque block behind a ref as the top of a fill slot in the slice', () => {
         const kind: AnyCodec = union([
             object({
                 a: fill(string, 'x'),
@@ -805,8 +850,7 @@ describe('a thunk changes no verdict of the order', () => {
         ])
         for (const top of [opaque, thunked(opaque)]) {
             const open: AnyCodec = object([string, optional(top)])
-            expect(meet(kind, open)).toBe(kind)
-            expect(meet(open, kind)).toBe(kind)
+            expect(meetOrdered(kind, open)).toBe(kind)
         }
     })
 })

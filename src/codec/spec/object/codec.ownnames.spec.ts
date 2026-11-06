@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import {
+    at as atOf,
     discriminatedUnion,
     item as itemOf,
     number,
@@ -31,6 +32,22 @@ describe('an attribute named like a member of Object.prototype is data like any 
             expect(Pet.encode({ [name]: 'Rex' })).toEqual({
                 [name]: { S: 'Rex' },
             })
+        })
+
+        it('is addressed by a path as the open entry of a pet that declares none', () => {
+            const Pet = object([string, optional(number)])
+            const located = atOf(Pet, [name] as never) as unknown as {
+                encode: (value: unknown) => unknown
+            }
+            expect(located.encode(3)).toEqual({ N: '3' })
+        })
+
+        it('is addressed by a path as the name that a pet declares', () => {
+            const Pet = object({ [name]: string }, [string, optional(number)])
+            const located = atOf(Pet, [name] as never) as unknown as {
+                encode: (value: unknown) => unknown
+            }
+            expect(located.encode('Rex')).toEqual({ S: 'Rex' })
         })
 
         it('is refused on decode as an undeclared name of a closed pet', () => {

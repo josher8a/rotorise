@@ -618,7 +618,7 @@ const childrenOf = (
         case 'object': {
             if (apart) return []
             const { fields, rest } = def.body
-            const field = fields[segment]
+            const field = own(fields, String(segment))
             return [
                 field
                     ? codecOfTerm(field.t)
@@ -2179,18 +2179,25 @@ export const fill = <const C extends AnyCodec>(
         Free<FreeOf<C>>
 }
 
-/** The refusal of a fill value that the codec it fills cannot write. */
-const checkFill = (filledCodec: AnyCodec, value: unknown): void => {
-    let refusal: CodecError | undefined
+/** The refusal of a fill value that the codec it fills cannot write, or `undefined` where it writes. */
+const fillRefusal = (
+    filledCodec: AnyCodec,
+    value: unknown,
+): CodecError | undefined => {
     try {
         const written = filledCodec.encode(value as never)
-        refusal = failed(written) ? written : undefined
+        return failed(written) ? written : undefined
     } catch (thrown) {
         // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
-        refusal = new CodecError(
+        return new CodecError(
             thrown instanceof Error ? thrown.message : String(thrown),
         )
     }
+}
+
+/** Throws the refusal of a fill value that the codec it fills cannot write. */
+const checkFill = (filledCodec: AnyCodec, value: unknown): void => {
+    const refusal = fillRefusal(filledCodec, value)
     if (refusal) {
         throw new CodecError(
             `The fill value of \`fill\` must be a value the codec it fills can write, and this \`${filledCodec.def.kind}\` refuses the fill value: ${refusal.message}. A row missing the attribute would read back as the fill value and then refuse on the way out`,
@@ -5154,13 +5161,26 @@ type CommonCodec<Ls extends unknown[], A> = Ls extends []
         > &
             TermMark<['union', Ls]>
 
+/**
+ * The slot of a name that the other object leaves undeclared. The other object holds the name at
+ * its open block, an optional slot, and a fill lies below no optional slot, so the slot is required
+ * at the codec that the fill fills.
+ */
+type Unfilled<S> = S extends {
+    readonly [fillMarker]: unknown
+    readonly codec: infer C
+}
+    ? C
+    : S
+
 /** One meet of two objects at the type level: the union of the names. */
-type MeetSpecs<A, B> = [keyof A & keyof B] extends [never]
-    ? A & B
-    : Omit<A, keyof B> &
-          Omit<B, keyof A> & {
-              readonly [K in keyof A & keyof B]: MeetSlot<A[K], B[K]>
-          }
+type MeetSpecs<A, B> = {
+    readonly [K in keyof Omit<A, keyof B>]: Unfilled<A[K & keyof A]>
+} & {
+    readonly [K in keyof Omit<B, keyof A>]: Unfilled<B[K & keyof B]>
+} & {
+    readonly [K in keyof A & keyof B]: MeetSlot<A[K], B[K]>
+}
 
 /** `never` where a name that the object requires meets at `never`, and the object holds no value. */
 type HoldsNone<S> = true extends {
@@ -5611,8 +5631,8 @@ const aligned = (
  * presence of a slot is one element of the order of {@link absentBelow}, at the order of the walk,
  * so the meet is the greatest lower bound in that order: the mark of the side that lies below the
  * other, and `req` where neither side does. A slot that one side leaves undeclared is the open key
- * entry of that side, an optional slot at the block, as {@link aligned} gives it. An `opaque` block
- * is the unit of the meet, so it keeps the declared slot as it is.
+ * entry of that side, an optional slot at the block, as {@link aligned} gives it. An `opaque`
+ * block meets at the codec of the other side, and the presence of the slot meets as any other.
  *
  * At the `relation` order two fills meet at a fill only where the fill values are one value
  * ({@link fillEquals}), as the model's `absentAgreeG` admits two fills only there. Two fills
@@ -5620,35 +5640,33 @@ const aligned = (
  * so the slot is required over the meet of the two codecs. At the `value` order a fill reads as a
  * required slot, so it lies below `optional` and the fill stays.
  *
+ * A fill stays only where the meet of the two codecs writes the fill value. At the `value` order a
+ * required slot of the pattern lies above the fill, and the meet can refuse the fill value, so the
+ * slot is then required.
+ *
  * `undefined` where a required slot meets at `never`, and the object holds no value.
  */
 const meetSlots = (
     left: ObjectSlot | AnyCodec,
     right: ObjectSlot | AnyCodec,
     [mine, theirs]: readonly [Field, Field],
-    declared: readonly [boolean, boolean],
     walk: MeetWalk,
 ): ObjectSlot | undefined => {
     if (left === right) return left
-    // an `opaque` open block is the unit of the meet, at the absent row too
-    if (
-        !declared[0] &&
-        resolvedTerm(termOf(entryCodec(left)))?.kind === 'opaq'
-    ) {
-        return right
-    }
-    if (
-        !declared[1] &&
-        resolvedTerm(termOf(entryCodec(right)))?.kind === 'opaq'
-    ) {
-        return left
-    }
     const held = meetOfTwo(entryCodec(left), entryCodec(right), walk)
-    const below = absentBelow(mine, theirs, walk.order)
+    const lower = absentBelow(mine, theirs, walk.order)
         ? mine
         : absentBelow(theirs, mine, walk.order)
           ? theirs
           : undefined
+    // a fill stays where the meet writes the fill value. Where the meet refuses the fill value, the
+    // absent row has no pair in the meet, so the slot is required, as `fill` itself would refuse
+    const below =
+        lower?.mark === 'fill' &&
+        unboundRefs([termOf(held)]).size === 0 &&
+        fillRefusal(held, lower.v) !== undefined
+            ? undefined
+            : lower
     switch (below?.mark) {
         case 'fill':
             return fill(held, below.v as Decoded<typeof held>)
@@ -5694,7 +5712,6 @@ const meetObjects = (
             own(left.spec, name) ?? codecOfTerm(mine.t),
             own(right.spec, name) ?? codecOfTerm(theirs.t),
             [mine, theirs],
-            declared,
             walk,
         )
         if (slot === undefined) return never
@@ -6582,6 +6599,8 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  */
 export type Option = {
     readonly codec: AnyCodec
+    /** The pair of the codec: a union reads and writes an option at the level of the union through it. */
+    readonly pair: Pair
     /** The member it reads, where the term bounds the read — a cheap filter on decode. */
     readonly member: AttributeName | undefined
     /** The kinds of value it takes, where the kind alone decides — the same filter on encode. */
@@ -8252,22 +8271,6 @@ type Order = 'relation' | 'value'
 export const fits = (a: Term, p: Term): boolean => below(a, opened(p), 'value')
 
 /**
- * **Whether the slot `mine` lies below the slot `wanted` at the absent row**, at the name `name`
- * of the pattern body `pattern`. A name that the pattern leaves to an `opaque` block is the top, as
- * `opaque` is the unit of the meet. Any other slot compares by {@link absentBelow}.
- */
-const slotBelow = (
-    name: string,
-    pattern: Body,
-    mine: Field,
-    wanted: Field,
-    order: Order,
-): boolean =>
-    (!Object.hasOwn(pattern.fields, name) &&
-        resolvedTerm(wanted.t)?.kind === 'opaq') ||
-    absentBelow(mine, wanted, order)
-
-/**
  * **Whether the pairs of the absent row that the slot `mine` holds are pairs of the slot
  * `wanted`.** A required slot holds no absent row. At the `relation` order, a `fill` slot
  * pairs the absent row with its fill value, so it is below only a slot of the same fill value. At the
@@ -8308,7 +8311,7 @@ const absentBelow = (mine: Field, wanted: Field, order: Order): boolean => {
  * are one term, so the answer errs towards no fit.
  *
  * The literal rule is `Calculus.altsSub`. Two objects compare on their {@link aligned} slots: each
- * slot of the option is below the slot of the pattern at the absent row ({@link slotBelow}) and at
+ * slot of the option is below the slot of the pattern at the absent row ({@link absentBelow}) and at
  * its term, and the open block of the option is below the open block of the pattern. A closed
  * object holds no undeclared name, as its open block is the bottom.
  *
@@ -8483,9 +8486,8 @@ const fitsNode = (
         if (A.kind !== 'object') return false
         return (
             aligned(A.body, P.body, asWritten).every(
-                ([name, mine, wanted]) =>
-                    slotBelow(name, P.body, mine, wanted, order) &&
-                    fits(mine.t, wanted.t),
+                ([, mine, wanted]) =>
+                    absentBelow(mine, wanted, order) && fits(mine.t, wanted.t),
             ) && fits(blockOf(A.body, 'written'), blockOf(P.body, 'written'))
         )
     }
@@ -8897,7 +8899,7 @@ const sliceSpec = (
             )
         ) {
             if (
-                !slotBelow(name, wantedObject.body, mine, wanted, 'value') ||
+                !absentBelow(mine, wanted, 'value') ||
                 !below(mine.t, wanted.t, 'value')
             ) {
                 leafFits = false
@@ -8907,7 +8909,7 @@ const sliceSpec = (
         // a slot whose absent row the pattern refuses splits into a present part and an absent
         // part, where the absent part has a codec: `optional` or `undefinable` at `never`. At the
         // `value` order a `fill` slot is required, so the pattern refuses no absent row
-        if (!slotBelow(name, wantedObject.body, mine, wanted, 'value')) {
+        if (!absentBelow(mine, wanted, 'value')) {
             const declared = own(piece.spec, name)
             if (!presence || declared === undefined || !('codec' in declared)) {
                 leafFits = false
@@ -8990,12 +8992,14 @@ const sliceSpec = (
     const rebuild = (replaced: ReadonlyMap<Entry, readonly Piece[]>): Piece => {
         const spec: Record<string, ObjectSlot> = { ...piece.spec }
         const positions = new Map<string, Map<number, Term>>()
+        let changed = false
         for (const [entry, list] of replaced) {
             const same =
                 list.length === entry.original.length &&
                 list.every((one, at) => one === entry.original[at])
             const { name, presence } = entry
             if (same && presence === undefined) continue
+            changed = true
             if (presence !== undefined && (same || list.length === 0)) {
                 const held = same ? presence.inner : (never as AnyCodec)
                 spec[name] = (list === entry.keep
@@ -9040,7 +9044,7 @@ const sliceSpec = (
                 suf: [],
             }) as unknown as ObjectSlot
         }
-        return { spec, rest: piece.rest }
+        return changed ? { spec, rest: piece.rest } : piece
     }
     const keepAll = new Map(nested.map((one) => [one, one.keep] as const))
     const keep = nested.every((one) => one.keep.length > 0)
@@ -9134,8 +9138,6 @@ const picked = <O>(
                 : undefined
         if (sliced === undefined)
             return splitParts(option, wanted, keep, splits)
-        // no part of a member fits, so the exclusion keeps the member whole and changes no key
-        if (!splits && !keep && sliced.keep.length === 0) return [option]
         return (keep ? sliced.keep : sliced.rest).map((one) => {
             if (one.spec === item?.spec) return option
             if (!splits) {

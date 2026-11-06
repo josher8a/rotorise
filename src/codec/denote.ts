@@ -211,8 +211,8 @@ const refusedBy = (q: Refinement, value: unknown): CodecError => {
  * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Closed.spec`
  * reads a field with a fill value as required at the caller side.
  *
- * The model reads a tag through `Calculus.pinOfG`, through a `refine` and through a `held` under
- * its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
+ * The model reads a tag through `Calculus.pinOfG`, through each `refine` and then through one `held`
+ * under its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
  * under a pair whose content is binary64 rounding, and the model names no such pair, so
  * `src/codec/lean.ts` refuses to emit one and says why.
  */
@@ -284,7 +284,11 @@ export type Pair = {
      * level of its path.
      */
     readonly encode: (value: never, enclosing: number) => Result<AttributeValue>
-    readonly decode: (attribute: AttributeValue) => Result<unknown>
+    /** `enclosing` counts as `encode` counts it, so a row that checks a premise by a write checks it at its own level. */
+    readonly decode: (
+        attribute: AttributeValue,
+        enclosing: number,
+    ) => Result<unknown>
 }
 
 /**
@@ -330,7 +334,7 @@ export const carriedCodec = <Payload, Written, Read>(
     member: AttributeName,
     refuse: (value: unknown) => CodecError,
     into: (payload: Payload, enclosing: number) => Result<Written>,
-    outOf: (carried: Read) => Result<unknown>,
+    outOf: (carried: Read, enclosing: number) => Result<unknown>,
 ): Pair => ({
     // two casts, one reason: `member` is a *value* here, so the type checker cannot tie it to the
     // payload types either side of it. The model takes the two prisms as arguments and gets that
@@ -349,8 +353,10 @@ export const carriedCodec = <Payload, Written, Read>(
                   carrying(member, written as never),
               )
     },
-    decode: (attribute) =>
-        andThen(expect(member, attribute), (carried) => outOf(carried as Read)),
+    decode: (attribute, enclosing) =>
+        andThen(expect(member, attribute), (carried) =>
+            outOf(carried as Read, enclosing + 1),
+        ),
 })
 
 /**
@@ -423,7 +429,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
          * Attributes the spec does not mention are dropped. A row written before a field existed
          * decodes without it, which is why `encode ∘ decode` is not identity on items.
          */
-        decode: (item) => {
+        decode: (item, enclosing = 0) => {
             const out: Record<string, unknown> = {}
             for (const {
                 name,
@@ -452,18 +458,23 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                         `'${name}' is required and the item has no such attribute`,
                     )
                 }
-                const read = attributeCodec.decode(attribute)
+                const read = attributeCodec.decode(attribute, enclosing)
                 if (failed(read)) return read.under(name)
                 out[name] = read
             }
             for (const name in item) {
-                if (Object.hasOwn(of, name)) continue
+                // a name that holds `undefined` is absent, as the write reads it
+                if (Object.hasOwn(of, name) || item[name] === undefined)
+                    continue
                 if (!restPair) {
                     return new CodecError(
                         `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
                     )
                 }
-                const read = restPair.decode(item[name] as AttributeValue)
+                const read = restPair.decode(
+                    item[name] as AttributeValue,
+                    enclosing,
+                )
                 if (failed(read)) return read.under(name)
                 out[name] = read
             }
@@ -513,11 +524,11 @@ export const heldThrough = (
             andThen(into(value), (held) =>
                 inner.encode(held as never, enclosing),
             ),
-        decode: (attribute) => {
+        decode: (attribute, enclosing) => {
             // `failed` rather than `andThen`, because a {@link Pair}'s read answers `unknown` and
             // `Result<unknown>` *is* `unknown` — the failure channel is not visible in that type,
             // so the test has to be made rather than inferred
-            const read = inner.decode(attribute)
+            const read = inner.decode(attribute, enclosing)
             return failed(read) ? read : outOf(read as never)
         },
     }
@@ -550,8 +561,8 @@ export const restrict = (
         const written = base.encode(value, enclosing)
         return !failed(written) && holds(value) ? written : refuse(value)
     },
-    decode: (attribute) => {
-        const read = base.decode(attribute)
+    decode: (attribute, enclosing) => {
+        const read = base.decode(attribute, enclosing)
         return failed(read) || holds(read as never) ? read : refuse(read)
     },
 })
@@ -837,10 +848,10 @@ export const altSem = (
      * reads the attribute, and a success answers. A failure falls through to the attempt, so the
      * result and the message are the attempt's whatever the lookup found.
      */
-    const read = (attribute: AttributeValue): Result<T> => {
+    const read = (attribute: AttributeValue, enclosing: number): Result<T> => {
         const hit = named(attribute)
         if (hit !== undefined) {
-            const direct = hit.codec.decode(attribute) as Result<T>
+            const direct = hit.pair.decode(attribute, enclosing) as Result<T>
             if (!failed(direct)) return direct
         }
         const member = memberOf(attribute)
@@ -857,7 +868,7 @@ export const altSem = (
                       member === undefined ||
                       option.member === member,
             naming('this attribute', names),
-            (option) => option.codec.decode(attribute) as Result<T>,
+            (option) => option.pair.decode(attribute, enclosing) as Result<T>,
         )
     }
     const write = (
@@ -869,8 +880,7 @@ export const altSem = (
             forValue(shapeOf(value)),
             naming('this value', held ? namesOf(held) : undefined),
             value,
-            (option) =>
-                pairOf(option.codec.def).encode(value as never, enclosing),
+            (option) => option.pair.encode(value as never, enclosing),
         ) as Result<AttributeValue>
     }
 
@@ -1002,6 +1012,7 @@ export type ItemPair = {
     ) => Result<Record<string, AttributeValue>>
     readonly decode: (
         item: Readonly<Record<string, AttributeValue>>,
+        enclosing?: number,
     ) => Result<Record<string, unknown>>
 }
 
@@ -1139,13 +1150,13 @@ export const denote = (def: Term): Pair => {
                     every(held, (one, index) =>
                         at(index, held.length).encode(one, enclosing),
                     ),
-                (carried: readonly AttributeValue[]) =>
+                (carried: readonly AttributeValue[], enclosing) =>
                     aligned(
                         carried.length,
                         (arity) => `expected a list of ${atLeast}${arity}`,
                     ) ??
                     every(carried, (one, index) =>
-                        at(index, carried.length).decode(one),
+                        at(index, carried.length).decode(one, enclosing),
                     ),
             )
         }
@@ -1249,8 +1260,10 @@ export const denote = (def: Term): Pair => {
                         `${describeShape(value)} is not a plain object, and an object writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
                     ),
                 body.encode,
-                (carried: Readonly<Record<string, AttributeValue>>) =>
-                    body.decode(carried),
+                (
+                    carried: Readonly<Record<string, AttributeValue>>,
+                    enclosing,
+                ) => body.decode(carried, enclosing),
             )
         }
         /** The rule `(held)`. `Lawful.held1` is the lemma; the adapter is data the term carries. */
@@ -1281,13 +1294,12 @@ export const denote = (def: Term): Pair => {
          * migrated row and reported at the next write instead of at this read.
          */
         case 'legacy': {
-            const current = codecOfTerm(def.inner)
-            const written = pairOf(def.inner)
+            const current = pairOf(def.inner)
             const older = def.r
             return {
-                encode: written.encode,
-                decode: (attribute) => {
-                    const read = current.decode(attribute)
+                encode: current.encode,
+                decode: (attribute, enclosing) => {
+                    const read = current.decode(attribute, enclosing)
                     if (!failed(read)) return read
                     // the older reader is the caller's, so it may throw rather than return, and
                     // the throw is a refusal of this read, as `held` reads a throw of the caller
@@ -1304,7 +1316,7 @@ export const denote = (def: Term): Pair => {
                         )
                     }
                     if (!failed(older_)) {
-                        if (!accepts(current, older_)) {
+                        if (!writesAt(current, older_, enclosing)) {
                             return new CodecError(
                                 `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
                             )
@@ -1326,8 +1338,8 @@ export const denote = (def: Term): Pair => {
             return {
                 encode: (value, enclosing) =>
                     pairOf(usedTargetOf(def)).encode(value, enclosing),
-                decode: (attribute) =>
-                    codecOfTerm(usedTargetOf(def)).decode(attribute),
+                decode: (attribute, enclosing) =>
+                    pairOf(usedTargetOf(def)).decode(attribute, enclosing),
             }
         /**
          * The rule `(union)`: the join, resolved by the first option that admits. `lawful_altCodec` is the lemma and
@@ -1420,8 +1432,8 @@ export const denote = (def: Term): Pair => {
                     member(value) === undefined
                         ? refuse(value)
                         : base.encode(value as never, enclosing),
-                decode: (attribute) =>
-                    andThen(base.decode(attribute), (read) => {
+                decode: (attribute, enclosing) =>
+                    andThen(base.decode(attribute, enclosing), (read) => {
                         const found = member(read)
                         return found === undefined ? refuse(read) : found
                     }),
@@ -1759,8 +1771,11 @@ export const storedTooDeeply = (
     attribute: AttributeValue,
     enclosing: number,
 ): CodecError | undefined => {
-    const list = attribute.L
-    const map = attribute.M
+    // a payload of another type is the refusal of `expect`, so this walk reads the two containers only
+    const list = Array.isArray(attribute.L) ? attribute.L : undefined
+    const map = asRecord(attribute.M) as
+        | Readonly<Record<string, AttributeValue | undefined>>
+        | undefined
     if (list === undefined && map === undefined) return undefined
     if (enclosing >= MAX_DOCUMENT_NESTING) {
         return new CodecError(
@@ -1812,7 +1827,7 @@ export const codecAtLevel = <T, A extends AttributeValue>(
         decode: (attribute) =>
             openRefusal(def) ??
             storedTooDeeply(attribute, enclosing) ??
-            pair.decode(attribute),
+            pair.decode(attribute, enclosing),
     }
     return codec<T, A>({
         def,
@@ -1994,31 +2009,36 @@ export const decodeWith = (
         const member = memberOf(attribute)
         switch (member) {
             case 'NULL':
-                return null
+                return andThen(expect(member, attribute), () => null)
             case 'S':
             case 'B':
             case 'BOOL':
-                return attribute[member]
+                return expect(member, attribute)
             case 'N':
-                return read(attribute.N as string)
+                return andThen(expect(member, attribute), read)
             case 'NS':
             case 'SS':
-            case 'BS': {
-                const members: readonly unknown[] = attribute[member] ?? []
-                const fault = faultOfSet(member, members)
-                return fault !== undefined
-                    ? setFaultError(member, fault)
-                    : member === 'NS'
-                      ? andThen(
-                            every(members as readonly string[], read),
-                            (numbers) => new Set(numbers),
-                        )
-                      : new Set(members)
-            }
+            case 'BS':
+                return andThen(expect(member, attribute), (carried) => {
+                    const members: readonly unknown[] = carried
+                    const fault = faultOfSet(member, members)
+                    return fault !== undefined
+                        ? setFaultError(member, fault)
+                        : member === 'NS'
+                          ? andThen(
+                                every(members as readonly string[], read),
+                                (numbers) => new Set(numbers),
+                            )
+                          : new Set(members)
+                })
             case 'L':
-                return every(attribute.L ?? [], walk)
+                return andThen(expect(member, attribute), (carried) =>
+                    every(carried, walk),
+                )
             case 'M':
-                return everyEntry(attribute.M ?? {}, walk)
+                return andThen(expect(member, attribute), (carried) =>
+                    everyEntry(carried, walk),
+                )
             default:
                 return new CodecError('an AttributeValue carrying no member')
         }
@@ -2272,6 +2292,15 @@ export const accepts = (codec: AnyCodec, value: unknown): boolean => {
     }
 }
 
+/** Whether a pair writes a value at a level, with a throw read as a refusal, as {@link accepts} reads it. */
+const writesAt = (pair: Pair, value: unknown, enclosing: number): boolean => {
+    try {
+        return !failed(pair.encode(value as never, enclosing))
+    } catch {
+        return false
+    }
+}
+
 /** …and the read side, which the deleted reader asked of the definition and this asks of the pair. */
 export const readsBack = (
     codec: AnyCodec,
@@ -2369,6 +2398,7 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  */
 export const optionOfTerm = (def: Term): Option => {
     const codec = codecOfTerm(def)
+    const pair = pairOf(def)
     /**
      * **A union of objects is an object option too**, and its names are its members' taken
      * together. A message names them: a name that every member always writes is named as
@@ -2394,6 +2424,7 @@ export const optionOfTerm = (def: Term): Option => {
         )
         return {
             codec,
+            pair,
             member: 'M',
             carries: ['map'],
             item: undefined,
@@ -2406,6 +2437,7 @@ export const optionOfTerm = (def: Term): Option => {
     if (def.kind !== 'object') {
         return {
             codec,
+            pair,
             member: readMember(def),
             carries: valueKinds(def),
             item: undefined,
@@ -2418,6 +2450,7 @@ export const optionOfTerm = (def: Term): Option => {
     for (const name in fields) declares.add(name)
     return {
         codec,
+        pair,
         member: 'M',
         carries: ['map'],
         item: undefined,

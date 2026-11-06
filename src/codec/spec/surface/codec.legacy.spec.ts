@@ -586,6 +586,54 @@ describe('an attribute written in an older encoding', () => {
     })
 })
 
+describe('a legacy read lands on a value that writes back at the level of the legacy', () => {
+    /**
+     * The premise of `legacy` is that the older reader lands on a value the current codec writes. The
+     * write refuses a value that nests past what DynamoDB stores, so the premise holds at the level
+     * of the row and at no other. A premise checked at level 0 reads a value that the write then
+     * refuses.
+     */
+    it('refuses a read that its own write refuses, at every depth of the row', () => {
+        const older = () => [['PET']]
+        const wrapped = (depth: number) => {
+            let codec: unknown = legacy({
+                current: array(array(string)),
+                older: { decode: older },
+            } as never)
+            for (let i = 0; i < depth; i++) codec = array(codec as never)
+            return codec as {
+                decode: (attribute: AttributeValue) => unknown
+                encode: (value: never) => unknown
+            }
+        }
+        const stored = (depth: number): AttributeValue => {
+            let attribute: AttributeValue = { S: 'old' }
+            for (let i = 0; i < depth; i++) attribute = { L: [attribute] }
+            return attribute
+        }
+        const refused: number[] = []
+        for (let depth = 0; depth <= 31; depth++) {
+            const codec = wrapped(depth)
+            const read = codec.decode(stored(depth))
+            if (read instanceof Error) {
+                refused.push(depth)
+                continue
+            }
+            expect(
+                codec.encode(read as never),
+                `depth ${depth}`,
+            ).not.toBeInstanceOf(Error)
+        }
+        expect(refused).not.toEqual([])
+        expect(refused).toEqual(
+            Array.from(
+                { length: refused.length },
+                (_, at) => 31 - at,
+            ).reverse(),
+        )
+    })
+})
+
 /** An adapter whose read hands back a value its write never produced. */
 const listOfStrings = held(array(string), anything<string[]>(), {
     encode: (value: string[]) => value,
