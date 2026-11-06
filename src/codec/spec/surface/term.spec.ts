@@ -292,7 +292,6 @@ describe('the term `.set()` writes', () => {
         expect(member(term)).toBe('SS')
     })
 
-    /** …and a set over a bare base holds the base as its element. */
     it('a set over a bare base holds the base as its element', () => {
         expect(erase(string.set()).def).toEqual({
             kind: 'set',

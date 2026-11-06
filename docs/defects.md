@@ -241,8 +241,8 @@ instantiations is not measured.
 ## Known: the options of a slice type follow the union order of the compiler
 
 **Observation.** A slice splits an option one key at a time. The run time reads the keys in the
-order of the declaration. The type reads the keys through `KeyTuple`, which builds a tuple from a
-union, and the order of a union is the order of the type identities of the compiler. TypeScript 7
+order of the declaration. The type reads the keys through a tuple that it builds from their union,
+and the order of a union is the order of the type identities of the compiler. TypeScript 7
 orders `'p' | 'q' | 'w'` as `["p", "q", "w"]`. TypeScript 6 orders it as `["w", "q", "p"]`. Measured
 2026-11-06 with `npm run check` (TypeScript 7) and `npx tsc --noEmit` (TypeScript 6):
 

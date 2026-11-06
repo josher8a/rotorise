@@ -191,7 +191,7 @@ describe('the port agrees with the SDK it was ported from', () => {
  * @anchored
  */
 /**
- * The sixteen constructor names `isBinary` accepts, not just the one anybody uses.
+ * The sixteen constructor names `isBinaryValue` accepts, not just the one anybody uses.
  *
  * `Uint8Array` is the type every example shows and the only one a hand-written list tends to cover;
  * the SDK accepts fifteen more, and a `Buffer` or a `DataView` reaching `M` instead of `B` is a

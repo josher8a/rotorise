@@ -964,8 +964,8 @@ export const byTagSem = <V>(
  * here, because no term carries the table; the refusal is the host's alone, and it is stated at
  * construction because the type cannot state it.
  *
- * Reached by both spellings — `mdunion` at the declaration, and {@link taggedItemSem} at a bare
- * term — so a term that was not built through the constructor meets the same rule.
+ * The one caller is `dissectionOf`. It reads the term and not the constructor, so a term that was
+ * not built through `mdunion` meets the same rule.
  */
 export const membersOf = <V>(
     ks: readonly string[],
@@ -1062,8 +1062,6 @@ export const itemSem = (def: ItemTerm): ItemPair => {
  * is exhaustive and the type checker knows it — a new kind with no row makes `def` something other
  * than `never` at the end of the switch and stops the build. A thrown default would replace that
  * with a runtime message, which is the weaker of the two and the one a test has to go looking for.
- * It is the same move as `_everyKindHasALevel`: a fact the documents assert, turned into a build
- * error instead of something a reader is asked to re-derive.
  */
 export const denote = (def: Term): Pair => {
     switch (def.kind) {
@@ -1496,11 +1494,8 @@ export const denote = (def: Term): Pair => {
  * **One codec per term, for the life of the term.**
  *
  * A term is immutable by design and frozen at construction, so a codec built from one is a function
- * of it and can be built once. The tree already assumes identity per term in at least one place —
- * `testing.ts`'s `unionsIn` is "keyed on the *definition* rather than the codec, which is what stops
- * a `ref` cycle: a recursive entity hands back the codec it already walked, and its def is the same
- * object" — and this makes that true rather than probable. The freeze is what the cache rests on: a
- * mutation fails loudly instead of poisoning it.
+ * of it and can be built once. The freeze is what the cache rests on: a mutation fails loudly
+ * instead of poisoning it.
  */
 const codecs = new WeakMap<Term, AttributeCodec<never, AttributeValue>>()
 

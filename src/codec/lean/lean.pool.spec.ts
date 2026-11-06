@@ -581,7 +581,7 @@ type PoolPair = {
     readonly label: string
     readonly left: AnyCodec
     readonly right: AnyCodec
-    /** The host verdicts, in the column order of `poolRow`: disjoint, views, agrees, guard, union. */
+    /** The host verdicts, in the order disjoint, views, agrees, guard, union. */
     readonly host: string
     readonly l: string
     readonly r: string

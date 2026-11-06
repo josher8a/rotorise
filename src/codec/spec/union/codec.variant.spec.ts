@@ -188,7 +188,7 @@ describe('tagged', () => {
     /**
      * **Every variant is an object, and this is the refusal that makes it so.**
      *
-     * `taggedItemSem` reads each variant's term and takes its item pair, which exists only for an
+     * `dissectionOf` reads each variant's term and takes its item pair, which exists only for an
      * `attributes` term. It is entitled to that because the declaration refuses anything else: an
      * option with no object `spec` has no attribute naming the discriminator, so there is no tag to
      * select on. The refusal was in the code and in no test, and a gate
@@ -200,7 +200,7 @@ describe('tagged', () => {
      * **Reached past a cast, deliberately.** `EveryOptionTagged` refuses both of these in the
      * *type*, landing on the option that is wrong, and that is the gate a caller meets. The cast is
      * how this test gets to the second one. Both are needed and neither is redundant: a cast defeats
-     * the type and nothing defeats the throw, which is why `taggedItemSem` may take every variant's
+     * the type and nothing defeats the throw, which is why `dissectionOf` may take every variant's
      * item pair without asking again.
      */
     const past = <T>(options: T) => options as never

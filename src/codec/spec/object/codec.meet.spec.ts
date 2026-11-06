@@ -70,7 +70,6 @@ describe('the meet of two closed objects', () => {
         )
     })
 
-    /** Strict objects remain strict when meet merges their bodies. */
     it('merges strict object bodies', () => {
         const leftThenRight = meet(object({ a: string }), object({ b: string }))
         const rightThenLeft = meet(object({ a: string }), object({ b: string }))

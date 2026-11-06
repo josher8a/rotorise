@@ -523,7 +523,6 @@ type ValueOfKey<E, P> = [ValueOf<E, P>] extends [never]
         : never
     : ValueOf<E, P>
 
-/** The last name of a path. */
 type LastName<P extends string> = P extends `${string}.${infer Tail}`
     ? LastName<Tail>
     : P
@@ -732,12 +731,10 @@ type ValidateMatchPaths<E, D extends string, Arms> = {
     }
 }
 
-/** The arms of a list of cases. */
 type ArmOfCases<C> = C extends readonly (readonly [unknown, infer Arm])[]
     ? Arm
     : never
 
-/** The literals that a list of cases names. */
 type LiteralOfCases<C> = C extends readonly (readonly [
     infer Literals extends readonly unknown[],
     unknown,
@@ -745,7 +742,6 @@ type LiteralOfCases<C> = C extends readonly (readonly [
     ? Literals[number] & PropertyKey
     : never
 
-/** The arm of the case that names a literal. */
 type ArmOfLiteral<C, L> = C extends readonly unknown[]
     ? C[number] extends infer Case
         ? Case extends readonly [
@@ -1135,10 +1131,9 @@ type DiscriminatedSchema<Entity, E, Used extends PropertyKey = never> = {
 }[OpenKeys<E, Used>]
 
 /**
- * A match on a path: the discriminator is a path below the top level. The constraint is shallow,
- * for the reason at {@link ObjectKeys}: each arm is a loose spec, and {@link ValidatePaths} reads
- * the literals of the value at the path, the arms against the options that each literal selects, and
- * the names that each arm reads.
+ * A match on a path: the discriminator is a path below the top level. The constraint is shallow:
+ * each arm is a loose spec, and {@link ValidatePaths} reads the literals of the value at the path,
+ * the arms against the options that each literal selects, and the names that each arm reads.
  */
 type PathMatch = {
     discriminator: AnyPath
@@ -1291,7 +1286,6 @@ const parts = (
 ): (Part | undefined)[] =>
     components.map((component) => partOf(component, attributes))
 
-/** The attribute that a component names. */
 const componentName = (component: unknown): string =>
     String(Array.isArray(component) ? component[0] : component)
 
@@ -1351,7 +1345,6 @@ const holdsPath = (path: string, names: Iterable<string>): boolean => {
     return false
 }
 
-/** Whether a path is related to any of the names. */
 const relatedToAny = (path: string, names: Iterable<string>): boolean => {
     for (const name of names) if (related(path, name)) return true
     return false
@@ -2272,7 +2265,6 @@ type CanBeAbsent<Spec> = [Spec] extends [null]
             : false
         : false
 
-/** The names of the keys that can be absent from a row. */
 type AbsentKeyNames<Schema> = {
     [K in keyof Schema]: CanBeAbsent<Schema[K]> extends true ? K : never
 }[keyof Schema] &

@@ -608,7 +608,7 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  *
- * **A segment has three answers**, as the model's `childD` has. The codecs at the segment. No
+ * **A segment has three answers**, as the model's `childG` has. The codecs at the segment. No
  * codec, where the term stores a member that is not the container of the segment: the store
  * refuses the segment on every attribute of the term, so the term leaves the frontier. And
  * {@link absent}, where the container admits no value at the segment: a closed object that lacks
@@ -745,7 +745,7 @@ const including = (
 
 /**
  * **A codec that admits no value at a path**: its term is `never`, the model's frame whose head is
- * `never` (`frameNever`). A declared `never` and {@link absent} are one term, so the test reads the
+ * `never` (`frameNeverC`). A declared `never` and {@link absent} are one term, so the test reads the
  * term and not the identity of {@link absent}: the frontier keeps the first codec of a term, and an
  * identity test made the verdict depend on the order of the options.
  *
@@ -1049,7 +1049,6 @@ export type ConstantOf<C> = TermOf<C> extends [
       : never
 type ConstantPair<V, D> = IsUnion<V> extends true ? never : [V, D]
 
-/** The literal capability, on every base. */
 const literalCapability =
     (base: LiteralBase) =>
     (...allowed: readonly LiteralValue[]) =>
@@ -3806,7 +3805,6 @@ type CompleteString<H, S extends string, L> = L extends [
         : never
     : never
 
-/** The check of a path in either form. */
 type CheckAt<H, S> = S extends string ? CheckString<H, S> : CheckPath<H, S>
 
 /**
@@ -4987,7 +4985,6 @@ type MarkedMeet<
       : OptionalCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
             TermMark<['optional', TermOf<C>]>
 
-/** The presence mark of a slot. */
 type SlotMark<S> = S extends { readonly [fillMarker]: unknown }
     ? 'fill'
     : S extends { readonly [undefinableMarker]: true }
@@ -5595,7 +5592,6 @@ type MeetWalk = {
     readonly entered: Map<Term, Map<Term, RefSlot>>
 }
 
-/** A fresh walk at a reading and an order. */
 const walkAt = (readings: MeetReadings, order: Order): MeetWalk => ({
     readings,
     order,
@@ -6862,7 +6858,6 @@ type PatternSpecs<P> = P extends unknown
         ? FieldSpecList<P>[number]
         : PatternSpecs<OptionsOfCodec<P>[number]>
     : never
-/** The options of a union codec, or `never` for any other codec. */
 type OptionsOfCodec<P> = P extends UnionCodec<
     infer _T,
     infer Os extends readonly unknown[],
@@ -7609,7 +7604,6 @@ type CrossLists<
       ]
     : []
 
-/** The term of a member spec: a closed object. */
 type SpecTerm<S> = ObjectTermOf<S, undefined>
 /** The term of the member specs of a pattern: one object, or the union of the objects. */
 type SpecsTerm<P> = true extends IsUnion<P>

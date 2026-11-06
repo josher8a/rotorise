@@ -153,7 +153,7 @@ export type Same<A, B> = [A] extends [B]
         : false
     : false
 
-// ── the segment, and the store's refusal (`Seg.member`, `apartAt`) ──
+// ── the segment, and the store's refusal (`Seg.member`, `apartG`) ──
 type SegMember<S> = S extends ['name', unknown] ? 'M' : 'L'
 type ApartAt<S, T, Env> = StoredMember<T, Env> extends 'none'
     ? false
@@ -172,7 +172,7 @@ type SlotTerm<S> = S extends [
     ? T
     : never
 
-// ── `listChild` ──
+// ── `listChildG` ──
 type At<L, I, C extends unknown[] = []> = L extends [infer H, ...infer R]
     ? C['length'] extends I
         ? Some<H>
@@ -264,7 +264,7 @@ type EveryEmpty<Os, Env, Seen extends unknown[]> = Os extends readonly []
           : false
       : false
 
-// ── `childD`, `childDL`, `childN`, `Frame.child` ──
+// ── `childG`, `joinAll`, `childN`, `GFrame.child` ──
 type ChildD<S, Env extends unknown[], T, Seen extends unknown[]> = T extends [
     'never',
 ]
@@ -319,14 +319,14 @@ type MapChild<S, Fs> = Fs extends [infer F, ...infer R]
             : None
         : None
     : Some<[]>
-// ── `pathHead`, `frameNever` ──
+// ── `pathHeadC`, `frameNeverC` ──
 type FrameNever<F> = F extends [infer T, infer Env]
     ? Norm<T, Env> extends [['never'], unknown]
         ? true
         : false
     : false
 
-/** `frameSame`: one datum at each position, as an exact type equality. */
+/** `frameSameC`: one datum at each position, as an exact type equality. */
 type FrameSame<F, G> = (<X>() => X extends F ? 1 : 2) extends <
     X,
 >() => X extends G ? 1 : 2
@@ -442,7 +442,7 @@ type AllSame<F, Fs> = Fs extends [infer G, ...infer R]
  * A node of the selector holds the frames of `Term.at` at its path, or `'refused'` where the store
  * refuses the path. The node offers a name that some head declares, an open name where a head
  * holds a rest or an opaque term, and a position where a head is a list. The decision at the node
- * is `pathKind` of its frames.
+ * is `pathKindC` of its frames.
  */
 
 /** The frames one segment down, or `'refused'`. */
@@ -452,7 +452,7 @@ export type StepFrames<S, Fs> = Fs extends unknown[]
         : 'refused'
     : 'refused'
 
-/** `pathKind` of the frames of a node. */
+/** `pathKindC` of the frames of a node. */
 export type KindOfFrames<Fs> = Fs extends [infer F, ...infer R]
     ? AnyNever<Fs> extends true
         ? AllNever<Fs> extends true

@@ -985,7 +985,7 @@ const leanPlaced = (t: Term, at: string, scope: At, placed: Placed): string => {
  *
  * `Rest.drop` vs `Rest.refuse` used to be a fourth entry here: `Def` recorded the rest *codec*
  * and nothing when the policy was a string, so this wrote `Rest.drop` for either. It was sound for
- * the vectors this module writes and only for them — `objectCodec`'s `e` is `objWrite`, which takes
+ * the vectors this module writes and only for them — `objectCodecCore`'s payload map is `objAt`, which takes
  * `rc?` and not the `kn` filter, and `rcOf` is `none` for both policies, so the two denote the
  * same `e` and differ only under `p`. A decode-direction
  * vector would have needed them apart and would have been silently wrong. The `attributes` term
@@ -1675,7 +1675,6 @@ const printers = {
     graph: { type: 'Graph', print: leanGraphOf },
 } as const
 
-/** A printer of a codec. */
 type Printer = keyof typeof printers
 
 /**
@@ -1685,7 +1684,6 @@ type Printer = keyof typeof printers
  */
 type Pin = (fn: unknown, made: string) => string
 
-/** The shapes of one module. */
 type Shapes = ReturnType<typeof leanShapes>
 
 /** The rows of one list. One list of a whole file exceeds `maxRecDepth`. */

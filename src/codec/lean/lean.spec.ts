@@ -17,7 +17,7 @@
  *   and a caller's adapter as variables of the theorem, and every other vector refuses them.
  * - `optional` and `fill` are `Field`s and `restOf` is a `Rest`. Asking for a `Term` at
  *   one of them is a stratification error, and the emitter reports it as one rather than flattening
- *   it — which is the same discipline `NotAboutAbsence` enforces in the types.
+ *   it.
  *
  * ── the sample ─────────────────────────────────────────────────────────────────────────────────
  *
@@ -421,7 +421,7 @@ describe('terms', () => {
      *
      * `Def` recorded the rest *codec*, and both `'drop'` and `'refuse'` recorded nothing — so
      * the definition alone could not tell them apart and this wrote `Rest.drop` for either. It was
-     * not wrong for the vectors this module writes: `objectCodec`'s `e` is `objWrite sems rc?`,
+     * not wrong for the vectors this module writes: `objectCodecCore`'s payload map is `objAt sems rc?`,
      * which never sees the `kn` filter the policy decides, and `rcOf` is `none` for both, so the two
      * denote the *same* `e`. It was wrong about the codec, and a decode-direction vector — whose `p`
      * is exactly where they differ — would have been silently false. `Body['rest']` now carries
@@ -1154,7 +1154,7 @@ export const sampleVectors: readonly Vector[] = [
         value: { a: { b: 'x' } },
     },
     /**
-     * **Two open objects, each with a refinement.** Both meet an object at `none`, because the model's `objObj` refuses a pair unless both open blocks are absent. The
+     * **Two open objects, each with a refinement.** Both meet an object at `none`, because the model refuses a pair unless both open blocks are absent. The
      * bridge asserts that refusal in both orders.
      */
     {

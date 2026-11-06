@@ -401,7 +401,6 @@ describe('the meet of two codecs that share no value', () => {
 })
 
 describe('the meet commutes with a path', () => {
-    /** `at` the one name of two objects reads the meet of the two slots there. */
     it('reads at a name the meet of the two slots', () => {
         let compared = 0
         for (const [x, y] of pairs(LEAVES)) {
