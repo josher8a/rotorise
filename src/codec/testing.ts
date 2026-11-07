@@ -32,12 +32,12 @@
  * ```
  *
  * The `⊑` is the whole subtlety, and it is why {@link checkStable} asks what it asks. Taken as an
- * equality the second law is *false* here and should be: `set` sorts and deduplicates, `decimal`
- * normalises, so `encode(decode({ SS: ['b', 'a'] }))` is `{ SS: ['a', 'b'] }` — the same set, not the
- * same bytes. So stability is checked *modulo* the equivalence "decodes to the same entity", which is
- * exactly a **quotient lens** — a bidirectional transformation well behaved modulo an equivalence the
+ * equality the second law is *false* here and should be: `set` sorts its members, so
+ * `encode(decode({ SS: ['b', 'a'] }))` is `{ SS: ['a', 'b'] }` — the same set, not the same bytes.
+ * So stability is checked *modulo* the equivalence "decodes to the same entity", which is exactly a
+ * **quotient lens** — a bidirectional transformation well behaved modulo an equivalence the
  * programmer controls, the equivalence being induced by a **canonizer** (Foster, Pilkiewicz and
- * Pierce, ICFP 2008). Sorting a set and normalising digits are canonizers.
+ * Pierce, ICFP 2008). Sorting a set is a canonizer.
  *
  * {@link checkIso} is the one place the second law *is* an equality, because a {@link held} adapter
  * claims a true isomorphism rather than a retraction — and it checks the direction
@@ -324,7 +324,7 @@ export const checkRoundTrip = <T>(
 /**
  * `decode ∘ encode ∘ decode = decode` — the weaker law that survives a lossy attribute.
  *
- * DynamoDB reorders the members of a set, so `decode ∘ encode = id` on an item is false for a set.
+ * DynamoDB reorders the members of a set, so `encode ∘ decode = id` on an item is false for a set.
  * What holds is that one pass through storage reaches a fixed point. The
  * `parse(print(parse(s))) = parse(s)` of tolerant parsers, and the law to assert for a table whose
  * rows predate the current codec.
@@ -868,14 +868,19 @@ export const checkEncodePaths = <T, Spec>(
  *
  * Invisible to {@link checkRoundTrip} and {@link checkStable} — both compare decoded values, which
  * an `N`-to-`S` rewrite leaves untouched.
+ *
+ * An empty list is a refusal: a check that tests nothing is no green run.
  */
 export const checkMembersStable = <T>(
-    subject: Pick<Checkable<T>, 'unsafeEncode' | 'unsafeDecode'> & {
-        rest?: AnyCodec | undefined
-    },
+    subject: Pick<Checkable<T>, 'unsafeEncode' | 'unsafeDecode'>,
     items: readonly AttributeMap[],
     equals: (a: unknown, b: unknown) => boolean = structuralEquals,
 ): void => {
+    if (items.length === 0) {
+        throw new CodecError(
+            'checkMembersStable was given no item, so the check has nothing to test; give it the items of a table',
+        )
+    }
     for (const [i, item] of items.entries()) {
         const rewritten = subject.unsafeEncode(subject.unsafeDecode(item))
         for (const [name, attribute] of Object.entries(item)) {
@@ -1274,10 +1279,11 @@ const draw = (
             return someUnknown(rng, size, 'exact')
         case 'held':
             /**
-             * Generated for the inner codec and handed out through `decode`, so what is generated is
-             * always something the pair produced — an arbitrary for the *outer* type could invent a
-             * value `encode` never makes, and the round-trip would fail on the arbitrary rather than
-             * on the codec.
+             * Without a stated `arbitrary`, generated for the inner codec and handed out through
+             * `decode`, so the pair produced what is generated — an arbitrary for the *outer* type
+             * could invent a value `encode` never makes, and the round-trip would fail on the
+             * arbitrary rather than on the codec. A stated `arbitrary` is the caller's own choice of
+             * held value, and the round trip checks that value.
              *
              * The conversion is called raw, where the codec guards it. Here the input is correct by
              * construction, so a throw is a bug in the adapter and belongs at the top of a property
@@ -1895,8 +1901,9 @@ export const checkEquivalent = <T>(
  * way back in reads a row and writes back something else, which is data loss on a read-modify-write
  * and nothing else in the harness would catch it.
  *
- * The other direction, `decode(encode(t))` for every `t`, is not reachable: there is no arbitrary for
- * the held type except `decode` itself, so every value the harness can make is already in its image.
+ * The other direction, `decode(encode(t))` for every `t`, is not reachable: without a stated
+ * `arbitrary` there is none for the held type except `decode` itself, so every value the harness can
+ * make is already in its image.
  * `checkRoundTrip` over a spec holding the adapter covers what that leaves.
  *
  * @example

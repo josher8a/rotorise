@@ -15,10 +15,12 @@
  * change of shape rather than a change of data. Pair it with `checkAgainst` from
  * `rotorise/testing` to prove each attribute as it is replaced.
  *
- * Verified against the real SDK: a law in `native.spec.ts` draws generated values under every
- * combination of the four options, and checks both directions against the SDK. On each value the two
- * write the same stored data or both refuse. Each deviation below is counted by name — **deviations,
- * in the direction of the store**.
+ * Verified against the real SDK by two laws in `native.spec.ts`. The write law draws generated
+ * values under every combination of the four options, and compares the write with `convertToAttr`.
+ * On each value the two write the same stored data or both refuse. The read law compares the read
+ * with `convertToNative` under the default options. The write law counts by name each deviation
+ * below that its pool draws, **deviations, in the direction of the store**. The pool draws no
+ * `Blob` and no key `__proto__`, and a named test pins each of the two.
  *
  * **The port writes the stored data of the SDK, and not its bytes.** The SDK writes the form that
  * the caller holds, and the store returns a normal form. The port writes the normal form, through
@@ -284,8 +286,9 @@ const setKind = (first: unknown) =>
  * **Value to value, and no attribute.** The result is a value that the canonical `opaque` writes: a
  * number is a `DynamoNumber`, a `Map` and a class instance are a plain object, a binary view is a
  * `Uint8Array`, and an empty value that `convertEmptyValues` reaches is `null`. The canonical
- * write owns the attribute and the rule of a stored set, so a set with two kinds of member, an
- * empty set and a set that repeats a member are its refusals, with its text.
+ * write owns the attribute and the rule of a stored set, so a set with two kinds of member and a set
+ * that repeats a member are its refusals, with its text. This function refuses the empty set itself,
+ * with the text of the SDK.
  */
 const toCanonical = (
     value: unknown,

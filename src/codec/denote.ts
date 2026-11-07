@@ -799,9 +799,8 @@ export const altSem = (
      * attribute.
      *
      * {@link accepts} is the decision for every option, and {@link admitOption} is that one row. The model's option row
-     * is the write domain of the meaning, and `codec.laws.spec.ts` holds
-     * `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table — so on the values in play this
-     * selects the same option `only` would have found by attempting, and says *why* rather than
+     * is the write domain of the meaning, and `accepts(c, v)` is `!failed(c.encode(v))` by definition — so
+     * this selects the same option `only` would have found by attempting, and says *why* rather than
      * discovering it. A `held` option whose adapter **throws** on a value it does not own is
      * filtered out here instead of propagating.
      *
@@ -2405,15 +2404,14 @@ export const valueKinds = (t: Term): readonly Shape[] => {
 /**
  * **Admission is "encode succeeds"**, and that is the law rather than a shortcut.
  *
- * `codec.laws.spec.ts` states `accepts(c, v) ⟺ !failed(c.encode(v))` over its whole table and pool,
- * both ways, and the reader this replaces existed only because encoding did not validate — a
- * codec's input is typed, so `string.encode(5)` once wrote `{ S: 5 }`. Every row validates now, so
+ * `accepts(c, v)` is `!failed(c.encode(v))`, with a throw read as a refusal. The reader this replaces
+ * existed only because encoding did not validate — a codec's input is typed, so `string.encode(5)`
+ * once wrote `{ S: 5 }`. Every row validates now, so
  * the description and the thing described are one question and asking it is the only honest form.
  *
  * **One cast, at the one place it belongs.** A codec's `encode` is typed to its own held set and
  * this takes an `unknown`, which is precisely a value arriving from outside that type — the
- * question being whether it belongs. Four callers share this cast rather than writing it four
- * times.
+ * question being whether it belongs. Each caller shares this cast rather than writing it again.
  *
  * Asking terminates: an option's `encode` is one level below the union's. The direction that would
  * not is an `encode` that consults admission, which is why `opaque` and `custom` always asked their

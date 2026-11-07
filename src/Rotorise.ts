@@ -15,7 +15,6 @@ import type {
     EncodedVariants,
     IsUnion,
     ItemCodec,
-    ItemSpec,
     itemMark,
     KeyText,
     KnownKeys,
@@ -3174,10 +3173,7 @@ export const tableEntry =
     >() =>
     <
         const Schema extends Record<string, FullKeySpec<KeyedBy>>,
-        const CodecSpec extends
-            | ItemSpec<Entity>
-            | Record<string, unknown>
-            | undefined = undefined,
+        const CodecSpec extends Record<string, unknown> | undefined = undefined,
         const CodecRest = undefined,
         Separator extends string = '#',
         const Roles extends
@@ -3503,7 +3499,6 @@ export const tableEntry =
          * refuses.
          */
         const storedAt = (slot: ObjectSlot): Set<AttributeName> => {
-            const def = (slot as { readonly def: Term | Field }).def
             const walk = (t: Term): Set<AttributeName> => {
                 if (t.kind === 'union')
                     return new Set(t.options.flatMap((o) => [...walk(o)]))
@@ -3516,31 +3511,22 @@ export const tableEntry =
                 const stored = member(t)
                 return new Set(stored === undefined ? [] : [stored])
             }
-            const found = walk('mark' in def ? def.t : def)
+            const found = walk(termOfSlot(slot))
             found.delete('NULL')
             return found
         }
 
         /**
          * The slots that the codec declares at a top-level field: one for each variant that has it.
-         * An item that names its variant by the discriminator reads that variant alone.
          */
-        const slotsAt = (
-            field: string,
-            item?: Record<string, unknown>,
-        ): ObjectSlot[] => {
+        const slotsAt = (field: string): ObjectSlot[] => {
             if (attributes === undefined) return []
             if (!isTagged(attributes)) {
                 const slot = own(attributes.spec, field)
                 return slot === undefined ? [] : [slot]
             }
-            const named = item?.[attributes.discriminator]
-            const variants =
-                named === undefined
-                    ? Object.values(attributes.spec)
-                    : [own(attributes.spec, String(named))]
-            return variants
-                .map((variant) => variant && own(variant, field))
+            return Object.values(attributes.spec)
+                .map((variant) => own(variant, field))
                 .filter((slot) => slot !== undefined)
         }
 
@@ -3558,7 +3544,7 @@ export const tableEntry =
                 new RotoriseError(
                     `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
                 )
-            let found: ObjectSlot
+            let found: AnyCodec
             try {
                 found = at(attributes as never, path as never) as never
             } catch (error) {
@@ -3570,17 +3556,8 @@ export const tableEntry =
             // `narrow` answers (a path that variants declare differently, or only some of them) stay
             // refusals on use
             const address =
-                (
-                    found as unknown as {
-                        readonly def: Term
-                        readonly encode: (value: unknown) => unknown
-                    }
-                ).def.kind === 'never'
-                    ? (
-                          found as unknown as {
-                              encode: (v: unknown) => unknown
-                          }
-                      ).encode(undefined)
+                termOfSlot(found).kind === 'never'
+                    ? found.encode(undefined as never)
                     : undefined
             if (address instanceof CodecError && address.kind === 'refused')
                 throw refused(address)
@@ -3638,7 +3615,7 @@ export const tableEntry =
                     return rest === undefined ? [] : [rest]
                 })
             }
-            const declared = slotsAt(field, item)
+            const declared = slotsAt(field)
             if (declared.length > 0) return declared
             // the erased item codec types its rest as `undefined`, and the run time holds a codec there
             const rest = (

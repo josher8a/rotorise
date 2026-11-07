@@ -282,10 +282,11 @@ describe('a key follows its attribute in every path that writes a row', () => {
 /**
  * **Every route writes one key for each key name**, over generated entities. A key has four routes,
  * the key builder of `keys`, the update of `keyUpdates`, the entry of `toEntry` and the write of the
- * item, and each must give the key that the codec gives for the attribute. The entities are drawn from the codec of each entry. A draw that
- * both routes refuse is counted and pinned, not skipped: a string that holds the separator cannot be
- * a part of a composite key, and `keys` and `toItem` say so alike. A draw that one route writes and
- * the other refuses is a failure, as is a draw that the two write as two keys.
+ * item, and each must give the key that the codec gives for the attribute. The entities are drawn
+ * from the codec of each entry. A draw that both routes refuse is counted and pinned, not skipped: a
+ * string that holds the separator cannot be a part of a composite key, and `keys` and `toItem` give
+ * one reason. A draw that one route writes and the other refuses is a failure, as is a draw that
+ * the two write as two keys.
  */
 describe('keys and toItem write one key for each key name, over generated entities', () => {
     const dateSchema: StandardSchemaV1<Date> = {
@@ -340,6 +341,11 @@ describe('keys and toItem write one key for each key name, over generated entiti
     const isoAt = held(string, dateSchema, {
         encode: (day: Date) => day.toISOString(),
         decode: (text: string) => new Date(text),
+        arbitrary: (rng) => new Date(Math.floor(rng() * 4e12)),
+    })
+    const epochAt = held(string, dateSchema, {
+        encode: (day: Date) => String(day.getTime()),
+        decode: (text: string) => new Date(Number(text)),
         arbitrary: (rng) => new Date(Math.floor(rng() * 4e12)),
     })
     type Visit =
@@ -492,7 +498,11 @@ describe('keys and toItem write one key for each key name, over generated entiti
                     itemSaid = (error as Error).message
                 }
                 if (keyed === undefined && item === undefined) {
-                    count.bothRefuse++
+                    if (keysSaid === itemSaid) count.bothRefuse++
+                    else
+                        failures.push(
+                            `${label} ${at}: keys says ${keysSaid}, toItem says ${itemSaid}`,
+                        )
                 } else if (keyed === undefined || item === undefined) {
                     failures.push(
                         `${label} ${at}: keys ${keysSaid ?? 'writes'}, toItem ${itemSaid ?? 'writes'}`,
@@ -537,10 +547,33 @@ describe('keys and toItem write one key for each key name, over generated entiti
                 }
             }
             expect(failures).toEqual([])
-            expect(count.agree).toBeGreaterThan(50)
             expect(count).toEqual(pinned[label])
         })
     }
+
+    it('refuses at construction a key that two variants write with two codecs, as the key of each route', () => {
+        expect(() =>
+            tableEntry<Visit>()(
+                { PK: ['petId'], GSI1SK: 'at' },
+                {
+                    codec: item(
+                        discriminatedUnion('kind', [
+                            object({
+                                kind: string('DOG'),
+                                petId: string,
+                                at: isoAt,
+                            }),
+                            object({
+                                kind: string('CAT'),
+                                petId: string,
+                                at: epochAt,
+                            }),
+                        ]),
+                    ),
+                },
+            ),
+        ).toThrow(/which two variants write with two codecs/)
+    })
 })
 
 describe('two variants that write a key attribute with two codecs are refused, at a name and at a component', () => {
@@ -598,6 +631,65 @@ describe('two variants that write a key attribute with two codecs are refused, a
         expect(() =>
             build({ PK: ['petId'], GSI1SK: ['at'] } as never, iso, iso),
         ).not.toThrow()
+    })
+})
+
+/**
+ * **A variant that does not declare a key attribute has no codec for it.** The type refuses a key
+ * that names an attribute which a variant lacks, so the check at run time reads the entity that
+ * the type forbids. A value at that attribute is read with no codec, and the codec of another
+ * variant never reads it. `keys` and `toItem` both refuse it.
+ */
+describe('a key attribute that the variant of the entity lacks is read with no codec of another variant', () => {
+    const dateSchema: StandardSchemaV1<Date> = {
+        '~standard': {
+            version: 1,
+            vendor: 'handwritten',
+            validate: (value) =>
+                value instanceof Date
+                    ? { value }
+                    : { issues: [{ message: 'not a Date' }] },
+        },
+    }
+    const isoAt = held(string, dateSchema, {
+        encode: (day: Date) => day.toISOString(),
+        decode: (text: string) => new Date(text),
+    })
+    const Absent = tableEntry<
+        | { kind: 'DOG'; petId: string; at: Date }
+        | { kind: 'CAT'; petId: string }
+    >()(
+        // @ts-expect-error the type refuses a key that names an attribute which a variant lacks
+        { PK: ['petId'], GSI1SK: 'at' },
+        {
+            codec: item(
+                discriminatedUnion('kind', [
+                    object({
+                        kind: string('DOG'),
+                        petId: string,
+                        at: isoAt,
+                    }),
+                    object({ kind: string('CAT'), petId: string }),
+                ]),
+            ),
+        },
+    )
+    const stray = { kind: 'CAT', petId: 'p1', at: new Date(0) } as never
+
+    it('refuses the key of a CAT that carries a Date, where DOG would write the text of the Date', () => {
+        expect(
+            Absent.keys(['GSI1SK'], { kind: 'DOG', at: new Date(0) } as never),
+        ).toEqual({
+            GSI1SK: { S: '1970-01-01T00:00:00.000Z' },
+        })
+        expect(() => Absent.keys(['GSI1SK'], stray)).toThrow(
+            /built from a value that DynamoDB cannot store as a key/,
+        )
+    })
+
+    it('refuses the item of a CAT that carries the attribute that no codec declares', () => {
+        const written = Absent.toItem(stray)
+        expect(written).toBeInstanceOf(Error)
     })
 })
 
@@ -692,7 +784,6 @@ describe('a key component is the stored text of its attribute, over generated en
                     )
             }
             expect(failures).toEqual([])
-            expect(count.agree).toBeGreaterThan(50)
             expect(count).toEqual(pinned[label])
         })
     }

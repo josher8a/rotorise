@@ -631,7 +631,8 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  *
- * **A segment has four answers.** The model's `childG` has the first three. The codecs at the segment. No
+ * **A segment has four answers.** The model's `childG` has the same four, and its `none` is the
+ * refusal. The codecs at the segment. No
  * codec, where the term stores a member that is not the container of the segment: the store
  * refuses the segment on every attribute of the term, so the term leaves the frontier.
  * {@link absent}, where the container admits no value at the segment: a closed object that lacks
@@ -714,8 +715,8 @@ const childrenOf = (
         case 'opaq':
             return [codec]
         // a primitive, a literal and a set each store a member that no segment enters. A set is
-        // unordered, so no document path addresses a member of one, and the empty frontier keeps a
-        // meaningless path from compiling
+        // unordered, so no document path addresses a member of one. A walk whose frontier admits no
+        // codec, as an empty frontier does, throws 'no attribute is declared' with kind `vacant`
         default:
             return []
     }
@@ -2280,14 +2281,15 @@ type WallOver<W extends string, C> = [CycleEntryOf<TermOf<C>>] extends [never]
  *
  * The pair must round-trip — `decode(encode(x))` equal to `x`, and `encode(decode(y))` equal to `y` —
  * or the codec's own law does not hold either. `checkRoundTrip` over a spec holding one is what
- * establishes it, and generation reaches through: values are generated for the inner codec and
- * handed out through `decode`, so what is generated is always something the pair produced.
+ * establishes it, and generation reaches through: without a stated `arbitrary`, values are generated
+ * for the inner codec and handed out through `decode`, so the pair produced what is generated. A
+ * stated `arbitrary` generates the held value itself, so the round trip checks that value.
  *
  * **Nothing here checks it, and nothing here can.** The model carries it as `IsoCancels` — a
  * premise, in both directions: `g(f v) = v` wherever `f v` lands writable, and `f(g v) = v` on the
  * writable values themselves. It is a premise there for the same reason it is unchecked here. One
- * direction quantifies over the *held* type, which has no arbitrary except `decode` itself, so
- * every value this library could make is already in the pair's image; and probing the other at
+ * direction quantifies over the *held* type. Without a stated `arbitrary` that type has none except
+ * `decode` itself, so every value this library could make is already in the pair's image; and probing the other at
  * construction is worse than not probing it, because a legitimate adapter is an isomorphism on the
  * values its inner codec describes and *throws* off them.
  *
@@ -4008,9 +4010,10 @@ export type KnownKeys<T> = keyof {
 /**
  * The codecs an item needs: one per attribute, optional exactly where the entity is.
  *
- * `tableEntry` checks the short form of its `codec` option against the entity. Each attribute that
- * the entity states has a field. The spec names no other attribute. Each field decodes to a type
- * that the entity admits.
+ * Each attribute that the entity states has a field, and the spec names no other attribute. A field
+ * is an {@link OptionalCodec} where the entity admits `undefined` at the attribute. Elsewhere the
+ * field is a {@link Nestable} codec of the type of the attribute. A plain codec at an optional
+ * attribute is a type error of this type, and `tableEntry` accepts that record.
  */
 export type ItemSpec<T> = T extends unknown
     ? {

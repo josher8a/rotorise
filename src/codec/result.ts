@@ -8,6 +8,13 @@
 
 type CodecErrorKind = 'refused' | 'vacant' | 'someVariants' | 'ambiguous'
 
+/** The stack of an error with the header of a copy: the header of the original names the reason alone. */
+const headed = (stack: string | undefined, copy: Error): string | undefined => {
+    if (stack === undefined) return undefined
+    const frames = stack.indexOf('\n    at ')
+    return `${copy.name}: ${copy.message}${frames < 0 ? '' : stack.slice(frames)}`
+}
+
 /**
  * Encoding for DynamoDB is not a bijection, and no library can make it one.
  *
@@ -59,13 +66,14 @@ export class CodecError extends Error {
      * path goes on a copy and the error that the caller returned never changes. The copy calls no
      * constructor, because a constructor captures a new stack at each level of a refusal. The copy
      * reads the stack of the original on demand, because a read of `stack` formats the stack, and
-     * a refusal that unwinds through many levels would format it at each level.
+     * a refusal that unwinds through many levels would format it at each level. The header of the
+     * stack is the name and the message of the copy, so a printed stack names the path.
      */
     under(segment: string | number): this {
         const path = [segment, ...this.path]
         const deeper: this = Object.create(Object.getPrototypeOf(this))
         Object.defineProperty(deeper, 'stack', {
-            get: () => this.stack,
+            get: () => headed(this.stack, deeper),
             configurable: true,
         })
         // the own fields of a subclass, such as the term of a refused recursion, stay on the copy

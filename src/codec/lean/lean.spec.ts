@@ -1378,7 +1378,7 @@ const emittable = (one: Vector): boolean => statesTerm(one.codec, one.name)
 /**
  * The **read** vectors the committed sample carries: the same "one per kind" rule the refusals use.
  *
- * `.readvectors.lean` holds all 27 and the gate elaborates every one. A sample is for reading, so
+ * `.readvectors.lean` holds each emittable vector and the gate elaborates every one. A sample is for reading, so
  * it takes the ground scalars, one container, one object and one union — enough that a reader sees
  * what the shape of a read vector is without scrolling through the corpus.
  */

@@ -16,10 +16,12 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
+    held,
     item,
     object,
     string,
 } from '../../codec'
+import type { StandardSchemaV1 } from '../../standard'
 
 /** What a consumer writes: the narrowing of a result. */
 const isError = (value: unknown): value is Error => value instanceof Error
@@ -151,23 +153,45 @@ describe('the codec decides the member of a key of one top-level attribute', () 
             })
         })
 
+        // two codecs that write the same member, so the type admits the key and construction refuses it
+        const dateSchema: StandardSchemaV1<Date> = {
+            '~standard': {
+                version: 1,
+                vendor: 'handwritten',
+                validate: (value) =>
+                    value instanceof Date
+                        ? { value }
+                        : { issues: [{ message: 'not a Date' }] },
+            },
+        }
+        const iso = held(string, dateSchema, {
+            encode: (day: Date) => day.toISOString(),
+            decode: (text: string) => new Date(text),
+        })
+        const epoch = held(string, dateSchema, {
+            encode: (day: Date) => String(day.getTime()),
+            decode: (text: string) => new Date(Number(text)),
+        })
+
         it('refuses at construction a key that the variants write with two codecs', () => {
             const split = () =>
-                tableEntry<Tagged>()(
-                    // @ts-expect-error the type refuses a key that two variants write as S and N
-                    { PK: ['litterId'], GSI1SK: 'weight' },
+                tableEntry<
+                    | { kind: 'DOG'; litterId: string; weaned: Date }
+                    | { kind: 'CAT'; litterId: string; weaned: Date }
+                >()(
+                    { PK: ['litterId'], GSI1SK: 'weaned' },
                     {
                         codec: item(
                             discriminatedUnion('kind', [
                                 object({
                                     kind: string('DOG'),
                                     litterId: string,
-                                    weight: decimal,
+                                    weaned: iso,
                                 }),
                                 object({
                                     kind: string('CAT'),
                                     litterId: string,
-                                    weight: string,
+                                    weaned: epoch,
                                 }),
                             ]),
                         ),

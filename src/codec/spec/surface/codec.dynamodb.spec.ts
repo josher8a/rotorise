@@ -2,9 +2,9 @@
  * The round-trip law against DynamoDB itself, rather than against a belief about it.
  *
  * Every other spec asserts `decode(encode(x)) = x` in memory. That is a claim about the codec, not
- * about storage — and storage is where the interesting losses happen. `codec.listing.spec.ts` fakes
- * the storage leg by hand-writing `{ N: '1.5' }` for an item encoded as `{ N: '1.50' }`, which
- * encodes *my belief* about normalisation into the fixture. This tier removes the belief:
+ * about storage — and storage is where the interesting losses happen. A fixture that writes the
+ * storage leg by hand encodes a belief about normalisation into the fixture. This tier removes the
+ * belief:
  *
  * ```
  * decode(getItem(putItem(encode(x)))) = x

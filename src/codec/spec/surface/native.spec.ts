@@ -12,9 +12,10 @@
  * verified against so a package manager can say when yours is far from it.
  *
  * Two kinds of agreement are checked, and the second is the one a port usually gets wrong:
- * the *values* both produce, and the *types* both name. Then the one **disagreement**, which is
+ * the *values* both produce, and the *types* both name. Then the **disagreements**, which are
  * where the port stops being faithful on purpose: the SDK does not check that an `N` carries a
- * numeral, in either direction, and this does.
+ * numeral, in either direction, and this does. The port also refuses a set that the SDK writes
+ * with a loose rule.
  */
 
 import { File } from 'node:buffer'
@@ -945,10 +946,12 @@ describe('a set takes the writer of its first member, as the SDK does', () => {
  * The rows are compared after the normalisations that the port states: a set is sorted, a typed
  * array is its bytes, and a numeral is its normal digits. A value that the port writes and the SDK
  * refuses, a row that differs, and a refusal of both with a text that no exception names, are
- * failures. Four exceptions are stated by name, and each is counted:
+ * failures. Five exceptions are stated by name, and each is counted:
  *
- * - **set family**: the port refuses a set of two families or of a kind that no stored set holds,
- *   where the SDK writes the members as the first member does (the doc of `native`).
+ * - **set family**: the port refuses a set of two families, where the SDK writes the members as
+ *   the first member does (the doc of `native`).
+ * - **repeated member**: the port refuses a set that repeats a member, where the SDK writes the
+ *   set (the doc of `native`).
  * - **numeral gate**: the port refuses a number that DynamoDB refuses (`5e-324`, `1e300` with
  *   `allowImpreciseNumbers`), where the SDK writes it (the doc of `nativeNumber`).
  * - **set of booleans text**: both refuse a set of a kind that no stored set holds, with the text
@@ -1246,7 +1249,6 @@ describe('the port writes what the SDK writes, or both refuse', () => {
         expect(failures).toEqual([])
         const decided = Object.values(count).reduce((sum, n) => sum + n, 0)
         expect(decided).toBe(8000)
-        expect(count.agree).toBeGreaterThan(decided / 2)
         expect(count).toEqual({
             agree: 5416,
             bothRefuseSameText: 1638,

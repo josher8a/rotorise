@@ -31,11 +31,9 @@ const Pets = item(PetUnion)
 
 describe('a tag under a caller adapter', () => {
     it('keys the variant by the stored literal in the type', () => {
-        const stored: (typeof Pets.spec)['D'] = Pets.spec.D
+        void Pets.spec.D
         // @ts-expect-error the caller's value is no key of the spec
-        const named: (typeof Pets.spec)['dog'] = undefined as never
-        expect(stored).toBeDefined()
-        expect(named).toBeUndefined()
+        void Pets.spec.dog
         expect(Object.keys(Pets.spec).sort()).toEqual(['D', 'cat'])
     })
 

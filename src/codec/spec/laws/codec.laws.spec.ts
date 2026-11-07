@@ -45,6 +45,7 @@ import {
     checkDecodesAreWritable,
     checkEquivalent,
     checkIso,
+    checkMembersStable,
     checkStable,
     rngFrom,
 } from '../../testing'
@@ -926,6 +927,12 @@ describe('(C): what a codec reads, it can write', () => {
         expect(() => checkStable(Refusing, items)).toThrow(CodecError)
     })
 
+    it('is no green run over no item, for the member check as for the stability check', () => {
+        expect(() => checkMembersStable(Pet, [])).toThrow(
+            /checkMembersStable was given no item/,
+        )
+    })
+
     /**
      * And over a row where **(Q) and (R) actually part company**, which is the only kind that says
      * anything the round-trip tests do not. A set is stored unordered, so `encode ∘ decode` is free
@@ -960,7 +967,7 @@ describe('(C): what a codec reads, it can write', () => {
      * codec refusing the empty set while its read returned one, and one writing only normalised
      * numerals while its read took any. Neither is expressible now. `held` inherits the carrier
      * underneath, and every carrier has closed the hole the defect needed — `string.set()` and
-     * `opaque` both refuse an empty `SS`, and `decimal` normalises `1.50` to `1.5` on the way in,
+     * `opaque` both refuse an empty `SS`, and `decimal` refuses `1.50`,
      * so the mutation never reaches the adapter. `custom` was the only definition that took a
      * pair from outside, which is what made an outside defect writable at all.
      *

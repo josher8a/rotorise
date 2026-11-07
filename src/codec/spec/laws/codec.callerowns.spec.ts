@@ -58,6 +58,20 @@ describe('a refusal that an adapter returns', () => {
         expect(notTitled.path).toEqual([])
         expect(failed(first) && typeof first.stack).toBe('string')
     })
+    it('prints the path in the first line of the stack, and the error of the caller keeps its own line', () => {
+        const notTitled = new CodecError('the name is not in title case')
+        const Name = held(string, string, {
+            encode: (text) => text,
+            decode: (text) => (text === text.toLowerCase() ? notTitled : text),
+        })
+        const read = item(object({ name: Name })).decode({ name: { S: 'rex' } })
+        expect(failed(read) && read.stack?.split('\n')[0]).toBe(
+            'CodecError: at name: the name is not in title case',
+        )
+        expect(notTitled.stack?.split('\n')[0]).toBe(
+            'CodecError: the name is not in title case',
+        )
+    })
 })
 
 describe('a refusal at a deeper level', () => {

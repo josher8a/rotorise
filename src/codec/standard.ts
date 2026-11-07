@@ -49,8 +49,3 @@ export type StandardTypes<Input, Output> = {
 export type StandardInput<S extends StandardSchemaV1> = NonNullable<
     S['~standard']['types']
 >['input']
-
-/** The output type of a schema. */
-export type StandardOutput<S extends StandardSchemaV1> = NonNullable<
-    S['~standard']['types']
->['output']
