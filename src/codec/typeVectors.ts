@@ -22,6 +22,12 @@
  * pairs in the order of the hash. A slice root also takes each literal that its options hold, a union
  * pattern that covers or part-covers a name, and a union pattern at two names.
  *
+ * A path row where the run time resolves has a `decoded` row. The row checks that a value which the
+ * run-time codec at the path decodes is assignable to the decoded type of the call. The `encoded`
+ * rows check only the names of the attributes that the codec writes. The value is one draw of the
+ * codec, printed as a literal. A codec that draws no value gives no row: the path row stays, and the
+ * pool spec pins the count of each. A value that has no literal throws {@link TypeUnemittable}.
+ *
  * ── the row id ────────────────────────────────────────────────────────────────────────────────
  *
  * A row id is the group, the verdict that the run time expects, a hash of the Lean print of the
@@ -944,6 +950,16 @@ const sliceRoot = (
     return { root, declarations: p.declarations, checks: b }
 }
 
+/** One draw of the codec as a literal, or nothing where the codec draws no value. */
+const decodedSample = (codec: AnyCodec, root: string): string | undefined => {
+    try {
+        return valueText(arbitraryOf(codec, rngFrom(1), 2), `${root} decoded`)
+    } catch (error) {
+        if (error instanceof CodecError) return undefined
+        throw error
+    }
+}
+
 /** One path root: the codec, the item that holds it at `r`, and each path. */
 const pathRoot = (
     vectors: PathVectors,
@@ -986,6 +1002,22 @@ const pathRoot = (
         const id = rowId('path', expect, root, text)
         assert(b, { id, expect }, call)
         if (host.kind !== 'resolved') continue
+        const sample = decodedSample(host.codec, root)
+        if (sample !== undefined)
+            assert(
+                b,
+                {
+                    id: rowId(
+                        'decoded',
+                        'accept',
+                        root,
+                        `${text} ${hash(sample)}`,
+                    ),
+                    expect: 'accept',
+                    after: id,
+                },
+                `{ const c = ${call}; const d: Decoded<typeof c> = ${sample}; void d }`,
+            )
         // the type of `encode` at the path admits the key of each attribute that the run time writes
         for (const key of writtenKeys(host.codec))
             assert(

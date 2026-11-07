@@ -2175,6 +2175,16 @@ describe('the generated pool, against the model', () => {
             for (const [file, text] of files)
                 writeFileSync(join(types, file), text)
         }
+        // a resolved path row has a `decoded` row, but where the codec draws no value
+        const rows: readonly { readonly id: string }[] = JSON.parse(
+            files.find(([file]) => file === 'rows.json')?.[1] ?? '[]',
+        )
+        const rowsOf = (group: string) =>
+            rows.filter((row) => row.id.startsWith(`${group}|accept|`)).length
+        expect({
+            resolvedPathRows: rowsOf('path'),
+            decodedRows: rowsOf('decoded'),
+        }).toEqual({ resolvedPathRows: 7359, decodedRows: 7210 })
         expect(files.map(([file]) => file)).toEqual([
             'codecs.ts',
             'slices0.ts',
