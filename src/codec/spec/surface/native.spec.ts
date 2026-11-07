@@ -17,9 +17,10 @@
  * numeral, in either direction, and this does.
  */
 
+import { File } from 'node:buffer'
 import type { marshallOptions } from '@aws-sdk/util-dynamodb'
 import * as sdk from '@aws-sdk/util-dynamodb'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import type {
     AttributeMap,
     B,
@@ -678,6 +679,62 @@ describe('what native refuses and reads back', () => {
     })
 })
 
+describe('a Blob and a File', () => {
+    /**
+     * The SDK lists both as binary and writes a `B` that holds the object. A synchronous write
+     * cannot read their bytes, so the port refuses, and the type has no attribute for them.
+     */
+    it('are refused by name, where the SDK writes a B that holds the object', () => {
+        expect(sdk.convertToAttr(new Blob(['a']))).toEqual({
+            B: expect.any(Blob),
+        })
+        for (const bytes of [new Blob(['a']), new File(['a'], 'a.txt')]) {
+            const refused = native.encode(bytes)
+            expect(refused).toBeInstanceOf(CodecError)
+            expect((refused as CodecError).reason).toMatch(/behind a promise/)
+        }
+    })
+
+    it('have no attribute in the type', () => {
+        expectTypeOf<native.Encode<Blob>>().toBeNever()
+        expectTypeOf<native.Encode<File>>().toBeNever()
+        expectTypeOf<native.Encode<Uint8Array>>().toEqualTypeOf<B>()
+    })
+
+    it('are not the name of a value that only claims a binary constructor', () => {
+        const claimed = { constructor: { name: 'Uint8Array' } }
+        const refused = native.encode(claimed)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).not.toMatch(/promise/)
+        expect((refused as CodecError).reason).toMatch(/is no binary value/)
+    })
+})
+
+describe('an attribute named __proto__', () => {
+    /**
+     * DynamoDB stores the name. The SDK assigns each key into a plain object, so its write drops
+     * the attribute and its read sets a prototype from the stored data. The port keeps the
+     * attribute on both halves.
+     */
+    it('is written, where the SDK drops it with no refusal', () => {
+        const pet = JSON.parse('{"petId":"p1","__proto__":{"name":"Rex"}}')
+        expect(sdk.convertToAttr(pet)).toEqual({ M: { petId: { S: 'p1' } } })
+        const written = native.encode(pet) as { M: Record<string, unknown> }
+        expect(Object.keys(written.M).sort()).toEqual(['__proto__', 'petId'])
+        expect(Object.hasOwn(written.M, '__proto__')).toBe(true)
+    })
+
+    it('is read as an attribute, and writes back as it was stored', () => {
+        const stored = JSON.parse(
+            '{"M":{"__proto__":{"M":{"isAdmin":{"BOOL":true}}}}}',
+        )
+        const read = native.decode(stored) as Record<string, unknown>
+        expect(Object.keys(read)).toEqual(['__proto__'])
+        expect(read.isAdmin).toBeUndefined()
+        expect(native.encode(read)).toEqual(stored)
+    })
+})
+
 describe('a Set that repeats a stored member', () => {
     /**
      * Two objects with one numeral are two members of a Set. The SDK writes both, and DynamoDB
@@ -894,7 +951,49 @@ describe('the port writes what the SDK writes, or both refuse', () => {
         () => new Set([number_('1.5'), number_('2')]),
         () => new Set([true]),
         () => new Set(['a', new Uint8Array([1])]),
+        () => new Set([number_('1'), 2 ** 60]),
+        () => new Set([1, number_('12345678901234567890')]),
+        () => new Set([number_('1'), Number.NaN]),
+        () => new Set([number_('1'), 'a']),
+        () => new Set([1, new Number(2)]),
+        () => new Set([new Number(1), 2]),
+        () => new Set([1n, new Number(2)]),
+        () => new Set(['a', new String('b')]),
+        () => new Set([new String('a'), 'b']),
+        () => new Set([1, 1n]),
+        () => new Set([new Uint8Array([1]), new Uint8Array([1])]),
     ]
+    /** The family of a member of a set, as the SDK writes it. */
+    const familyOf = (member: unknown): string => {
+        const named = (member as { constructor?: { name?: string } })
+            ?.constructor?.name
+        if (
+            member instanceof DynamoNumber ||
+            typeof member === 'number' ||
+            typeof member === 'bigint' ||
+            named === 'Number'
+        )
+            return 'N'
+        if (typeof member === 'string' || named === 'String') return 'S'
+        if (ArrayBuffer.isView(member) || member instanceof ArrayBuffer)
+            return 'B'
+        return 'other'
+    }
+    /** Whether a set at any depth of a value holds members of two families. */
+    const hasMixedSet = (value: unknown): boolean => {
+        if (value instanceof Set) {
+            return (
+                new Set([...value].map(familyOf)).size > 1 ||
+                [...value].some(hasMixedSet)
+            )
+        }
+        if (Array.isArray(value)) return value.some(hasMixedSet)
+        if (value instanceof Map) return [...value.values()].some(hasMixedSet)
+        if (typeof value === 'object' && value !== null) {
+            return Object.values(value).some(hasMixedSet)
+        }
+        return false
+    }
     type Rng = ReturnType<typeof rngFrom>
     const pick = <T>(rng: Rng, from: readonly T[]): T =>
         from[Math.floor(rng() * from.length)] as T
@@ -1008,6 +1107,7 @@ describe('the port writes what the SDK writes, or both refuse', () => {
             agree: 0,
             bothRefuseSameText: 0,
             setFamily: 0,
+            repeatedMember: 0,
             numeralGate: 0,
             setOfBooleansText: 0,
             firstFault: 0,
@@ -1046,8 +1146,13 @@ describe('the port writes what the SDK writes, or both refuse', () => {
                         )
                     }
                 } else if (refused) {
-                    if (ours.reason.startsWith('a set writes'))
+                    if (
+                        ours.reason.startsWith('a set writes') &&
+                        hasMixedSet(value)
+                    )
                         count.setFamily++
+                    else if (/ two times, as two /.test(ours.reason))
+                        count.repeatedMember++
                     else if (
                         /is not a number DynamoDB stores/.test(ours.reason)
                     ) {
@@ -1073,12 +1178,13 @@ describe('the port writes what the SDK writes, or both refuse', () => {
         expect(decided).toBe(8000)
         expect(count.agree).toBeGreaterThan(decided / 2)
         expect(count).toEqual({
-            agree: 5533,
-            bothRefuseSameText: 1730,
-            setFamily: 315,
-            numeralGate: 289,
-            setOfBooleansText: 102,
-            firstFault: 31,
+            agree: 5416,
+            bothRefuseSameText: 1638,
+            setFamily: 239,
+            repeatedMember: 121,
+            numeralGate: 358,
+            setOfBooleansText: 194,
+            firstFault: 34,
         })
     })
 })

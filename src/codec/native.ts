@@ -15,9 +15,10 @@
  * change of shape rather than a change of data. Pair it with `checkAgainst` from
  * `rotorise/testing` to prove each attribute as it is replaced.
  *
- * Verified against the real SDK: twenty values and three option sets, both directions, agreeing on
- * every one including the cases where the SDK throws — with **deviations, in the direction of the
- * store**.
+ * Verified against the real SDK: a law in `native.spec.ts` draws generated values under every
+ * combination of the four options, and checks both directions against the SDK. On each value the two
+ * write the same stored data or both refuse. Each deviation below is counted by name — **deviations,
+ * in the direction of the store**.
  *
  * **The port writes the stored data of the SDK, and not its bytes.** The SDK writes the form that
  * the caller holds, and the store returns a normal form. The port writes the normal form, through
@@ -35,6 +36,14 @@
  * strings), where the SDK hands back an empty `Set` or writes the set. A set of numbers and bigints
  * follows the SDK: the first member picks the writer, so `Set([1n, 2 ** 60])` writes `NS` and
  * `Set([1, 2n ** 60n])` is refused as a number outside the safe range.
+ *
+ * **A `Blob` and a `File` are refused.** The SDK lists both as binary and writes a `B` that holds the
+ * object. A synchronous write cannot read their bytes, which sit behind a promise, so the port
+ * refuses, and `native.Encode<Blob>` is `never`.
+ *
+ * **A key named `__proto__` is an attribute.** DynamoDB stores the name. The SDK assigns the key
+ * into a plain object, which sets a prototype, so its write drops the attribute with no refusal and
+ * its read takes a prototype from the stored data. The port writes and reads the attribute.
  */
 
 import type { ErrorMessage, show } from '../utils'
@@ -102,7 +111,7 @@ const isBinaryValue = (value: unknown): boolean =>
  * the test and prints its digits.
  */
 const outsideSafeRange = (
-    shown: number | bigint,
+    shown: number | bigint | string,
     asNumber: number,
     options: native.Options,
 ): CodecError | undefined => {
@@ -166,8 +175,17 @@ const bytesOf = (value: unknown): Result<Uint8Array> => {
         return new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
     }
     if (value instanceof ArrayBuffer) return new Uint8Array(value)
+    // a `Blob` and a `File` read their bytes by a promise. Any other value that reaches here only
+    // names a binary constructor
+    if (
+        typeof (value as { arrayBuffer?: unknown })?.arrayBuffer === 'function'
+    ) {
+        return new CodecError(
+            `${rendered(value)} holds its bytes behind a promise, so a synchronous write cannot read them`,
+        )
+    }
     return new CodecError(
-        `${rendered(value)} holds its bytes behind a promise, so a synchronous write cannot read them`,
+        `${rendered(value)} is no binary value: its constructor is named '${(value as { constructor: { name: string } }).constructor.name}', and a write reads the bytes of a view or an ArrayBuffer`,
     )
 }
 
@@ -198,25 +216,66 @@ const enumerable = (
 }
 
 /**
- * A number or a bigint in a set, as the writer of the first member writes it. The SDK writes a set of
- * numbers with `convertToNumberAttr` on each member, which refuses a bigint outside the safe range,
- * and a set of bigints with `convertToBigIntAttr`, which writes the digits of each member.
+ * A member of a set, as the SDK writes it after it has picked the writer from the first member.
+ * `kind` is that writer: a `DynamoNumber` first writes the text of each member, a number first reads
+ * the range of each member, a bigint first writes the digits of each member, and a string first
+ * writes the text of each member. A boxed `Number` or `String` is its primitive, and a member of
+ * another family is left to the canonical write, which refuses a set of two families.
  */
-const setNumber = (
-    member: number | bigint,
-    firstType: string,
+const setMember = (
+    member: unknown,
+    kind: 'numberValue' | 'number' | 'bigint' | 'string' | 'binary' | 'other',
     write: (value: number | bigint) => Result<DynamoNumber>,
     options: native.Options,
-): Result<DynamoNumber> => {
-    if (firstType === 'number' && typeof member === 'bigint') {
+): Result<unknown> => {
+    const named = (member as { constructor?: { name?: string } })?.constructor
+        ?.name
+    const primitive =
+        named === 'Number' || named === 'String'
+            ? (member as number | string).valueOf()
+            : member
+    if (kind === 'binary')
+        return isBinaryValue(member) ? bytesOf(member) : member
+    if (kind === 'string')
+        return typeof primitive === 'string' ? primitive : member
+    if (kind === 'other') return member
+    if (member instanceof DynamoNumber) {
+        if (kind !== 'number') return member
         return (
-            outsideSafeRange(member, Number(member), options) ?? write(member)
+            outsideSafeRange(member.digits, Number(member.digits), options) ??
+            member
         )
     }
-    return firstType === 'bigint' && typeof member === 'number'
-        ? DynamoNumber.from(member.toString())
-        : write(member)
+    if (typeof primitive !== 'number' && typeof primitive !== 'bigint') {
+        return member
+    }
+    if (kind === 'number') {
+        return typeof primitive === 'bigint'
+            ? (outsideSafeRange(primitive, Number(primitive), options) ??
+                  write(primitive))
+            : write(primitive)
+    }
+    // a `DynamoNumber` or a bigint first writes the digits of each member, with no range
+    return isNumeral(primitive.toString())
+        ? DynamoNumber.from(primitive.toString())
+        : new CodecError(
+              `${primitive.toString()} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
+          )
 }
+
+/** The writer that the SDK picks from the first member of a set. */
+const setKind = (first: unknown) =>
+    first instanceof DynamoNumber
+        ? 'numberValue'
+        : typeof first === 'number'
+          ? 'number'
+          : typeof first === 'bigint'
+            ? 'bigint'
+            : typeof first === 'string'
+              ? 'string'
+              : isBinaryValue(first)
+                ? 'binary'
+                : 'other'
 
 /**
  * A value, as `@aws-sdk/util-dynamodb`'s `convertToAttr` reads it, handed to the canonical write.
@@ -282,15 +341,9 @@ const toCanonical = (
         }
         // the SDK picks the writer from the first member, and each member goes through it. A number
         // reads the range of a number, and a bigint writes its digits with no range
-        const first = members[0]
+        const kind = setKind(members[0])
         return andThen(
-            every(members, (member) =>
-                typeof member === 'number' || typeof member === 'bigint'
-                    ? setNumber(member, typeof first, write, options)
-                    : isBinaryValue(member)
-                      ? bytesOf(member)
-                      : member,
-            ),
+            every(members, (member) => setMember(member, kind, write, options)),
             (written) => new Set(written),
         )
     }
@@ -585,26 +638,34 @@ export namespace native {
               ? N
               : T extends string
                 ? OrNull<S, T, '', Empties>
-                : T extends ArrayBufferView | ArrayBuffer
-                  ? OrNull<B, unknown, never, Empties>
-                  : T extends ReadonlySet<infer Member> & {
-                          readonly get?: never
-                      }
-                    ? OrNull<
-                          SetFamily<Dropped<Member, Drops>>,
-                          unknown,
-                          never,
-                          Empties
-                      >
-                    : T extends readonly (infer Element)[]
-                      ? Dropped<Element, Drops> extends infer Kept
-                          ? [Kept] extends [never]
-                              ? ErrorMessage<'[native] a list holds `undefined`, which is refused unless `removeUndefinedValues` is set'>
-                              : L<EncodeWith<Exclude<Kept, Fn>, Empties, Drops>>
+                : T extends Promised
+                  ? never
+                  : T extends ArrayBufferView | ArrayBuffer
+                    ? OrNull<B, unknown, never, Empties>
+                    : T extends ReadonlySet<infer Member> & {
+                            readonly get?: never
+                        }
+                      ? OrNull<
+                            SetFamily<Dropped<Member, Drops>>,
+                            unknown,
+                            never,
+                            Empties
+                        >
+                      : T extends readonly (infer Element)[]
+                        ? Dropped<Element, Drops> extends infer Kept
+                            ? [Kept] extends [never]
+                                ? ErrorMessage<'[native] a list holds `undefined`, which is refused unless `removeUndefinedValues` is set'>
+                                : L<
+                                      EncodeWith<
+                                          Exclude<Kept, Fn>,
+                                          Empties,
+                                          Drops
+                                      >
+                                  >
+                            : never
+                        : T extends object
+                          ? M<ItemEncodeWith<MapAsRecord<T>, Empties, Drops>>
                           : never
-                      : T extends object
-                        ? M<ItemEncodeWith<MapAsRecord<T>, Empties, Drops>>
-                        : never
 
     /**
      * A `Map` reads as the record of its values, which is how the marshaller writes it. A `Map`
@@ -613,6 +674,9 @@ export namespace native {
     type MapAsRecord<T> = T extends ReadonlyMap<unknown, infer Value>
         ? { readonly [key: string]: Value }
         : T
+
+    /** A value that reads its bytes by a promise: a `Blob` and a `File`, named by shape. No write is possible, so no attribute. */
+    type Promised = { readonly arrayBuffer: () => Promise<ArrayBuffer> }
 
     /** A member that the marshaller drops from a map and from a list: a function. */
     type Fn = (...args: never[]) => unknown
