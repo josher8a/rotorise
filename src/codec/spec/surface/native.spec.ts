@@ -565,6 +565,15 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
                 ][0] as new () => object
             )(),
         },
+        // the SDK prints the digits of a bigint, where a float would print its nearest binary64
+        {
+            name: 'a number set holding an unsafe bigint',
+            value: new Set([1, 2n ** 60n]),
+        },
+        {
+            name: 'a number set holding a bigint below the safe range',
+            value: new Set([1, -(2n ** 60n)]),
+        },
         // `constructor` is a string, so the SDK finds no `!data.constructor` and refuses the value
         {
             name: 'an object whose constructor is a string',
@@ -794,4 +803,282 @@ describe('a set takes the writer of its first member, as the SDK does', () => {
             )
         },
     )
+})
+
+/**
+ * **The port writes what the SDK writes, or both refuse**, over a generated pool.
+ *
+ * The pool draws the forms that the SDK reads: safe and unsafe numbers, `NaN` and the infinities,
+ * bigints, strings, booleans, `null`, `undefined`, the typed arrays, `Buffer`, `ArrayBuffer` and
+ * `DataView`, a class, an anonymous class and an object whose `constructor` is a string, sets of
+ * one family, of two families and empty, arrays, plain objects, null-prototype objects and `Map`, at
+ * depth 3. It draws no `Blob`, no `File` and no depth above 3. Each of the 16 sets of the four options
+ * that the port reproduces draws 500 values from one seed.
+ *
+ * The rows are compared after the normalisations that the port states: a set is sorted, a typed
+ * array is its bytes, and a numeral is its normal digits. A value that the port writes and the SDK
+ * refuses, a row that differs, and a refusal of both with a text that no exception names, are
+ * failures. Four exceptions are stated by name, and each is counted:
+ *
+ * - **set family**: the port refuses a set of two families or of a kind that no stored set holds,
+ *   where the SDK writes the members as the first member does (the doc of `native`).
+ * - **numeral gate**: the port refuses a number that DynamoDB refuses (`5e-324`, `1e300` with
+ *   `allowImpreciseNumbers`), where the SDK writes it (the doc of `nativeNumber`).
+ * - **set of booleans text**: both refuse a set of a kind that no stored set holds, with the text
+ *   of the canonical write on one side and the text of the SDK on the other.
+ * - **first fault**: a value holds two faults and the two read them in another order, because the
+ *   port refuses a number as it meets it and a set when it writes it.
+ */
+describe('the port writes what the SDK writes, or both refuse', () => {
+    class Pet {
+        name = 'Rex'
+    }
+    const Anonymous = [
+        class {
+            petName = 'Rex'
+        },
+    ][0] as new () => object
+    const number_ = (digits: string): DynamoNumber =>
+        orThrow(DynamoNumber.from(digits))
+    const leaves: readonly (() => unknown)[] = [
+        () => 1,
+        () => -7,
+        () => 1.5,
+        () => 0.1,
+        () => 2 ** 53,
+        () => 2 ** 60,
+        () => -(2 ** 60),
+        () => 1e300,
+        () => 5e-324,
+        () => Number.NaN,
+        () => Number.POSITIVE_INFINITY,
+        () => Number.NEGATIVE_INFINITY,
+        () => 1n,
+        () => 2n ** 60n,
+        () => '',
+        () => 'abc',
+        () => true,
+        () => false,
+        () => null,
+        () => undefined,
+        () => new Uint8Array(0),
+        () => new Uint8Array([1, 2]),
+        () => Buffer.from([1]),
+        () => Buffer.alloc(0),
+        () => new ArrayBuffer(0),
+        () => new ArrayBuffer(2),
+        () => new DataView(new ArrayBuffer(0)),
+        () => new DataView(new ArrayBuffer(2)),
+        () => Int16Array.from([1, 2]),
+        () => new Int16Array(0),
+        () => number_('1.5'),
+        () => number_('12345678901234567890'),
+        () => new Pet(),
+        () => new Anonymous(),
+        () => ({ constructor: 'Acme' }),
+    ]
+    const sets: readonly (() => unknown)[] = [
+        () => new Set(['a', 'b']),
+        () => new Set([1, 2]),
+        () => new Set([1n, 2n]),
+        () => new Set([new Uint8Array([1]), new Uint8Array([2])]),
+        () => new Set([1, 'a']),
+        () => new Set(['a', 1]),
+        () => new Set([1n, 2 ** 60]),
+        () => new Set([1, 2n ** 60n]),
+        () => new Set([1n, 2]),
+        () => new Set([1, 2n]),
+        () => new Set(),
+        () => new Set(['a', undefined]),
+        () => new Set([2 ** 60]),
+        () => new Set([number_('1.5'), number_('2')]),
+        () => new Set([true]),
+        () => new Set(['a', new Uint8Array([1])]),
+    ]
+    type Rng = ReturnType<typeof rngFrom>
+    const pick = <T>(rng: Rng, from: readonly T[]): T =>
+        from[Math.floor(rng() * from.length)] as T
+    const drawn = (rng: Rng, depth: number): unknown => {
+        const kind = rng()
+        if (depth <= 0 || kind < 0.5) return pick(rng, leaves)()
+        if (kind < 0.65) return pick(rng, sets)()
+        if (kind < 0.8) {
+            return Array.from({ length: Math.floor(rng() * 4) }, () =>
+                drawn(rng, depth - 1),
+            )
+        }
+        if (kind < 0.9) {
+            return Object.fromEntries(
+                ['a', 'b', 'c']
+                    .slice(0, Math.floor(rng() * 4))
+                    .map((name) => [name, drawn(rng, depth - 1)]),
+            )
+        }
+        if (kind < 0.95) {
+            const bare = Object.create(null) as Record<string, unknown>
+            for (const name of ['a', 'b'].slice(0, Math.floor(rng() * 3))) {
+                bare[name] = drawn(rng, depth - 1)
+            }
+            return bare
+        }
+        return new Map([['a', drawn(rng, depth - 1)]])
+    }
+
+    /** The SDK reads `NumberValue` where the port reads a `DynamoNumber`. */
+    const forSdk = (value: unknown): unknown => {
+        if (value instanceof DynamoNumber) {
+            return sdk.NumberValueImpl.from(value.digits)
+        }
+        if (Array.isArray(value)) return value.map(forSdk)
+        if (value instanceof Set) return new Set([...value].map(forSdk))
+        if (value instanceof Map) {
+            return new Map([...value].map(([key, held]) => [key, forSdk(held)]))
+        }
+        if (typeof value === 'object' && value !== null) {
+            const proto: unknown = Object.getPrototypeOf(value)
+            if (proto === Object.prototype || proto === null) {
+                return Object.fromEntries(
+                    Object.entries(value).map(([key, held]) => [
+                        key,
+                        forSdk(held),
+                    ]),
+                )
+            }
+        }
+        return value
+    }
+    const bytesOf = (value: unknown): string => {
+        const view = ArrayBuffer.isView(value)
+            ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+            : value instanceof ArrayBuffer
+              ? new Uint8Array(value)
+              : (value as Uint8Array)
+        return [...view].join(',')
+    }
+    const digitsOf = (numeral: unknown): unknown => {
+        if (typeof numeral !== 'string') return numeral
+        const read = DynamoNumber.from(numeral)
+        return read instanceof DynamoNumber ? read.digits : numeral
+    }
+    /** A row as the port states it: a set sorted, bytes as bytes, a numeral as its normal digits. */
+    const normal = (row: unknown): unknown => {
+        if (row === null || typeof row !== 'object') return row
+        const attribute = row as Record<string, unknown>
+        if (attribute.B !== undefined) return { B: bytesOf(attribute.B) }
+        if (attribute.N !== undefined) return { N: digitsOf(attribute.N) }
+        if (Array.isArray(attribute.SS)) return { SS: [...attribute.SS].sort() }
+        if (Array.isArray(attribute.NS)) {
+            return { NS: attribute.NS.map(digitsOf).sort() }
+        }
+        if (Array.isArray(attribute.BS)) {
+            return { BS: attribute.BS.map(bytesOf).sort() }
+        }
+        if (Array.isArray(attribute.L)) return { L: attribute.L.map(normal) }
+        if (typeof attribute.M === 'object' && attribute.M !== null) {
+            return {
+                M: Object.fromEntries(
+                    Object.entries(attribute.M).map(([key, held]) => [
+                        key,
+                        normal(held),
+                    ]),
+                ),
+            }
+        }
+        return attribute
+    }
+
+    it('holds over 16 option sets, with each exception counted', () => {
+        const flags = [
+            'removeUndefinedValues',
+            'convertEmptyValues',
+            'convertClassInstanceToMap',
+            'allowImpreciseNumbers',
+        ] as const
+        const optionSets = Array.from({ length: 16 }, (_, bits) =>
+            Object.fromEntries(
+                flags.map((flag, at) => [flag, Boolean(bits & (1 << at))]),
+            ),
+        )
+        const sdkTail = ' Use NumberValue from @aws-sdk/lib-dynamodb.'
+        const portTail = ' Use DynamoNumber from rotorise.'
+        const setText =
+            'Only Number Set (NS), Binary Set (BS) or String Set (SS) are allowed.'
+        const rng = rngFrom(20261107)
+        const count = {
+            agree: 0,
+            bothRefuseSameText: 0,
+            setFamily: 0,
+            numeralGate: 0,
+            setOfBooleansText: 0,
+            firstFault: 0,
+        }
+        const failures: string[] = []
+        for (const options of optionSets) {
+            const port = native(options)
+            for (let at = 0; at < 500; at++) {
+                const value = drawn(rng, 3)
+                const ours = port.encode(value)
+                let theirs: unknown
+                let sdkText: string | undefined
+                try {
+                    theirs = sdk.convertToAttr(forSdk(value), options)
+                } catch (thrown) {
+                    sdkText = (thrown as Error).message
+                }
+                const refused = ours instanceof CodecError
+                const shown = `${Object.prototype.toString.call(value)} at ${at} ${JSON.stringify(options)}`
+                if (refused && sdkText !== undefined) {
+                    if (ours.reason === sdkText.replace(sdkTail, portTail)) {
+                        count.bothRefuseSameText++
+                    } else if (
+                        ours.reason.startsWith('a set writes') &&
+                        sdkText === setText
+                    ) {
+                        count.setOfBooleansText++
+                    } else if (
+                        sdkText === setText ||
+                        /is not a number DynamoDB stores/.test(ours.reason)
+                    ) {
+                        count.firstFault++
+                    } else {
+                        failures.push(
+                            `${shown}: two texts: ${ours.reason} | ${sdkText}`,
+                        )
+                    }
+                } else if (refused) {
+                    if (ours.reason.startsWith('a set writes'))
+                        count.setFamily++
+                    else if (
+                        /is not a number DynamoDB stores/.test(ours.reason)
+                    ) {
+                        count.numeralGate++
+                    } else
+                        failures.push(
+                            `${shown}: only the port refuses: ${ours.reason}`,
+                        )
+                } else if (sdkText !== undefined) {
+                    failures.push(`${shown}: only the SDK refuses: ${sdkText}`)
+                } else if (
+                    JSON.stringify(normal(ours)) ===
+                    JSON.stringify(normal(theirs))
+                ) {
+                    count.agree++
+                } else {
+                    failures.push(`${shown}: two rows`)
+                }
+            }
+        }
+        expect(failures).toEqual([])
+        const decided = Object.values(count).reduce((sum, n) => sum + n, 0)
+        expect(decided).toBe(8000)
+        expect(count.agree).toBeGreaterThan(decided / 2)
+        expect(count).toEqual({
+            agree: 5533,
+            bothRefuseSameText: 1730,
+            setFamily: 315,
+            numeralGate: 289,
+            setOfBooleansText: 102,
+            firstFault: 31,
+        })
+    })
 })

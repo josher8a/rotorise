@@ -14,6 +14,7 @@ import { RotoriseError, tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
 import {
     binary,
+    decimal,
     held,
     nullable,
     number,
@@ -22,6 +23,7 @@ import {
     union,
 } from '../../codec'
 import type { StandardSchemaV1 } from '../../standard'
+import { arbitraryOf, rngFrom, structuralEquals } from '../../testing'
 
 /** What a consumer writes: the narrowing of a result. */
 const isError = (value: unknown): value is Error => value instanceof Error
@@ -256,4 +258,110 @@ describe('a key follows its attribute in every path that writes a row', () => {
             SK: { S: '2020-01-01T00:00:00.000Z' },
         })
     })
+})
+
+/**
+ * **`keys` and `toItem` write one key for each key name**, over generated entities. A key has two
+ * routes, the key builder of `keys` and the write of the item, and each must give the key that the
+ * codec gives for the attribute. The entities are drawn from the codec of each entry. A draw that
+ * both routes refuse is counted and pinned, not skipped: a string that holds the separator cannot be
+ * a part of a composite key, and `keys` and `toItem` say so alike. A draw that one route writes and
+ * the other refuses is a failure, as is a draw that the two write as two keys.
+ */
+describe('keys and toItem write one key for each key name, over generated entities', () => {
+    const dateSchema: StandardSchemaV1<Date> = {
+        '~standard': {
+            version: 1,
+            vendor: 'handwritten',
+            validate: (value) =>
+                value instanceof Date
+                    ? { value }
+                    : { issues: [{ message: 'not a Date' }] },
+        },
+    }
+    // a drawn string is rarely a date, so the held side draws one
+    const bornOn = held(string, dateSchema, {
+        encode: (day: Date) => day.toISOString(),
+        decode: (text: string) => new Date(text),
+        arbitrary: (rng) => new Date(Math.floor(rng() * 4e12)),
+    })
+    type Route = {
+        readonly codec: unknown
+        readonly keys: (
+            names: readonly string[],
+            attributes: never,
+        ) => Record<string, unknown>
+        readonly toItem: (item: never) => unknown
+    }
+    const entries: Record<string, { entry: Route; names: readonly string[] }> =
+        {
+            Born: {
+                entry: tableEntry<{ petId: string; bornAt: Date }>()(
+                    { PK: ['petId'], SK: 'bornAt' },
+                    { codec: { petId: string, bornAt: bornOn } },
+                ) as unknown as Route,
+                names: ['PK', 'SK'],
+            },
+            Litters: {
+                entry: Litters as unknown as Route,
+                names: ['PK', 'GSI1SK'],
+            },
+            Prices: {
+                entry: tableEntry<{ id: string; price: string }>()(
+                    { PK: ['id', 'price'] },
+                    { codec: { id: string, price: decimal } },
+                ) as unknown as Route,
+                names: ['PK'],
+            },
+        }
+    const pinned: Record<string, { agree: number; bothRefuse: number }> = {
+        Born: { agree: 78, bothRefuse: 22 },
+        Litters: { agree: 81, bothRefuse: 19 },
+        Prices: { agree: 78, bothRefuse: 22 },
+    }
+
+    for (const [label, { entry, names }] of Object.entries(entries)) {
+        it(`holds for ${label}`, () => {
+            const rng = rngFrom(20261107)
+            const count = { agree: 0, bothRefuse: 0 }
+            const failures: string[] = []
+            for (let at = 0; at < 100; at++) {
+                const entity = arbitraryOf(entry.codec as never, rng, 3)
+                let keyed: Record<string, unknown> | undefined
+                let keysSaid: string | undefined
+                try {
+                    keyed = entry.keys(names, entity as never)
+                } catch (error) {
+                    keysSaid = (error as Error).message
+                }
+                let item: Record<string, unknown> | undefined
+                let itemSaid: string | undefined
+                try {
+                    const written = entry.toItem(entity as never)
+                    if (written instanceof Error) itemSaid = written.message
+                    else item = written as Record<string, unknown>
+                } catch (error) {
+                    itemSaid = (error as Error).message
+                }
+                if (keyed === undefined && item === undefined) {
+                    count.bothRefuse++
+                } else if (keyed === undefined || item === undefined) {
+                    failures.push(
+                        `${label} ${at}: keys ${keysSaid ?? 'writes'}, toItem ${itemSaid ?? 'writes'}`,
+                    )
+                } else if (
+                    names.every((name) =>
+                        structuralEquals(keyed[name], item[name]),
+                    )
+                ) {
+                    count.agree++
+                } else {
+                    failures.push(`${label} ${at}: two keys`)
+                }
+            }
+            expect(failures).toEqual([])
+            expect(count.agree).toBeGreaterThan(50)
+            expect(count).toEqual(pinned[label])
+        })
+    }
 })

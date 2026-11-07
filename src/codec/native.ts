@@ -59,7 +59,7 @@ import {
     tooDeeplyNested,
 } from './attribute'
 import type { AttributeCodec, Result } from './codec'
-import { andThen, CodecError, every, everyEntry, failed } from './codec'
+import { andThen, CodecError, every, everyEntry } from './codec'
 import { codecOfTerm, mapNumberLeaves, opaqueTerms } from './denote'
 import { rendered } from './value'
 
@@ -96,6 +96,30 @@ const isBinaryValue = (value: unknown): boolean =>
             ?.name as string,
     )
 
+/**
+ * The refusal of a number outside the safe range, or `undefined`. `shown` is the number as the SDK
+ * prints it, and `asNumber` is what the range test reads: the SDK reads a `bigint` as a number for
+ * the test and prints its digits.
+ */
+const outsideSafeRange = (
+    shown: number | bigint,
+    asNumber: number,
+    options: native.Options,
+): CodecError | undefined => {
+    if (options.allowImpreciseNumbers) return undefined
+    if (asNumber > Number.MAX_SAFE_INTEGER) {
+        return new CodecError(
+            `Number ${shown} is greater than Number.MAX_SAFE_INTEGER. Use DynamoNumber from rotorise.`,
+        )
+    }
+    if (asNumber < Number.MIN_SAFE_INTEGER) {
+        return new CodecError(
+            `Number ${shown} is lesser than Number.MIN_SAFE_INTEGER. Use DynamoNumber from rotorise.`,
+        )
+    }
+    return undefined
+}
+
 const nativeNumber = (
     value: number | bigint,
     options: native.Options,
@@ -105,17 +129,9 @@ const nativeNumber = (
             `Special numeric value ${value.toString()} is not allowed`,
         )
     }
-    if (typeof value === 'number' && !options.allowImpreciseNumbers) {
-        if (value > Number.MAX_SAFE_INTEGER) {
-            return new CodecError(
-                `Number ${value} is greater than Number.MAX_SAFE_INTEGER. Use DynamoNumber from rotorise.`,
-            )
-        }
-        if (value < Number.MIN_SAFE_INTEGER) {
-            return new CodecError(
-                `Number ${value} is lesser than Number.MIN_SAFE_INTEGER. Use DynamoNumber from rotorise.`,
-            )
-        }
+    if (typeof value === 'number') {
+        const unsafe = outsideSafeRange(value, value, options)
+        if (unsafe) return unsafe
     }
     /**
      * **The gate the SDK does not have.** `Number.isFinite` and the safe range are its two checks,
@@ -193,8 +209,9 @@ const setNumber = (
     options: native.Options,
 ): Result<DynamoNumber> => {
     if (firstType === 'number' && typeof member === 'bigint') {
-        const checked = nativeNumber(Number(member), options)
-        return failed(checked) ? checked : write(member)
+        return (
+            outsideSafeRange(member, Number(member), options) ?? write(member)
+        )
     }
     return firstType === 'bigint' && typeof member === 'number'
         ? DynamoNumber.from(member.toString())
