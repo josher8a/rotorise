@@ -2,7 +2,8 @@
  * A key attribute is `S`, `N` or `B`, and the key of one attribute takes the member of that attribute.
  *
  * A key attribute of DynamoDB is `S`, `N` or `B`. A composite key joins its parts, so it is `S`. A
- * key of one attribute copies the value of that attribute, so a number is `N`, a `Uint8Array` is
+ * key of one attribute copies the attribute: the value, or the stored payload where the field is
+ * under the adapter of a caller. So a number is `N`, a `Uint8Array` is
  * `B`, and an `N` sort key
  * orders by number where an `S` key orders `10` before `9`. Every path that writes a row writes the
  * same member: `toItem`, `keys` and `keyUpdates`. `null` gives no key, as `undefined` does, in every
@@ -262,12 +263,26 @@ describe('a key follows its attribute in every path that writes a row', () => {
             SK: { S: '2020-01-01T00:00:00.000Z' },
         })
     })
+
+    it('toEntry holds the key that toItem writes for a held Date, and refuses nothing that toItem writes', () => {
+        expect(Born.toEntry({ petId: 'p1', bornAt: day }).SK).toBe(
+            '2020-01-01T00:00:00.000Z',
+        )
+        const past = 2 ** 60
+        expect(
+            Litters.unsafeToItem({ litterId: 'l1', born: past, name: 'a' })
+                .GSI1SK,
+        ).toEqual({ N: String(past) })
+        expect(
+            Litters.toEntry({ litterId: 'l1', born: past, name: 'a' }).GSI1SK,
+        ).toBe(past)
+    })
 })
 
 /**
- * **`keys` and `toItem` write one key for each key name**, over generated entities. A key has two
- * routes, the key builder of `keys` and the write of the item, and each must give the key that the
- * codec gives for the attribute. The entities are drawn from the codec of each entry. A draw that
+ * **Every route writes one key for each key name**, over generated entities. A key has four routes,
+ * the key builder of `keys`, the update of `keyUpdates`, the entry of `toEntry` and the write of the
+ * item, and each must give the key that the codec gives for the attribute. The entities are drawn from the codec of each entry. A draw that
  * both routes refuse is counted and pinned, not skipped: a string that holds the separator cannot be
  * a part of a composite key, and `keys` and `toItem` say so alike. A draw that one route writes and
  * the other refuses is a failure, as is a draw that the two write as two keys.
@@ -295,8 +310,33 @@ describe('keys and toItem write one key for each key name, over generated entiti
             names: readonly string[],
             attributes: never,
         ) => Record<string, unknown>
+        readonly keyUpdates: (changed: never) => {
+            readonly set: Record<string, unknown>
+        }
+        readonly toEntry: (item: never) => Record<string, unknown>
         readonly toItem: (item: never) => unknown
     }
+    type Priced =
+        | { kind: 'DOG'; petId: string; price: string }
+        | { kind: 'CAT'; petId: string; price: string }
+    const pricedVariants = () =>
+        item(
+            discriminatedUnion('kind', [
+                object({ kind: string('DOG'), petId: string }, [
+                    string,
+                    optional(decimal),
+                ]),
+                object({ kind: string('CAT'), petId: string }, [
+                    string,
+                    optional(decimal),
+                ]),
+            ]),
+        )
+    const drawPriced = (rng: () => number) => ({
+        kind: rng() < 0.5 ? 'DOG' : 'CAT',
+        petId: `p${Math.floor(rng() * 9)}`,
+        price: `${1 + Math.floor(rng() * 90)}.5`,
+    })
     const isoAt = held(string, dateSchema, {
         encode: (day: Date) => day.toISOString(),
         decode: (text: string) => new Date(text),
@@ -334,6 +374,44 @@ describe('keys and toItem write one key for each key name, over generated entiti
                 },
             ) as unknown as Route,
             names: ['PK', 'GSI1SK'],
+        },
+        TaggedComposite: {
+            entry: tableEntry<Visit>()(
+                { PK: ['petId'], GSI1SK: ['at'] },
+                {
+                    codec: item(
+                        discriminatedUnion('kind', [
+                            object({
+                                kind: string('DOG'),
+                                petId: string,
+                                at: isoAt,
+                            }),
+                            object({
+                                kind: string('CAT'),
+                                petId: string,
+                                at: isoAt,
+                            }),
+                        ]),
+                    ),
+                },
+            ) as unknown as Route,
+            names: ['PK', 'GSI1SK'],
+        },
+        TaggedRest: {
+            entry: tableEntry<Priced>()(
+                { PK: ['petId'], GSI1SK: 'price' },
+                { codec: pricedVariants() as never },
+            ) as unknown as Route,
+            names: ['PK', 'GSI1SK'],
+            draw: drawPriced,
+        },
+        TaggedRestComposite: {
+            entry: tableEntry<Priced>()(
+                { PK: ['petId'], GSI1SK: ['kind', 'price'] },
+                { codec: pricedVariants() as never },
+            ) as unknown as Route,
+            names: ['PK', 'GSI1SK'],
+            draw: drawPriced,
         },
         Rest: {
             entry: tableEntry<{ petId: string; price: string }>()(
@@ -381,6 +459,9 @@ describe('keys and toItem write one key for each key name, over generated entiti
         Litters: { agree: 81, bothRefuse: 19 },
         Prices: { agree: 78, bothRefuse: 22 },
         Tagged: { agree: 75, bothRefuse: 25 },
+        TaggedComposite: { agree: 75, bothRefuse: 25 },
+        TaggedRest: { agree: 100, bothRefuse: 0 },
+        TaggedRestComposite: { agree: 100, bothRefuse: 0 },
         Rest: { agree: 100, bothRefuse: 0 },
         HeldComposite: { agree: 78, bothRefuse: 22 },
     }
@@ -421,7 +502,36 @@ describe('keys and toItem write one key for each key name, over generated entiti
                         structuralEquals(keyed[name], item[name]),
                     )
                 ) {
-                    count.agree++
+                    // the other two routes write the key that the item holds
+                    let updated: Record<string, unknown> | undefined
+                    let entered: Record<string, unknown> | undefined
+                    try {
+                        updated = entry.keyUpdates(entity as never).set
+                        entered = entry.toEntry(entity as never)
+                    } catch (error) {
+                        failures.push(
+                            `${label} ${at}: ${(error as Error).message}`,
+                        )
+                        continue
+                    }
+                    const held = (name: string) => {
+                        const stored = item[name] as {
+                            S?: string
+                            N?: string
+                        }
+                        return stored.S ?? stored.N
+                    }
+                    if (
+                        names.every(
+                            (name) =>
+                                structuralEquals(updated?.[name], item[name]) &&
+                                (typeof entered?.[name] === 'number'
+                                    ? entered[name] === Number(held(name))
+                                    : entered?.[name] === held(name)),
+                        )
+                    )
+                        count.agree++
+                    else failures.push(`${label} ${at}: two keys`)
                 } else {
                     failures.push(`${label} ${at}: two keys`)
                 }
@@ -431,6 +541,64 @@ describe('keys and toItem write one key for each key name, over generated entiti
             expect(count).toEqual(pinned[label])
         })
     }
+})
+
+describe('two variants that write a key attribute with two codecs are refused, at a name and at a component', () => {
+    const dateSchema: StandardSchemaV1<Date> = {
+        '~standard': {
+            version: 1,
+            vendor: 'handwritten',
+            validate: (value) =>
+                value instanceof Date
+                    ? { value }
+                    : { issues: [{ message: 'not a Date' }] },
+        },
+    }
+    const iso = held(string, dateSchema, {
+        encode: (day: Date) => day.toISOString(),
+        decode: (text: string) => new Date(text),
+    })
+    const epoch = held(string, dateSchema, {
+        encode: (day: Date) => String(day.getTime()),
+        decode: (text: string) => new Date(Number(text)),
+    })
+    type Visit =
+        | { kind: 'DOG'; petId: string; at: Date }
+        | { kind: 'CAT'; petId: string; at: Date }
+    const build = (spec: never, first: unknown, second: unknown) =>
+        tableEntry<Visit>()(spec, {
+            codec: item(
+                discriminatedUnion('kind', [
+                    object({
+                        kind: string('DOG'),
+                        petId: string,
+                        at: first as never,
+                    }),
+                    object({
+                        kind: string('CAT'),
+                        petId: string,
+                        at: second as never,
+                    }),
+                ]),
+            ),
+        } as never)
+
+    it('refuses the key of one attribute, and each plain component of a list', () => {
+        for (const spec of [
+            { PK: ['petId'], GSI1SK: 'at' },
+            { PK: ['petId'], GSI1SK: ['at'] },
+            { PK: ['petId'], GSI1SK: ['petId', 'at'] },
+        ])
+            expect(() => build(spec as never, iso, epoch)).toThrow(
+                /'GSI1SK' is built from 'at', which two variants write with two codecs/,
+            )
+    })
+
+    it('accepts one codec that both variants share', () => {
+        expect(() =>
+            build({ PK: ['petId'], GSI1SK: ['at'] } as never, iso, iso),
+        ).not.toThrow()
+    })
 })
 
 /**

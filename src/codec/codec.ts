@@ -6823,8 +6823,9 @@ type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
  * literal of the inner term where the inner term pins one, and `string` where it pins none. Any
  * other field prints its value.
  *
- * A key of one attribute does not read this type. That key writes the attribute, and not a text of
- * the attribute, so the value of the attribute is the right type there.
+ * A key of one attribute reads this type too. That key holds the stored payload of an attribute
+ * under the adapter of a caller, as the row does, because an entry that holds a value such as a
+ * `Date` cannot be stored. A field with no adapter of a caller holds its value.
  */
 export type KeyText<Value, Field> = [Field] extends [never]
     ? Value
@@ -6842,6 +6843,18 @@ export type KeyText<Value, Field> = [Field] extends [never]
               : HeldStored<Field>
           : Value
       : Value
+
+/**
+ * `true` where a path cannot go into the field: `at` throws a `CodecError` at a `refine` and at a
+ * `legacy`, because the predicate reads the whole value and an older encoding has another shape.
+ */
+export type PathBlocked<Field> = [Field] extends [never]
+    ? false
+    : Field extends { readonly [termMarker]?: infer M }
+      ? M extends ['refine', ...unknown[]] | ['legacy', unknown]
+          ? true
+          : false
+      : false
 
 /**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.

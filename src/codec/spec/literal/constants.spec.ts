@@ -197,15 +197,15 @@ describe('the variants of a tagged codec decide a constant that they all state',
     /**
      * A constant that an adapter puts back is a new object at each read, so the variants state one
      * constant where their two objects print the same. A single codec decides it, and the variants
-     * decide it as well.
+     * decide it as well. The variants share one codec, because a key attribute has one codec and two
+     * codecs that write the same text are refused.
      */
     it('on an adapter that gives a new object at each read, so keyUpdates asks for no component of it', () => {
-        const adoptedOn = () =>
-            held(string('2026-01-01'), z.date(), {
-                encode: (day: Date) =>
-                    day.toISOString().slice(0, 10) as '2026-01-01',
-                decode: (text: string) => new Date(text),
-            })
+        const adoptedOn = held(string('2026-01-01'), z.date(), {
+            encode: (day: Date) =>
+                day.toISOString().slice(0, 10) as '2026-01-01',
+            decode: (text: string) => new Date(text),
+        })
         const Pets = tableEntry<
             | { kind: 'DOG'; adoptedOn: Date; petId: string }
             | { kind: 'CAT'; adoptedOn: Date; petId: string }
@@ -216,12 +216,12 @@ describe('the variants of a tagged codec decide a constant that they all state',
                     discriminatedUnion('kind', [
                         object({
                             kind: string('DOG'),
-                            adoptedOn: adoptedOn(),
+                            adoptedOn,
                             petId: string,
                         }),
                         object({
                             kind: string('CAT'),
-                            adoptedOn: adoptedOn(),
+                            adoptedOn,
                             petId: string,
                         }),
                     ]),
