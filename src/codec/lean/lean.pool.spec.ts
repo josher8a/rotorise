@@ -22,6 +22,7 @@ import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
 import type { AnyCodec } from '../codec'
 import {
     array,
+    at,
     binary,
     boolean,
     CodecError,
@@ -39,6 +40,7 @@ import {
     mdunion,
     meet,
     meetOrdered,
+    narrow,
     never,
     nullable,
     nullValue,
@@ -2327,5 +2329,188 @@ describe('fits is the order of the meet', () => {
         expect(failed(meetOrdered(missed.o, missed.p).decode(stored))).toBe(
             true,
         )
+    })
+})
+
+/**
+ * **The algebraic laws of `narrow` and of the meet**, over the pool. The model states each operation
+ * as a relation of rows and values, and each law is a fact of that relation that the host must keep:
+ *
+ * - **`narrow` is idempotent**, and keeps what `extract` keeps. `narrow` keeps an option that the
+ *   clause does not separate, and `extract` keeps an option that fits the clause, so `narrow` keeps
+ *   more. The law is the inclusion.
+ * - **The meet commutes.** `meet(a, b)` and `meet(b, a)` write and read one set of rows: one term,
+ *   or two terms that agree on a sample.
+ *
+ * A law that skips every case proves nothing, so each asserts the number of cases that it decides
+ * and pins the cases that it skips and the cases that it cannot decide. A pool change that moves a
+ * count is a change of the draw, and it names itself.
+ */
+describe('the algebraic laws of narrow and of the meet, over the pool', () => {
+    // built at the first law that runs, and not at collection: the draw writes the module state
+    // that the first describe of this file reads, so a second build at collection would move it
+    let built: ReturnType<typeof buildPool> | undefined
+    const poolOf = () => {
+        built ??= buildPool()
+        return {
+            pairs: built.flatMap((one) => one.pairs),
+            slices: built.flatMap((one) => one.slices),
+        }
+    }
+    const merge = meet as unknown as (a: AnyCodec, b: AnyCodec) => unknown
+    /** A term that states no row of the pool, for the reasons of {@link meetCoversOf}. */
+    const stated = (c: AnyCodec): boolean =>
+        !('mark' in c.def) &&
+        ![...reachable(c.def)].some((t) => t.kind === 'refine') &&
+        recursionUse(c.def as Term) === 0
+    const shown = (value: unknown): string =>
+        JSON.stringify(value, (_, x) =>
+            typeof x === 'bigint' ? `${x}n` : x instanceof Set ? [...x] : x,
+        )?.slice(0, 160) ?? 'undefined'
+    const drawn = (codec: AnyCodec, seed: number): unknown | undefined => {
+        try {
+            return arbitraryOf(codec, rngFrom(seed), 3)
+        } catch {
+            return undefined
+        }
+    }
+
+    it('narrow is idempotent, and keeps what extract keeps', () => {
+        const { slices } = poolOf()
+        const count = { slices: 0, unrooted: 0, values: 0, wider: 0 }
+        const broken: string[] = []
+        for (const s of slices) {
+            const c = s.codec as AnyCodec
+            let root: unknown
+            try {
+                root = item(c as never)
+            } catch {
+                count.unrooted++
+                continue
+            }
+            for (const clause of s.clauses) {
+                const pattern = erase(object(clause as never))
+                let kept: AnyCodec
+                let once: { encode: (v: unknown) => unknown }
+                let twice: { encode: (v: unknown) => unknown }
+                try {
+                    kept = erase(extract(c as never, pattern as never))
+                    once = (
+                        narrow as never as (
+                            l: unknown,
+                            p: unknown,
+                        ) => typeof once
+                    )(
+                        (
+                            at as never as (
+                                c: unknown,
+                                p: readonly never[],
+                            ) => unknown
+                        )(root, []),
+                        pattern,
+                    )
+                    twice = (
+                        narrow as never as (
+                            l: unknown,
+                            p: unknown,
+                        ) => typeof twice
+                    )(once, pattern)
+                } catch {
+                    count.unrooted++
+                    continue
+                }
+                count.slices++
+                for (let seed = 1; seed <= 6; seed++) {
+                    const value = drawn(c, seed)
+                    if (value === undefined || failed(c.encode(value as never)))
+                        continue
+                    count.values++
+                    const first = once.encode(value)
+                    const second = twice.encode(value)
+                    if (
+                        failed(first) !== failed(second) ||
+                        (!failed(first) && !structuralEquals(first, second))
+                    ) {
+                        broken.push(`${s.name} idempotent ${shown(value)}`)
+                    }
+                    const inKept = !failed(kept.encode(value as never))
+                    if (inKept && failed(first)) {
+                        broken.push(
+                            `${s.name} extract keeps ${shown(value)}, narrow refuses`,
+                        )
+                    }
+                    if (!inKept && !failed(first)) count.wider++
+                }
+            }
+        }
+        expect(broken).toEqual([])
+        expect(count.values).toBeGreaterThan(count.slices)
+        expect(count).toEqual({
+            slices: 12210,
+            unrooted: 0,
+            values: 70920,
+            wider: 4234,
+        })
+    })
+
+    it('the meet commutes, as one term or as two terms that agree', () => {
+        const { pairs } = poolOf()
+        const count = {
+            pairs: 0,
+            sameTerm: 0,
+            sameAccepts: 0,
+            undecided: 0,
+            bothRefused: 0,
+            skipped: 0,
+        }
+        const broken: string[] = []
+        const built = (a: AnyCodec, b: AnyCodec): AnyCodec | undefined => {
+            try {
+                return erase(merge(a, b))
+            } catch {
+                return undefined
+            }
+        }
+        for (const p of pairs) {
+            const ab = built(p.left, p.right)
+            const ba = built(p.right, p.left)
+            if (ab === undefined && ba === undefined) {
+                count.bothRefused++
+                continue
+            }
+            if (ab === undefined || ba === undefined) {
+                broken.push(`${p.name} refused in one order only`)
+                continue
+            }
+            if (!stated(ab) || !stated(ba)) {
+                count.skipped++
+                continue
+            }
+            count.pairs++
+            if (sameTerm(termOf(ab), termOf(ba))) {
+                count.sameTerm++
+                continue
+            }
+            try {
+                checkEquivalent(ab as never, ba as never, { count: 20 })
+                count.sameAccepts++
+            } catch (error) {
+                if (error instanceof Disagreement) {
+                    broken.push(
+                        `${p.name} ${(error as Error).message.slice(0, 160)}`,
+                    )
+                } else count.undecided++
+            }
+        }
+        expect(broken).toEqual([])
+        expect(count.sameTerm).toBeGreaterThan(count.pairs / 2)
+        expect(count).toEqual({
+            pairs: 2758,
+            sameTerm: 2751,
+            sameAccepts: 6,
+            undecided: 1,
+            bothRefused: 20,
+            skipped: 458,
+        })
     })
 })
