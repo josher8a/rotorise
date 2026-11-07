@@ -35,7 +35,6 @@ import {
     opaqueTerms,
     optionOfTerm,
     termOf,
-    underCaller,
 } from './denote'
 import type {
     ApartG,
@@ -93,6 +92,7 @@ import {
     clauseForm,
     closedCopy,
     holdsNoValue,
+    isCallerPin,
     mapChildren,
     member as memberOf,
     openRefusal,
@@ -100,6 +100,7 @@ import {
     resolvedTerm,
     sameAdapter,
     sameTerm,
+    storedPin,
     targetOf,
     throughRefs,
     unanimous,
@@ -604,13 +605,19 @@ export const constantOf = (declared: ObjectSlot): unknown => {
     // `held` and reading only the bare row would have lost every one of them. The value is the
     // caller's rather than the carrier's, so it is the inner literal's put back through the
     // adapter — well defined because `held` owes that the pair cancels.
-    if (t.kind === 'held' && t.inner.kind === 'literal') {
-        // a caller's adapter that refuses its own literal breaks the pair it owes, and decides no
-        // value: the codec refuses every row, and its encode and decode report the refusal
-        const value = (t.g as (held: unknown) => unknown)(t.inner.v)
-        return failed(value) ? undefined : value
-    }
-    return t.kind === 'literal' ? t.v : undefined
+    //
+    // The walk is `storedPin`, the one reader of a term through its wrappers, and a `ref` is read as
+    // its target. A throw of the adapter of a caller is not caught here: the caller of this
+    // function names the attribute in the refusal.
+    const at = resolvedTerm(t)
+    if (at === undefined || at.kind === 'refine') return undefined
+    const pin = storedPin(at)
+    if (pin?.under.kind !== 'literal') return undefined
+    if (pin.held === undefined) return pin.under.v
+    // a caller's adapter that refuses its own literal breaks the pair it owes, and decides no
+    // value: the codec refuses every row, and its encode and decode report the refusal
+    const value = (pin.held.g as (held: unknown) => unknown)(pin.under.v)
+    return failed(value) ? undefined : value
 }
 
 /* ── the seam: a definition, as the term it denotes ───────────────────────────────────── */
@@ -6489,7 +6496,8 @@ const dissectionOf = (
                 }
                 for (const name of ks) {
                     const field = own(node.body.fields, name)
-                    if (field && underCaller(field.t)) callerMembers.add(item)
+                    if (field && isCallerPin(storedPin(field.t)))
+                        callerMembers.add(item)
                 }
                 return [
                     node.body,
@@ -6805,7 +6813,7 @@ type StoredLiterals<T> = T extends ['prim', ['literal', string, infer V]]
  * `never`. A library adapter is lawful by its own term: `number` reads its text as its value.
  */
 type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
-    ? M extends [
+    ? Unrefined<M> extends [
           'held',
           false,
           infer Inner,
@@ -6816,6 +6824,25 @@ type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
         ? StoredLiterals<Inner>
         : never
     : never
+
+/** The term under each `refine`, as `pinOfG` reads it. */
+type Unrefined<M> = M extends ['refine', infer I, ...unknown[]]
+    ? Unrefined<I>
+    : M
+
+/** Whether a field is under the adapter of a caller, through each `refine`. */
+type CallerHeld<Field> = Field extends { readonly [termMarker]?: infer M }
+    ? Unrefined<M> extends [
+          'held',
+          false,
+          unknown,
+          unknown,
+          [['caller'], false],
+          ...unknown[],
+      ]
+        ? true
+        : false
+    : false
 
 /**
  * The text that a field of an entity prints in a key, where the entity holds `Value`. A field under
@@ -6829,19 +6856,10 @@ type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
  */
 export type KeyText<Value, Field> = [Field] extends [never]
     ? Value
-    : Field extends { readonly [termMarker]?: infer M }
-      ? M extends [
-            'held',
-            false,
-            unknown,
-            unknown,
-            [['caller'], false],
-            ...unknown[],
-        ]
-          ? [HeldStored<Field>] extends [never]
-              ? string
-              : HeldStored<Field>
-          : Value
+    : true extends CallerHeld<Field>
+      ? [HeldStored<Field>] extends [never]
+          ? string
+          : HeldStored<Field>
       : Value
 
 /**
@@ -6870,13 +6888,17 @@ type TagsOf<Spec, D extends PropertyKey> = Spec extends unknown
       // handed in whole would ask about a union of codecs and answer nothing
       D extends keyof Spec
         ? [HeldStored<Spec[D]>] extends [never]
-            ? Spec[D] extends AttributeCodec<infer Tag, AttributeValue>
-                ? // a tag is stored as `S` or as `N`, so a numeric enum indexes variants as readily as
-                  // a string one — `readTag` reads either member and keys on the text it carries
-                  Tag extends string | number
-                    ? Tag
-                    : never
-                : never
+            ? true extends CallerHeld<Spec[D]>
+                ? // an adapter of a caller whose inner term pins no literal names no tag, and the run
+                  // time refuses the codec at construction
+                  never
+                : Spec[D] extends AttributeCodec<infer Tag, AttributeValue>
+                  ? // a tag is stored as `S` or as `N`, so a numeric enum indexes variants as readily as
+                    // a string one — `readTag` reads either member and keys on the text it carries
+                    Tag extends string | number
+                      ? Tag
+                      : never
+                  : never
             : HeldStored<Spec[D]>
         : never
     : never

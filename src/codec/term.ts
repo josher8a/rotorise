@@ -854,13 +854,32 @@ export const holdsNoValue = (
  * the term under that `held` pins itself. A second adapter or a refinement under the first adapter
  * pins nothing.
  */
-export const storedAlternatives = (t: Term): Alternatives | undefined => {
+export const storedPin = (t: Term): StoredPin | undefined => {
     const at = resolvedTerm(t)
-    if (at?.kind === 'refine') return storedAlternatives(at.inner)
-    if (at?.kind !== 'held') return at && literalAlternatives(at)
+    if (at?.kind === 'refine') return storedPin(at.inner)
+    if (at?.kind !== 'held') return at && { held: undefined, under: at }
     const inner = resolvedTerm(at.inner)
-    return inner && literalAlternatives(inner)
+    return inner && { held: at, under: inner }
 }
+
+/**
+ * What {@link storedPin} reads: the `held` that the walk passed, and the term below it, which is
+ * the term of the stored attribute. A `held` of a caller has no `via`.
+ */
+export type StoredPin = {
+    readonly held: Extract<Term, { kind: 'held' }> | undefined
+    readonly under: Term
+}
+
+/** The alternatives that the stored side of a term pins, or `undefined` where it pins none. */
+export const storedAlternatives = (t: Term): Alternatives | undefined => {
+    const pin = storedPin(t)
+    return pin && literalAlternatives(pin.under)
+}
+
+/** Whether the adapter that {@link storedPin} passed is the adapter of a caller. */
+export const isCallerPin = (pin: StoredPin | undefined): boolean =>
+    pin?.held !== undefined && pin.held.via === undefined
 
 /** One literal, as the one-alternative set it pins. */
 export const oneAlternative = (t: Literal): Alternatives =>

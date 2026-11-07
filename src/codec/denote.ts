@@ -205,17 +205,6 @@ const refusedBy = (q: Refinement, value: unknown): CodecError => {
 }
 
 /**
- * Whether a term holds a value under the adapter of a caller, through any refinement and any
- * library adapter above it. A library adapter has `via`, and a caller's adapter has none.
- */
-export const underCaller = (t: Term): boolean =>
-    t.kind === 'held'
-        ? t.via === undefined || underCaller(t.inner)
-        : t.kind === 'refine'
-          ? underCaller(t.inner)
-          : false
-
-/**
  * **A member's assignment: one tag per key, read off the member's own body.**
  *
  * The tag table is a host index over a `Term.union`, and no term carries it. The model carries the

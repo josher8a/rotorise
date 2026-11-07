@@ -36,10 +36,16 @@ import {
     orThrow,
     pathBuilder,
 } from './codec/codec'
-import { codecOfTerm, underCaller } from './codec/denote'
+import { codecOfTerm } from './codec/denote'
 import { native } from './codec/native'
 import type { Field, Term } from './codec/term'
-import { member, sameTerm, storedAlternatives } from './codec/term'
+import {
+    isCallerPin,
+    literalAlternatives,
+    member,
+    sameTerm,
+    storedPin,
+} from './codec/term'
 import { own } from './codec/value'
 import type {
     DistributiveOmit,
@@ -1205,8 +1211,12 @@ export class RotoriseError extends Error {
      */
     readonly kind: RotoriseErrorKind
 
-    constructor(message: string, kind: RotoriseErrorKind = 'refused') {
-        super(message)
+    constructor(
+        message: string,
+        kind: RotoriseErrorKind = 'refused',
+        options?: ErrorOptions,
+    ) {
+        super(message, options)
         this.name = 'RotoriseError'
         this.kind = kind
     }
@@ -2854,6 +2864,23 @@ const sameConstant = (written: unknown, constant: unknown): boolean =>
         String(written) === String(constant))
 
 /**
+ * The constant that a slot decides at a component. A throw of the adapter of a caller is a bug of
+ * the caller, and the entry refuses at construction with the component and the original error as
+ * the cause. A refusal that the adapter returns decides nothing.
+ */
+const decidedBy = (component: string, slot: ObjectSlot): unknown => {
+    try {
+        return constantOf(slot)
+    } catch (cause) {
+        throw new RotoriseError(
+            `'${component}' is a key component under the adapter of a caller, and the adapter threw while the entry read the constant of the attribute. A throw of caller code is a bug in the adapter, and a refusal is a returned value.`,
+            'refused',
+            { cause },
+        )
+    }
+}
+
+/**
  * The value every variant writes at this attribute, when they all write the same one.
  *
  * The rule for a union is the rule for one codec, asked of each variant: one value, or none. A
@@ -2864,7 +2891,7 @@ const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
     let agreed: unknown
     for (const name of Object.keys(codec.spec)) {
         const found = own(codec.spec, name)?.[component]
-        const value = found && constantOf(found)
+        const value = found && decidedBy(component, found)
         if (value === undefined) return undefined
         if (agreed === undefined) agreed = value
         else if (!sameConstant(agreed, value)) return undefined
@@ -3352,7 +3379,7 @@ export const tableEntry =
                         // the spec and not `field`, which hands back the codec a member marks:
                         // the two marks are the answer here, so the declaration is what is read
                         const found = own(attributes.spec, component)
-                        return found && constantOf(found)
+                        return found && decidedBy(component, found)
                     }
 
         /**
@@ -3554,7 +3581,8 @@ export const tableEntry =
                     option.body.fields[
                         (attributes as TaggedRuntime).discriminator
                     ]
-                const stored = field && storedAlternatives(field.t)
+                const pin = field && storedPin(field.t)
+                const stored = pin && literalAlternatives(pin.under)
                 if (stored?.ls.some((v) => String(v) === tag))
                     found = codecOfTerm(
                         option.body.rest,
@@ -3634,7 +3662,11 @@ export const tableEntry =
             if (slots.length === 0) return value
             if (alone) {
                 // a key of one attribute under no adapter of a caller holds the value, which the type says
-                if (!slots.some((slot) => underCaller(termOfSlot(slot))))
+                if (
+                    !slots.some((slot) =>
+                        isCallerPin(storedPin(termOfSlot(slot))),
+                    )
+                )
                     return value
                 const stored = keyAttribute(slots, value)
                 if (stored === undefined || stored instanceof CodecError)

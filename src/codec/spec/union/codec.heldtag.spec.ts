@@ -71,6 +71,7 @@ describe('a number tag under a caller adapter', () => {
         })
         expect(() =>
             item(
+                // @ts-expect-error the tag is a number under the adapter of a caller, which names no key
                 discriminatedUnion('size', [
                     object({ size: One, pups: string }),
                     object({ size: number(2), pups: string, extra: number }),
