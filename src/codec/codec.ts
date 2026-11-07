@@ -3980,15 +3980,16 @@ type DerivedItem<Spec, Rest> = [Rest] extends [undefined]
  * The value is `0` and not `T[K]`: only the keys are read back out, and naming the property type
  * instantiates one per key of every entity every spec is checked against, to be thrown away.
  */
-type KnownKeys<T> = keyof {
+export type KnownKeys<T> = keyof {
     [K in keyof T as string extends K ? never : number extends K ? never : K]: 0
 }
 
 /**
  * The codecs an item needs: one per attribute, optional exactly where the entity is.
  *
- * Total coverage replaces the `key satisfies never` of a hand-written marshaller — a new field is a
- * compile error here, not a field that silently stops being written.
+ * `tableEntry` checks the short form of its `codec` option against the entity. Each attribute that
+ * the entity states has a field. The spec names no other attribute. Each field decodes to a type
+ * that the entity admits.
  */
 export type ItemSpec<T> = T extends unknown
     ? {

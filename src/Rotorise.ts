@@ -16,6 +16,9 @@ import type {
     IsUnion,
     ItemCodec,
     ItemSpec,
+    itemMark,
+    KnownKeys,
+    ObjectOf,
     ObjectSlot,
     PathOf,
     Result,
@@ -2764,6 +2767,28 @@ const componentsOf = (
 }
 
 /**
+ * The check of a short codec: the spec decodes to the entity.
+ *
+ * Each field decodes to a type that the entity admits, and a field that the codec reads as optional
+ * is optional in the entity. Each attribute that the entity states has a field. The spec names no
+ * attribute that the entity lacks. A refusal lands on the field that is wrong, or on the spec where
+ * a field is missing. A built codec states its own decoded type, so it passes unchecked here.
+ */
+type ShortCodecCheck<E, S> = [S] extends [undefined]
+    ? unknown
+    : S extends { readonly [itemMark]: true }
+      ? unknown
+      : {
+            readonly [K in keyof S]: K extends keyof E
+                ? [ObjectOf<S>[K & keyof ObjectOf<S>]] extends [E[K]]
+                    ? unknown
+                    : ErrorMessage<`[tableEntry] '${K & string}' decodes to a type that the entity does not admit`>
+                : ErrorMessage<`[tableEntry] the entity has no attribute '${K & string}'`>
+        } & ([Exclude<KnownKeys<E>, keyof S>] extends [never]
+            ? unknown
+            : ErrorMessage<`[tableEntry] the codec omits '${Exclude<KnownKeys<E>, keyof S> & string}'`>)
+
+/**
  * Entry point for defining a DynamoDB table schema with Rotorise.
  *
  * @template Entity The base entity type that this table represents.
@@ -2863,7 +2888,11 @@ export const tableEntry =
                       readonly codec?: IsUnion<Entity> extends true
                           ? TaggedCodec<Entity, CodecSpec>
                           :
-                                | CodecSpec
+                                | (CodecSpec &
+                                      ShortCodecCheck<
+                                          Entity,
+                                          NoInfer<CodecSpec>
+                                      >)
                                 | (ItemCodec<Entity, CodecSpec, CodecRest> &
                                       Closed)
                       readonly separator?: Separator

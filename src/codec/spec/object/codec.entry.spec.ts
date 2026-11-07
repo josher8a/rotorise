@@ -6,7 +6,9 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { decimal, optional, string } from '../../codec'
+import { decimal, held, number, optional, string } from '../../codec'
+import { CodecError } from '../../result'
+import type { StandardSchemaV1 } from '../../standard'
 import {
     checkEncodePaths,
     checkMembersStable,
@@ -219,5 +221,139 @@ describe('the separator is a slot of the options, and the default is in the type
                 { separator: '' },
             ),
         ).toThrow('Separator must not be an empty string')
+    })
+})
+
+describe('a codec entry decodes to the entity: it declares every attribute, with a type that the entity admits', () => {
+    type Owner = { petId: string; name: string; age: number; nick?: string }
+
+    it('refuses a spec that omits an attribute and types another as a string', () => {
+        const Owners = tableEntry<Owner>()(
+            { PK: ['petId'] },
+            {
+                codec: {
+                    petId: string,
+                    // @ts-expect-error age decodes to a string, and the entity holds a number
+                    age: string,
+                },
+            },
+        )
+        // the run time builds the entry, and reads a number as the string that the codec decodes
+        const read = Owners.unsafeFromItem({
+            petId: { S: 'p1' },
+            age: { S: '3' },
+        } as never)
+        expect(read).toEqual({ petId: 'p1', age: '3' })
+    })
+
+    it('refuses an omitted attribute', () => {
+        tableEntry<Owner>()(
+            { PK: ['petId'] },
+            // @ts-expect-error the codec omits name
+            { codec: { petId: string, age: number, nick: optional(string) } },
+        )
+    })
+
+    it('refuses a field that decodes to a type that the entity does not admit', () => {
+        tableEntry<Owner>()(
+            { PK: ['petId'] },
+            {
+                codec: {
+                    petId: string,
+                    name: string,
+                    // @ts-expect-error age decodes to a string
+                    age: string,
+                    nick: optional(string),
+                },
+            },
+        )
+    })
+
+    it('refuses a name that the entity lacks', () => {
+        tableEntry<Owner>()(
+            { PK: ['petId'] },
+            {
+                codec: {
+                    petId: string,
+                    name: string,
+                    age: number,
+                    nick: optional(string),
+                    // @ts-expect-error the entity has no attribute extra
+                    extra: string,
+                },
+            },
+        )
+    })
+
+    it('refuses a field that the codec reads as optional where the entity requires it', () => {
+        tableEntry<Owner>()(
+            { PK: ['petId'] },
+            {
+                codec: {
+                    petId: string,
+                    // @ts-expect-error name is optional in the codec and required in the entity
+                    name: optional(string),
+                    age: number,
+                    nick: optional(string),
+                },
+            },
+        )
+    })
+
+    it('accepts a complete spec', () => {
+        const Owners = tableEntry<Owner>()(
+            { PK: ['petId'] },
+            {
+                codec: {
+                    petId: string,
+                    name: string,
+                    age: number,
+                    nick: optional(string),
+                },
+            },
+        )
+        expect(
+            Owners.unsafeToItem({ petId: 'p1', name: 'Rex', age: 3 }),
+        ).toEqual(expect.objectContaining({ petId: { S: 'p1' } }))
+    })
+
+    it('accepts a codec that is narrower than the entity, and refuses an encode outside it as a value', () => {
+        type Role = { id: string; role: 'admin' | 'user' }
+        const Roles = tableEntry<Role>()(
+            { PK: ['id'] },
+            { codec: { id: string, role: string('admin') } },
+        )
+        expect(Roles.toItem({ id: 'a', role: 'admin' })).not.toBeInstanceOf(
+            Error,
+        )
+        expect(Roles.toItem({ id: 'a', role: 'user' })).toBeInstanceOf(
+            CodecError,
+        )
+    })
+
+    it('reads the decoded type of a held field', () => {
+        const dateSchema: StandardSchemaV1<Date> = {
+            '~standard': {
+                version: 1,
+                vendor: 'handwritten',
+                validate: (value) =>
+                    value instanceof Date
+                        ? { value }
+                        : { issues: [{ message: 'not a Date' }] },
+            },
+        }
+        const at = held(string, dateSchema, {
+            encode: (day: Date) => day.toISOString(),
+            decode: (text: string) => new Date(text),
+        })
+        tableEntry<{ petId: string; at: Date }>()(
+            { PK: ['petId'] },
+            { codec: { petId: string, at } },
+        )
+        tableEntry<{ petId: string; at: string }>()(
+            { PK: ['petId'] },
+            // @ts-expect-error the held field decodes to a Date, and the entity holds a string
+            { codec: { petId: string, at } },
+        )
     })
 })
