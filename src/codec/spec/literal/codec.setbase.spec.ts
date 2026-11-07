@@ -41,7 +41,7 @@ import {
     string,
     union,
 } from '../../codec'
-import { orThrow } from '../../result'
+import { failed, orThrow } from '../../result'
 import { checkRoundTrip } from '../../testing'
 
 declare const brand: unique symbol
@@ -186,8 +186,10 @@ describe('a set of a literal refuses a repeated value, at each base', () => {
     })
 
     it('builds the set of two distinct values, as the literal builds them', () => {
-        expect(string.set('dog', 'cat').def).toBeDefined()
-        expect(() => string.set('dog', 'cat')).not.toThrow()
+        const kinds = string.set('dog', 'cat')
+        expect(failed(kinds.decode({ SS: ['cat'] }))).toBe(false)
+        expect(failed(kinds.decode({ SS: ['dog', 'cat'] }))).toBe(false)
+        expect(failed(kinds.decode({ SS: ['cow'] }))).toBe(true)
     })
 })
 

@@ -80,7 +80,7 @@ describe('a meet refuses at the type what it refuses at run time', () => {
         ])
         const met = meet(either, object({ k: string('a') }))
         expect(termOf(met).kind).toBe('object')
-        expect(met.spec).toBeDefined()
+        expect(Object.keys(met.spec)).toEqual(['k'])
     })
 })
 
@@ -107,8 +107,8 @@ describe('a constant is decided at the type where it is decided at run time', ()
         expectTypeOf<ConstantAttributes<typeof spec>>().toEqualTypeOf<
             'n' | 'b'
         >()
-        expect(constantOf(spec.n)).toBeDefined()
-        expect(constantOf(spec.b)).toBeDefined()
+        expect(constantOf(spec.n)).toEqual(five)
+        expect(constantOf(spec.b)).toEqual(new Uint8Array([1]))
     })
 
     it('decides a caller adapter over a literal, so keyUpdates asks no component of it', () => {

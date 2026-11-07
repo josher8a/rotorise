@@ -324,16 +324,23 @@ export const checkRoundTrip = <T>(
 /**
  * `decode ∘ encode ∘ decode = decode` — the weaker law that survives a lossy attribute.
  *
- * DynamoDB normalises `N` (`'1.50'` → `'1.5'`) and reorders sets, so `decode ∘ encode = id` is
- * false for those. What holds is that one pass through storage reaches a fixed point. The
+ * DynamoDB reorders the members of a set, so `decode ∘ encode = id` on an item is false for a set.
+ * What holds is that one pass through storage reaches a fixed point. The
  * `parse(print(parse(s))) = parse(s)` of tolerant parsers, and the law to assert for a table whose
  * rows predate the current codec.
+ *
+ * An empty list is a refusal: a check that tests nothing is no green run.
  */
 export const checkStable = <T>(
     subject: Pick<Checkable<T>, 'unsafeEncode' | 'unsafeDecode'>,
     items: readonly AttributeMap[],
     equals: (a: unknown, b: unknown) => boolean = structuralEquals,
 ): void => {
+    if (items.length === 0) {
+        throw new CodecError(
+            'checkStable was given no item, so the check has nothing to test; give it the items of a table',
+        )
+    }
     for (const [i, item] of items.entries()) {
         const once = subject.unsafeDecode(item)
         const twice = subject.unsafeDecode(subject.unsafeEncode(once))
@@ -346,12 +353,13 @@ export const checkStable = <T>(
 }
 
 /**
- * **(C), the law nothing else here checks.**
+ * **(C), checked on attributes that `encode` never makes.**
  *
- * `p a = some v ⟹ e v is defined` — whatever a codec reads, it can write back. Everything else in
- * this module generates *values* and round-trips them, so `decode` only ever sees attributes that
- * `encode` produced. That is the wrong direction for (C): the attribute that breaks it is by
- * definition one `encode` would never make.
+ * `p a = some v ⟹ e v is defined` — whatever a codec reads, it can write back. `checkAgainst` and
+ * `checkEquivalent` ask (C) of a value that the read of the codec produced from a generated value.
+ * The other checks here generate *values* and round-trip them, so `decode` only ever sees
+ * attributes that `encode` produced. That is the wrong direction for (C): the attribute that
+ * breaks it is by definition one `encode` would never make.
  *
  * Three defects lived in that gap and all three shipped. `set` refused the empty set on the way in
  * and returned it on the way out. `decimal` accepted `'1.50'`, which DynamoDB stores as `'1.5'`, so
@@ -975,9 +983,9 @@ export const structuralEquals = (a: unknown, b: unknown): boolean => {
 // ── generating, by what a codec is ──────────────────────────────────
 //
 // The codecs carry a {@link Term} saying what they are; the arbitraries live here and dispatch
-// on it. That is the whole reason for the def: an arbitrary baked into every codec ships to
-// production whether or not anything ever runs a property test, and no bundler can shake a closure
-// out of an object that is always constructed.
+// on it. An arbitrary baked into every codec ships to production whether or not anything ever
+// runs a property test, and no bundler can shake a closure out of an object that is always
+// constructed.
 
 /** Shorter, then simpler: `'a#b'` before `'a'` before `''`. */
 const shrinkString = (value: string): readonly string[] => {

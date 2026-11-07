@@ -34,6 +34,7 @@ import {
     ref,
     refine,
     scope,
+    spread,
     string,
     union,
 } from '../../codec'
@@ -219,6 +220,20 @@ describe('a path that crosses a whole-value adapter', () => {
         // @ts-expect-error a path cannot go into `legacy`, at the type as at run time
         expect(() => atOf(Migrated, ['a', 'x'])).toThrow(
             /a path cannot go into `legacy` at 'x'/,
+        )
+    })
+
+    it('a position past the prefix of a list with a suffix answers a codec that refuses on use, and does not throw', () => {
+        const Tags = itemOf(
+            object({ tags: list(string, spread(string), string) }),
+        )
+        const past = atOf(Tags as never, ['tags', 1] as never) as unknown as {
+            encode: (value: never) => unknown
+        }
+        const refused = past.encode('x' as never)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toMatch(
+            /a path cannot go to position 1 of a list with a suffix/,
         )
     })
 

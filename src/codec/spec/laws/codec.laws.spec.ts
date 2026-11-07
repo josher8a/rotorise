@@ -22,7 +22,6 @@ import {
     boolean,
     CodecError,
     decimal,
-    discriminatedUnion,
     failed,
     fill,
     held,
@@ -30,10 +29,8 @@ import {
     legacy,
     list,
     nullable,
-    nullValue,
     number,
     object,
-    opaque,
     optional,
     ref,
     refine,
@@ -886,8 +883,7 @@ describe('(C): what a codec reads, it can write', () => {
      * (Q) of stored ones leaves the gap this file exists to close.
      *
      * It was exercised in two files, both of them about one entity apiece. Here it runs over the
-     * whole table the other laws use, and over stored forms an arbitrary cannot produce: DynamoDB
-     * normalises `N`, so `'1.50'` comes back `'1.5'` and only a fixed point survives one pass.
+     * whole table the other laws use, on the items that `encode` wrote for generated values.
      */
     const itemsOf = <T>(
         subject: { encode: (v: T) => unknown },
@@ -905,7 +901,29 @@ describe('(C): what a codec reads, it can write', () => {
     }
 
     it('is stable for a wide entity, over items it wrote itself', () => {
-        checkStable(Pet, itemsOf(Pet, Pet as unknown as AnyCodec, 40, 20260829))
+        const items = itemsOf(Pet, Pet as unknown as AnyCodec, 40, 20260829)
+        // a codec that refuses what it generates drops each draw, and no item is no test
+        expect(items.length).toBeGreaterThan(20)
+        checkStable(Pet, items)
+    })
+
+    it('is no green run over a codec that refuses every value it generates', () => {
+        const Refusing = item(
+            object({
+                petId: held(string, string, {
+                    encode: () => new CodecError('no'),
+                    decode: (value: string) => value,
+                }),
+            }),
+        )
+        const items = itemsOf(
+            Refusing,
+            Refusing as unknown as AnyCodec,
+            40,
+            20260829,
+        )
+        expect(items).toEqual([])
+        expect(() => checkStable(Refusing, items)).toThrow(CodecError)
     })
 
     /**
@@ -952,202 +970,15 @@ describe('(C): what a codec reads, it can write', () => {
 })
 
 /**
- * **Admission against `encode`, in the one direction that is true.**
+ * **Admission against `encode`.**
  *
- * `accepts` asks of the pair the model's write domain: whether the meaning's `e` is defined at the
- * value. The obvious law here is therefore `accepts(c, v) ⟺ !failed(c.encode(v))`, and half
- * of it used to be false — not because the port was wrong, but because **encoding did not
- * validate**. A codec's input is typed, so `string.encode(5)` wrote `{ S: 5 }` and
- * `array(string).encode([5])` wrote `{ L: [{ S: 5 }] }`. `carries`'s own docstring said this for
- * as long as it existed; what was missing was anything that measured how far it went.
- *
- * **That was true and is not any more.** The list of codecs where the converse failed was this
- * file's deliverable while the question was open — twenty-three of thirty-two — and the question
- * was whether `encode` should consult `admits`, which is a behaviour change and was JH's call.
- * It was taken: every row now runs the predicate admission runs, so the law below is the iff.
- *
- * What the old nine exact rows were exact *for* is still the interesting part, because it is what
- * the other twenty-three had to be given:
- *
- * - the five literals and `null` validated because their admissible set is **data this library
- *   owns** — `ℓ` is frozen at construction, so the check is decidable and `encode` ran it.
- * - `opaque` and `custom` are exact because their rows **ask the codec** rather than describing it.
- *   A question cannot disagree with its answer. That is the model's own move at `custom`, and the
- *   reason `opaque`'s rows were converted to match — and it is why those two are the one pair
- *   `encode` must *not* consult admission for: admission reaches them by calling `encode`.
- *
- * Everything else was loose at the value kinds it was handed but never checked, and now checks.
+ * `accepts` reads `encode` as a refusal: it is `!failed(encode(value))`, and a throw counts as a
+ * refusal. So `accepts` and `encode` agree by definition, and no cross of codecs and values can
+ * show a defect that the definition hides. The rows below are the ones that the model states: a
+ * value that the type of a codec excludes is refused by `encode`, so `accepts` answers `false`.
  */
-describe('`accepts`, and the direction of the law that is true', () => {
+describe('`accepts` answers the rows that the model states', () => {
     const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
-
-    /** One entry per `Term` kind, plus the literal at each base and the two `opaque` policies. */
-    const codecs: readonly (readonly [string, AnyCodec])[] = [
-        ['string', string],
-        ['string(...)', string('A', 'B')],
-        ['decimal', decimal],
-        ["decimal('1')", decimal('1', '2.5')],
-        ['number', number],
-        ['number(...)', number(0, 1, 2)],
-        ['boolean', boolean],
-        ['boolean(true)', boolean(true)],
-        ['null', nullValue],
-        ['binary', binary],
-        ['binary(...)', binary(new Uint8Array([1, 2]))],
-        ['opaque', opaque],
-        ["opaque('lossy')", opaque('lossy')],
-        ['set', string.set()],
-        ['set(decimal)', decimal.set()],
-        ['array', array(string)],
-        ['list', list(string, number)],
-        ['list(rest)', list(string, spread(number))],
-        ['open object', object([string, optional(decimal)])],
-        ['attributes', item(object({ a: string, b: number }))],
-        [
-            'attributes(open)',
-            item(object({ a: string }, [string, optional(decimal)])),
-        ],
-        ['nullable', nullable(string)],
-        ['legacy', legacy({ current: decimal, older: string })],
-        ['refine', refine(string, isTag, { arbitrary: () => 't-x' as const })],
-        [
-            'held',
-            held(string.set(), array(string), {
-                encode: (tags: readonly string[]) => new Set(tags),
-                decode: (tags: ReadonlySet<string>) => [...tags],
-            }),
-        ],
-        ['ref', scope({ At: ref('Str'), Str: string }).At],
-        [
-            'tagged',
-            discriminatedUnion('type', [
-                object({ type: string('CHECKUP'), petId: string }),
-                object({
-                    type: string('SHOT'),
-                    petId: string,
-                    vaccine: string,
-                }),
-            ]),
-        ],
-        [
-            'untagged',
-            union([
-                object({ petId: string, price: decimal }),
-                object({ petIds: array(string) }),
-            ]),
-        ],
-    ] as unknown as readonly (readonly [string, AnyCodec])[]
-
-    /**
-     * Every codec's own generated values, crossed with every codec — which is the whole method.
-     *
-     * An arbitrary only ever produces values its own codec admits, so a pool drawn from one codec
-     * exercises the implication and finds nothing. The looseness lives in the *cross* terms: a
-     * `number` handed a `decimal`'s string, a `set` handed a `string`. The hand-written tail is for
-     * the kinds no arbitrary in the table produces — a plain object whose names are right and whose
-     * values are not, which is the only way to reach an object option's looseness.
-     */
-    const pool: unknown[] = []
-    for (const [, one] of codecs) {
-        for (const seed of [1, 7, 0x5eed]) {
-            try {
-                pool.push(arbitraryOf(one, rngFrom(seed), 3))
-            } catch {
-                // a hand-written codec generates nothing unless it says how
-            }
-        }
-    }
-    pool.push(
-        5,
-        'yes',
-        true,
-        null,
-        undefined,
-        [],
-        [5],
-        {},
-        new Set(),
-        new Set([5]),
-        new Set(['a', 5]),
-        new Uint8Array([9]),
-        'bytes',
-        Number.NaN,
-        1e400,
-        '1.50',
-        0,
-        -1,
-        { a: 5, b: 0 },
-        { a: 5, b: 'x' },
-        { a: 'x', b: 'y' },
-        { petId: 5, price: 5 },
-        { petId: 'p', price: 5 },
-        { type: 'CHECKUP', petId: 5 },
-        { type: 'NOPE', petId: 'p' },
-    )
-
-    /** `encode` is a `Result`-returning function that can still *throw*: `held`'s adapter does. */
-    const writesIt = (one: AnyCodec, value: unknown): boolean => {
-        try {
-            return !failed(one.encode(value as never))
-        } catch {
-            return false
-        }
-    }
-
-    /**
-     * **The law.** Nothing `accepts` accepts is refused by `encode`, at any codec in the table over
-     * any value in the pool. This is the half that makes `accepts` usable as a *filter*: a union
-     * resolver, or an `encode` that validated, could rely on it without narrowing what either
-     * writes today.
-     */
-    it('is sound: nothing it admits does `encode` refuse', () => {
-        const unsound: string[] = []
-        for (const [name, one] of codecs) {
-            for (const value of pool) {
-                if (accepts(one, value) && !writesIt(one, value)) {
-                    unsound.push(`${name} @ ${String(value)}`)
-                }
-            }
-        }
-        expect(unsound).toEqual([])
-    })
-
-    /**
-     * **The law, both ways, at every codec in the table over every value in the pool.**
-     *
-     * This was two tests and a list. The list was twenty-three codecs whose `encode` wrote a value
-     * `admits` rejects, and it was the deliverable while the question "should `encode` validate?"
-     * was open. It is closed, so the list is empty and the two halves are one assertion.
-     *
-     * How it went: gating the five **ground** rows on the predicates `admits` already used closed
-     * seventeen, because twelve of the twenty-three were loose only through their elements — a
-     * `tuple` took a `Uint8Array` of the right length because its positions did, and `attributes`,
-     * the wrappers, `legacy`, `held`, `lazy` and both unions inherited the same way. The remaining
-     * six were loose in their own row and got their own gate: `set` asked `instanceof Set` before
-     * spreading, `array` and `tuple` asked `Array.isArray`, `record` asked `asRecord`, and `refine`
-     * started running its predicate on the way in.
-     *
-     * **Every gate is the predicate `admits` was already using**, not a second description of it.
-     * That is the whole reason this can be an iff rather than two lists kept in agreement: there is
-     * one test per kind and two callers of it.
-     *
-     * If this fails, one of the two moved. A failure naming a codec on the `accepts`-accepts side
-     * means `encode` got stricter than the row; on the `encode`-writes side, that `accepts` was
-     * loosened — which is the drift the whole apparatus exists to catch.
-     */
-    it('holds both ways, everywhere', () => {
-        const disagree: string[] = []
-        for (const [name, one] of codecs) {
-            for (const value of pool) {
-                if (accepts(one, value) !== writesIt(one, value)) {
-                    disagree.push(
-                        `${name} @ ${String(value)}: admits=${accepts(one, value)} writes=${writesIt(one, value)}`,
-                    )
-                }
-            }
-        }
-        expect(disagree).toEqual([])
-    })
 
     /** The rows the brief called out, spelled as the one-liners they are. */
     it('answers the specific rows the model states', () => {

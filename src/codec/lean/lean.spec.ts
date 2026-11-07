@@ -2072,12 +2072,10 @@ const itemReads = (): readonly ItemRead[] => {
 
 describe('union resolution, model against library', () => {
     /**
-     * **Coverage, and it is worth being exact about that.** Two resolutions were pinned before —
-     * a positive vector *is* an agreement about which option answered, since the attribute it
-     * names is the one that option produced — and the refusal set carries 88 more union lines.
-     * This widens two to 208, and the value is the corpus rather than the question. 216 with
-     * `set_of_literal`, and 248 by `literal_non_ascii` and the three products: each new entry
-     * adds the resolutions of the unions it takes part in.
+     * **Coverage.** A positive vector is an agreement about which option answered, because the
+     * attribute it names is the one that option produced. The value of this test is the corpus and
+     * not the question: each new corpus entry adds the resolutions of the unions that it takes part
+     * in.
      */
     it('the emitter drops no union resolution: it offers 450 write pairs and every one of 481 read pairs', () => {
         expect(writeResolutions().length).toBe(450)
@@ -2342,19 +2340,16 @@ describe('the legacy read gate, against the model', () => {
 
 describe("the read side, against the model's read row", () => {
     /**
-     * **The measurement that rejected a port.** HANDOFF's fourth item wanted the resolver's read
-     * side decided through a port of `Closed.AdmA`. `decode` already agrees with `Closed.AdmA` at every pair
-     * the kernel can check, because `decode` validates — it parses data somebody else wrote —
-     * where `encode` trusted its argument's type. So the port would have been a second
-     * description of one thing, and this differential is the guard that a second description
-     * would have needed anyway.
+     * `decode` agrees with `Closed.AdmA` at every pair that the kernel can check, because `decode`
+     * validates: it parses data that another writer wrote, where `encode` trusts the type of its
+     * argument. A port of `Closed.AdmA` for the resolver would be a second description of one thing,
+     * so this differential is the guard.
      *
-     * **All 1591 are asserted, and it was 1588.** Three pairs were excluded as stuck on the
-     * `Double` axiom: `scalar_number__reads__scalar_decimal`,
+     * **Every pair is asserted.** `scalar_number__reads__scalar_decimal`,
      * `scalar_number__reads__literal_decimal` and `scalar_number__reads__raw_N`, each a `number`
-     * codec against an `N` attribute. The model has no axiom, and `Closed.AdmA` at `number` decides
-     * a concrete numeral `.n` by `rfl`, so the filter excluded pairs the row answers. The filter is
-     * deleted, and the three are theorems in `.readverdicts.lean` like every other pair.
+     * codec against an `N` attribute, are theorems in `.readverdicts.lean` like every other pair:
+     * the model has no axiom at them, and `Closed.AdmA` at `number` decides a concrete numeral `.n`
+     * by `rfl`.
      */
     it('offers 2805 pairs, and asserts every one', () => {
         const verdicts = readVerdicts()

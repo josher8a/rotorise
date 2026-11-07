@@ -301,11 +301,6 @@ describe('DynamoDB Utils', () => {
             { separator: '-' },
         )
 
-        expect(testTableEntry.fromEntry).toBeDefined()
-        expect(testTableEntry.toEntry).toBeDefined()
-        expect(testTableEntry.key).toBeDefined()
-        expect(testTableEntry.infer).toBeDefined()
-
         type entries =
             | ({
                   a: 'a1'

@@ -2254,23 +2254,20 @@ describe('fits is the order of the meet', () => {
     }
 
     /**
-     * **The stated limits.** Twenty-four pairs disagree, and each has a named cause.
+     * **The stated limits.** A pair can disagree for one of three causes, and the test asserts the
+     * cause of each pair that disagrees.
      *
-     * - The refinement limit: `1.198 lr`, `1.428 rl`, `1.429 rl`, `1.431 rl`, `1.433 rl`,
-     *   `1.434 rl`, `1.435 rl`, `1.456 lr`, `1.561 rl`, `1.681 lr`, `1.743 lr`, `4.848 rl`,
-     *   `4.850 lr`, `4.850 rl` and `4.928 rl`. The pattern holds a refinement. The meet refines the option
-     *   by the predicate, and the host cannot read the predicate, so `fits` answers no, and the
-     *   sample finds no value that the predicate refuses.
-     * - The closure limit: `20261004.648 lr`, `20261004.969 rl`, `20261004.972 rl`, `4.590 rl`,
-     *   `4.604 lr`, `4.605 lr`, `4.720 lr` and `4.901 lr`. The option holds an older reading of a
-     *   part of the pattern, and the meet holds that part of the pattern. The older reader of the
-     *   pool returns a value that the current form cannot write, so the older reading holds the
-     *   pairs of the current form and no other pair. An opaque function decides that, and the
-     *   order cannot read it, so `fits` answers no.
-     * - `1.925 lr`, a sampler miss: an open option whose block holds a number, against a pattern
-     *   that holds the optional name `m` at an object. The meet holds `m` at `never`, and the
-     *   option holds `m` at its block. The sample draws no value at `m`, so a decode shows the
-     *   difference.
+     * - The refinement limit: the pattern holds a refinement. The meet refines the option by the
+     *   predicate, and the host cannot read the predicate, so `fits` answers no, and the sample
+     *   finds no value that the predicate refuses.
+     * - The closure limit: the option holds an older reading of a part of the pattern, and the meet
+     *   holds that part of the pattern. The older reader of the pool returns a value that the
+     *   current form cannot write, so the older reading holds the pairs of the current form and no
+     *   other pair. An opaque function decides that, and the order cannot read it, so `fits`
+     *   answers no.
+     * - The sampler miss: an open option whose block holds a number, against a pattern that holds
+     *   the optional name `m` at an object. The meet holds `m` at `never`, and the option holds `m`
+     *   at its block. The sample draws no value at `m`, so a decode shows the difference.
      */
     it('holds fits exactly where the meet of the option as written and the pattern open is the option', () => {
         const rows = buildPool().flatMap((one) =>
@@ -2331,13 +2328,37 @@ describe('fits is the order of the meet', () => {
             '4.901 lr',
             '4.928 rl',
         ])
-        const missed = rows.find((row) => row.key === '1.918 lr')
-        expect(missed).toBeDefined()
-        if (missed === undefined) return
+        // each disagreement has one of the three stated causes, and a disagreement of a new class
+        // fails here. A refinement in the pattern comes first. The sampler miss is a stored row that
+        // the option reads and the meet refuses. A legacy in the option is the closure limit
+        const holds = (root: unknown, kind: string): boolean => {
+            const seen = new WeakSet<object>()
+            const walk = (node: unknown): boolean => {
+                if (typeof node !== 'object' || node === null) return false
+                if (seen.has(node)) return false
+                seen.add(node)
+                if ((node as { kind?: unknown }).kind === kind) return true
+                return Object.values(node).some(walk)
+            }
+            return walk(root)
+        }
         const stored = { M: { a: { N: '1' }, m: { N: '1' } } }
-        expect(failed(missed.o.decode(stored))).toBe(false)
-        expect(failed(meetOrdered(missed.o, missed.p).decode(stored))).toBe(
-            true,
+        const causeOf = (key: string): string => {
+            const row = rows.find((one) => one.key === key)
+            if (row === undefined) return 'no row'
+            if (holds(termOf(row.p), 'refine')) return 'refinement'
+            if (
+                !failed(row.o.decode(stored)) &&
+                failed(meetOrdered(row.o, row.p).decode(stored))
+            ) {
+                return 'sampler miss'
+            }
+            return holds(termOf(row.o), 'legacy') ? 'closure' : 'no cause'
+        }
+        const causes = disagree.map(causeOf)
+        expect(causes.filter((cause) => cause.startsWith('no '))).toEqual([])
+        expect(causes.filter((cause) => cause === 'sampler miss')).toHaveLength(
+            1,
         )
     })
 })
@@ -2454,7 +2475,6 @@ describe('the algebraic laws of narrow and of the meet, over the pool', () => {
             }
         }
         expect(broken).toEqual([])
-        expect(count.values).toBeGreaterThan(count.slices)
         expect(count).toEqual({
             slices: 12210,
             unrooted: 0,
@@ -2513,7 +2533,6 @@ describe('the algebraic laws of narrow and of the meet, over the pool', () => {
             }
         }
         expect(broken).toEqual([])
-        expect(count.sameTerm).toBeGreaterThan(count.pairs / 2)
         expect(count).toEqual({
             pairs: 2758,
             sameTerm: 2751,

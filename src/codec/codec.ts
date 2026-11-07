@@ -624,12 +624,15 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  *
- * **A segment has three answers**, as the model's `childG` has. The codecs at the segment. No
+ * **A segment has five answers.** The model's `childG` has the first three. The codecs at the segment. No
  * codec, where the term stores a member that is not the container of the segment: the store
- * refuses the segment on every attribute of the term, so the term leaves the frontier. And
+ * refuses the segment on every attribute of the term, so the term leaves the frontier.
  * {@link absent}, where the container admits no value at the segment: a closed object that lacks
  * the name, or a list with no spread past its prefix. A write there leaves an item that the codec
- * does not read, so `absent` stays on the frontier and the frontier refuses on use.
+ * does not read, so `absent` stays on the frontier and the frontier refuses on use. A returned
+ * `CodecError`, where the path cannot continue: a position past the prefix of a list with a suffix,
+ * and a path into a `held`. `at` turns it into a codec that refuses on use. A thrown `CodecError`,
+ * from `refine` and `legacy`: the call of `at` throws.
  *
  * `cycles` holds the entries of the flat scope of the root of the walk, which {@link printedMember}
  * reads.
@@ -640,7 +643,6 @@ const childrenOf = (
     cycles: Cycles,
 ): readonly AnyCodec[] | CodecError => {
     const def = codec.def
-    // a position enters a list, and a name enters a map
     const container = typeof segment === 'number' ? 'L' : 'M'
     let stored = memberOf(def)
     if (def.kind === 'held' || def.kind === 'refine' || def.kind === 'legacy')
@@ -660,8 +662,7 @@ const childrenOf = (
                       : absent,
             ]
         }
-        // a set is unordered, so no document path addresses a member of one — `set` never offered
-        // a child either, and refusing here is what keeps a meaningless path from compiling
+        // a position enters the prefix or the spread of a list, and a name enters no list
         case 'list': {
             if (apart || typeof segment !== 'number') return []
             // **A suffix refuses every position past the prefix.** Which codec holds position `n`
@@ -705,7 +706,9 @@ const childrenOf = (
         // `opaque` admits every value, so the codec at each segment is `opaque` again
         case 'opaq':
             return [codec]
-        // a primitive, a literal and a set each store a member that no segment enters
+        // a primitive, a literal and a set each store a member that no segment enters. A set is
+        // unordered, so no document path addresses a member of one, and the empty frontier keeps a
+        // meaningless path from compiling
         default:
             return []
     }
@@ -6749,8 +6752,8 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
  *
  * **Every option is admitted by attempt**, an object option included, as in the model, where a
  * union acts exactly where one of its options acts (`select_isSome_attempt`). The kind of the value is a cheap filter in front of the attempt, and the
- * names present select nothing. The declaration guard makes the attempt decide: two options that
- * both admit one value are refused where the union is declared, so at most one attempt succeeds.
+ * names present select nothing. Two options that both admit one value are well formed, because
+ * compatibility makes the order of the attempts unobservable.
  */
 export type Option = {
     readonly codec: AnyCodec

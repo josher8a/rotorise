@@ -104,6 +104,6 @@ describe('a value is attributed to the read of the pair by one condition', () =>
                     refine: (value: { x: string }) => ({ x: `${value.x}!` }),
                 } as never,
             ),
-        ).not.toThrow(/\(C\) fails/)
+        ).not.toThrow()
     })
 })
