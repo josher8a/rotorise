@@ -29,7 +29,7 @@ import type {
 import { DynamoNumber, memberOf } from './attribute'
 import type { LiteralValue, Shape } from './codec'
 import type { Result } from './result'
-import { CodecError, failed } from './result'
+import { CodecError, failed, setOwn } from './result'
 
 /**
  * A value read as a bare record of attributes, or nothing.
@@ -123,8 +123,10 @@ export const thrownReason = (thrown: unknown): string =>
     thrown instanceof Error ? thrown.message : rendered(thrown)
 
 /**
- * The refusal of a stored item that is no plain object, or `undefined`. A whole-item decode reads
- * the item from outside the program, so each entry of a decode asks it before the first read.
+ * The refusal of an item that is no plain object, or `undefined`. A whole-item decode reads the item
+ * from outside the program, so each entry of a decode asks it before the first read. A whole-item
+ * encode asks it too: an instance of a class writes a row that decode returns as a plain object,
+ * and the `M` row of the same value refuses.
  */
 export const itemRefusal = (item: unknown): CodecError | undefined =>
     asRecord(item) === undefined
@@ -331,7 +333,7 @@ export const readTags = (
     for (const name of ks) {
         const one = readTag(item, name)
         if (failed(one)) return one
-        out[name] = one
+        setOwn(out, name, one)
     }
     return out
 }

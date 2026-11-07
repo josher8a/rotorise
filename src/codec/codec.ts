@@ -66,6 +66,7 @@ import {
     failed,
     orThrow,
     type Result,
+    setOwn,
 } from './result'
 import {
     alignedRows,
@@ -910,11 +911,11 @@ const preconditionsOf = (
 /**
  * The codec at a path whose walk refused. Both halves return the refusal, so
  * no value is written and no attribute is read, and the term is **`never`** for the reason that
- * {@link unresolvedAt} gives. Each call returns a new `CodecError`, because `under` changes the
- * error that it receives.
+ * {@link unresolvedAt} gives. Both halves return the one refusal, because `under` copies an error
+ * and never changes the error that it receives.
  */
 const refusedAt = (refusal: CodecError): AnyCodec => {
-    const refused = () => new CodecError(refusal.message, refusal.kind)
+    const refused = () => refusal
     return codec<never, AttributeValue>({
         def: { kind: 'never' },
         encode: refused,
@@ -4720,11 +4721,16 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
     // a term that reads a name that no scope binds refuses each use
     const self: ObjectItem = {
         [itemMark]: true,
-        encode: (item) => openRefusal(itemDef) ?? (body.encode(item) as never),
+        encode: (item) =>
+            openRefusal(itemDef) ??
+            itemRefusal(item) ??
+            (body.encode(item) as never),
 
         encodePartial: (patch) => {
             const open = openRefusal(itemDef)
             if (open) return open
+            const refused = itemRefusal(patch)
+            if (refused) return refused
             const held = patch as Record<string, unknown>
             const out: Record<string, AttributeValue> = {}
             for (const name in held) {
@@ -4738,7 +4744,7 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
                 }
                 const written = codecOfTerm(term).encode(value as never)
                 if (failed(written)) return written.under(name)
-                out[name] = written
+                setOwn(out, name, written)
             }
             return out as never
         },
@@ -6504,11 +6510,13 @@ const dissectionOf = (
         [itemMark]: true as const,
         encode: (item: T) =>
             openRefusal(unionDef) ??
+            itemRefusal(item) ??
             andThen(andThen(tagOf(item), pick), (variant) =>
                 variant.encode(item as never),
             ),
         encodePartial: (patch: Partial<T>) =>
             openRefusal(unionDef) ??
+            itemRefusal(patch) ??
             andThen(andThen(tagOf(patch), pick), (variant) =>
                 variant.encodePartial(patch as never),
             ),

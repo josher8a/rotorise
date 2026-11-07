@@ -48,11 +48,28 @@ export class CodecError extends Error {
         this.kind = kind
     }
 
-    /** The same failure, one level further in. */
+    /**
+     * The same failure, one level further in, as a copy.
+     *
+     * A caller owns a refusal that an adapter returns, and one refusal reaches many reads, so the
+     * path goes on a copy and the error that the caller returned never changes. The copy calls no
+     * constructor, because a constructor captures a new stack at each level of a refusal. The copy
+     * reads the stack of the original on demand, because a read of `stack` formats the stack, and
+     * a refusal that unwinds through many levels would format it at each level.
+     */
     under(segment: string | number): this {
-        this.path = [segment, ...this.path]
-        this.message = `at ${asPath(this.path)}: ${this.reason}`
-        return this
+        const path = [segment, ...this.path]
+        const deeper: this = Object.create(Object.getPrototypeOf(this))
+        Object.defineProperty(deeper, 'stack', {
+            get: () => this.stack,
+            configurable: true,
+        })
+        // the own fields of a subclass, such as the term of a refused recursion, stay on the copy
+        Object.assign(deeper, this, {
+            message: `at ${asPath(path)}: ${this.reason}`,
+            path,
+        })
+        return deeper
     }
 }
 
@@ -135,6 +152,30 @@ export const every = <A, B>(
 }
 
 /**
+ * Sets an own data property of a record that a decode or an encode builds.
+ *
+ * `JSON.parse` and `Object.fromEntries` hold `__proto__` as an own data property, and a plain
+ * assignment of that name runs the setter of `Object.prototype`, which drops a primitive and takes
+ * an object as the prototype. Each other name takes the plain assignment.
+ */
+export const setOwn = <T>(
+    record: Record<string, T>,
+    name: string,
+    value: T,
+): void => {
+    if (name === '__proto__') {
+        Object.defineProperty(record, name, {
+            value,
+            writable: true,
+            enumerable: true,
+            configurable: true,
+        })
+    } else {
+        record[name] = value
+    }
+}
+
+/**
  * Every entry, or the first failure, labelled with its key.
  *
  * Walks the object rather than `Object.entries` of it. Every map, record and item goes through here
@@ -148,7 +189,7 @@ export const everyEntry = <A, B>(
     for (const key in held) {
         const next = step(held[key] as A, key)
         if (failed(next)) return next.under(key)
-        out[key] = next
+        setOwn(out, key, next)
     }
     return out
 }

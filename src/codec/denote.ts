@@ -42,7 +42,14 @@ import type {
     Shape,
 } from './codec'
 import type { Result } from './result'
-import { andThen, CodecError, every, everyEntry, failed } from './result'
+import {
+    andThen,
+    CodecError,
+    every,
+    everyEntry,
+    failed,
+    setOwn,
+} from './result'
 import { agrees, guardAt, sideOf } from './scoped'
 import type { Alternatives, Body, Field, Literal, Term } from './term'
 import {
@@ -248,7 +255,7 @@ export const assignmentOf = (
                 `'${name}' names ${alts.ls.length} values at one option (${alts.ls.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
             )
         }
-        out[name] = String(alts.ls[0])
+        setOwn(out, name, String(alts.ls[0]))
     }
     return out
 }
@@ -406,7 +413,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 }
                 const written = attribute.encode(value as never, enclosing)
                 if (failed(written)) return written.under(name)
-                out[name] = written
+                setOwn(out, name, written)
             }
             for (const name in held) {
                 const value = held[name]
@@ -421,7 +428,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 }
                 const written = restPair.encode(value as never, enclosing)
                 if (failed(written)) return written.under(name)
-                out[name] = written
+                setOwn(out, name, written)
             }
             return out
         },
@@ -442,14 +449,14 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                     switch (field.mark) {
                         case 'undefinable':
                             // before the skip: the key survives an omitted attribute
-                            out[name] = undefined
+                            setOwn(out, name, undefined)
                             continue
                         case 'optional':
                             continue
                         case 'fill':
                             // `copied` and not `structuredClone`: a decode must be writable, so
                             // the copy keeps the class of each value, a `DynamoNumber` included
-                            out[name] = copy ? copied(field.v) : field.v
+                            setOwn(out, name, copy ? copied(field.v) : field.v)
                             continue
                         case 'req':
                             return new CodecError(
@@ -459,7 +466,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 }
                 const read = attributeCodec.decode(attribute, enclosing)
                 if (failed(read)) return read.under(name)
-                out[name] = read
+                setOwn(out, name, read)
             }
             for (const name in item) {
                 // a name that holds `undefined` is absent, as the write reads it
@@ -475,7 +482,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                     enclosing,
                 )
                 if (failed(read)) return read.under(name)
-                out[name] = read
+                setOwn(out, name, read)
             }
             return out
         },
@@ -530,6 +537,23 @@ export const heldThrough = (
 }
 
 /**
+ * Whether the caller predicate holds, or the refusal of a predicate that throws. The predicate is
+ * the caller's code, so a throw is a refusal of the value, as a throw of a `held` conversion is.
+ */
+const ask = (
+    holds: (value: never) => boolean,
+    value: unknown,
+): boolean | CodecError => {
+    try {
+        return holds(value as never)
+    } catch (thrown) {
+        return new CodecError(
+            `the predicate of this refinement threw: ${thrownReason(thrown)}`,
+        )
+    }
+}
+
+/**
  * The rule `(refine)`: a pair narrowed by a predicate on **values** — the model's `Codec.restrict`.
  *
  * Both halves gate on the *same* predicate applied to the same value, which is what makes each law
@@ -554,11 +578,19 @@ export const restrict = (
     // two orders agree because the model's `q` is total
     encode: (value, enclosing) => {
         const written = base.encode(value, enclosing)
-        return !failed(written) && holds(value) ? written : refuse(value)
+        if (failed(written)) return refuse(value)
+        const asked = ask(holds, value)
+        return asked === true
+            ? written
+            : asked === false
+              ? refuse(value)
+              : asked
     },
     decode: (attribute, enclosing) => {
         const read = base.decode(attribute, enclosing)
-        return failed(read) || holds(read as never) ? read : refuse(read)
+        if (failed(read)) return read
+        const asked = ask(holds, read)
+        return asked === true ? read : asked === false ? refuse(read) : asked
     },
 })
 
@@ -941,7 +973,7 @@ export const byTagSem = <V>(
             const text =
                 typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
             if (failed(text)) return text
-            out[name] = String(text)
+            setOwn(out, name, String(text))
         }
         return out
     },

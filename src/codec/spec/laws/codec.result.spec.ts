@@ -119,11 +119,10 @@ describe('the unsafe pair throws, and is the one composition uses', () => {
     })
 })
 
-describe('anything that is not a decoding failure still throws', () => {
-    it('does not swallow a bug in a caller-supplied predicate', () => {
-        // a refinement's predicate and a thunk are the two places a caller's code still runs
-        // uncontained. An adapter contains its pair and reports a throw as a refusal, which is
-        // the backstop `held` states, so the bug has to come from somewhere that does not
+describe('a throw of caller code is a refusal', () => {
+    it('refuses the value where the predicate of a refinement throws, as an adapter does', () => {
+        // a read of a stored row is data from outside, so a throw of the predicate of the caller
+        // returns as a `CodecError` and a union reads the next option
         const broken = refine(
             string,
             (_value): _value is string => {
@@ -131,7 +130,11 @@ describe('anything that is not a decoding failure still throws', () => {
             },
             { describe: 'a predicate with a bug in it' },
         )
-        expect(() => broken.encode('x')).toThrow(TypeError)
+        const refused = broken.encode('x')
+        expect(refused).toBeInstanceOf(CodecError)
+        expect(isError(refused) && refused.message).toBe(
+            'the predicate of this refinement threw: a bug, not a bad row',
+        )
     })
 })
 

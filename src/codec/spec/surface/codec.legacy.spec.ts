@@ -331,7 +331,7 @@ describe('a fill value that makes the codec throw', () => {
             throw new Error('the predicate read the fill value')
         })
         expect(() => fill(strict, 'x')).toThrow(
-            /The fill value of `fill` must be a value the codec it fills can write, and this `refine` refuses the fill value: the predicate read the fill value/,
+            /The fill value of `fill` must be a value the codec it fills can write, and this `refine` refuses the fill value: the predicate of this refinement threw: the predicate read the fill value/,
         )
     })
 })
