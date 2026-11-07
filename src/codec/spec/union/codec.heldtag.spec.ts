@@ -6,10 +6,12 @@
  * as the variant that the caller names `'dog'`, and the value that the read returns writes back to
  * the same row.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
 import {
+    type Decoded,
     discriminatedUnion,
+    exclude,
     held,
     item,
     number,
@@ -21,12 +23,11 @@ const Dog = held(string('D'), string('dog'), {
     encode: (_: 'dog') => 'D' as const,
     decode: (_: 'D') => 'dog' as const,
 })
-const Pets = item(
-    discriminatedUnion('kind', [
-        object({ kind: Dog, bark: string }),
-        object({ kind: string('cat'), lives: number }),
-    ]),
-)
+const PetUnion = discriminatedUnion('kind', [
+    object({ kind: Dog, bark: string }),
+    object({ kind: string('cat'), lives: number }),
+])
+const Pets = item(PetUnion)
 
 describe('a tag under a caller adapter', () => {
     it('keys the variant by the stored literal in the type', () => {
@@ -76,5 +77,19 @@ describe('a number tag under a caller adapter', () => {
                 ]),
             ),
         ).toThrow(/every option must name 'size' with a literal/)
+    })
+})
+
+describe('a slice of a tag under a caller adapter', () => {
+    const NotCats = exclude(PetUnion, object({ kind: string('cat') }))
+
+    it('keeps the variant that the stored literal selects, in the type and at run time', () => {
+        expectTypeOf<Decoded<typeof NotCats>>().toEqualTypeOf<{
+            readonly kind: 'dog'
+            readonly bark: string
+        }>()
+        const row = { M: { kind: { S: 'D' }, bark: { S: 'woof' } } }
+        expect(NotCats.unsafeDecode(row)).toEqual({ kind: 'dog', bark: 'woof' })
+        expect(NotCats.unsafeEncode({ kind: 'dog', bark: 'woof' })).toEqual(row)
     })
 })

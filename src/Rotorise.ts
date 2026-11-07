@@ -17,6 +17,7 @@ import type {
     ItemCodec,
     ItemSpec,
     itemMark,
+    KeyText,
     KnownKeys,
     ObjectOf,
     ObjectSlot,
@@ -439,8 +440,15 @@ type ComputeTableKeyType<
     Spec,
     Separator extends string,
     NullAs extends never | undefined = never,
+    CodecSpec = undefined,
 > = Spec extends InputSpecShape
-    ? CompositeKeyBuilderImpl<Entity, Spec, Separator, number, false>
+    ? CompositeKeyBuilderImpl<
+          TextView<Entity, CodecSpec>,
+          Spec,
+          Separator,
+          number,
+          false
+      >
     : Spec extends keyof Entity
       ? Replace<Entity[Spec], null, undefined>
       : Spec extends null
@@ -453,7 +461,8 @@ type ComputeTableKeyType<
                     ValueOfKey<Entity, Spec['discriminator']>
                 >,
                 Separator,
-                NullAs
+                NullAs,
+                CodecSpec
             >
           : never
 
@@ -461,6 +470,7 @@ type TableEntryImpl<
     Entity,
     Schema,
     Separator extends string = '#',
+    CodecSpec = undefined,
 > = Entity extends unknown
     ? show<
           {
@@ -471,10 +481,18 @@ type TableEntryImpl<
                             Schema[Key]['spec'],
                             ValueOfKey<Entity, Schema[Key]['discriminator']>
                         >,
-                        Separator
+                        Separator,
+                        never,
+                        CodecSpec
                     >
                   : Schema[Key] extends keyof Entity | InputSpecShape | null
-                    ? ComputeTableKeyType<Entity, Schema[Key], Separator>
+                    ? ComputeTableKeyType<
+                          Entity,
+                          Schema[Key],
+                          Separator,
+                          never,
+                          CodecSpec
+                      >
                     : ErrorMessage<'Invalid schema definition'>
           } & Entity
       >
@@ -1791,6 +1809,7 @@ type ProcessKey<
     Separator extends string,
     NullAs extends never | undefined = never,
     Config extends SpecConfigShape = SpecConfigShape,
+    CodecSpec = undefined,
 > = Separator extends ''
     ? never
     : [Entity] extends [never]
@@ -1799,7 +1818,7 @@ type ProcessKey<
         ? Replace<Entity[Spec], null, undefined>
         : Spec extends InputSpecShape
           ? CompositeKeyBuilderImpl<
-                Entity,
+                TextView<Entity, CodecSpec>,
                 Spec,
                 Separator,
                 Exclude<Config['depth'], undefined>,
@@ -1817,7 +1836,8 @@ type ProcessKey<
                     >,
                     Separator,
                     NullAs,
-                    Config
+                    Config,
+                    CodecSpec
                 >
               : ErrorMessage<'Invalid Spec'>
 
@@ -1826,6 +1846,7 @@ type OptimizedBuiltKey<
     Spec,
     Separator extends string,
     Config extends SpecConfigShape,
+    CodecSpec = undefined,
 > = Entity extends unknown
     ? show<
           Spec extends DiscriminatedSchemaShape
@@ -1837,10 +1858,48 @@ type OptimizedBuiltKey<
                     >,
                     Separator,
                     undefined,
-                    Config
+                    Config,
+                    CodecSpec
                 >
-              : ProcessKey<Entity, Spec, Separator, undefined, Config>
+              : ProcessKey<
+                    Entity,
+                    Spec,
+                    Separator,
+                    undefined,
+                    Config,
+                    CodecSpec
+                >
       >
+    : never
+
+/**
+ * The entity as a key prints it. A component of a key prints the stored text of its attribute, so
+ * a field under the adapter of a caller prints the stored literal where the entity holds the
+ * caller's value. A variant spec declares one field per variant, and the text is the union of the
+ * texts of the variants that declare the field.
+ */
+type TextView<Entity, CodecSpec> = [CodecSpec] extends [undefined]
+    ? Entity
+    : {
+          [K in keyof Entity]: KeyText<
+              Entity[K],
+              FieldOf<
+                  IsVariantSpec<CodecSpec> extends true
+                      ? VariantsOf<CodecSpec>
+                      : CodecSpec,
+                  K
+              >
+          >
+      }
+
+type VariantsOf<CodecSpec> = CodecSpec extends readonly unknown[]
+    ? CodecSpec[number]
+    : CodecSpec[keyof CodecSpec]
+
+type FieldOf<Spec, K> = Spec extends unknown
+    ? K extends keyof Spec
+        ? Spec[K]
+        : never
     : never
 
 type TableEntryDefinition<
@@ -1858,7 +1917,7 @@ type TableEntryDefinition<
      */
     toEntry: <const ExactEntity>(
         item: Exact<Entity, ExactEntity>,
-    ) => TableEntryImpl<ExactEntity, Schema, Separator>
+    ) => TableEntryImpl<ExactEntity, Schema, Separator, CodecSpec>
 
     /**
      * Extracts the raw entity from a table entry by removing all computed keys.
@@ -1867,7 +1926,14 @@ type TableEntryDefinition<
      * entry lacks give the same entity, because the key adds no information to the attributes.
      * Use this when processing items retrieved from DynamoDB.
      */
-    fromEntry: <const Entry extends TableEntryImpl<Entity, Schema, Separator>>(
+    fromEntry: <
+        const Entry extends TableEntryImpl<
+            Entity,
+            Schema,
+            Separator,
+            CodecSpec
+        >,
+    >(
         entry: Entry,
     ) => DistributiveOmit<Entry, keyof Schema>
 
@@ -1897,7 +1963,7 @@ type TableEntryDefinition<
         key: Key,
         attributes: Attributes,
         config?: Config & DepthRefusal<Config>,
-    ) => OptimizedBuiltKey<Attributes, Spec, Separator, Config_>
+    ) => OptimizedBuiltKey<Attributes, Spec, Separator, Config_, CodecSpec>
 
     /**
      * The keys a change to these attributes invalidates, rebuilt.
@@ -1943,7 +2009,7 @@ type TableEntryDefinition<
      * A zero-runtime inference helper. Use this with `typeof` to get the
      * total type of a table entry.
      */
-    infer: TableEntryImpl<Entity, Schema, Separator>
+    infer: TableEntryImpl<Entity, Schema, Separator, CodecSpec>
 
     /**
      * Creates a proxy to generate property paths as strings.
@@ -1952,7 +2018,7 @@ type TableEntryDefinition<
      * @example
      * table.path().data.nested.property.toString() // returns "data.nested.property"
      */
-    path: () => PathOf<TableEntryImpl<Entity, Schema, Separator>>
+    path: () => PathOf<TableEntryImpl<Entity, Schema, Separator, CodecSpec>>
 } & ([CodecSpec] extends [undefined]
     ? Record<never, never>
     : EntryCodecMethods<Entity, Schema, CodecSpec, CodecRest, Separator>) &
@@ -2793,39 +2859,118 @@ const componentsOf = (
 
 type PlainComponent = string | number | bigint | boolean | null | undefined
 
-/** The names that the lists of `Schema` use as a component. One test of the union is the cheap path. */
-type ComponentNames<Schema> = {
-    [K in keyof Schema]: Schema[K] extends readonly unknown[]
-        ? Extract<Schema[K][number], string>
+/** The names that a key spec uses as a component: each list, at any depth of a match. */
+type ComponentsOf<Spec> = Spec extends readonly unknown[]
+    ? Extract<Spec[number], string>
+    : Spec extends { readonly spec: infer Arms }
+      ? ComponentsOf<Arms[keyof Arms]>
+      : Spec extends { readonly cases: infer C }
+        ? ComponentsOf<ArmOfCases<C>>
         : never
+
+/** The names that the specs of `Schema` use as a component. One test of the union is the cheap path. */
+type ComponentNames<Schema> = {
+    [K in keyof Schema]: ComponentsOf<Schema[K]>
 }[keyof Schema]
 
+/** The value of each name of a union of names, one by one: a name that is a path reads at the path. */
+type ValuesOfNames<E, Names> = Names extends unknown
+    ? ValueOfKey<E, Names>
+    : never
+
+/** The refusal of one component, by the type of its value: an object prints as its `toString`. */
+type RefuseObject<
+    E,
+    Name extends string,
+    Own extends string,
+> = unknown extends ValueOfKey<E, Name>
+    ? unknown
+    : [ValueOfKey<E, Name>] extends [PlainComponent]
+      ? unknown
+      : ErrorMessage<`[tableEntry] '${Name}' holds an object, and ${Own} prints its toString. Give the attribute a codec that writes text or a number`>
+
 /**
- * The refusal of a component that holds an object, in an entry with no codec. Such an entry prints
- * the value itself, and an object prints as its `toString`, so two values give one key. A codec
- * writes the text of the attribute, so an entry with a codec passes. The refusal lands on the
- * component. A component of a type that the check cannot read (`unknown`) passes.
+ * The refusals of a key spec, on the component that is wrong, in a list and in each arm of a match.
+ * `Refuse` reads one name. `E` is the entity and `Enc` the attributes that the codec writes, or
+ * `never` for an entry with no codec.
  */
-type ValidateComponents<Schema, E, CodecSpec> = [CodecSpec] extends [undefined]
-    ? string extends keyof Schema
+type RefuseComponents<E, Enc, Spec> = Spec extends readonly unknown[]
+    ? {
+          [I in keyof Spec]: Spec[I] extends string
+              ? RefuseComponent<E, Enc, Spec[I]>
+              : unknown
+      }
+    : Spec extends { readonly spec: infer Arms }
+      ? { spec: { [L in keyof Arms]: RefuseComponents<E, Enc, Arms[L]> } }
+      : Spec extends { readonly cases: infer C }
+        ? {
+              cases: {
+                  [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
+                      ? readonly [unknown, RefuseComponents<E, Enc, Arm>]
+                      : unknown
+              }
+          }
+        : unknown
+
+/**
+ * One component. An entry with no codec prints the value, so an object is refused. An entry with a
+ * codec prints the text that the codec writes, so a member other than `S` and `N` is refused: a
+ * list, a map and a boolean print nothing. A path has no field of the codec, and the codec prints the
+ * raw value there, so an object at a path is refused with a codec too.
+ */
+type RefuseComponent<E, Enc, Name extends string> = [Enc] extends [never]
+    ? RefuseObject<E, Name, 'an entry with no codec'>
+    : Name extends `${string}.${string}`
+      ? RefuseObject<E, Name, 'a path component'>
+      : [Exclude<CodecMember<Enc, Name>, 'S' | 'N'>] extends [never]
         ? unknown
-        : [E[ComponentNames<Schema> & keyof E]] extends [PlainComponent]
-          ? unknown
-          : {
-                [K in keyof Schema]: Schema[K] extends readonly unknown[]
-                    ? {
-                          [I in keyof Schema[K]]: Schema[K][I] extends keyof E &
-                              string
-                              ? unknown extends E[Schema[K][I]]
-                                  ? unknown
-                                  : [E[Schema[K][I]]] extends [PlainComponent]
-                                    ? unknown
-                                    : ErrorMessage<`[tableEntry] '${Schema[K][I] & string}' holds an object, and an entry with no codec prints its toString. Give the attribute a codec that writes text or a number`>
-                              : unknown
-                      }
-                    : unknown
-            }
-    : unknown
+        : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<CodecMember<Enc, Name>, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>
+
+/**
+ * The refusal of a component that cannot print as one key segment. The refusal lands on the
+ * component. A component of a type that the check cannot read (`unknown`) passes, and so does an
+ * entry with an open codec, which states no name that can be found. The cheap path is one test of
+ * the union of names.
+ */
+type ValidateComponents<Schema, E, CodecSpec, CodecRest> =
+    string extends keyof Schema
+        ? unknown
+        : [CodecSpec] extends [undefined]
+          ? [ValuesOfNames<E, ComponentNames<Schema>>] extends [PlainComponent]
+              ? unknown
+              : { [K in keyof Schema]: RefuseComponents<E, never, Schema[K]> }
+          : string extends keyof EncodedAttributes<CodecSpec, CodecRest>
+            ? unknown
+            : [
+                    Exclude<
+                        CodecMember<
+                            EncodedAttributes<CodecSpec, CodecRest>,
+                            ComponentNames<Schema>
+                        >,
+                        'S' | 'N'
+                    >,
+                ] extends [never]
+              ? [
+                    ValuesOfNames<
+                        E,
+                        Extract<ComponentNames<Schema>, `${string}.${string}`>
+                    >,
+                ] extends [PlainComponent]
+                  ? unknown
+                  : {
+                        [K in keyof Schema]: RefuseComponents<
+                            E,
+                            EncodedAttributes<CodecSpec, CodecRest>,
+                            Schema[K]
+                        >
+                    }
+              : {
+                    [K in keyof Schema]: RefuseComponents<
+                        E,
+                        EncodedAttributes<CodecSpec, CodecRest>,
+                        Schema[K]
+                    >
+                }
 
 /**
  * Whether a literal separator holds more than one character. A plain `string` is no literal, so the
@@ -2930,7 +3075,7 @@ export const tableEntry =
             ValidatePaths<Schema, KeyedBy> &
             ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest> &
             ValidateKeyNames<Schema, CodecSpec, CodecRest> &
-            ValidateComponents<Schema, KeyedBy, CodecSpec>,
+            ValidateComponents<Schema, KeyedBy, CodecSpec, CodecRest>,
         ...[options]: [Separator] extends ['']
             ? [ErrorMessage<'Separator must not be an empty string'>]
             : ManyCharacters<Separator> extends true

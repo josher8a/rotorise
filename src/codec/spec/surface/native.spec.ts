@@ -28,6 +28,7 @@ import type {
     L,
     M,
     N,
+    NS,
     NULL,
     S,
     SS,
@@ -640,6 +641,16 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
                 new Set(digits.map((d) => sdk.NumberValueImpl.from(d))),
             ),
         ).toEqual({ NS: digits })
+    })
+
+    it('types a DynamoNumber as N, and a set of them as NS, as the write does', () => {
+        expectTypeOf<native.Encode<DynamoNumber>>().toEqualTypeOf<N>()
+        expectTypeOf<
+            native.Encode<ReadonlySet<DynamoNumber>>
+        >().toEqualTypeOf<NS>()
+        expectTypeOf<
+            native.ItemEncode<{ price: DynamoNumber }>
+        >().toEqualTypeOf<native.ItemEncode<{ price: number }>>()
     })
 })
 

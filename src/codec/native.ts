@@ -634,7 +634,7 @@ export namespace native {
           ? NULL
           : T extends boolean
             ? BOOL
-            : T extends number | bigint
+            : T extends number | bigint | DynamoNumber
               ? N
               : T extends string
                 ? OrNull<S, T, '', Empties>
@@ -690,7 +690,7 @@ export namespace native {
         : (
                 Member extends string
                     ? 'S'
-                    : Member extends number | bigint
+                    : Member extends number | bigint | DynamoNumber
                       ? 'N'
                       : Member extends ArrayBufferView | ArrayBuffer
                         ? 'B'

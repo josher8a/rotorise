@@ -3322,7 +3322,7 @@ type MembersOf<C> = C extends UnionCodec<infer _T, infer Options>
             [V in keyof Table]: {
                 readonly spec: Table[V]
                 readonly rest: undefined
-                readonly t: VariantOf<T, D & keyof T, V>
+                readonly t: VariantOf<T, D & keyof T, DecodedTags<Table[V], D>>
             }
         }[keyof Table]
       : C extends {
@@ -6818,6 +6818,32 @@ type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
     : never
 
 /**
+ * The text that a field of an entity prints in a key, where the entity holds `Value`. A field under
+ * the adapter of a caller prints the stored text, which the caller's value does not give: the
+ * literal of the inner term where the inner term pins one, and `string` where it pins none. Any
+ * other field prints its value.
+ *
+ * A key of one attribute does not read this type. That key writes the attribute, and not a text of
+ * the attribute, so the value of the attribute is the right type there.
+ */
+export type KeyText<Value, Field> = [Field] extends [never]
+    ? Value
+    : Field extends { readonly [termMarker]?: infer M }
+      ? M extends [
+            'held',
+            false,
+            unknown,
+            unknown,
+            [['caller'], false],
+            ...unknown[],
+        ]
+          ? [HeldStored<Field>] extends [never]
+              ? string
+              : HeldStored<Field>
+          : Value
+      : Value
+
+/**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
  * A tag is the stored literal on both sides, so a field under `held` answers to the literal of its
  * inner term, and the caller's value is written through the field to reach it.
@@ -6839,6 +6865,17 @@ type TagsOf<Spec, D extends PropertyKey> = Spec extends unknown
                     : never
                 : never
             : HeldStored<Spec[D]>
+        : never
+    : never
+
+/**
+ * The values that a variant decodes its tag to. The table is keyed by the stored literal, and the
+ * entity holds the decoded value, so a member of the entity is found by the second and not by the
+ * first. The two are one value except under the adapter of a caller.
+ */
+type DecodedTags<Spec, D> = D extends keyof Spec
+    ? Spec[D] extends AttributeCodec<infer Tag, AttributeValue>
+        ? Tag
         : never
     : never
 
@@ -8452,7 +8489,7 @@ export type ExtractedRests<
  * member keeps the rest that it declares.
  */
 type KeptVariants<T, D, Kept> = {
-    [K in keyof Kept]: VariantOf<T, D & keyof T, K>
+    [K in keyof Kept]: VariantOf<T, D & keyof T, DecodedTags<Kept[K], D>>
 }[keyof Kept]
 
 /** The members of a tag table a pattern keeps, keyed as they were. */
