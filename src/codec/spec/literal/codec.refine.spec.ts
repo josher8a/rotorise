@@ -7,7 +7,16 @@
  * values instead — and reports when that thins a run enough to matter.
  */
 import { describe, expect, it } from 'vitest'
-import { CodecError, decimal, item, object, refine, string } from '../../codec'
+import {
+    array,
+    CodecError,
+    decimal,
+    item,
+    object,
+    refine,
+    string,
+} from '../../codec'
+import { failed } from '../../result'
 import { checkRoundTrip, rngFrom } from '../../testing'
 
 declare const brand: unique symbol
@@ -122,10 +131,41 @@ describe('a refused value is a failure the caller receives, never a throw', () =
      * the refusal reached the caller as an exception rather than as a `CodecError`.
      */
     it('refuses a bigint with a CodecError that names it', () => {
+        // no base admits a bigint, so the refusal is the one of the base, which names the value
         const uuid = refine(string, isUuid, { describe: 'a uuid' })
         const out = uuid.encode(10n as never)
         expect(out).toBeInstanceOf(CodecError)
         expect(String(out)).toContain('10')
-        expect(String(out)).toContain('a uuid')
+    })
+})
+
+describe('a refinement reads its predicate as true or false only', () => {
+    it('refuses a value that the predicate answers with a falsy number, and keeps the value that it answers with a truthy one', () => {
+        const named = ((text: string) => text.length) as unknown as (
+            text: string,
+        ) => text is string
+        const PetName = refine(string, named, { describe: 'a name' })
+        expect(PetName.decode({ S: 'Rex' })).toBe('Rex')
+        expect(PetName.decode({ S: '' })).toBeInstanceOf(CodecError)
+        expect(PetName.encode('Rex')).toEqual({ S: 'Rex' })
+    })
+})
+
+describe('a refused write inside a refinement names the attribute that refused', () => {
+    it('gives the path of the base on the write, as on the read', () => {
+        const Owner = refine(
+            object({ name: string, pets: array(string) }),
+            (v): v is typeof v => v.pets.length > 0,
+            { describe: 'an owner with a pet' },
+        )
+        const Store = item(object({ owner: Owner }))
+        const wrote = Store.encode({
+            owner: { name: 'Ann', pets: [7 as never] },
+        })
+        expect(failed(wrote) && wrote.path).toEqual(['owner', 'pets', 0])
+        const read = Store.decode({
+            owner: { M: { name: { S: 'Ann' }, pets: { L: [{ N: '7' }] } } },
+        } as never)
+        expect(failed(read) && read.path).toEqual(['owner', 'pets', 0])
     })
 })

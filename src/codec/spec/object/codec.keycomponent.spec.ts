@@ -217,6 +217,28 @@ describe('a key component with a codec', () => {
         ).toThrow(/'meta\.note' is a component of a key/)
     })
 
+    it('refuses at construction a path below an adapter of a caller', () => {
+        const noteSchema: StandardSchemaV1<{ readonly note: string }> = {
+            '~standard': {
+                version: 1,
+                vendor: 'test',
+                validate: (v) => ({ value: v as { readonly note: string } }),
+            },
+        }
+        const wholeNote = held(object({ note: string }), noteSchema, {
+            encode: (v: { readonly note: string }) => v,
+            decode: (v: { readonly note: string }) => v,
+        })
+        expect(() =>
+            tableEntry<{ id: string; meta: { readonly note: string } }>()(
+                { PK: ['id'], SK: ['meta.note'] },
+                { codec: { id: string, meta: wholeNote } },
+            ),
+        ).toThrow(
+            /'meta\.note' is a component of a key, and the codec cannot address that path.*a path cannot go into an adapter/,
+        )
+    })
+
     it('refuses an object at a path that the codec writes as a map', () => {
         type Chipped = { id: string; chip: { site: { zone: string } } }
         expect(() =>

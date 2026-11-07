@@ -114,6 +114,76 @@ describe('a tag whose adapter pins no literal', () => {
     })
 })
 
+describe('two members that decode their tag to one value', () => {
+    const refusal =
+        /two options decode to 'kind' = 'dog', and a write of that value reaches only the first of them/
+
+    it('are refused at construction, where a caller adapter and a plain literal meet', () => {
+        for (const options of [
+            [
+                object({ kind: DogTag, bark: string }),
+                object({ kind: string('dog'), lives: number }),
+            ],
+            [
+                object({ kind: string('dog'), lives: number }),
+                object({ kind: DogTag, bark: string }),
+            ],
+        ])
+            expect(() =>
+                item(discriminatedUnion('kind', options as never)),
+            ).toThrow(refusal)
+    })
+
+    it('are refused where the two differ only by a refine over the caller tag', () => {
+        const Other = held(string('O'), string('dog'), {
+            encode: (_: 'dog') => 'O' as const,
+            decode: (_: 'O') => 'dog' as const,
+        })
+        expect(() =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: refine(DogTag, isDog), bark: string }),
+                    object({ kind: Other, lives: number }),
+                ]),
+            ),
+        ).toThrow(refusal)
+    })
+
+    it('are refused with the error of the adapter as the cause, where the adapter throws', () => {
+        const bug = new TypeError('a bug in the adapter')
+        const Kind = held(string('D'), string('dog'), {
+            encode: (_: 'dog') => 'D' as const,
+            decode: (_: 'D'): 'dog' => {
+                throw bug
+            },
+        })
+        let thrown: unknown
+        try {
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: Kind, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ]),
+            )
+        } catch (error) {
+            thrown = error
+        }
+        expect(thrown).toBeInstanceOf(CodecError)
+        expect((thrown as CodecError).cause).toBe(bug)
+    })
+
+    it('are two members when each decodes its tag to its own value', () => {
+        expect(() =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: DogTag, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ]),
+            ),
+        ).not.toThrow()
+    })
+})
+
 describe('the constant that a field decides', () => {
     it('is read through a ref, and not through a refine, which can reject the value', () => {
         const { Row } = scope({

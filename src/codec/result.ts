@@ -42,8 +42,12 @@ export class CodecError extends Error {
     /** The failure itself, without the path that was discovered on the way out. */
     readonly reason: string
 
-    constructor(reason: string, kind: CodecErrorKind = 'refused') {
-        super(reason)
+    constructor(
+        reason: string,
+        kind: CodecErrorKind = 'refused',
+        options?: ErrorOptions,
+    ) {
+        super(reason, options)
         this.reason = reason
         this.kind = kind
     }

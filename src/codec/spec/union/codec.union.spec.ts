@@ -769,3 +769,18 @@ describe('the refusal of a union', () => {
         )
     })
 })
+
+describe('a union names one path for one fault on both sides', () => {
+    it('gives the path of the one option that the kind leaves, on the write as on the read', () => {
+        const Store = item(
+            object({ pet: union([object({ name: string }), number]) }),
+        )
+        const wrote = Store.encode({ pet: { name: 5 } } as never)
+        const read = Store.decode({ pet: { M: { name: { N: '5' } } } } as never)
+        expect(failed(read) && read.path).toEqual(['pet', 'name'])
+        expect(failed(wrote) && wrote.path).toEqual(['pet', 'name'])
+        expect(failed(wrote) && wrote.reason).toMatch(
+            /^no option admits this value/,
+        )
+    })
+})

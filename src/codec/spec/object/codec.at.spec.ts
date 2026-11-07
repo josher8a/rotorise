@@ -21,6 +21,7 @@ import {
     discriminatedUnion,
     dynamoNumber,
     fill,
+    held,
     item as itemOf,
     legacy,
     list,
@@ -38,6 +39,9 @@ import {
     string,
     union,
 } from '../../codec'
+
+/** The codec that `at` answers where the path cannot continue: it refuses on use, and never throws. */
+type Refusing = { readonly encode: (value: never) => unknown }
 
 const Delivery = object({
     id: string,
@@ -199,9 +203,10 @@ describe('a path that crosses a whole-value adapter', () => {
             }),
         )
         // @ts-expect-error a path cannot go into `refine`, at the type as at run time
-        expect(() => atOf(Account, ['a', 'x'])).toThrow(CodecError)
-        // @ts-expect-error a path cannot go into `refine`, at the type as at run time
-        expect(() => atOf(Account, ['a', 'x'])).toThrow(
+        const refused = atOf(Account, ['a', 'x']) as unknown as Refusing
+        const written = refused.encode('1' as never)
+        expect(written).toBeInstanceOf(CodecError)
+        expect((written as CodecError).message).toMatch(
             /a path cannot go into `refine` at 'x'/,
         )
         // the refined attribute itself is a path, and its codec keeps the predicate
@@ -218,9 +223,28 @@ describe('a path that crosses a whole-value adapter', () => {
             }),
         )
         // @ts-expect-error a path cannot go into `legacy`, at the type as at run time
-        expect(() => atOf(Migrated, ['a', 'x'])).toThrow(
+        const refused = atOf(Migrated, ['a', 'x']) as unknown as Refusing
+        expect((refused.encode('1' as never) as CodecError).message).toMatch(
             /a path cannot go into `legacy` at 'x'/,
         )
+    })
+
+    it('a path into a union answers one way, whatever the option order', () => {
+        const Dog = object({ kind: string('dog'), name: string })
+        const Cat = object({ kind: string('cat'), name: string })
+        const Adopted = held(Dog, Dog, { encode: (v) => v, decode: (v) => v })
+        const Named = refine(Cat, (v): v is typeof v => v.name !== '')
+        for (const options of [
+            union([Adopted, Named]),
+            union([Named, Adopted]),
+        ]) {
+            const Pets = itemOf(object({ pet: options }))
+            const refused = atOf(
+                Pets as never,
+                ['pet', 'name'] as never,
+            ) as unknown as Refusing
+            expect(refused.encode('Rex' as never)).toBeInstanceOf(CodecError)
+        }
     })
 
     it('a position past the prefix of a list with a suffix answers a codec that refuses on use, and does not throw', () => {
@@ -250,7 +274,8 @@ describe('a path that crosses a whole-value adapter', () => {
             }),
         )
         // @ts-expect-error a path cannot go into `legacy`, at the type as at run time
-        expect(() => atOf(Migrated, ['a', 'x'])).toThrow(
+        const refused = atOf(Migrated, ['a', 'x']) as unknown as Refusing
+        expect((refused.encode('1' as never) as CodecError).message).toMatch(
             /a path cannot go into `legacy` at 'x'/,
         )
         const body = object({
@@ -301,7 +326,8 @@ describe('an option that the store keeps apart from the segment', () => {
         ])
         const Drawing = itemOf(object({ shape: Shape }))
         // @ts-expect-error a path cannot go into `refine`, at the type as at run time
-        expect(() => atOf(Drawing, ['shape', 'x'])).toThrow(
+        const refused = atOf(Drawing, ['shape', 'x']) as unknown as Refusing
+        expect((refused.encode('1' as never) as CodecError).message).toMatch(
             /a path cannot go into `refine` at 'x'/,
         )
     })

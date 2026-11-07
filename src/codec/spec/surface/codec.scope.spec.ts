@@ -256,10 +256,13 @@ describe('an entry of a scope', () => {
             }),
             B: array(ref('A')),
         })
-        expect(() =>
-            // @ts-expect-error the path reads a member across the entry `B` of a cycle
-            at(itemOf(C.A), ['s', 'x']),
-        ).toThrow(/a path cannot go into `refine` at 'x'/)
+        // @ts-expect-error the path reads a member across the entry `B` of a cycle
+        const refused = at(itemOf(C.A), ['s', 'x']) as unknown as {
+            readonly encode: (value: never) => unknown
+        }
+        expect((refused.encode('1' as never) as CodecError).message).toMatch(
+            /a path cannot go into `refine` at 'x'/,
+        )
     })
 })
 

@@ -3554,15 +3554,36 @@ export const tableEntry =
             // an entry without a codec states no slot
             if (attributes === undefined) return undefined
             if (pathSlots.has(path)) return pathSlots.get(path)
+            const refused = (error: CodecError) =>
+                new RotoriseError(
+                    `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
+                )
             let found: ObjectSlot
             try {
                 found = at(attributes as never, path as never) as never
             } catch (error) {
                 if (!(error instanceof CodecError)) throw error
-                throw new RotoriseError(
-                    `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
-                )
+                throw refused(error)
             }
+            // a path that the codec cannot address is a codec of the term `never`, and the one
+            // refusal sits in its closures, so `encode` gives it back for any value. The kinds that
+            // `narrow` answers (a path that variants declare differently, or only some of them) stay
+            // refusals on use
+            const address =
+                (
+                    found as unknown as {
+                        readonly def: Term
+                        readonly encode: (value: unknown) => unknown
+                    }
+                ).def.kind === 'never'
+                    ? (
+                          found as unknown as {
+                              encode: (v: unknown) => unknown
+                          }
+                      ).encode(undefined)
+                    : undefined
+            if (address instanceof CodecError && address.kind === 'refused')
+                throw refused(address)
             pathSlots.set(path, found)
             return found
         }

@@ -631,15 +631,15 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * threw, which meant every reader of a definition had to know about a definition that was not one.
  * The disagreement belongs to the walk, so it is the walk that carries it.
  *
- * **A segment has five answers.** The model's `childG` has the first three. The codecs at the segment. No
+ * **A segment has four answers.** The model's `childG` has the first three. The codecs at the segment. No
  * codec, where the term stores a member that is not the container of the segment: the store
  * refuses the segment on every attribute of the term, so the term leaves the frontier.
  * {@link absent}, where the container admits no value at the segment: a closed object that lacks
  * the name, or a list with no spread past its prefix. A write there leaves an item that the codec
  * does not read, so `absent` stays on the frontier and the frontier refuses on use. A returned
  * `CodecError`, where the path cannot continue: a position past the prefix of a list with a suffix,
- * and a path into a `held`. `at` turns it into a codec that refuses on use. A thrown `CodecError`,
- * from `refine` and `legacy`: the call of `at` throws.
+ * and a path into a `held`, a `refine` or a `legacy`. `at` turns it into a codec that refuses on use.
+ * No segment throws, so the option order of a union never decides the channel of the answer.
  *
  * `cycles` holds the entries of the flat scope of the root of the walk, which {@link printedMember}
  * reads.
@@ -695,12 +695,12 @@ const childrenOf = (
         // part of the attribute, and the attribute is checked as a whole nowhere on that write
         case 'refine':
             if (apart) return []
-            throw new CodecError(
+            return new CodecError(
                 `a path cannot go into \`refine\` at '${segment}': the predicate reads the whole value, and a write at the path writes one part of the value without the predicate. Address the refined attribute itself`,
             )
         case 'legacy':
             if (apart) return []
-            throw new CodecError(
+            return new CodecError(
                 `a path cannot go into \`legacy\` at '${segment}': an older encoding of the attribute has another shape, and a path addresses the current shape only. Address the attribute itself`,
             )
         case 'held':
@@ -2808,7 +2808,8 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
     // dissection takes the key set of the node that it replaces
     const record: Record<string, Term> = {}
     const [close, copies] = closedCopy(record)
-    for (const [name, t] of Object.entries(terms)) record[name] = close(t)
+    for (const [name, t] of Object.entries(terms))
+        setOwn(record, name, close(t))
     for (const [was, copy] of copies) {
         const ks = keySets.get(was)
         if (ks !== undefined) keySets.set(copy, ks)
@@ -4688,7 +4689,7 @@ const objectFromMap = <
     const fields: Record<string, Field> = {}
     const declaredSpec = spec as unknown as Record<string, ObjectSlot>
     for (const name in declaredSpec) {
-        fields[name] = fieldOf(declaredSpec[name] as ObjectSlot)
+        setOwn(fields, name, fieldOf(declaredSpec[name] as ObjectSlot))
     }
 
     const declaredBody: Body =
@@ -5007,7 +5008,7 @@ export function object(
             if (Object.hasOwn(fields, name)) {
                 throw new CodecError(`'${name}' is declared more than once`)
             }
-            fields[name] = slot
+            setOwn(fields, name, slot)
         }
     }
     return objectFromMap(fields, rest) as ObjectCodec<
@@ -5860,7 +5861,7 @@ const meetObjects = (
             fieldOf(slot).mark === 'optional'
         )
             continue
-        spec[name] = slot
+        setOwn(spec, name, slot)
     }
     return objectFromMap(spec, rest)
 }
@@ -6030,7 +6031,7 @@ export const opened = throughRefs((t, opened) => {
         case 'object': {
             const fields: Record<string, Field> = {}
             for (const [name, field] of Object.entries(t.body.fields))
-                fields[name] = { ...field, t: opened(field.t) }
+                setOwn(fields, name, { ...field, t: opened(field.t) })
             const { rest } = t.body
             return {
                 kind: 'object',
@@ -8921,7 +8922,7 @@ type ObjectNode = Extract<Term, { kind: 'object' }>
 const nodeOfPiece = (piece: Piece): ObjectNode => {
     const fields: Record<string, Field> = {}
     for (const [name, slot] of Object.entries(piece.spec)) {
-        fields[name] = fieldOf(slot)
+        setOwn(fields, name, fieldOf(slot))
     }
     return {
         kind: 'object',
@@ -9174,9 +9175,16 @@ const sliceSpec = (
             changed = true
             if (presence !== undefined && (same || list.length === 0)) {
                 const held = same ? presence.inner : (never as AnyCodec)
-                spec[name] = (list === entry.keep
-                    ? held
-                    : underMark(presence.mark, held)) as unknown as ObjectSlot
+                setOwn(
+                    spec,
+                    name,
+                    (list === entry.keep
+                        ? held
+                        : underMark(
+                              presence.mark,
+                              held,
+                          )) as unknown as ObjectSlot,
+                )
                 continue
             }
             if (list.some((one) => one.rest !== undefined)) {
@@ -9192,9 +9200,16 @@ const sliceSpec = (
                 codecs.length === 1 ? codecs[0] : union(codecs as never)
             ) as AnyCodec
             if (entry.at === undefined) {
-                spec[name] = (presence === undefined || list === entry.keep
-                    ? codec
-                    : underMark(presence.mark, codec)) as unknown as ObjectSlot
+                setOwn(
+                    spec,
+                    name,
+                    (presence === undefined || list === entry.keep
+                        ? codec
+                        : underMark(
+                              presence.mark,
+                              codec,
+                          )) as unknown as ObjectSlot,
+                )
                 continue
             }
             const at = positions.get(name) ?? new Map<number, Term>()
@@ -9210,11 +9225,15 @@ const sliceSpec = (
                     `'${name}' was split by position and holds no list`,
                 )
             }
-            spec[name] = codecOfTerm({
-                kind: 'list',
-                pre: declared.pre.map((one, i) => at.get(i) ?? one),
-                suf: [],
-            }) as unknown as ObjectSlot
+            setOwn(
+                spec,
+                name,
+                codecOfTerm({
+                    kind: 'list',
+                    pre: declared.pre.map((one, i) => at.get(i) ?? one),
+                    suf: [],
+                }) as unknown as ObjectSlot,
+            )
         }
         return changed ? { spec, rest: piece.rest } : piece
     }
