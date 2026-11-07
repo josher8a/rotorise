@@ -35,6 +35,7 @@ import {
     opaqueTerms,
     optionOfTerm,
     termOf,
+    underCaller,
 } from './denote'
 import type {
     ApartG,
@@ -116,7 +117,7 @@ import {
 export { codecOfTerm, termOf, valueKinds } from './denote'
 
 import type { ErrorMessage, show } from '../utils'
-import type { StandardOutput, StandardSchemaV1 } from './standard'
+import type { StandardInput, StandardSchemaV1 } from './standard'
 import {
     describeShape,
     itemRefusal,
@@ -281,7 +282,7 @@ type LitsT<
     : ['union', { -readonly [I in keyof L]: LitT<K, L[I]> }]
 /**
  * The term of a `held`. `H` is the held type of a foreign schema, in a tuple: the schema is the top
- * at run time, so only this marker carries its output, and `DecodeT` reads it from here.
+ * at run time, so only this marker carries its input, and `DecodeT` reads it from here.
  */
 type HeldT<I, O, G, H extends unknown[] = []> = [
     'held',
@@ -2247,6 +2248,10 @@ type WallOver<W extends string, C> = [CycleEntryOf<TermOf<C>>] extends [never]
  * returns no issues. `validate` answers synchronously here, because a codec does. A `Promise` or a
  * throw becomes a refusal.
  *
+ * **The held type of a foreign schema is its input.** `validate` takes an input, so the held value
+ * that `decode` returns and `encode` takes is the input type of the schema. A schema that transforms
+ * has an output type that `validate` refuses, and the output is not a held type.
+ *
  * **A foreign schema records the top as the held side.** The library cannot read which kinds of
  * value a foreign schema admits, so the write occupancy of this `held` is every kind. A `union`
  * with such an option has no certificate on the write side, and refuses where the other option
@@ -2321,7 +2326,7 @@ export const held = <
             TermOf<C>,
             O extends StandardSchemaV1 ? ['opaq'] : TermOf<O>,
             ['caller'],
-            O extends StandardSchemaV1 ? [StandardOutput<O>] : []
+            O extends StandardSchemaV1 ? [StandardInput<O>] : []
         >
     > &
     Free<FreeOf<C> | FreeOf<O>> => {
@@ -2362,9 +2367,13 @@ export const held = <
     })
 }
 
-/** The held type of a `held`: the output of a foreign schema, or what a codec decodes. */
+/**
+ * The held type of a `held`: the input of a foreign schema, or what a codec decodes. A schema that
+ * transforms has an output that `validate` refuses, so the held value is the type that `validate`
+ * accepts.
+ */
 export type HeldOf<O> = O extends StandardSchemaV1
-    ? StandardOutput<O>
+    ? StandardInput<O>
     : Decoded<O>
 
 /**
@@ -6462,6 +6471,9 @@ const dissectionOf = (
     // **A tag that a member reads through an unbound `ref` is indexed by the scope**, on the closed
     // copy, because the index reads the literal of each tag through the `ref`
     const index = () => {
+        // a tag is written through its field only where a caller's adapter holds one: a plain
+        // literal is its own stored text
+        const callerMembers = new Set<unknown>()
         const members = membersOf(
             ks,
             memberTerms.map((term, at) => {
@@ -6472,6 +6484,10 @@ const dissectionOf = (
                         `every option must be an object codec, and option ${at} is a \`${node?.kind}\``,
                     )
                 }
+                for (const name of ks) {
+                    const field = own(node.body.fields, name)
+                    if (field && underCaller(field.t)) callerMembers.add(item)
+                }
                 return [
                     node.body,
                     item as unknown as ItemCodec<T, unknown>,
@@ -6479,7 +6495,16 @@ const dissectionOf = (
             }),
         )
         if (failed(members)) throw members
-        const { pick, tagOf } = byTagSem(ks, members) as unknown as {
+        const { pick, tagOf } = byTagSem(
+            ks,
+            members,
+            callerMembers.size > 0
+                ? (variant, patch) =>
+                      callerMembers.has(variant)
+                          ? variant.encodePartial(patch as never)
+                          : undefined
+                : undefined,
+        ) as unknown as {
             pick: (
                 assignment: Readonly<Record<string, string>>,
             ) => Result<ItemCodec<T, unknown>>
@@ -6763,8 +6788,36 @@ const optionOf = (t: Term): Option => {
         : base
 }
 
+/** The stored literals that a term names: a literal, or the options of a union of literals. */
+type StoredLiterals<T> = T extends ['prim', ['literal', string, infer V]]
+    ? V extends string
+        ? V
+        : never
+    : T extends ['union', infer Os extends readonly unknown[]]
+      ? StoredLiterals<Os[number]>
+      : never
+
+/**
+ * The stored literals of a field under the adapter of a caller, which the inner term names, or
+ * `never`. A library adapter is lawful by its own term: `number` reads its text as its value.
+ */
+type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
+    ? M extends [
+          'held',
+          false,
+          infer Inner,
+          unknown,
+          [['caller'], false],
+          ...unknown[],
+      ]
+        ? StoredLiterals<Inner>
+        : never
+    : never
+
 /**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
+ * A tag is the stored literal on both sides, so a field under `held` answers to the literal of its
+ * inner term, and the caller's value is written through the field to reach it.
  *
  * A variant may span several tags, and this codebase relies on it: a carrier declared
  * `carrierId: string('ACME', 'GLOBEX')` is *one* variant covering two stored values, which is why
@@ -6774,13 +6827,15 @@ type TagsOf<Spec, D extends PropertyKey> = Spec extends unknown
     ? // distributed over the *variants*: the conditional below is on `Spec[D]`, so a union of specs
       // handed in whole would ask about a union of codecs and answer nothing
       D extends keyof Spec
-        ? Spec[D] extends AttributeCodec<infer Tag, AttributeValue>
-            ? // a tag is stored as `S` or as `N`, so a numeric enum indexes variants as readily as
-              // a string one — `readTag` reads either member and keys on the text it carries
-              Tag extends string | number
-                ? Tag
+        ? [HeldStored<Spec[D]>] extends [never]
+            ? Spec[D] extends AttributeCodec<infer Tag, AttributeValue>
+                ? // a tag is stored as `S` or as `N`, so a numeric enum indexes variants as readily as
+                  // a string one — `readTag` reads either member and keys on the text it carries
+                  Tag extends string | number
+                    ? Tag
+                    : never
                 : never
-            : never
+            : HeldStored<Spec[D]>
         : never
     : never
 

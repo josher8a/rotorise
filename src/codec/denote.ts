@@ -205,6 +205,17 @@ const refusedBy = (q: Refinement, value: unknown): CodecError => {
 }
 
 /**
+ * Whether a term holds a value under the adapter of a caller, through any refinement and any
+ * library adapter above it. A library adapter has `via`, and a caller's adapter has none.
+ */
+export const underCaller = (t: Term): boolean =>
+    t.kind === 'held'
+        ? t.via === undefined || underCaller(t.inner)
+        : t.kind === 'refine'
+          ? underCaller(t.inner)
+          : false
+
+/**
  * **A member's assignment: one tag per key, read off the member's own body.**
  *
  * The tag table is a host index over a `Term.union`, and no term carries it. The model carries the
@@ -926,6 +937,10 @@ export const altSem = (
 export const byTagSem = <V>(
     ks: readonly string[],
     members: readonly (readonly [Readonly<Record<string, string>>, V])[],
+    written?: (
+        member: V,
+        patch: Readonly<Record<string, unknown>>,
+    ) => unknown | undefined,
 ): {
     readonly pick: (assignment: Readonly<Record<string, string>>) => Result<V>
     readonly tagOf: (
@@ -960,6 +975,42 @@ export const byTagSem = <V>(
         )
     },
     tagOf: (item) => {
+        /**
+         * The stored text of a tag. A tag is the stored literal on both sides. Where a member holds
+         * the tag under the adapter of a caller, `written` is given for that member, and the
+         * caller's value goes through the tag field of the member: the first member that writes it
+         * decides the text. The adapter writes `'dog'` as `'D'`, and a member that does not admit
+         * the value refuses it. Two adapters of a caller that write one caller value make the order
+         * of the members decide, and construction cannot refuse that, because an adapter is opaque.
+         * A member with no adapter of a caller writes the literal as it is, so the value is
+         * compared with the literal, and no refusal is built. A value that no member writes keeps
+         * its own text, and the pick names it. A number spells its text through the carrier:
+         * `String(1e21)` is '1e+21', and the store holds '1000000000000000000000'.
+         */
+        const storedTag = (name: string, tag: unknown): Result<string> => {
+            const asText =
+                typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
+            const plain = failed(asText) ? asText : String(asText)
+            if (written) {
+                for (const [assignment, member] of members) {
+                    const row = written(member, { [name]: tag })
+                    if (row === undefined) {
+                        if (plain === assignment[name]) return plain
+                        continue
+                    }
+                    if (failed(row)) continue
+                    const attribute = own(
+                        row as Record<string, unknown>,
+                        name,
+                    ) as
+                        | { readonly S?: string; readonly N?: string }
+                        | undefined
+                    const text = attribute?.S ?? attribute?.N
+                    if (text !== undefined) return text
+                }
+            }
+            return plain
+        }
         const out: Record<string, string> = {}
         for (const name of ks) {
             const tag = own(item, name)
@@ -968,12 +1019,9 @@ export const byTagSem = <V>(
                     `'${name}' chooses the variant and was not given`,
                 )
             }
-            // a tag is its stored text, and a number spells that text through the carrier:
-            // `String(1e21)` is '1e+21', and the store holds '1000000000000000000000'
-            const text =
-                typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
-            if (failed(text)) return text
-            setOwn(out, name, String(text))
+            const stored = storedTag(name, tag)
+            if (failed(stored)) return stored
+            setOwn(out, name, stored)
         }
         return out
     },
