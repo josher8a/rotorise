@@ -64,6 +64,7 @@ import {
     componentsOf,
     holdsNoValue,
     isOpaqueSugar,
+    targetOf,
     member as termMember,
     usedTargetOf,
 } from './term'
@@ -365,6 +366,7 @@ export const checkStable = <T>(
  * A refusal of a mutated attribute, a `CodecError`, is never reported: refusing it is exactly right, and
  * is what most of these do. What is reported is a mutation that decodes and then cannot be encoded,
  * and a mutation that makes `decode` throw anything but a `CodecError`, because a refusal is a value.
+ * A mutation that decodes must also keep the shape of its row through `encode(decode(x))`.
  */
 export const checkDecodesAreWritable = <T>(
     subject: Checkable<T>,
@@ -410,8 +412,9 @@ export const checkDecodesAreWritable = <T>(
                         `  threw    = ${error instanceof Error ? `${error.constructor.name}: ${error.message}` : 'a value that is no Error'}`,
                 )
             }
+            let rewritten: AttributeMap
             try {
-                subject.unsafeEncode(read)
+                rewritten = subject.unsafeEncode(read)
             } catch (error) {
                 throw new CodecError(
                     '(C) fails: this attribute decodes and the value it yields cannot be encoded.\n' +
@@ -422,8 +425,142 @@ export const checkDecodesAreWritable = <T>(
                         `  encoding it again said: ${(error as Error).message}`,
                 )
             }
+            const changed = shapeChange(
+                subject.def,
+                { M: item },
+                { M: rewritten },
+                '',
+            )
+            if (changed !== undefined) {
+                throw new CodecError(
+                    'a read keeps the shape of the row: encode(decode(x)) differs from x.\n' +
+                        `  mutation = ${what}\n` +
+                        `  seed     = ${seed}, case ${i}\n` +
+                        `  item     = ${JSON.stringify(item)}\n` +
+                        `  written  = ${JSON.stringify(rewritten)}\n` +
+                        `  ${changed}`,
+                )
+            }
         }
     }
+}
+
+/**
+ * The shape of an attribute: its member, and below it the size of a set, the length of a list and the
+ * names of a map. No value is in it, so two numerals that read to one value are two members that
+ * become one.
+ */
+const shapeOfAttribute = (value: AttributeValue | undefined): unknown => {
+    if (value === undefined) return 'absent'
+    const m = memberOf(value)
+    if (m === 'SS' || m === 'NS' || m === 'BS') {
+        return [m, (value[m] as readonly unknown[]).length]
+    }
+    if (m === 'L') return ['L', (value.L ?? []).length]
+    if (m === 'M') return ['M', Object.keys(value.M ?? {}).sort()]
+    return m
+}
+
+/**
+ * The term below a `ref`, a `held` and a `refine`, as far as the term reads. `undefined` where the
+ * term cannot be read: a name that no scope binds, or more hops than a closed term holds.
+ */
+const storedTerm = (t: Term): Term | undefined => {
+    let at = t
+    for (let hops = 0; hops < 64; hops++) {
+        if (at.kind === 'ref') {
+            const target = targetOf(at)
+            if (target === undefined) return undefined
+            at = target
+        } else if (at.kind === 'held' || at.kind === 'refine') at = at.inner
+        else return at
+    }
+    return undefined
+}
+
+/** The term of one position of a list: a declared position, or the spread. */
+const elementTerm = (
+    t: Term | undefined,
+    at: number,
+    length: number,
+): Term | undefined => {
+    if (t?.kind !== 'list') return undefined
+    if (at < t.pre.length) return t.pre[at]
+    const fromEnd = at - (length - t.suf.length)
+    return fromEnd >= 0 ? t.suf[fromEnd] : t.spread
+}
+
+/**
+ * Where a read changed the shape of a row, or `undefined`. **Law X**: `encode(decode(x))` keeps the
+ * shape of `x` at every depth, the members, the size of each set, the length of each list and the
+ * names of each map. A read that maps two stored members to one is no injective image, as the model's
+ * `setImage` states, and a set that loses a member changes what the row holds.
+ *
+ * The walk reads the term and the two rows together. Two reads change a shape by design, and the
+ * term states each one: at a map, a name that the row lacks and the term declares as `fill` is
+ * written with its fill value, and at a position that the term reads through a `legacy`, the older
+ * form is written in the current form, so that position is not compared. A union passes where one
+ * option passes. Where the term cannot be read below a position (a name that no scope binds, or a
+ * form that is no map or list), the comparison is strict there, which can report a lawful read.
+ */
+const shapeChange = (
+    t: Term | undefined,
+    before: AttributeValue | undefined,
+    after: AttributeValue | undefined,
+    path: string,
+): string | undefined => {
+    const term = t === undefined ? undefined : storedTerm(t)
+    if (term?.kind === 'legacy') return undefined
+    if (term?.kind === 'union') {
+        const each = term.options.map((o) =>
+            shapeChange(o, before, after, path),
+        )
+        return each.some((one) => one === undefined) ? undefined : each[0]
+    }
+    const was = JSON.stringify(shapeOfAttribute(before))
+    const now = JSON.stringify(shapeOfAttribute(after))
+    const differs = `${path === '' ? 'the row' : path} was ${was} and is ${now}`
+    if (before === undefined || after === undefined) {
+        return was === now ? undefined : differs
+    }
+    const m = memberOf(before)
+    if (m === 'L' && memberOf(after) === 'L') {
+        const [one, other] = [before.L ?? [], after.L ?? []]
+        if (one.length !== other.length) return differs
+        for (const [at, child] of one.entries()) {
+            const found = shapeChange(
+                elementTerm(term, at, one.length),
+                child,
+                other[at],
+                `${path}[${at}]`,
+            )
+            if (found !== undefined) return found
+        }
+        return undefined
+    }
+    if (m === 'M' && memberOf(after) === 'M') {
+        const [one, other] = [before.M ?? {}, after.M ?? {}]
+        for (const name of new Set([
+            ...Object.keys(one),
+            ...Object.keys(other),
+        ])) {
+            const declared =
+                term?.kind === 'object' && Object.hasOwn(term.body.fields, name)
+                    ? term.body.fields[name]
+                    : undefined
+            if (one[name] === undefined && declared?.mark === 'fill') continue
+            const found = shapeChange(
+                declared?.t ??
+                    (term?.kind === 'object' ? term.body.rest : undefined),
+                one[name],
+                other[name],
+                `${path === '' ? '' : `${path}.`}'${name}'`,
+            )
+            if (found !== undefined) return found
+        }
+        return undefined
+    }
+    return was === now ? undefined : differs
 }
 
 /** One mutated attribute, and the name of the shape that made it. */
@@ -490,6 +627,23 @@ const SHAPES: readonly {
         what: 'a string where a number was stored',
         to: (v) =>
             memberOf(v) === 'N' ? { value: { S: v.N as string } } : undefined,
+    },
+    {
+        // two numerals that read to one value are two members that a set holds as one
+        what: 'a duplicate member in two numeral forms',
+        to: (v) => {
+            const first = memberOf(v) === 'NS' ? v.NS?.[0] : undefined
+            return first === undefined
+                ? undefined
+                : {
+                      value: {
+                          NS: [
+                              first,
+                              `${first}${first.includes('.') ? '' : '.'}00000000000000001`,
+                          ],
+                      },
+                  }
+        },
     },
     {
         // `String` of it throws, so a reader that renders a payload in a message throws with it
