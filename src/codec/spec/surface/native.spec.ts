@@ -654,6 +654,55 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
     })
 })
 
+describe('a writeNumber deviation sees each number that the codec writes', () => {
+    const refusing = native(
+        {},
+        { writeNumber: () => new CodecError('no numbers here') },
+    )
+    const one = orThrow(DynamoNumber.from('1'))
+
+    it('refuses every set that holds a number, whatever its first member is', () => {
+        for (const set of [
+            new Set([1, 2]),
+            new Set([1n, 2n]),
+            new Set([1n, 2]),
+            new Set([2, 1n]),
+            new Set([one, 2]),
+        ])
+            expect(refusing.encode(set)).toBeInstanceOf(CodecError)
+    })
+
+    it('hands each number member of a set to the writer one time, and no DynamoNumber', () => {
+        const seen: (number | bigint)[] = []
+        const recording = native(
+            {},
+            {
+                writeNumber: (value) => {
+                    seen.push(value)
+                    return { N: value.toString() }
+                },
+            },
+        )
+        expect(recording.encode(new Set([1n, 2, 3n]))).toEqual({
+            NS: ['1', '2', '3'],
+        })
+        expect(seen).toEqual([1n, 2, 3n])
+        seen.length = 0
+        expect(recording.encode(new Set([one, 2]))).toEqual({
+            NS: ['1', '2'],
+        })
+        expect(seen).toEqual([2])
+    })
+
+    it('keeps the numeral refusal of a NaN that is not the first member of a bigint-first set', () => {
+        const refused = native.encode(new Set([1n, Number.NaN]))
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).reason).toMatch(
+            /^NaN is not a number DynamoDB stores/,
+        )
+    })
+})
+
 describe('native in a container', () => {
     const pet = item(object({ x: native }))
 
@@ -710,6 +759,16 @@ describe('a Blob and a File', () => {
         expectTypeOf<native.Encode<Blob>>().toBeNever()
         expectTypeOf<native.Encode<File>>().toBeNever()
         expectTypeOf<native.Encode<Uint8Array>>().toEqualTypeOf<B>()
+    })
+
+    it('are not the name of an object that only has a method named arrayBuffer, which is a map', () => {
+        type Doc = { title: string; arrayBuffer: () => Promise<ArrayBuffer> }
+        expectTypeOf<native.Encode<Doc>>().toEqualTypeOf<M<{ title: S }>>()
+        const doc: Doc = {
+            title: 'a',
+            arrayBuffer: async () => new ArrayBuffer(0),
+        }
+        expect(native.encode(doc)).toEqual({ M: { title: { S: 'a' } } })
     })
 
     it('are not the name of a value that only claims a binary constructor', () => {

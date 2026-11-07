@@ -129,16 +129,23 @@ const outsideSafeRange = (
     return undefined
 }
 
+/**
+ * A number as the codec writes it. The family of the set that holds the number decides the range
+ * rule: a number first reads the safe range, and a bigint first or a `DynamoNumber` first writes
+ * digits with no range and no special-value test, as the SDK does. `ranged` is that rule, and a
+ * number outside a set is ranged.
+ */
 const nativeNumber = (
     value: number | bigint,
     options: native.Options,
+    ranged = true,
 ): Result<AttributeValue> => {
-    if (typeof value === 'number' && !Number.isFinite(value)) {
-        return new CodecError(
-            `Special numeric value ${value.toString()} is not allowed`,
-        )
-    }
-    if (typeof value === 'number') {
+    if (typeof value === 'number' && ranged) {
+        if (!Number.isFinite(value)) {
+            return new CodecError(
+                `Special numeric value ${value.toString()} is not allowed`,
+            )
+        }
         const unsafe = outsideSafeRange(value, value, options)
         if (unsafe) return unsafe
     }
@@ -215,17 +222,11 @@ const enumerable = (
     return Object.fromEntries(entries)
 }
 
-/**
- * A member of a set, as the SDK writes it after it has picked the writer from the first member.
- * `kind` is that writer: a `DynamoNumber` first writes the text of each member, a number first reads
- * the range of each member, a bigint first writes the digits of each member, and a string first
- * writes the text of each member. A boxed `Number` or `String` is its primitive, and a member of
- * another family is left to the canonical write, which refuses a set of two families.
- */
+/** One member of a set, written by the writer that `kind` names. */
 const setMember = (
     member: unknown,
     kind: 'numberValue' | 'number' | 'bigint' | 'string' | 'binary' | 'other',
-    write: (value: number | bigint) => Result<DynamoNumber>,
+    write: (value: number | bigint, ranged?: boolean) => Result<DynamoNumber>,
     options: native.Options,
 ): Result<unknown> => {
     const named = (member as { constructor?: { name?: string } })?.constructor
@@ -256,11 +257,7 @@ const setMember = (
             : write(primitive)
     }
     // a `DynamoNumber` or a bigint first writes the digits of each member, with no range
-    return isNumeral(primitive.toString())
-        ? DynamoNumber.from(primitive.toString())
-        : new CodecError(
-              `${primitive.toString()} is not a number DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125`,
-          )
+    return write(primitive, false)
 }
 
 /** The writer that the SDK picks from the first member of a set. */
@@ -339,8 +336,6 @@ const toCanonical = (
                       'Pass a non-empty set, or options.convertEmptyValues=true.',
                   )
         }
-        // the SDK picks the writer from the first member, and each member goes through it. A number
-        // reads the range of a number, and a bigint writes its digits with no range
         const kind = setKind(members[0])
         return andThen(
             every(members, (member) => setMember(member, kind, write, options)),
@@ -472,9 +467,13 @@ const configured = (
 ): AttributeCodec<unknown> => {
     const writeAttribute =
         deviations.writeNumber ??
-        ((value: number | bigint) => nativeNumber(value, options))
-    const write = (value: number | bigint): Result<DynamoNumber> =>
-        andThen(writeAttribute(value), (written) =>
+        ((value: number | bigint, ranged?: boolean) =>
+            nativeNumber(value, options, ranged))
+    const write = (
+        value: number | bigint,
+        ranged = true,
+    ): Result<DynamoNumber> =>
+        andThen(writeAttribute(value, ranged), (written) =>
             memberOf(written) === 'N'
                 ? DynamoNumber.from(written.N as string)
                 : new CodecError(
@@ -675,8 +674,21 @@ export namespace native {
         ? { readonly [key: string]: Value }
         : T
 
-    /** A value that reads its bytes by a promise: a `Blob` and a `File`, named by shape. No write is possible, so no attribute. */
-    type Promised = { readonly arrayBuffer: () => Promise<ArrayBuffer> }
+    /**
+     * A value that reads its bytes by a promise: a `Blob` and a `File`. No write is possible, so no
+     * attribute. The type reads shape, and the run time reads the name of the constructor, which the
+     * type cannot see. So only a class instance with the surface of a `Blob` counts as a `Blob` here.
+     * One over-match remains: an object that carries all six members by hand is `never` in the type,
+     * and the run time writes it as a map.
+     */
+    type Promised = {
+        readonly size: number
+        readonly type: string
+        readonly arrayBuffer: () => Promise<ArrayBuffer>
+        readonly slice: Fn
+        readonly stream: Fn
+        readonly text: () => Promise<string>
+    }
 
     /** A member that the marshaller drops from a map and from a list: a function. */
     type Fn = (...args: never[]) => unknown
