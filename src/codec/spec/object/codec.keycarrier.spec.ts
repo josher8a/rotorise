@@ -15,10 +15,14 @@ import type { Attribute } from '../../attribute'
 import {
     binary,
     decimal,
+    discriminatedUnion,
     held,
+    item,
     nullable,
     number,
+    object,
     opaque,
+    optional,
     string,
     union,
 } from '../../codec'
@@ -293,40 +297,103 @@ describe('keys and toItem write one key for each key name, over generated entiti
         ) => Record<string, unknown>
         readonly toItem: (item: never) => unknown
     }
-    const entries: Record<string, { entry: Route; names: readonly string[] }> =
+    const isoAt = held(string, dateSchema, {
+        encode: (day: Date) => day.toISOString(),
+        decode: (text: string) => new Date(text),
+        arbitrary: (rng) => new Date(Math.floor(rng() * 4e12)),
+    })
+    type Visit =
+        | { kind: 'DOG'; petId: string; at: Date }
+        | { kind: 'CAT'; petId: string; at: Date }
+    const entries: Record<
+        string,
         {
-            Born: {
-                entry: tableEntry<{ petId: string; bornAt: Date }>()(
-                    { PK: ['petId'], SK: 'bornAt' },
-                    { codec: { petId: string, bornAt: bornOn } },
-                ) as unknown as Route,
-                names: ['PK', 'SK'],
-            },
-            Litters: {
-                entry: Litters as unknown as Route,
-                names: ['PK', 'GSI1SK'],
-            },
-            Prices: {
-                entry: tableEntry<{ id: string; price: string }>()(
-                    { PK: ['id', 'price'] },
-                    { codec: { id: string, price: decimal } },
-                ) as unknown as Route,
-                names: ['PK'],
-            },
+            entry: Route
+            names: readonly string[]
+            draw?: (rng: () => number) => unknown
         }
+    > = {
+        Tagged: {
+            entry: tableEntry<Visit>()(
+                { PK: ['petId'], GSI1SK: 'at' },
+                {
+                    codec: item(
+                        discriminatedUnion('kind', [
+                            object({
+                                kind: string('DOG'),
+                                petId: string,
+                                at: isoAt,
+                            }),
+                            object({
+                                kind: string('CAT'),
+                                petId: string,
+                                at: isoAt,
+                            }),
+                        ]),
+                    ),
+                },
+            ) as unknown as Route,
+            names: ['PK', 'GSI1SK'],
+        },
+        Rest: {
+            entry: tableEntry<{ petId: string; price: string }>()(
+                { PK: ['petId'], GSI1SK: 'price' },
+                {
+                    codec: item(
+                        object({ petId: string }, [string, optional(decimal)]),
+                    ) as never,
+                },
+            ) as unknown as Route,
+            names: ['PK', 'GSI1SK'],
+            draw: (rng) => ({
+                petId: `p${Math.floor(rng() * 9)}`,
+                price: `${1 + Math.floor(rng() * 90)}.5`,
+            }),
+        },
+        HeldComposite: {
+            entry: tableEntry<{ petId: string; at: Date }>()(
+                { PK: ['petId'], SK: ['at'] },
+                { codec: { petId: string, at: isoAt } },
+            ) as unknown as Route,
+            names: ['PK', 'SK'],
+        },
+        Born: {
+            entry: tableEntry<{ petId: string; bornAt: Date }>()(
+                { PK: ['petId'], SK: 'bornAt' },
+                { codec: { petId: string, bornAt: bornOn } },
+            ) as unknown as Route,
+            names: ['PK', 'SK'],
+        },
+        Litters: {
+            entry: Litters as unknown as Route,
+            names: ['PK', 'GSI1SK'],
+        },
+        Prices: {
+            entry: tableEntry<{ id: string; price: string }>()(
+                { PK: ['id', 'price'] },
+                { codec: { id: string, price: decimal } },
+            ) as unknown as Route,
+            names: ['PK'],
+        },
+    }
     const pinned: Record<string, { agree: number; bothRefuse: number }> = {
         Born: { agree: 78, bothRefuse: 22 },
         Litters: { agree: 81, bothRefuse: 19 },
         Prices: { agree: 78, bothRefuse: 22 },
+        Tagged: { agree: 75, bothRefuse: 25 },
+        Rest: { agree: 100, bothRefuse: 0 },
+        HeldComposite: { agree: 78, bothRefuse: 22 },
     }
 
-    for (const [label, { entry, names }] of Object.entries(entries)) {
+    for (const [label, { entry, names, draw }] of Object.entries(entries)) {
         it(`holds for ${label}`, () => {
             const rng = rngFrom(20261107)
             const count = { agree: 0, bothRefuse: 0 }
             const failures: string[] = []
             for (let at = 0; at < 100; at++) {
-                const entity = arbitraryOf(entry.codec as never, rng, 3)
+                const entity = draw
+                    ? draw(rng)
+                    : arbitraryOf(entry.codec as never, rng, 3)
                 let keyed: Record<string, unknown> | undefined
                 let keysSaid: string | undefined
                 try {
@@ -358,6 +425,103 @@ describe('keys and toItem write one key for each key name, over generated entiti
                 } else {
                     failures.push(`${label} ${at}: two keys`)
                 }
+            }
+            expect(failures).toEqual([])
+            expect(count.agree).toBeGreaterThan(50)
+            expect(count).toEqual(pinned[label])
+        })
+    }
+})
+
+/**
+ * **A key component is the stored text of its attribute**, over generated entities. A composite key
+ * prints each component. The component of an attribute with a codec is the `S` text or the `N`
+ * digits that `toItem` writes for the field. `keys` and `toItem` can agree and both print the
+ * `toString` of a held `Date`, so the law compares the key with the stored attribute, not with the
+ * other route. A draw that `toItem` refuses is counted and pinned.
+ */
+describe('a key component is the stored text of its attribute, over generated entities', () => {
+    const dateSchema: StandardSchemaV1<Date> = {
+        '~standard': {
+            version: 1,
+            vendor: 'handwritten',
+            validate: (value) =>
+                value instanceof Date
+                    ? { value }
+                    : { issues: [{ message: 'not a Date' }] },
+        },
+    }
+    const isoAt = held(string, dateSchema, {
+        encode: (day: Date) => day.toISOString(),
+        decode: (text: string) => new Date(text),
+        arbitrary: (rng) => new Date(Math.floor(rng() * 4e12)),
+    })
+    type Route = {
+        readonly codec: unknown
+        readonly toItem: (item: never) => unknown
+        readonly keys: (
+            names: readonly string[],
+            attributes: never,
+        ) => Record<string, { S?: string }>
+    }
+    const entries: Record<
+        string,
+        { entry: Route; key: string; fields: readonly string[] }
+    > = {
+        HeldComposite: {
+            entry: tableEntry<{ petId: string; at: Date }>()(
+                { PK: ['petId'], SK: ['at'] },
+                { codec: { petId: string, at: isoAt } },
+            ) as unknown as Route,
+            key: 'SK',
+            fields: ['at'],
+        },
+        Prices: {
+            entry: tableEntry<{ id: string; price: string }>()(
+                { PK: ['id', 'price'] },
+                { codec: { id: string, price: decimal } },
+            ) as unknown as Route,
+            key: 'PK',
+            fields: ['id', 'price'],
+        },
+    }
+    const pinned: Record<string, { agree: number; refused: number }> = {
+        HeldComposite: { agree: 78, refused: 22 },
+        Prices: { agree: 78, refused: 22 },
+    }
+
+    for (const [label, { entry, key, fields }] of Object.entries(entries)) {
+        it(`holds for ${label}`, () => {
+            const rng = rngFrom(20261107)
+            const count = { agree: 0, refused: 0 }
+            const failures: string[] = []
+            for (let at = 0; at < 100; at++) {
+                const entity = arbitraryOf(entry.codec as never, rng, 3)
+                let written: Record<string, { S?: string; N?: string }>
+                try {
+                    const row = entry.toItem(entity as never)
+                    if (row instanceof Error) {
+                        count.refused++
+                        continue
+                    }
+                    written = row as typeof written
+                } catch {
+                    count.refused++
+                    continue
+                }
+                const text = (field: string) => {
+                    const stored = written[field]
+                    return stored?.S ?? stored?.N
+                }
+                const expected = fields
+                    .flatMap((field) => [field.toUpperCase(), text(field)])
+                    .join('#')
+                const printed = entry.keys([key], entity as never)[key]?.S
+                if (printed === expected) count.agree++
+                else
+                    failures.push(
+                        `${label} ${at}: ${printed} is not ${expected}`,
+                    )
             }
             expect(failures).toEqual([])
             expect(count.agree).toBeGreaterThan(50)

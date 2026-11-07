@@ -151,7 +151,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
             })
         })
 
-        it('refuses at construction a key that the variants write as two members', () => {
+        it('refuses at construction a key that the variants write with two codecs', () => {
             const split = () =>
                 tableEntry<Tagged>()(
                     // @ts-expect-error the type refuses a key that two variants write as S and N
@@ -173,7 +173,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
                         ),
                     },
                 )
-            expect(split).toThrow(/arms of a key give one member/)
+            expect(split).toThrow(/two variants write with two codecs/)
         })
     })
 

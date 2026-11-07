@@ -98,13 +98,14 @@ describe('a key build', () => {
         expect(() => Prefixed.key('PK', { orgId: 'acme' })).toThrow(/orgId/)
     })
 
-    it('builds the key of a value that holds a part of a longer separator', () => {
-        const Dashed = tableEntry<User>()(
-            { PK: ['orgId'] },
-            { separator: '::' },
-        )
-        expect(Dashed.key('PK', { orgId: 'a:b' })).toBe('ORGID::a:b')
-        expect(() => Dashed.key('PK', { orgId: 'a::b' })).toThrow(/orgId/)
+    it('refuses a separator of more than one character, which reads two lists as one key', () => {
+        expect(() =>
+            tableEntry<User>()(
+                { PK: ['orgId'] },
+                // @ts-expect-error a literal of two characters is no separator
+                { separator: '::' },
+            ),
+        ).toThrow('Separator must be one character')
     })
 
     it('does not read a component that a depth cuts off', () => {

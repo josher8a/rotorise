@@ -35,7 +35,7 @@ import {
 } from './codec/codec'
 import { native } from './codec/native'
 import type { Field, Term } from './codec/term'
-import { member } from './codec/term'
+import { member, sameTerm } from './codec/term'
 import { own } from './codec/value'
 import type {
     DistributiveOmit,
@@ -1455,6 +1455,12 @@ const key =
     >(
         schema: Schema,
         separator: Separator = '#' as Separator,
+        /** The text that the codec of a component writes, where the entry has a codec. */
+        text?: (
+            path: string,
+            value: unknown,
+            attributes: Record<string, unknown>,
+        ) => unknown,
     ) => {
         checkPaths(schema)
         return <
@@ -1512,6 +1518,11 @@ const key =
             // A segment that holds the separator reads back as two. The refusal names the component,
             // and never the value that it printed.
             const push = (component: string, segment: joinable) => {
+                if (typeof segment === 'object' && segment !== null) {
+                    throw new RotoriseError(
+                        `buildCompositeKey: the value of ${component} is an object, so the key cannot print it. Give the attribute a codec that writes text or a number.`,
+                    )
+                }
                 if (
                     segment !== undefined &&
                     segment !== null &&
@@ -1559,7 +1570,16 @@ const key =
                             : `the tag of ${path}`,
                         tag ?? name,
                     )
-                    push(path, value as joinable)
+                    push(
+                        path,
+                        (text === undefined
+                            ? value
+                            : text(
+                                  path,
+                                  value,
+                                  attributes as Record<string, unknown>,
+                              )) as joinable,
+                    )
                 }
                 printed++
             }
@@ -1588,6 +1608,11 @@ const toEntry =
     >(
         schema: Schema,
         separator: Separator = '#' as Separator,
+        text?: (
+            path: string,
+            value: unknown,
+            attributes: Record<string, unknown>,
+        ) => unknown,
     ) =>
     <const ExactEntity extends Entity>(
         item: ExactEntity,
@@ -1595,7 +1620,7 @@ const toEntry =
         ? TableEntryImpl<E, Schema, Separator>
         : never => {
         const entry = { ...item }
-        const buildKey = key<Entity>()(schema, separator)
+        const buildKey = key<Entity>()(schema, separator, text)
 
         for (const key_ in schema) {
             const val = buildKey(key_, item)
@@ -2766,6 +2791,55 @@ const componentsOf = (
     return { components, narrows }
 }
 
+type PlainComponent = string | number | bigint | boolean | null | undefined
+
+/** The names that the lists of `Schema` use as a component. One test of the union is the cheap path. */
+type ComponentNames<Schema> = {
+    [K in keyof Schema]: Schema[K] extends readonly unknown[]
+        ? Extract<Schema[K][number], string>
+        : never
+}[keyof Schema]
+
+/**
+ * The refusal of a component that holds an object, in an entry with no codec. Such an entry prints
+ * the value itself, and an object prints as its `toString`, so two values give one key. A codec
+ * writes the text of the attribute, so an entry with a codec passes. The refusal lands on the
+ * component. A component of a type that the check cannot read (`unknown`) passes.
+ */
+type ValidateComponents<Schema, E, CodecSpec> = [CodecSpec] extends [undefined]
+    ? string extends keyof Schema
+        ? unknown
+        : [E[ComponentNames<Schema> & keyof E]] extends [PlainComponent]
+          ? unknown
+          : {
+                [K in keyof Schema]: Schema[K] extends readonly unknown[]
+                    ? {
+                          [I in keyof Schema[K]]: Schema[K][I] extends keyof E &
+                              string
+                              ? unknown extends E[Schema[K][I]]
+                                  ? unknown
+                                  : [E[Schema[K][I]]] extends [PlainComponent]
+                                    ? unknown
+                                    : ErrorMessage<`[tableEntry] '${Schema[K][I] & string}' holds an object, and an entry with no codec prints its toString. Give the attribute a codec that writes text or a number`>
+                              : unknown
+                      }
+                    : unknown
+            }
+    : unknown
+
+/**
+ * Whether a literal separator holds more than one character. A plain `string` is no literal, so the
+ * type cannot tell and the run time refuses it. The type counts UTF-16 units and the run time counts
+ * code points.
+ */
+type ManyCharacters<S extends string> = string extends S
+    ? false
+    : S extends `${infer _Head}${infer Rest}`
+      ? '' extends Rest
+          ? false
+          : true
+      : false
+
 /**
  * The check of a short codec: the spec decodes to the entity.
  *
@@ -2855,70 +2929,73 @@ export const tableEntry =
             ValidateSchema<Schema> &
             ValidatePaths<Schema, KeyedBy> &
             ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest> &
-            ValidateKeyNames<Schema, CodecSpec, CodecRest>,
+            ValidateKeyNames<Schema, CodecSpec, CodecRest> &
+            ValidateComponents<Schema, KeyedBy, CodecSpec>,
         ...[options]: [Separator] extends ['']
             ? [ErrorMessage<'Separator must not be an empty string'>]
-            : [
-                  /**
-                   * Everything else this entry needs, each in a named slot.
-                   *
-                   * The separator is a slot and not a bare string. A parameter typed
-                   * `Separator | {...}` makes the object a candidate for `Separator`, the candidate
-                   * fails the constraint, and the inference falls back to `string`: every key of an
-                   * entry with options then typed as `${string}` in place of the default `'#'`. One
-                   * shape gives `Separator` one inference site, so a missing separator takes the
-                   * default.
-                   */
-                  options?: {
-                      /**
-                       * The attributes, as a spec or as a codec already built from one.
-                       *
-                       * A spec is the short form and takes the defaults. Pass a built codec
-                       * where a default is not what you want — `item` is where a rest policy
-                       * is chosen, and anything else it grows is reached the same way,
-                       * without this signature needing to learn about it.
-                       *
-                       * Where the entity is a union this must be a codec `union` built with
-                       * a discriminator, for the reason `item` refuses one: a single map of
-                       * attributes names one variant's, and the type would let the others
-                       * through it. That is worse here than it is there, because a
-                       * discriminant is usually a key component, so the mis-description lands
-                       * in an index rather than in a field.
-                       */
-                      readonly codec?: IsUnion<Entity> extends true
-                          ? TaggedCodec<Entity, CodecSpec>
-                          :
-                                | (CodecSpec &
-                                      ShortCodecCheck<
-                                          Entity,
-                                          NoInfer<CodecSpec>
-                                      >)
-                                | (ItemCodec<Entity, CodecSpec, CodecRest> &
-                                      Closed)
-                      readonly separator?: Separator
-                      /**
-                       * The keys that address the item: the partition key and the sort key.
-                       *
-                       * `keyUpdates` refuses a change that touches either, because DynamoDB
-                       * cannot update a key attribute of the table. `keys` with no names
-                       * builds these.
-                       */
-                      readonly key?: Roles & DistinctRoles<Roles>
-                      /**
-                       * The keys of each secondary index, by the name of the index: the
-                       * partition key and the sort key. `keyCondition` with the name of an
-                       * index builds the condition of a query on that index.
-                       */
-                      readonly indexes?: Indexes & DistinctIndexes<Indexes>
-                  } & WritesRow<
-                      Pinned,
-                      Entity,
-                      ExpandCases<Schema>,
-                      CodecSpec,
-                      CodecRest,
-                      Separator
-                  >,
-              ]
+            : ManyCharacters<Separator> extends true
+              ? [ErrorMessage<'Separator must be one character'>]
+              : [
+                    /**
+                     * Everything else this entry needs, each in a named slot.
+                     *
+                     * The separator is a slot and not a bare string. A parameter typed
+                     * `Separator | {...}` makes the object a candidate for `Separator`, the candidate
+                     * fails the constraint, and the inference falls back to `string`: every key of an
+                     * entry with options then typed as `${string}` in place of the default `'#'`. One
+                     * shape gives `Separator` one inference site, so a missing separator takes the
+                     * default.
+                     */
+                    options?: {
+                        /**
+                         * The attributes, as a spec or as a codec already built from one.
+                         *
+                         * A spec is the short form and takes the defaults. Pass a built codec
+                         * where a default is not what you want — `item` is where a rest policy
+                         * is chosen, and anything else it grows is reached the same way,
+                         * without this signature needing to learn about it.
+                         *
+                         * Where the entity is a union this must be a codec `union` built with
+                         * a discriminator, for the reason `item` refuses one: a single map of
+                         * attributes names one variant's, and the type would let the others
+                         * through it. That is worse here than it is there, because a
+                         * discriminant is usually a key component, so the mis-description lands
+                         * in an index rather than in a field.
+                         */
+                        readonly codec?: IsUnion<Entity> extends true
+                            ? TaggedCodec<Entity, CodecSpec>
+                            :
+                                  | (CodecSpec &
+                                        ShortCodecCheck<
+                                            Entity,
+                                            NoInfer<CodecSpec>
+                                        >)
+                                  | (ItemCodec<Entity, CodecSpec, CodecRest> &
+                                        Closed)
+                        readonly separator?: Separator
+                        /**
+                         * The keys that address the item: the partition key and the sort key.
+                         *
+                         * `keyUpdates` refuses a change that touches either, because DynamoDB
+                         * cannot update a key attribute of the table. `keys` with no names
+                         * builds these.
+                         */
+                        readonly key?: Roles & DistinctRoles<Roles>
+                        /**
+                         * The keys of each secondary index, by the name of the index: the
+                         * partition key and the sort key. `keyCondition` with the name of an
+                         * index builds the condition of a query on that index.
+                         */
+                        readonly indexes?: Indexes & DistinctIndexes<Indexes>
+                    } & WritesRow<
+                        Pinned,
+                        Entity,
+                        ExpandCases<Schema>,
+                        CodecSpec,
+                        CodecRest,
+                        Separator
+                    >,
+                ]
     ): TableEntryDefinition<
         Entity,
         ExpandCases<Schema>,
@@ -2947,6 +3024,10 @@ export const tableEntry =
         const sep = separator ?? ('#' as Separator)
         if (sep === '' || typeof sep !== 'string') {
             throw new RotoriseError('Separator must not be an empty string')
+        }
+        // the model has one separator character: a longer separator joins two lists to one key
+        if (Array.from(sep).length !== 1) {
+            throw new RotoriseError('Separator must be one character')
         }
 
         const expanded = Object.fromEntries(
@@ -2982,14 +3063,14 @@ export const tableEntry =
         for (const [index, given] of Object.entries(indexes ?? {}))
             namesOf(`the index '${index}'`, given)
 
-        const buildEntry = toEntry()(expanded as never, sep) as (
-            item: never,
-        ) => Record<string, unknown>
-        const buildKey = key()(expanded as never, sep) as (
-            name: never,
-            attributes: never,
-            config?: never,
-        ) => unknown
+        const buildEntry = toEntry()(
+            expanded as never,
+            sep,
+            (path, value, given) => storedText(path, value, given),
+        ) as (item: never) => Record<string, unknown>
+        const buildKey = key()(expanded as never, sep, (path, value, given) =>
+            storedText(path, value, given),
+        ) as (name: never, attributes: never, config?: never) => unknown
 
         /**
          * A built codec carries its own options; a spec takes the defaults.
@@ -3195,6 +3276,50 @@ export const tableEntry =
         }
 
         /**
+         * The slots that write a field: the declared slots, or the slot of the rest where the codec
+         * declares none and holds a rest. The rest writes each attribute that the fields lack, so a
+         * key on such an attribute takes the member of the rest on every route.
+         */
+        const fieldSlots = (
+            field: string,
+            item?: Record<string, unknown>,
+        ): ObjectSlot[] => {
+            const declared = slotsAt(field, item)
+            if (declared.length > 0 || attributes === undefined) return declared
+            if (isTagged(attributes)) return declared
+            // the erased item codec types its rest as `undefined`, and the run time holds a codec there
+            const rest = (
+                attributes as unknown as { readonly rest?: ObjectSlot }
+            ).rest
+            return rest === undefined ? [] : [rest]
+        }
+
+        /**
+         * The text that a component prints, as the codec writes the attribute: the `S` text or the `N`
+         * digits. A component of an attribute that the codec does not write prints as it is. A key
+         * follows its attribute on every route that writes a row.
+         */
+        const storedText = (
+            path: string,
+            value: unknown,
+            item: Record<string, unknown>,
+        ): unknown => {
+            if (attributes === undefined || path.includes('.')) return value
+            const slots = fieldSlots(path, item)
+            if (slots.length === 0) return value
+            const written = keyAttribute(slots, value)
+            if (written !== undefined && !(written instanceof CodecError)) {
+                if (memberOf(written) === 'S' && typeof written.S === 'string')
+                    return written.S
+                if (memberOf(written) === 'N' && typeof written.N === 'string')
+                    return written.N
+            }
+            throw new RotoriseError(
+                `'${path}' is a component of a key, and the codec writes no text or number for the value, so the key cannot print it.`,
+            )
+        }
+
+        /**
          * The one member that a key stores, decided at construction from the codec.
          *
          * A list of components prints one string, so it is `S`. A top-level attribute takes the member
@@ -3202,6 +3327,10 @@ export const tableEntry =
          * give one member, as the model gives one member to a key name. A path, a `null` arm and a
          * field whose term states no member add none. An entry without a codec has no member here, and
          * the run time reads the member of the value. The type refuses arms that disagree.
+         *
+         * Two variants that write the attribute with two codecs are refused. No value exists at
+         * construction, so the test is the identity of the two terms: two codecs that write the same
+         * text for every value are refused too.
          */
         const memberOfKey = (
             name: string,
@@ -3216,10 +3345,51 @@ export const tableEntry =
                         arm(next)
                 } else if (Array.isArray(value)) {
                     found.set('S', 'a list of components')
+                    // a component with no transform prints the text that the codec writes, so the
+                    // codec writes text or a number there
+                    for (const component of value) {
+                        const [field, transform] = Array.isArray(component)
+                            ? component
+                            : [component]
+                        if (
+                            typeof field !== 'string' ||
+                            field.includes('.') ||
+                            typeof transform === 'function'
+                        )
+                            continue
+                        for (const slot of fieldSlots(field)) {
+                            const stored = storedAt(slot)
+                            if (
+                                ![...stored].every(
+                                    (m) => m === 'S' || m === 'N',
+                                )
+                            )
+                                throw new RotoriseError(
+                                    `'${name}' prints '${field}' as a component, and the codec writes it as ${[...stored].join(' and ')}. A component is text or a number: write the attribute as S or N.`,
+                                )
+                        }
+                    }
                 } else if (typeof value === 'string' && !value.includes('.')) {
                     // a slot of two members is one field stored as two types. A second slot of the
                     // field is another variant
-                    for (const [at, slot] of slotsAt(value).entries()) {
+                    const written = fieldSlots(value)
+                    const termOf = (slot: ObjectSlot): Term => {
+                        const def = (slot as { readonly def: Term | Field }).def
+                        return 'mark' in def ? def.t : def
+                    }
+                    const [firstSlot, ...otherSlots] = written
+                    if (
+                        firstSlot !== undefined &&
+                        otherSlots.some(
+                            (other) =>
+                                !sameTerm(termOf(firstSlot), termOf(other)),
+                        )
+                    ) {
+                        throw new RotoriseError(
+                            `'${name}' is built from '${value}', which two variants write with two codecs. A key attribute has one codec, so every variant writes the key one way.`,
+                        )
+                    }
+                    for (const [at, slot] of written.entries()) {
                         const stored = storedAt(slot)
                         if (stored.size > 1) {
                             throw new RotoriseError(
@@ -3291,7 +3461,7 @@ export const tableEntry =
             if (field === undefined) return asKey(name, value)
             const encoded =
                 written?.[field] ??
-                keyAttribute(slotsAt(field, item), item[field])
+                keyAttribute(fieldSlots(field, item), item[field])
             if (encoded === undefined) return asKey(name, value)
             const stored = keyMembers.get(name)
             // the member is decided at construction, so a write at another member is no key

@@ -42,7 +42,7 @@ The double-call `<Entity>()(schema)` is required because TypeScript does not sup
 
 `options` is an object:
 
-- **`separator`** — Joins the components of a key. Defaults to `'#'`.
+- **`separator`** — Joins the components of a key. Defaults to `'#'`. The separator is one character: a longer one is refused at construction, because a key with a segment that holds it reads back as another list.
 - **`key`** — The keys that address the item: `{ partition: 'PK', sort: 'SK' }`, or `{ partition: 'PK' }`. `keys` builds these with no names, and `keyUpdates` refuses a change that touches them. Construction refuses a name that is no key of the schema, and one key in the two roles.
 - **`indexes`** — The keys of each secondary index, by the name of the index: `{ GSI1: { partition: 'GSI1PK', sort: 'GSI1SK' } }`. `keyCondition` with the name of an index reads these. Construction refuses a name that is no key of the schema, and one key in the two roles of an index.
 - **`codec`** — The attributes of the item, which `toItem` and `fromItem` encode and decode.
@@ -53,6 +53,7 @@ Builds a specific key value from the given attributes.
 It throws a `RotoriseError` where a segment of a component holds the separator, because the key
 would read back as another list of segments. The message names the component, and never the value.
 A transform whose tag or value prints the separator is refused too, and so is `.toEntry(item)`.
+A component of an entry with a codec prints the stored text of the attribute: the `S` text or the `N` digits. An entry with no codec refuses a component that holds an object, in the type and at run time.
 
 ```ts
 UserTable.key('PK', { orgId: 'acme', id: '123' })
