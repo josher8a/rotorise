@@ -2868,6 +2868,7 @@ const graphWalkOf = (
 export const leanPath = (
     { name, codec, paths }: PathVectors,
     decide: typeof hostAt = hostAt,
+    shared?: Map<string, string>,
 ): string => {
     const bound: Bound = {
         closures: new Map(),
@@ -2876,9 +2877,20 @@ export const leanPath = (
     }
     const item = wrapperOf(codec)
     const def = item.def as Term
-    // a closed codec prints one time per theorem, as a `let` that the rows name
+    // a closed codec prints one time per theorem, as a `let` that the rows name, unless the file holds it as a `def`
     const closedLets = new Map<string, string>()
+    const mentionsBound = (printed: string): boolean =>
+        [...bound.closures.values(), ...bound.readers.values()].some((n) =>
+            new RegExp(`(?<![\\w.])${n}(?![\\w])`).test(printed),
+        )
     const closedNamed = (printed: string): string => {
+        if (shared !== undefined && !mentionsBound(printed)) {
+            const kept = shared.get(printed)
+            if (kept !== undefined) return kept
+            const made = `t${shared.size}`
+            shared.set(printed, made)
+            return made
+        }
         const known = closedLets.get(printed)
         if (known !== undefined) return known
         const made = `c${closedLets.size}`
@@ -3117,8 +3129,16 @@ export const leanPathModules = (
         owner.set(i, least)
         size[least] = (size[least] ?? 0) + length
     }
-    return size.map((_, file) =>
-        leanModule(`${sliceImports}
+    return size.map((_, file) => {
+        // a closed term that no caller's function enters is one `def` of the file, which each theorem reads
+        const shared = new Map<string, string>()
+        const theorems = paths
+            .filter((_, i) => owner.get(i) === file)
+            .map((one) => leanPath(one, undefined, shared))
+        const defs = [...shared].map(
+            ([printed, name]) => `def ${name} : Closed := ${printed}`,
+        )
+        return leanModule(`${sliceImports}
 import Calculus.Bridge.ScopePaths
 
 /-!
@@ -3138,11 +3158,11 @@ namespace Calculus
 
 set_option maxRecDepth 8192
 
-${printed.filter((_, i) => owner.get(i) === file).join('\n\n')}
+${[...defs, ...theorems].join('\n\n')}
 
 end Calculus
-`),
-    )
+`)
+    })
 }
 
 /**
