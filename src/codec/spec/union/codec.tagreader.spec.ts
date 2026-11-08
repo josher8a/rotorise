@@ -7,10 +7,12 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { DynamoNumber } from '../../attribute'
 import {
     CodecError,
     constantOf,
     discriminatedUnion,
+    dynamoNumber,
     held,
     item,
     mdunion,
@@ -20,7 +22,9 @@ import {
     refine,
     scope,
     string,
+    union,
 } from '../../codec'
+import { orThrow } from '../../result'
 
 const DogTag = held(string('D'), string('dog'), {
     encode: (_: 'dog') => 'D' as const,
@@ -249,8 +253,45 @@ describe('two members that decode their tag to one value', () => {
                 ]),
             ),
         ).toThrow(
-            /option 0 decodes 'kind' = 'dog', and a write of that value gives 'dog', which no option carries/,
+            /option 0 decodes 'kind' = 'dog', and its adapter refuses to write that value: the adapter refuses its own value/,
         )
+    })
+
+    it('are refused in either order where a plain number tag meets a caller tag that decodes to the same number', () => {
+        const one = orThrow(DynamoNumber.from('1'))
+        const XTag = held(string('X'), dynamoNumber(one), {
+            encode: (_: DynamoNumber) => 'X' as const,
+            decode: (_: 'X') => orThrow(DynamoNumber.from('1')),
+        })
+        const plain = object({ kind: dynamoNumber(one), lives: number })
+        const caller = object({ kind: XTag, bark: string })
+        // the model has no reference identity: a number is its digits, so one answer for both orders
+        for (const options of [
+            [plain, caller],
+            [caller, plain],
+        ])
+            expect(() =>
+                item(discriminatedUnion('kind', options as never)),
+            ).toThrow(/two options decode to 'kind' = '1'/)
+    })
+
+    it('are refused where a tag that is a union of one literal decodes to the value of the other tag', () => {
+        expect(() =>
+            item(
+                mdunion(['kind', 'size'], [
+                    object({
+                        kind: DogTag,
+                        size: string('small'),
+                        bark: string,
+                    }),
+                    object({
+                        kind: union([string('dog')]),
+                        size: string('large'),
+                        pen: string,
+                    }),
+                ] as never) as never,
+            ),
+        ).toThrow(/two options decode to 'kind' = 'dog'/)
     })
 
     it('write back the row that each reads, where the write gives each member its own text', () => {

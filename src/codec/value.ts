@@ -27,7 +27,7 @@ import type {
     StoredItem,
 } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
-import type { LiteralValue, Shape } from './codec'
+import type { Shape } from './codec'
 import type { Result } from './result'
 import { CodecError, failed, setOwn } from './result'
 
@@ -205,7 +205,7 @@ export const expect = <K extends AttributeName>(
  * alternative a caller wrote is never the same object as the value that arrives. `DynamoNumber`
  * normalises at construction, so comparing the digits is comparing the numbers.
  */
-export const sameLiteral = (one: LiteralValue, other: unknown): boolean =>
+export const sameLiteral = (one: unknown, other: unknown): boolean =>
     one instanceof Uint8Array
         ? other instanceof Uint8Array &&
           one.length === other.length &&
