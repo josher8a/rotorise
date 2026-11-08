@@ -3,6 +3,7 @@
 #
 #   scripts/gate.sh              all nine checks
 #   scripts/gate.sh --no-build   the five Python guards only
+#   scripts/gate.sh --full       all nine checks, and no reuse of a stored result
 #
 # `--no-build` skips the build, the gateway check, the emit and the vector bridge,
 # and is honest only when no `.lean` file changed.
@@ -10,6 +11,10 @@
 # Run the gate inside the devcontainer or on CI. Only one `lake build` may run at a time
 # across the sessions sharing this tree, and a build from `docs/` is one of them: `calculus`
 # is a path dependency there, so it writes this package's `.lake/build`.
+#
+# The vector emit and the vector bridge reuse the result of a step whose inputs did not change
+# since the step passed: `scripts/gate_cache.py` states the key of each step. The gate prints each
+# reuse. `--full` runs every step, and CI runs `--full`.
 #
 # Every check runs even after one fails, so one invocation reports the whole state of the
 # tree rather than its first symptom. The exit code is 1 if any check failed and 0 only when
@@ -20,21 +25,23 @@ set -uo pipefail
 FORMAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$FORMAL_DIR" || exit 2
 
-REPO_DIR="$(cd "$FORMAL_DIR/.." && pwd)"
 RUN_BUILD=1
 
 for arg in "$@"; do
   case "$arg" in
     --no-build) RUN_BUILD=0 ;;
-    -h|--help)  sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --full)     export GATE_CACHE_OFF=1 ;;
+    -h|--help)  sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "gate.sh: unknown argument: $arg" >&2
-       echo "usage: gate.sh [--no-build]" >&2
+       echo "usage: gate.sh [--no-build] [--full]" >&2
        exit 2 ;;
   esac
 done
 
 fail=0
 first_failure=""
+GATE_REUSE_LOG=$(mktemp); export GATE_REUSE_LOG
+trap 'rm -f "$GATE_REUSE_LOG"' EXIT
 
 # run <label> <command…> — the one place an exit code is read, so there is one
 # place to get it wrong. A step writes its output to a file, and a failed step prints the file.
@@ -73,8 +80,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
      new=$(comm -23 <(printf "%s\n" "$out" | sort) \
                     <(grep -v "^#" scripts/classical_gateways.txt | sort))
      [ -z "$new" ] || { echo "new classical route(s):"; echo "$new"; exit 1; }'
-  run 'vector emit' bash -c \
-    "cd \"$REPO_DIR\" && EMIT_LEAN_REFUSALS=1 npx --no-install vitest run src/codec/lean/lean.spec.ts src/codec/lean/lean.pool.spec.ts src/codec/lean/lean.key.spec.ts src/codec/lean/lean.update.spec.ts --reporter=dot"
+  run 'vector emit' python3 scripts/gate_cache.py emit
   # The vector bridge runs as one set of parallel jobs, longest first: the kernel checks the
   # theorems of one file in sequence, so the wall time of the set is the time of its longest file.
   # A file prints the name of each failing row and exits 0 after a print, so a job passes only
@@ -91,7 +97,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # reports as one more job.
   run 'vector bridge' bash -c '
     jobs=${GATE_JOBS:-3}; out=$(mktemp -d); trap "rm -rf $out" EXIT
-    ( python3 scripts/type_bridge.py > $out/types.log 2>&1; rc=$?
+    ( python3 scripts/gate_cache.py types > $out/types.log 2>&1; rc=$?
       [ $rc -eq 0 ] || cp $out/types.log $out/xtype_bridge.out; echo $rc > $out/xtype_bridge.rc ) &
     printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
       .pool.paths0.lean .pool.paths1.lean .pool.paths3.lean .pool.paths2.lean \
@@ -101,7 +107,9 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
       [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
         { echo \"the last line is not #assert_axioms_module\" > $out/x{}.out; echo 1 > $out/x{}.rc; exit 0; }
-      lake env lean {} > $out/x{}.out 2>&1; echo \$? > $out/x{}.rc"
+      python3 scripts/gate_cache.py hit {} && { : > $out/x{}.out; echo 0 > $out/x{}.rc; exit 0; }
+      lake env lean {} > $out/x{}.out 2>&1; rc=\$?; echo \$rc > $out/x{}.rc
+      [ \$rc -eq 0 ] && [ ! -s $out/x{}.out ] && python3 scripts/gate_cache.py store {}; exit 0"
     wait
     fail=0
     for rc in "$out"/*.rc; do
@@ -119,6 +127,10 @@ else
 fi
 
 echo
+if [ -s "$GATE_REUSE_LOG" ]; then
+  echo "REUSED $(wc -l < "$GATE_REUSE_LOG" | tr -d ' ') stored result(s); --full runs them:"
+  sed 's/^/      | /' "$GATE_REUSE_LOG"
+fi
 if [ $fail -eq 0 ]; then
   if [ "$RUN_BUILD" -eq 1 ]; then
     echo 'ALL_GREEN'

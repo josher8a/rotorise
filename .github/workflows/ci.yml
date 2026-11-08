@@ -69,7 +69,7 @@ jobs:
           restore-keys: lake-build-
       - run: lake exe cache get
         working-directory: formal
-      - run: formal/scripts/gate.sh
+      - run: formal/scripts/gate.sh --full
       - name: leanchecker
         working-directory: formal
         run: |
