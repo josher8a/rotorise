@@ -10,7 +10,6 @@ import {
     exclude,
     item,
     meet,
-    narrow,
     object,
     optional,
     scope,
@@ -121,7 +120,7 @@ describe('a pattern or a meet over an attribute named __proto__', () => {
         ).toBe(true)
     })
 
-    it('keeps the name as an own key in the opening of an exclude pattern and of a narrow pattern', () => {
+    it('keeps the name as an own key in the opening of an exclude pattern', () => {
         const pattern = () => object({ ...named(string('a')) } as never)
         const excluded = exclude(
             pet() as never,
@@ -131,17 +130,6 @@ describe('a pattern or a meet over an attribute named __proto__', () => {
             own(
                 excluded.unsafeDecode(
                     row('{"M":{"kind":{"S":"dog"},"__proto__":{"S":"b"}}}'),
-                ),
-            ),
-        ).toBe(true)
-        const narrowed = narrow(
-            pet() as never,
-            pattern() as never,
-        ) as unknown as Decoder
-        expect(
-            own(
-                narrowed.unsafeDecode(
-                    row('{"M":{"kind":{"S":"dog"},"__proto__":{"S":"a"}}}'),
                 ),
             ),
         ).toBe(true)

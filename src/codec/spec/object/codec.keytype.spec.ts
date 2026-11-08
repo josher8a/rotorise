@@ -60,9 +60,9 @@ describe('a component under a refine prints the text of its field', () => {
         const key = Pets.key('PK', { petId: 'p1' })
         expect(key).toBe('PETID#p1')
         expectTypeOf(key).toEqualTypeOf<'PETID#p1'>()
-        // the key attribute of an entry holds the same text
+        // `fromEntry` drops each key attribute, whatever its text
         expect(
-            Pets.fromEntry({ petId: 'p1', name: 'a', PK: 'PETID#p1' }),
+            Pets.fromEntry({ petId: 'p1', name: 'a', PK: 'PETID#zz' }),
         ).toEqual({ petId: 'p1', name: 'a' })
     })
 

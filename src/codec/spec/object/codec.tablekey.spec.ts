@@ -248,12 +248,16 @@ describe('a refusal names the key that refused', () => {
         { key: { partition: 'PK', sort: 'SK' } },
     )
 
-    it('names SK, which lacks `name`, and not the table key PK that the block also meets', () => {
+    it('names the table key SK first, whether or not the change gives `name`, and then the table key that the block meets', () => {
         const untyped = Pets.keyUpdates as (changed: object) => unknown
         expect(() => untyped({ species: 'DOG' })).toThrow(RotoriseError)
-        expect(() => untyped({ species: 'DOG' })).toThrow(
-            /^'SK' is the table's own key and is built from 'species', 'name'\./,
-        )
+        for (const changed of [
+            { species: 'DOG' },
+            { species: 'DOG', name: 'Rex' },
+        ])
+            expect(() => untyped(changed)).toThrow(
+                /^'SK' is the table's own key and is built from 'species', 'name'\./,
+            )
         // the block meets PK through GSI1SK, and the message then says why the block is frozen
         expect(() => untyped({ species: 'DOG' })).toThrow(
             /the block holds 'petId' of 'PK'.*freezes its block/s,

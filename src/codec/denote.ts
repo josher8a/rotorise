@@ -435,8 +435,10 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
             return out
         },
         /**
-         * Attributes the spec does not mention are dropped. A row written before a field existed
-         * decodes without it, which is why `encode ∘ decode` is not identity on items.
+         * A closed body refuses an attribute that it does not declare, because the schema and the
+         * data have drifted apart, and an open key entry takes it. A row written before a field
+         * existed decodes without that field, which is why `encode ∘ decode` is not identity on
+         * items.
          */
         decode: (item, enclosing = 0) => {
             const out: Record<string, unknown> = {}

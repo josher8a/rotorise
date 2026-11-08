@@ -39,7 +39,7 @@ describe('a key of one attribute at a path', () => {
         expectTypeOf(entry.SK).toEqualTypeOf<'x'>()
     })
 
-    it('prints the number that the codec writes at the path, as an N', () => {
+    it('holds the number that the codec writes at the path, and writes it as an N in the row', () => {
         const Notes = tableEntry<Noted>()(
             { PK: ['id'], SK: 'meta.grams' },
             { codec: { id: string, meta } },
@@ -47,6 +47,10 @@ describe('a key of one attribute at a path', () => {
         const key = Notes.key('SK', { meta: { grams: 90 } })
         expect(key).toBe(90)
         expectTypeOf(key).toEqualTypeOf<90>()
+        // the row member is the one that the codec writes at the path
+        expect(Notes.keys(['SK'], { meta: { note: 'n', grams: 90 } })).toEqual({
+            SK: { N: '90' },
+        })
     })
 
     it('prints the stored text under the adapter of a caller at the path', () => {

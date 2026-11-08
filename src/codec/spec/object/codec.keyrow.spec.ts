@@ -53,13 +53,13 @@ describe('a key that builds no value', () => {
         expect(Pets.toEntry(clean)).toHaveProperty('PK', 'PETID#p1')
     })
 
-    it('is removed and not set by keyUpdates, as the two routes above give it no value', () => {
+    it('is removed and not set by keyUpdates, which builds its own keys', () => {
         const { set, remove } = Pets.keyUpdates(stale)
         expect(remove).toEqual(['GSI1PK'])
         expect(set).not.toHaveProperty('GSI1PK')
     })
 
-    it('reads back as the entity, through fromItem of toItem', () => {
+    it('drops the key attributes of the row before the read, so the entity reads back without them', () => {
         expect(Pets.fromItem(Pets.unsafeToItem(clean))).toEqual(clean)
     })
 
@@ -97,9 +97,9 @@ describe('a key that cannot print', () => {
 
     it('refuses an absent part before it tests the separator of a part that precedes it', () => {
         // species holds the separator and petId is absent: the print stops at the absent part
-        expect(
-            kindOf(() => Pets.key('GSI1SK', { species: 'CAT#1' } as never)),
-        ).toBe('refused')
+        const run = () => Pets.key('GSI1SK', { species: 'CAT#1' } as never)
+        expect(kindOf(run)).toBe('refused')
+        expect(run).toThrow(/Attribute petId not found/)
     })
 
     it('refuses the separator of a part that is printed, once the print has stopped at the absent part', () => {
@@ -179,5 +179,22 @@ describe('a key named __proto__', () => {
         expect(
             Object.hasOwn(Pets.unsafeToItem({ petId: 'p1' }), '__proto__'),
         ).toBe(true)
+    })
+})
+
+describe('a row that a closed entry wrote', () => {
+    const Pets = tableEntry<{ petId: string }>()(
+        { PK: ['petId'] },
+        { codec: { petId: string } },
+    ) as unknown as {
+        unsafeToItem: (item: object) => Record<string, unknown>
+        fromItem: (row: object) => unknown
+    }
+
+    it('reads back through fromItem, because the key attributes leave the row before the read', () => {
+        const row = Pets.unsafeToItem({ petId: 'p1' })
+        expect(row).toHaveProperty('PK')
+        // the closed codec refuses an attribute that it does not declare, a key attribute included
+        expect(Pets.fromItem(row)).toEqual({ petId: 'p1' })
     })
 })

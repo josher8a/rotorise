@@ -271,5 +271,8 @@ describe('a path that variants declare differently refuses on use with the reaso
         expect(() => Notes.keys(['SK'], dogNote)).toThrow(
             /declared differently in different variants/,
         )
+        expect(() => Notes.keys(['SK'], dogNote)).toThrow(
+            /^'meta\.note' is a component of a key, and the codec cannot address that path/,
+        )
     })
 })

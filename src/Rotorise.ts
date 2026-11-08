@@ -4277,11 +4277,11 @@ export const tableEntry =
         /**
          * The keys are removed before decoding, not merely left undeclared.
          *
-         * A codec that drops what it does not declare would ignore them anyway. One that keeps
-         * them — a rest policy of `'lossy'`, say, which is how an open entity is declared —
-         * would sweep the computed keys into the entity, and `PK` is not an attribute of
-         * anything. Removing them here is what makes `fromItem` mean the same thing under every
-         * policy.
+         * A closed codec refuses an attribute that it does not declare, so a row of a closed entry
+         * would be refused for its own key attributes. An open key entry takes every attribute, so
+         * it would sweep the computed keys into the entity, and `PK` is not an attribute of
+         * anything. Removing the keys here is what makes `fromItem` mean the same thing for a
+         * closed entry and for an open one.
          */
         const fromItem = (item: AttributeMap) =>
             attributes.decode(dropKeys(item)) as Result<unknown>

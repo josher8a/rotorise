@@ -245,7 +245,7 @@ const resolved = <T>({
 }: CheckOptions<T> = {}) => {
     if (!(Number.isInteger(count) && count >= 1)) {
         throw new CodecError(
-            `a count of ${count} runs no case, so the check has nothing to test; give a count of one or more whole cases`,
+            `a count of ${count} is not a whole number of one or more cases; give a count of one or more whole cases`,
         )
     }
     const rng = rngFrom(seed)

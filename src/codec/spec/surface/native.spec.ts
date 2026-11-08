@@ -927,8 +927,9 @@ describe('a boxed primitive, in the type and at run time', () => {
     it('narrows the type at a boxed Boolean, because the interface admits any class with valueOf(): boolean', () => {
         // the run time reads `new Boolean(true)` as BOOL, as the SDK does
         expect(native.encode(new Boolean(true))).toEqual({ BOOL: true })
-        // the type cannot tell a boxed Boolean from a class that has `valueOf(): boolean`
-        expectTypeOf<native.Encode<Boolean>>().not.toEqualTypeOf<BOOL>()
+        // the type cannot tell a boxed Boolean from a class that has `valueOf(): boolean`, and reads
+        // both as a map: the one member of the interface is a function, which a map does not write
+        expectTypeOf<native.Encode<Boolean>>().toEqualTypeOf<M<{}>>()
     })
 
     it('keeps a set of boxed numbers refused in the type, because the SDK picks the writer from a first member that is no number', () => {
