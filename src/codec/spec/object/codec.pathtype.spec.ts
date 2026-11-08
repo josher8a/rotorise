@@ -2,9 +2,10 @@
  * The type of a key at a path reads the codec along the path, as `at` does at run time.
  *
  * The member that the codec writes at a path decides the member of a key of one attribute. A path
- * goes below an object field, and below no field that `refine`, `legacy` or `held` wraps, whatever
- * the adapter stores. A key of one attribute holds the value or no key, so a path whose value can
- * be absent gives a sparse key.
+ * goes below an object, a union of objects, and a field under `optional`, `undefinable` or `fill`.
+ * It goes below no field that `refine`, `legacy` or `held` wraps, whatever the adapter stores, and
+ * below no `ref`. A key of one attribute holds the value or no key, so a path whose value can be
+ * absent gives a sparse key.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
@@ -15,11 +16,17 @@ import {
     decimal,
     discriminatedUnion,
     dynamoNumber,
+    fill,
     held,
+    item,
     object,
     optional,
+    ref,
     refine,
+    scope,
     string,
+    undefinable,
+    union,
 } from '../../codec'
 import { orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
@@ -83,6 +90,81 @@ describe('the member of a key of one attribute at a path is the member that the 
     })
 })
 
+describe('a path goes below each field that the codec walks at run time, and the type admits it', () => {
+    it('goes below a fill over an object', () => {
+        const Notes = tableEntry<{ id: string; meta: { note: string } }>()(
+            { PK: ['id'], SK: ['meta.note'] },
+            {
+                codec: {
+                    id: string,
+                    meta: fill(object({ note: string }), { note: 'none' }),
+                },
+            },
+        )
+        expect(Notes.key('SK', { meta: { note: 'n' } })).toBe('NOTE#n')
+    })
+
+    it('goes below a union of objects', () => {
+        const Notes = tableEntry<{ id: string; meta: { a: string } }>()(
+            { PK: ['id'], SK: ['meta.a'] },
+            {
+                codec: {
+                    id: string,
+                    meta: union([
+                        object({ a: string }),
+                        object({ a: string, b: string }),
+                    ]),
+                },
+            },
+        )
+        expect(Notes.key('SK', { meta: { a: 'z' } })).toBe('A#z')
+    })
+
+    it('goes below a discriminated union, with no refine over it', () => {
+        const Notes = tableEntry<{
+            id: string
+            meta: { kind: 'a' | 'b'; note: string }
+        }>()(
+            { PK: ['id'], SK: ['meta.note'] },
+            {
+                codec: {
+                    id: string,
+                    meta: discriminatedUnion('kind', [
+                        object({ kind: string('a'), note: string }),
+                        object({ kind: string('b'), note: string }),
+                    ]),
+                },
+            },
+        )
+        expect(Notes.key('SK', { meta: { kind: 'a', note: 'n' } })).toBe(
+            'NOTE#n',
+        )
+    })
+
+    it('refuses a path below a ref, which resolves in the term frames that the type walk does not hold', () => {
+        const Home = discriminatedUnion('kind', [
+            object({ kind: string('house'), ownerId: string }),
+            object({ kind: string('flat'), ownerId: string }),
+        ])
+        const Pets = scope({
+            Pet: object({ id: string, home: ref('Home') }),
+            Home,
+        }).Pet
+        const Visits = tableEntry<{
+            id: string
+            home: { kind: 'house' | 'flat'; ownerId: string }
+        }>()(
+            // @ts-expect-error the frontier walk does not see a ref
+            { PK: ['id'], SK: ['home.ownerId'] },
+            { codec: item(Pets) },
+        )
+        // `at` walks below the ref, so construction builds the key that the type refuses
+        expect(
+            Visits.key('SK', { home: { kind: 'flat', ownerId: 'o1' } }),
+        ).toBe('OWNERID#o1')
+    })
+})
+
 describe('a path below a field that a wrapper blocks is refused, whatever the wrapper stores', () => {
     type Note =
         | { readonly kind: 'a'; readonly note: string }
@@ -92,7 +174,7 @@ describe('a path below a field that a wrapper blocks is refused, whatever the wr
         object({ kind: string('b'), note: string }),
     ])
 
-    it('refuses a path below a refine over a union of objects', () => {
+    it('refuses a path below a refine over a union of objects, which the union alone admits', () => {
         const Checked = refine(Meta, (v: Note): v is Note => v.note !== '')
         expect(() =>
             tableEntry<{ id: string; meta: Note }>()(
@@ -144,6 +226,17 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
         expectTypeOf(Visits.key('GSI2SK', { at })).toEqualTypeOf<string>()
     })
 
+    it('types the absent value of an undefinable caller adapter, as the run time gives it', () => {
+        const Visits = tableEntry<{ petId: string; at: Date | undefined }>()(
+            { PK: ['petId'], GSI2SK: 'at' },
+            { codec: { petId: string, at: undefinable(isoAt) } },
+        )
+        const at = undefined as Date | undefined
+        const key = Visits.key('GSI2SK', { at })
+        expect(key).toBeUndefined()
+        expectTypeOf(key).toEqualTypeOf<string | undefined>()
+    })
+
     it('holds the DynamoNumber in a key of one attribute, as the run time does', () => {
         const Prices = tableEntry<{ id: string; price: DynamoNumber }>()(
             { PK: ['id'], SK: 'price' },
@@ -151,6 +244,20 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
         )
         const price = orThrow(DynamoNumber.from('1.5'))
         const key = Prices.key('SK', { price })
+        expect(key).toBe(price)
+        expectTypeOf(key).toEqualTypeOf<typeof price>()
+    })
+
+    it('holds the DynamoNumber in a key of one attribute at a path, as at the top level', () => {
+        const Prices = tableEntry<{
+            id: string
+            meta: { price: DynamoNumber }
+        }>()(
+            { PK: ['id'], SK: 'meta.price' },
+            { codec: { id: string, meta: object({ price: dynamoNumber }) } },
+        )
+        const price = orThrow(DynamoNumber.from('1.5'))
+        const key = Prices.key('SK', { meta: { price } })
         expect(key).toBe(price)
         expectTypeOf(key).toEqualTypeOf<typeof price>()
     })

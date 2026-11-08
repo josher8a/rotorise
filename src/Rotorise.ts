@@ -11,7 +11,9 @@ import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     AttributeOf,
+    ChildAt,
     Closed,
+    CodecAt,
     ConstantOf,
     EncodedBy,
     EncodedVariants,
@@ -566,7 +568,7 @@ type NameOf<E, P extends string> = P extends `${string}.${string}`
 
 /** The text that a key of one attribute at a path prints: the value at the path of the view of the entity. */
 type PathText<Entity, Spec extends string, CodecSpec> = Replace<
-    ValueAt<TextView<Entity, CodecSpec>, Spec>,
+    ValueAt<TextView<Entity, CodecSpec, true>, Spec>,
     null,
     undefined
 >
@@ -949,35 +951,53 @@ type CodecMember<Enc, Name extends string> = Enc extends unknown
     : never
 
 /**
- * The field that the codec declares at a path, or `never`. A name goes below a field into the
- * `spec` of that field. A field that holds no `spec` has no field below it, so the path ends in
- * `never` there. `refine`, `legacy` and `held` write no `spec`, which is how the type refuses a path
- * below them, as `at` does at run time. The walk reads the codec, as `at` does at
- * run time, and never the value of the entity.
+ * The frontier at the root of an item: one member per variant of a tagged codec, or the one member
+ * of the spec. The rest of the item names no path.
  */
-type FieldAtPath<Spec, Path extends string> = Spec extends unknown
-    ? Path extends `${infer Head}.${infer Tail}`
-        ? Head extends keyof Spec
-            ? Spec[Head] extends { readonly spec: infer Nested }
-                ? FieldAtPath<Nested, Tail>
-                : never
+type RootFrontier<CodecSpec> = IsVariantSpec<CodecSpec> extends true
+    ? VariantsOf<CodecSpec> extends infer V
+        ? V extends unknown
+            ? {
+                  readonly spec: V
+                  readonly rest: undefined
+                  readonly t: unknown
+              }
             : never
-        : Path extends keyof Spec
-          ? Spec[Path]
-          : never
-    : never
+        : never
+    : {
+          readonly spec: CodecSpec
+          readonly rest: undefined
+          readonly t: unknown
+      }
+
+/**
+ * The codec that the frontier holds at a path. The walk is the frontier walk of `at`: `CodecAt` reads
+ * the field, and `ChildAt` goes below it through each presence mark and each union. It enters an
+ * `object`, a union of objects, and a field under `optional`, `undefinable` or `fill`. It cannot
+ * enter `refine`, `legacy`, `held`, `nullable`, a leaf, or a `ref`. A `ref` resolves in the term
+ * frames of `at`, and the frontier holds no frame, so the type refuses a path below a `ref` that
+ * `at` walks at run time.
+ */
+type CodecAtPath<
+    F,
+    Path extends string,
+> = Path extends `${infer Head}.${infer Tail}`
+    ? CodecAtPath<ChildAt<F, Head>, Tail>
+    : CodecAt<F, Path>
 
 /**
  * The member that the codec writes at a path: the member of the field at the path, over every
  * variant that declares it. `never` where the codec has no field at the path.
  */
-type CodecMemberAtPath<CodecSpec, Path extends string> = FieldAtPath<
-    IsVariantSpec<CodecSpec> extends true ? VariantsOf<CodecSpec> : CodecSpec,
+type CodecMemberAtPath<CodecSpec, Path extends string> = CodecAtPath<
+    RootFrontier<CodecSpec>,
     Path
 > extends infer Field
     ? [Field] extends [never]
         ? never
-        : Exclude<MemberOf<AttributeOf<Field>>, 'NULL'>
+        : unknown extends Field
+          ? never
+          : Exclude<MemberOf<AttributeOf<Field>>, 'NULL'>
     : never
 
 /**
@@ -1981,16 +2001,23 @@ type OptimizedBuiltKey<
  * a field under the adapter of a caller prints the stored literal where the entity holds the
  * caller's value. A variant spec declares one field per variant, and the text is the union of the
  * texts of the variants that {@link VariantFor} names for the call. An attribute that an `object` codec writes prints
- * as the view of that object, so a path reads the text of the field below.
+ * as the view of that object, so a path reads the text of the field below. A component prints the
+ * digits of a `DynamoNumber`. With `Whole`, a key of one attribute at a path reads the view, and a
+ * leaf keeps its value as the key of a top-level attribute does.
  */
-type TextView<Entity, CodecSpec> = [CodecSpec] extends [undefined]
+type TextView<Entity, CodecSpec, Whole extends boolean = false> = [
+    CodecSpec,
+] extends [undefined]
     ? Entity
-    : { [K in keyof Entity]: TextAt<Entity, K, CodecSpec> }
+    : { [K in keyof Entity]: TextAt<Entity, K, CodecSpec, Whole> }
 
 /** The value that one attribute prints in a key: its stored text, or the view of its object. */
-type TextAt<Entity, K extends PropertyKey, CodecSpec> = [CodecSpec] extends [
-    undefined,
-]
+type TextAt<
+    Entity,
+    K extends PropertyKey,
+    CodecSpec,
+    Whole extends boolean = false,
+> = [CodecSpec] extends [undefined]
     ? Entity[K & keyof Entity]
     : FieldOf<
             IsVariantSpec<CodecSpec> extends true
@@ -2003,10 +2030,12 @@ type TextAt<Entity, K extends PropertyKey, CodecSpec> = [CodecSpec] extends [
           : Field extends { readonly spec: infer Nested }
             ? Entity[K & keyof Entity] extends infer Value
                 ? Value extends object
-                    ? TextView<Value, Nested>
+                    ? TextView<Value, Nested, Whole>
                     : Value
                 : never
-            : DigitsOf<KeyText<Entity[K & keyof Entity], Field>>
+            : Whole extends true
+              ? KeyText<Entity[K & keyof Entity], Field>
+              : DigitsOf<KeyText<Entity[K & keyof Entity], Field>>
       : never
 
 /** The text that a `DynamoNumber` component prints: its digits. A key of one attribute holds the value itself. */
@@ -3130,7 +3159,7 @@ type RefuseComponent<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
     ? RefuseObject<E, Name, 'an entry with no codec'>
     : Name extends `${string}.${string}`
       ? [CodecMemberAtPath<CodecSpec, Name>] extends [never]
-          ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path cannot go into refine, legacy or held, and the codec declares no field there. Address the attribute itself`>
+          ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill, and no other codec: refine, legacy, held, nullable, a ref and a leaf have no field below. Address the attribute itself`>
           : [Exclude<CodecMemberAtPath<CodecSpec, Name>, 'S' | 'N'>] extends [
                   never,
               ]

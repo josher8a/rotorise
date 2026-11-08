@@ -4,7 +4,8 @@
  * The key model is parametric in the name of an attribute, so a name can be a path. The key part
  * holds the value at the member of the name. An entry with no codec prints the value. An entry
  * with a codec prints the text or the number that the codec writes at the path. The type refuses
- * a path that the codec cannot address: a path cannot go into `refine`, `legacy` or `held`.
+ * a path that the codec cannot address: a path cannot go into `refine`, `legacy`, `held`, `nullable`
+ * or a `ref`, and a leaf has no field below.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'

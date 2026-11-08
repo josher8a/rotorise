@@ -3345,7 +3345,7 @@ type ItemFrontier<T, Spec, Rest> = {
 }
 
 /** The codec that a member holds at a key: the declared field, then the open entry. */
-type CodecAt<M, K> = M extends Spoken
+export type CodecAt<M, K> = M extends Spoken
     ? K extends keyof M['spec']
         ? Marks<M['spec'][K]>
         : M['rest'] extends AnyCodec
@@ -3354,7 +3354,7 @@ type CodecAt<M, K> = M extends Spoken
     : unknown
 
 /** The frontier one key down. A key that no known member holds gives an unknown frontier. */
-type ChildAt<F, K> = unknown extends F
+export type ChildAt<F, K> = unknown extends F
     ? unknown
     : MembersOf<CodecAt<F, K>> extends infer Next
       ? [Next] extends [never]
@@ -6861,6 +6861,8 @@ type CallerHeld<Field> = Field extends { readonly [termMarker]?: infer M }
  * literal of the inner term where the inner term pins one, and `string` where it pins none. Any
  * other field prints its value.
  *
+ * An absent value stays absent: where `Value` holds `undefined` or `null`, so does the text.
+ *
  * A key of one attribute reads this type too. That key holds the stored payload of an attribute
  * under the adapter of a caller, as the row does, because an entry that holds a value such as a
  * `Date` cannot be stored. A field with no adapter of a caller holds its value.
@@ -6868,9 +6870,9 @@ type CallerHeld<Field> = Field extends { readonly [termMarker]?: infer M }
 export type KeyText<Value, Field> = [Field] extends [never]
     ? Value
     : true extends CallerHeld<Field>
-      ? [HeldStored<Field>] extends [never]
-          ? string
-          : HeldStored<Field>
+      ?
+            | ([HeldStored<Field>] extends [never] ? string : HeldStored<Field>)
+            | Extract<Value, null | undefined>
       : Value
 
 /**
