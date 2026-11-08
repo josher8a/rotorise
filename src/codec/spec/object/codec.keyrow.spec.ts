@@ -74,7 +74,7 @@ describe('a key that builds no value', () => {
     it('is refused by toEntry for the same entity', () => {
         expect(() => Pets.toEntry(stale)).toThrow(RotoriseError)
         expect(() => Pets.toEntry(stale)).toThrow(
-            /^'GSI1PK' is a key of the schema, and the write of the codec holds an attribute of that name/,
+            /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
         )
     })
 })
@@ -196,5 +196,66 @@ describe('a row that a closed entry wrote', () => {
         expect(row).toHaveProperty('PK')
         // the closed codec refuses an attribute that it does not declare, a key attribute included
         expect(Pets.fromItem(row)).toEqual({ petId: 'p1' })
+    })
+})
+
+describe('an entity that holds the name of a key', () => {
+    type Pet = { petId: string; status: string }
+    const keys = {
+        PK: ['petId'],
+        GSI1PK: {
+            discriminator: 'status',
+            spec: { ADOPTED: null, AVAILABLE: ['petId'] },
+        },
+    } as never
+    const closed = tableEntry<Pet>()(keys, {
+        codec: { petId: string, status: string },
+    } as never) as unknown as {
+        toItem: (item: object) => unknown
+        toEntry: (item: object) => Record<string, unknown>
+    }
+    const bare = tableEntry<Pet>()(keys) as unknown as {
+        toEntry: (item: object) => Record<string, unknown>
+    }
+    const open = tableEntry<Pet>()(keys, {
+        codec: item(
+            object({ petId: string, status: string }, [
+                string,
+                optional(string),
+            ] as never) as never,
+        ) as never,
+    } as never) as unknown as {
+        toItem: (item: object) => unknown
+        toEntry: (item: object) => Record<string, unknown>
+    }
+    const stale = { petId: 'p1', status: 'AVAILABLE', GSI1PK: 'mine' }
+
+    it('is refused by toEntry where the codec is closed, as toItem refuses it', () => {
+        expect(closed.toItem(stale)).toBeInstanceOf(CodecError)
+        expect(() => closed.toEntry(stale)).toThrow(RotoriseError)
+        expect(() => closed.toEntry(stale)).toThrow(
+            /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
+        )
+    })
+
+    it('is refused by toEntry where the entry has no codec, so the entity value is not lost', () => {
+        expect(() => bare.toEntry(stale)).toThrow(
+            /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
+        )
+    })
+
+    it('is refused by toEntry where the open entry refuses the value, as toItem refuses it', () => {
+        const number = { petId: 'p1', status: 'AVAILABLE', GSI1PK: 42 }
+        expect(open.toItem(number)).toBeInstanceOf(CodecError)
+        expect(() => open.toEntry(number)).toThrow(RotoriseError)
+    })
+
+    it('holds no attribute at the name of a key that builds no value, where the entity holds undefined', () => {
+        const entry = closed.toEntry({
+            petId: 'p1',
+            status: 'ADOPTED',
+            GSI1PK: undefined,
+        })
+        expect(entry).not.toHaveProperty('GSI1PK')
     })
 })

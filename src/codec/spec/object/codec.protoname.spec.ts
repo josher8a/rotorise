@@ -6,6 +6,7 @@
  * name as an own key.
  */
 import { describe, expect, it } from 'vitest'
+import { tableEntry } from '../../../Rotorise'
 import {
     exclude,
     item,
@@ -133,5 +134,25 @@ describe('a pattern or a meet over an attribute named __proto__', () => {
                 ),
             ),
         ).toBe(true)
+    })
+})
+
+describe('a key named __proto__', () => {
+    const Pets = tableEntry<{ petId: string }>()({
+        PK: ['petId'],
+        ['__proto__']: ['petId'],
+    } as never) as unknown as {
+        keyUpdates: (changed: object) => { set: Record<string, unknown> }
+        keys: (names: string[], given: object) => Record<string, unknown>
+    }
+
+    it('is an own attribute of the update that keyUpdates writes', () => {
+        const { set } = Pets.keyUpdates({ petId: 'p2' })
+        expect(Object.hasOwn(set, '__proto__')).toBe(true)
+    })
+
+    it('is an own attribute of the keys that keys writes', () => {
+        const out = Pets.keys(['__proto__'], { petId: 'p2' })
+        expect(Object.hasOwn(out, '__proto__')).toBe(true)
     })
 })

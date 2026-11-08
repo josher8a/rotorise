@@ -211,3 +211,20 @@ describe('construction refuses roles of an index that address no item', () => {
         )
     })
 })
+
+describe('a null discriminator on the sort key', () => {
+    type Entry = { petId: string; status: 'A' | 'B' | null; name: string }
+    const Entries = tableEntry<Entry>()(
+        {
+            PK: ['petId'],
+            SK: { discriminator: 'status', spec: { A: ['name'], B: ['name'] } },
+        } as never,
+        { key: { partition: 'PK', sort: 'SK' } } as never,
+    ) as unknown as { keyCondition: (given: object) => unknown }
+
+    it('gives the condition that an absent discriminator gives, because a null is no value', () => {
+        expect(Entries.keyCondition({ petId: 'p1', status: null })).toEqual(
+            Entries.keyCondition({ petId: 'p1' }),
+        )
+    })
+})

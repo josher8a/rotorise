@@ -1428,13 +1428,17 @@ type Arm =
           readonly named: boolean
       }
 
+/** Whether an attribute holds a value. A `null` is no value, as the model reads an item. */
+const isValue = (value: unknown): boolean =>
+    value !== undefined && value !== null
+
 const select = (spec: unknown, attributes: Record<string, unknown>): Arm => {
     let arm = spec
     while (isMatch(arm)) {
         const discriminator = String(arm.discriminator)
         const literal = valueAt(attributes, discriminator)
-        // a `null` value is no value, as the model reads an item: it selects no arm
-        if (literal === undefined || literal === null)
+        // a `null` value is no value: it selects no arm
+        if (!isValue(literal))
             return { kind: 'missing', discriminator, named: false }
         arm = Object.hasOwn(arm.spec, String(literal))
             ? arm.spec[String(literal)]
@@ -3063,7 +3067,7 @@ const componentsOf = (
         // the discriminant chooses which list applies, so when its value is known only that
         // variant's components are needed — the others describe an item this is not
         const chosen = valueAt(given, discriminator)
-        if (chosen === undefined || chosen === null) {
+        if (!isValue(chosen)) {
             for (const variant of Object.values(variants ?? {})) walk(variant)
             return
         }
@@ -4000,7 +4004,8 @@ export const tableEntry =
         const keyUpdates = (
             changed: Record<string, unknown>,
         ): KeyUpdate<string> => {
-            const set: Record<string, AttributeValue> = {}
+            // an entry list, so a key named `__proto__` is an own attribute of the result
+            const set: [string, AttributeValue][] = []
             const remove: string[] = []
             const given = overDecided(changed)
             const givenNames = Object.keys(given)
@@ -4050,10 +4055,10 @@ export const tableEntry =
                     }
                 })()
                 if (built === undefined) remove.push(key.name)
-                else set[key.name] = carried(key.name, given, built)
+                else set.push([key.name, carried(key.name, given, built)])
             }
 
-            return { set, remove }
+            return { set: Object.fromEntries(set), remove }
         }
 
         /** The names the schema computes, as opposed to the attributes the codec declares. */
@@ -4119,7 +4124,7 @@ export const tableEntry =
                     ? [
                           ...componentsOf(expanded[name], attributes)
                               .components,
-                      ].some((c) => valueAt(attributes, c) !== undefined)
+                      ].some((c) => isValue(valueAt(attributes, c)))
                     : printed.some((part) => part !== undefined)
             if (!given) return undefined
             const built = buildKey(
@@ -4180,37 +4185,28 @@ export const tableEntry =
         ): Record<string, V> => ({ ...dropKeys(row), ...part })
 
         /**
-         * The refusal of a write that holds a key name, or `undefined`. The model derives the item
-         * for a codec whose write holds no key name (`write_row`): the key is written over the
-         * attribute of that name, and a read removes it. Construction refuses a declared key name,
-         * and an open key entry writes any other name, a key name included. So the premise is a
-         * test on the write of the codec, stated once: `toItem` and `toEntry` both read it.
+         * The refusal of a row that holds a key name, or `undefined`. The model derives the item for
+         * a write that holds no key name (`write_row`): the key is written over the attribute of
+         * that name, and a read removes it. Construction refuses a declared key name, so a row
+         * holds a key name only through an open key entry, or through the entity. The premise is a
+         * test on the row that the route writes, stated once. `toItem` writes the write of the
+         * codec, and `toEntry` writes the entity, which no codec checks.
          */
-        const writesKeyName = (written: object): string | undefined => {
-            const held = keyNames.find((name) => Object.hasOwn(written, name))
+        const holdsKeyName = (
+            row: Record<string, unknown>,
+            holder: 'the write of the codec' | 'the entity',
+        ): string | undefined => {
+            const held = keyNames.find(
+                (name) => Object.hasOwn(row, name) && row[name] !== undefined,
+            )
             return held === undefined
                 ? undefined
-                : `'${held}' is a key of the schema, and the write of the codec holds an attribute of that name through its open key entry. The codec writes no key name, because the item holds each key name once. Remove the attribute from the entity, or rename the key`
+                : `'${held}' is a key of the schema, and ${holder} holds an attribute of that name. The item holds each key name once. Remove the attribute from the entity, or rename the key`
         }
 
-        /** Whether the codec writes an open key entry: the only way that a write holds a key name. */
-        const isOpen =
-            attributes !== undefined &&
-            (isTagged(attributes)
-                ? attributes.variants().some((one) => one.rest !== undefined)
-                : attributes.rest !== undefined)
-
         const buildEntry = (item: Record<string, unknown>) => {
-            if (isOpen && attributes !== undefined) {
-                const written = attributes.encode(item as never)
-                // `toEntry` does not check the entity against the codec. A write that refuses holds
-                // no attribute, so it holds no key name, and the refusal is no answer of this test
-                const held =
-                    written instanceof CodecError
-                        ? undefined
-                        : writesKeyName(written)
-                if (held !== undefined) throw new RotoriseError(held)
-            }
+            const held = holdsKeyName(item, 'the entity')
+            if (held !== undefined) throw new RotoriseError(held)
             return joinRow(
                 item,
                 keyPart(item, (name, value) => {
@@ -4239,9 +4235,9 @@ export const tableEntry =
                     )
                 }
 
-                const out: Record<string, AttributeValue> = {}
-                for (const name of names) out[name] = address(name, attributes)
-                return out
+                return Object.fromEntries(
+                    names.map((name) => [name, address(name, attributes)]),
+                )
             },
             keyCondition: (
                 first: string | Record<string, unknown>,
@@ -4292,7 +4288,7 @@ export const tableEntry =
             andThen(
                 attributes.encode(item as never),
                 (written: AttributeMap) => {
-                    const held = writesKeyName(written)
+                    const held = holdsKeyName(written, 'the write of the codec')
                     return held !== undefined
                         ? new CodecError(held)
                         : joinRow(
