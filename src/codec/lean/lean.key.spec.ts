@@ -18,6 +18,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../Rotorise'
 import {
+    type ConditionOutcome,
+    type ConditionRow,
     type KeyArm,
     type KeyOutcome,
     type KeyPart,
@@ -854,13 +856,167 @@ describe('the derived key rows, against the model of a key', () => {
     })
 
     it('emits the key rows for the gate', () => {
-        const text = leanKeyModule(rows)
+        const text = leanKeyModule(rows, conditionRows())
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(join(process.cwd(), 'formal', '.keys.lean'), text)
         }
         expect(text).toContain(
             'theorem keyRows_check : failingKeys keyRows = []',
         )
+        expect(text).toContain(
+            'theorem conditionRows_check : failingConditions conditionRows = []',
+        )
         expect(text.trimEnd().endsWith('#assert_axioms_module')).toBe(true)
+    })
+})
+
+/**
+ * **The sort condition rows, against the model of a condition.**
+ *
+ * A query gives some parts of a sort key, and `keyCondition` of `src/` turns them into no condition,
+ * a refusal, the equality on the whole key, or the prefix of the leading parts. A prefix stops at the
+ * first absent part and drops each later part, so a part that prints after an absent part would widen
+ * the selection, and the builder refuses it. The pool is each presence of the parts of a sort key of
+ * two and of three plain components, with an absent part as a missing attribute or as an empty
+ * string, which the builder reads as absent. The gate checks each row in the kernel against
+ * `DerivedKey.condition`.
+ */
+const conditionEntryOf = (names: readonly string[], separator: string) => {
+    const make = tableEntry<Record<string, unknown>>() as unknown as (
+        schema: unknown,
+        options: unknown,
+    ) => {
+        readonly keyCondition: (attributes: object) => {
+            readonly sort?: {
+                readonly equals?: { readonly S: string }
+                readonly beginsWith?: { readonly S: string }
+            }
+        }
+    }
+    return make(
+        { PK: ['pk'], K: names },
+        { separator, key: { partition: 'PK', sort: 'K' } },
+    )
+}
+
+const conditionValues: Readonly<Record<string, string>> = {
+    a: 'x1',
+    b: 'y2',
+    c: 'z3',
+}
+
+/** What the builder gave for a query: no condition, a refusal, the equality or the prefix. */
+const conditionOutcome = (
+    run: ReturnType<typeof conditionEntryOf>,
+    attributes: object,
+): ConditionOutcome => {
+    try {
+        const { sort } = run.keyCondition(attributes)
+        if (sort === undefined) return { kind: 'nothing' }
+        if (sort.equals !== undefined)
+            return { kind: 'equals', key: sort.equals.S }
+        if (sort.beginsWith !== undefined)
+            return { kind: 'prefix', key: sort.beginsWith.S }
+        throw new Error('the condition holds no key')
+    } catch (thrown) {
+        if (thrown instanceof RotoriseError) return { kind: 'refused' }
+        throw thrown
+    }
+}
+
+/** The rows of the pool: each presence of the parts, with an absent part missing or empty. */
+const conditionRows = (): ConditionRow[] => {
+    const rows: ConditionRow[] = []
+    const seen = new Set<string>()
+    const separator = '#'
+    for (const names of [
+        ['a', 'b'],
+        ['a', 'b', 'c'],
+    ]) {
+        const run = conditionEntryOf(names, separator)
+        for (let mask = 0; mask < 2 ** names.length; mask++) {
+            for (const absentAs of ['missing', 'empty'] as const) {
+                const present = names.map((_, i) => (mask >> i) % 2 === 1)
+                if (absentAs === 'empty' && present.every(Boolean)) continue
+                const attributes: Record<string, unknown> = { pk: 'p1' }
+                names.forEach((name, i) => {
+                    if (present[i]) attributes[name] = conditionValues[name]
+                    else if (absentAs === 'empty') attributes[name] = ''
+                })
+                const row: ConditionRow = {
+                    name: `condition_${rows.length}`,
+                    full: names.length,
+                    parts: names.map((name, i) =>
+                        present[i]
+                            ? {
+                                  kind: 'named' as const,
+                                  name: name.toUpperCase(),
+                                  value: conditionValues[name] ?? '',
+                              }
+                            : undefined,
+                    ),
+                    separator,
+                    outcome: conditionOutcome(run, attributes),
+                }
+                const content = JSON.stringify({ ...row, name: '' })
+                if (seen.has(content)) continue
+                seen.add(content)
+                rows.push(row)
+            }
+        }
+    }
+    return rows
+}
+
+describe('the sort condition rows, against the model of a condition', () => {
+    const rows = conditionRows()
+
+    it('refuses a part that prints after an absent part, and gives the prefix of the leading parts otherwise', () => {
+        for (const row of rows) {
+            const present = row.parts.map((part) => part !== undefined)
+            const leading = present.indexOf(false)
+            const gap = leading >= 0 && present.slice(leading).some(Boolean)
+            const texts = row.parts.flatMap((part) =>
+                part === undefined || part.kind !== 'named'
+                    ? []
+                    : [part.name, part.value],
+            )
+            if (!present.some(Boolean))
+                expect(row.outcome, row.name).toEqual({ kind: 'nothing' })
+            else if (gap)
+                expect(row.outcome, row.name).toEqual({ kind: 'refused' })
+            else if (present.every(Boolean))
+                expect(row.outcome, row.name).toEqual({
+                    kind: 'equals',
+                    key: texts.join(row.separator),
+                })
+            else
+                expect(row.outcome, row.name).toEqual({
+                    kind: 'prefix',
+                    key: `${texts.join(row.separator)}${row.separator}`,
+                })
+        }
+    })
+
+    it('holds a row of each outcome, a gap, no gap, and no part', () => {
+        for (const kind of ['nothing', 'refused', 'equals', 'prefix'] as const)
+            expect(
+                rows.some((row) => row.outcome.kind === kind),
+                kind,
+            ).toBe(true)
+        expect(
+            rows.some(
+                (row) =>
+                    row.outcome.kind === 'refused' &&
+                    row.parts[0] !== undefined,
+            ),
+        ).toBe(true)
+        expect(
+            rows.some(
+                (row) =>
+                    row.outcome.kind === 'refused' &&
+                    row.parts[0] === undefined,
+            ),
+        ).toBe(true)
     })
 })

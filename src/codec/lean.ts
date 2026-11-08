@@ -4006,6 +4006,29 @@ export type KeyRow = {
     readonly lawful: boolean
 }
 
+/**
+ * What the host gave for a sort condition: no condition, a refusal, the equality on a key, or the
+ * prefix match on a key.
+ */
+export type ConditionOutcome =
+    | { readonly kind: 'nothing' }
+    | { readonly kind: 'refused' }
+    | { readonly kind: 'equals'; readonly key: string }
+    | { readonly kind: 'prefix'; readonly key: string }
+
+/**
+ * **One row of the sort condition**: the length of the spec, the parts that the host evaluated for
+ * the item, the separator, and what the host gave. A value that holds the separator is a throw of
+ * the builder before the condition, so a row holds none.
+ */
+export type ConditionRow = {
+    readonly name: string
+    readonly full: number
+    readonly parts: readonly KeyPart[]
+    readonly separator: string
+    readonly outcome: ConditionOutcome
+}
+
 const leanKeyPart = (part: KeyPart): string =>
     part === undefined
         ? 'none'
@@ -4037,6 +4060,11 @@ const leanKeyTree = (tree: KeyTree): string =>
                 )
                 .join(', ')}])`
 
+const leanConditionOutcome = (outcome: ConditionOutcome): string =>
+    outcome.kind === 'equals' || outcome.kind === 'prefix'
+        ? `.${outcome.kind} ${leanString(outcome.key)}`
+        : `.${outcome.kind}`
+
 const leanKeyOutcome = (outcome: KeyOutcome): string =>
     outcome.kind === 'key'
         ? `.key ${leanString(outcome.key)}`
@@ -4049,7 +4077,10 @@ const leanKeyOutcome = (outcome: KeyOutcome): string =>
  *
  * Generated at gate time and elaborated, never committed.
  */
-export const leanKeyModule = (rows: readonly KeyRow[]): string => {
+export const leanKeyModule = (
+    rows: readonly KeyRow[],
+    conditions: readonly ConditionRow[] = [],
+): string => {
     const chars = rows.map((row) => [...row.separator])
     const bad = chars.findIndex((c) => c.length !== 1)
     if (bad >= 0) {
@@ -4058,6 +4089,21 @@ export const leanKeyModule = (rows: readonly KeyRow[]): string => {
             `the model has a one-character separator, and the row ${rows[bad]?.name} has another`,
         )
     }
+    const conditionChars = conditions.map((row) => [...row.separator])
+    const badCondition = conditionChars.findIndex((c) => c.length !== 1)
+    if (badCondition >= 0) {
+        return refuse(
+            'condition',
+            `the model has a one-character separator, and the row ${conditions[badCondition]?.name} has another`,
+        )
+    }
+    const conditionLines = conditions.map(
+        (row, i) =>
+            `  { name := ${leanString(row.name)}, full := ${row.full},
+    parts := [${row.parts.map(leanKeyPart).join(', ')}],
+    sep := Char.ofNat ${(conditionChars[i]?.[0] ?? '').codePointAt(0)},
+    host := ${leanConditionOutcome(row.outcome)} }`,
+    )
     const lines = rows.map(
         (row, i) =>
             `  { name := ${leanString(row.name)}, spec := ${leanKeyTree(row.tree)},
@@ -4066,6 +4112,7 @@ export const leanKeyModule = (rows: readonly KeyRow[]): string => {
     host := ${leanKeyOutcome(row.outcome)}, lawful := ${row.lawful} }`,
     )
     return leanModule(`import Calculus.Bridge.KeyRows
+import Calculus.Bridge.ConditionRows
 
 /-!
 # The derived keys of the pool, checked in the model
@@ -4095,6 +4142,16 @@ ${lines.join(',\n')}]
 theorem keyRows_check : failingKeys keyRows = [] := kernel_rfl%
 
 #eval (failingKeys keyRows).forM IO.println
+
+/-- The sort conditions of the pool: what the builder of \`src/\` gave for the parts of an item. A
+    row states that the model gives the same condition: none where no part is given, a refusal where
+    a part prints after an absent part, and the equality or the prefix otherwise. -/
+def conditionRows : List ConditionRow := [
+${conditionLines.join(',\n')}]
+
+theorem conditionRows_check : failingConditions conditionRows = [] := kernel_rfl%
+
+#eval (failingConditions conditionRows).forM IO.println
 
 end Calculus
 `)

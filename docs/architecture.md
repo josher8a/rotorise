@@ -1112,6 +1112,12 @@ The key of one attribute is the printed value of that attribute. A full key is n
 model refuses an empty value, and a full key of a leaf has a segment. A partial key may be empty,
 because the host gives it as a prefix.
 
+A condition on a sort key is the key of the parts that a query gives. It is the equality on the whole
+key where the query gives every part, and the prefix match of the leading parts with the boundary
+otherwise. A query that gives no part has no condition. A part that prints after an absent part is a
+refusal, because the prefix stops at the absent part, and the match would select the items that
+disagree on the later part.
+
 The footprint of a key spec depends on the item. A match reads the discriminator. Where the item
 holds the discriminator, the match reads the names under the arm that the discriminator selects.
 Where the item lacks the discriminator, the match reads the names under every arm. An item that
