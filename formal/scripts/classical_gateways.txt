@@ -88,5 +88,7 @@ String.instLawfulEqOrd
 String.instOrd
 String.instTransOrd
 String.ofList_injective
+String.ofList_toList
 String.startsWith
 String.toList
+String.toList_ofList

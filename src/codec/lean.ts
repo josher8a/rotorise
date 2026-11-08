@@ -4029,6 +4029,41 @@ export type ConditionRow = {
     readonly outcome: ConditionOutcome
 }
 
+/**
+ * What the host did for an item: it refused a key (a throw and a refusal as a value are one
+ * outcome, because the channel is no rule of the model), or it wrote, at each key name, no attribute
+ * or an attribute at a member with a text. The member is `true` for a number and `false` for a string.
+ */
+export type ItemOutcome =
+    | { readonly kind: 'refused' }
+    | {
+          readonly kind: 'written'
+          readonly attributes: readonly (readonly [
+              string,
+              readonly [boolean, string] | null,
+          ])[]
+      }
+
+/** A key of an entry: the name, whether its member is a number, and its key spec as a tree. */
+export type ItemKey = {
+    readonly name: string
+    readonly numeric: boolean
+    readonly tree: KeyTree
+}
+
+/**
+ * **One row of an item with derived keys**: the keys of the entry, the printed text of the attributes
+ * of the item that the keys read, the separator, and what `toItem` did. A key of the member `B` is
+ * outside the rows, as it is outside the model.
+ */
+export type ItemRow = {
+    readonly name: string
+    readonly keys: readonly ItemKey[]
+    readonly item: readonly (readonly [string, string])[]
+    readonly separator: string
+    readonly outcome: ItemOutcome
+}
+
 const leanKeyPart = (part: KeyPart): string =>
     part === undefined
         ? 'none'
@@ -4060,6 +4095,20 @@ const leanKeyTree = (tree: KeyTree): string =>
                 )
                 .join(', ')}])`
 
+const leanItemOutcome = (outcome: ItemOutcome): string =>
+    outcome.kind === 'refused'
+        ? '.refused'
+        : `.written [${outcome.attributes
+              .map(
+                  ([name, attribute]) =>
+                      `(${leanString(name)}, ${
+                          attribute === null
+                              ? 'none'
+                              : `some (${attribute[0]}, ${leanString(attribute[1])})`
+                      })`,
+              )
+              .join(', ')}]`
+
 const leanConditionOutcome = (outcome: ConditionOutcome): string =>
     outcome.kind === 'equals' || outcome.kind === 'prefix'
         ? `.${outcome.kind} ${leanString(outcome.key)}`
@@ -4080,6 +4129,7 @@ const leanKeyOutcome = (outcome: KeyOutcome): string =>
 export const leanKeyModule = (
     rows: readonly KeyRow[],
     conditions: readonly ConditionRow[] = [],
+    items: readonly ItemRow[] = [],
 ): string => {
     const chars = rows.map((row) => [...row.separator])
     const bad = chars.findIndex((c) => c.length !== 1)
@@ -4097,6 +4147,27 @@ export const leanKeyModule = (
             `the model has a one-character separator, and the row ${conditions[badCondition]?.name} has another`,
         )
     }
+    const itemChars = items.map((row) => [...row.separator])
+    const badItem = itemChars.findIndex((c) => c.length !== 1)
+    if (badItem >= 0) {
+        return refuse(
+            'item',
+            `the model has a one-character separator, and the row ${items[badItem]?.name} has another`,
+        )
+    }
+    const itemLines = items.map(
+        (row, i) =>
+            `  { name := ${leanString(row.name)},
+    keys := [${row.keys
+        .map(
+            (key) =>
+                `{ name := ${leanString(key.name)}, numeric := ${key.numeric}, spec := ${leanKeyTree(key.tree)} }`,
+        )
+        .join(', ')}],
+    item := [${row.item.map(([name, value]) => `(${leanString(name)}, ${leanString(value)})`).join(', ')}],
+    sep := Char.ofNat ${(itemChars[i]?.[0] ?? '').codePointAt(0)},
+    host := ${leanItemOutcome(row.outcome)} }`,
+    )
     const conditionLines = conditions.map(
         (row, i) =>
             `  { name := ${leanString(row.name)}, full := ${row.full},
@@ -4113,6 +4184,7 @@ export const leanKeyModule = (
     )
     return leanModule(`import Calculus.Bridge.KeyRows
 import Calculus.Bridge.ConditionRows
+import Calculus.Bridge.ItemRows
 
 /-!
 # The derived keys of the pool, checked in the model
@@ -4152,6 +4224,16 @@ ${conditionLines.join(',\n')}]
 theorem conditionRows_check : failingConditions conditionRows = [] := kernel_rfl%
 
 #eval (failingConditions conditionRows).forM IO.println
+
+/-- The items of the pool: what \`toItem\` of \`src/\` did for the keys of an entry. A row states that
+    the model builds the same key part: a refusal where a key is refused, and at each key name no
+    attribute, or the text at the member. -/
+def itemRows : List ItemRow := [
+${itemLines.join(',\n')}]
+
+theorem itemRows_check : failingItems libraryView itemRows = [] := kernel_rfl%
+
+#eval (failingItems libraryView itemRows).forM IO.println
 
 end Calculus
 `)

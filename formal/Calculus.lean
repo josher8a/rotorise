@@ -36,6 +36,7 @@ import Calculus.Dynamo.Alg.KeyUpdate
 import Calculus.Dynamo.Alg.KeyCondition
 import Calculus.Dynamo.Alg.KeyUpdate
 import Calculus.Dynamo.Alg.DerivedItem
+import Calculus.Dynamo.Alg.KeyItem
 import Calculus.Dynamo.Alg.Prisms
 import Calculus.Dynamo.Alg.Products
 import Calculus.Dynamo.Alg.Objects
@@ -85,4 +86,5 @@ import Calculus.Bridge.Kinds
 import Calculus.Bridge.Verdicts
 import Calculus.Bridge.KeyRows
 import Calculus.Bridge.ConditionRows
+import Calculus.Bridge.ItemRows
 import Calculus.Bridge.UpdateRows

@@ -1083,6 +1083,13 @@ The graph reads a row only where the key part of the row is the key part of the 
 from the complement. The graph is lawful in both orientations. The premises are on `c`: `c` is
 lawful, and the write of `c` is a row that holds no key name. The key function has no law.
 
+The key function of the graph is built from the keys. A key name reads its spec at the printed text of
+the item, and the text takes the carrier of the member of the name: a string at an `S` key, and a
+numeral at an `N` key. The segments of a composite key are written by the key codec, so segments that
+hold the separator are no key. A refused key refuses the key part, and the item is then no row of the
+graph: the graph writes nothing at that item, and no row reads as that item. A key of `B` is outside
+this construction, because an item of strings carries no bytes.
+
 The derived item is the graph with a second reader, the read of `c` on the complement. A row with a
 stale key, a row with no key, and a row with another member at a key name read as the item. The
 two readers agree wherever both read, so the read is the order-free union of the two. The read adds

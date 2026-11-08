@@ -17,9 +17,14 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../Rotorise'
+import type { AttributeMap, AttributeValue } from '../attribute'
+import { decimal, number, object, optional, string } from '../codec'
 import {
     type ConditionOutcome,
     type ConditionRow,
+    type ItemKey,
+    type ItemOutcome,
+    type ItemRow,
     type KeyArm,
     type KeyOutcome,
     type KeyPart,
@@ -856,7 +861,7 @@ describe('the derived key rows, against the model of a key', () => {
     })
 
     it('emits the key rows for the gate', () => {
-        const text = leanKeyModule(rows, conditionRows())
+        const text = leanKeyModule(rows, conditionRows(), itemRows())
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(join(process.cwd(), 'formal', '.keys.lean'), text)
         }
@@ -865,6 +870,9 @@ describe('the derived key rows, against the model of a key', () => {
         )
         expect(text).toContain(
             'theorem conditionRows_check : failingConditions conditionRows = []',
+        )
+        expect(text).toContain(
+            'theorem itemRows_check : failingItems libraryView itemRows = []',
         )
         expect(text.trimEnd().endsWith('#assert_axioms_module')).toBe(true)
     })
@@ -1018,5 +1026,246 @@ describe('the sort condition rows, against the model of a condition', () => {
                     row.parts[0] === undefined,
             ),
         ).toBe(true)
+    })
+})
+
+/**
+ * **The item rows, against the model of the row of an item.**
+ *
+ * `toItem` of `src/` writes the row of the codec with the key of each key name. The keys of the pool
+ * are a composite key of text, a key of one attribute of a string, of a number, of a decimal and of a
+ * number below an object, and a key of one optional attribute. Each item is a draw that the keys
+ * build, and a draw that a key refuses. The gate checks each row in the kernel against
+ * `DerivedItem.carrierOf`: the member of each key name, and the text at that member. A key at a number
+ * is a numeral, at every depth.
+ */
+type ItemSpec = {
+    readonly name: string
+    readonly codec: Record<string, unknown>
+    readonly keys: readonly {
+        readonly name: string
+        readonly numeric: boolean
+        readonly spec: string | readonly string[]
+    }[]
+}
+
+const itemSpecs: readonly ItemSpec[] = [
+    {
+        name: 'all',
+        codec: {
+            petId: string,
+            nick: string,
+            age: number,
+            weight: decimal,
+            owner: object({ age: number }),
+        },
+        keys: [
+            { name: 'PK', numeric: false, spec: ['petId'] },
+            { name: 'GSI1SK', numeric: true, spec: 'age' },
+            { name: 'GSI2SK', numeric: true, spec: 'weight' },
+            { name: 'GSI3SK', numeric: true, spec: 'owner.age' },
+            { name: 'GSI4SK', numeric: false, spec: 'nick' },
+            { name: 'GSI5SK', numeric: false, spec: ['petId', 'nick'] },
+        ],
+    },
+    {
+        name: 'composite',
+        codec: { petId: string, nick: optional(string) },
+        keys: [
+            { name: 'PK', numeric: false, spec: ['petId'] },
+            { name: 'GSI1SK', numeric: false, spec: ['petId', 'nick'] },
+        ],
+    },
+    {
+        name: 'sparse',
+        codec: { petId: string, nick: optional(string), age: number },
+        keys: [
+            { name: 'PK', numeric: false, spec: ['petId'] },
+            { name: 'GSI1SK', numeric: false, spec: 'nick' },
+            { name: 'GSI2SK', numeric: true, spec: 'age' },
+        ],
+    },
+]
+
+const itemDraws: readonly Record<string, unknown>[] = [
+    { petId: 'p1', nick: 'rex', age: 3, weight: '12.5', owner: { age: 7 } },
+    { petId: 'p1', nick: 'rex', age: 1.5, weight: '0.5', owner: { age: 0 } },
+    { petId: 'p1', nick: 'rex', age: -2, weight: '3', owner: { age: 2 ** 60 } },
+    { petId: 'p#1', nick: 'rex', age: 3, weight: '12.5', owner: { age: 7 } },
+    { petId: 'p1', nick: '', age: 3, weight: '12.5', owner: { age: 7 } },
+    { petId: 'p1', age: 3 },
+    { petId: 'p1', nick: 'rex', age: 3 },
+    { petId: 'p1' },
+    { petId: 'p1', nick: 'rex' },
+]
+
+/** The printed text of the attributes that the codec wrote: a string, a numeral, and each name below an object. */
+const printedOf = (
+    map: AttributeMap | Record<string, AttributeValue>,
+    prefix = '',
+): [string, string][] =>
+    Object.entries(map).flatMap(([name, attribute]): [string, string][] => {
+        const at = `${prefix}${name}`
+        if (attribute.S !== undefined) return [[at, attribute.S]]
+        if (attribute.N !== undefined) return [[at, attribute.N]]
+        if (attribute.M !== undefined) return printedOf(attribute.M, `${at}.`)
+        return []
+    })
+
+/** The attribute that `toItem` wrote at a key name: a member and a text, or none. */
+const writtenAt = (
+    row: AttributeMap,
+    name: string,
+): readonly [boolean, string] | null => {
+    const attribute = row[name]
+    if (attribute === undefined) return null
+    if (attribute.S !== undefined) return [false, attribute.S]
+    if (attribute.N !== undefined) return [true, attribute.N]
+    throw new Error(
+        `the row writes a member of ${name} that the rows do not state`,
+    )
+}
+
+const itemRows = (): ItemRow[] => {
+    const rows: ItemRow[] = []
+    const seen = new Set<string>()
+    const separator = '#'
+    for (const one of itemSpecs) {
+        const make = tableEntry<Record<string, unknown>>() as unknown as (
+            schema: unknown,
+            options: unknown,
+        ) => {
+            readonly toItem: (item: object) => unknown
+            readonly codec: {
+                readonly encode: (item: object) => unknown
+            }
+        }
+        const entry = make(
+            Object.fromEntries(one.keys.map((key) => [key.name, key.spec])),
+            { codec: one.codec, separator },
+        )
+        for (const draw of itemDraws) {
+            const encoded = entry.codec.encode(draw)
+            if (encoded instanceof Error) continue
+            const item = printedOf(encoded as AttributeMap)
+            const text = (path: string) =>
+                item.find(([name]) => name === path)?.[1]
+            const keys: ItemKey[] = one.keys.map((key) => ({
+                name: key.name,
+                numeric: key.numeric,
+                tree: {
+                    kind: 'arm',
+                    arm:
+                        typeof key.spec === 'string'
+                            ? { kind: 'attr', name: key.spec }
+                            : {
+                                  kind: 'leaf',
+                                  full: key.spec.length,
+                                  parts: key.spec.map((component) => {
+                                      const value = text(component)
+                                      return value === undefined || value === ''
+                                          ? undefined
+                                          : {
+                                                kind: 'named' as const,
+                                                name: component.toUpperCase(),
+                                                value,
+                                            }
+                                  }),
+                              },
+                },
+            }))
+            let outcome: ItemOutcome
+            try {
+                const result = entry.toItem(draw)
+                if (result instanceof Error) continue
+                const row = result as AttributeMap
+                outcome = {
+                    kind: 'written',
+                    attributes: one.keys.map(
+                        (key) => [key.name, writtenAt(row, key.name)] as const,
+                    ),
+                }
+            } catch (thrown) {
+                if (!(thrown instanceof RotoriseError)) throw thrown
+                outcome = { kind: 'refused' }
+            }
+            const row: ItemRow = {
+                name: `${one.name}_${rows.length}`,
+                keys,
+                item,
+                separator,
+                outcome,
+            }
+            const content = JSON.stringify({ ...row, name: '' })
+            if (seen.has(content)) continue
+            seen.add(content)
+            rows.push(row)
+        }
+    }
+    return rows
+}
+
+describe('the item rows, against the model of the row of an item', () => {
+    const rows = itemRows()
+    const attributesOf = (row: ItemRow) =>
+        row.outcome.kind === 'written'
+            ? Object.fromEntries(row.outcome.attributes)
+            : undefined
+
+    it('writes a key of a number as a number, at the top level and below an object', () => {
+        const written = rows
+            .filter((row) => row.name.startsWith('all_'))
+            .flatMap((row) => {
+                const attributes = attributesOf(row)
+                return attributes === undefined ? [] : [attributes]
+            })
+        expect(written.length).toBeGreaterThan(0)
+        for (const attributes of written) {
+            expect(attributes.GSI1SK?.[0]).toBe(true)
+            expect(attributes.GSI2SK?.[0]).toBe(true)
+            expect(attributes.GSI3SK?.[0]).toBe(true)
+            expect(attributes.PK?.[0]).toBe(false)
+            expect(attributes.GSI4SK?.[0]).toBe(false)
+        }
+    })
+
+    it('writes the numeral of the value at a key of a number', () => {
+        const first = rows.find((row) => row.name === 'all_0')
+        expect(attributesOf(first as ItemRow)).toMatchObject({
+            GSI1SK: [true, '3'],
+            GSI2SK: [true, '12.5'],
+            GSI3SK: [true, '7'],
+            PK: [false, 'PETID#p1'],
+            GSI4SK: [false, 'rex'],
+        })
+    })
+
+    it('refuses an item whose key holds the separator, is empty, or lacks a component', () => {
+        const refusedWith = (test: (row: ItemRow) => boolean) =>
+            rows.some((row) => row.outcome.kind === 'refused' && test(row))
+        const holds = (row: ItemRow, name: string, value: string) =>
+            row.item.some(([n, v]) => n === name && v === value)
+        // a component that holds the separator
+        expect(refusedWith((row) => holds(row, 'petId', 'p#1'))).toBe(true)
+        // a key of one attribute with the empty value
+        expect(refusedWith((row) => holds(row, 'nick', ''))).toBe(true)
+        // a component of a composite key that the item lacks
+        expect(
+            refusedWith(
+                (row) =>
+                    row.name.startsWith('composite_') &&
+                    !row.item.some(([name]) => name === 'nick'),
+            ),
+        ).toBe(true)
+        expect(rows.some((row) => row.outcome.kind === 'written')).toBe(true)
+    })
+
+    it('gives no key where an optional attribute is absent', () => {
+        const sparse = rows.filter(
+            (row) =>
+                row.name.startsWith('sparse_') &&
+                attributesOf(row)?.GSI1SK === null,
+        )
+        expect(sparse.length).toBeGreaterThan(0)
     })
 })
