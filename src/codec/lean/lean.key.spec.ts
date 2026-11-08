@@ -135,15 +135,15 @@ const writeAt = (item: Item, path: string, value: unknown): Item => {
 
 /**
  * The parts of a spec for an item, as a second reading of the spec: the components cut to the
- * depth, up to and including the first component that the builder refuses. A default stands for
- * an undefined value only. A component is absent where its value is undefined, and, with no transform, where its value is null or empty. A
- * component is refused as a separator where one of its segments holds the separator.
+ * depth, each one read. A default stands for an undefined value only. A component is absent where
+ * its value is undefined, and, with no transform, where its value is null or empty. The model
+ * reads the parts in this order: `printed` stops at the first absent part, and `Good` tests the
+ * segments of the parts that it keeps.
  */
 const partsOf = (
     components: readonly Component[],
     item: Item,
     depth: number | undefined,
-    separator: string,
 ): KeyPart[] => {
     const parts: KeyPart[] = []
     for (const component of depth === undefined
@@ -182,10 +182,9 @@ const partsOf = (
                     : { kind: 'shaped', tag, value: segment(value) }
         } else {
             parts.push(undefined)
-            break
+            continue
         }
         parts.push(part)
-        if (segmentsOf(part).some((one) => one.includes(separator))) break
     }
     return parts
 }
@@ -435,12 +434,7 @@ const entriesOf = (arm: Discriminated): (readonly [string, Arm])[] =>
         : Object.entries(arm.spec)
 
 /** The tree of an arm for an item: each arm is evaluated, and the item selects one. */
-const treeOf = (
-    arm: Arm,
-    item: Item,
-    depth: number | undefined,
-    separator: string,
-): KeyTree =>
+const treeOf = (arm: Arm, item: Item, depth: number | undefined): KeyTree =>
     isDiscriminated(arm)
         ? 'cases' in arm
             ? {
@@ -448,10 +442,7 @@ const treeOf = (
                   discriminator: arm.discriminator,
                   cases: arm.cases.map(
                       ([literals, inner]) =>
-                          [
-                              literals,
-                              treeOf(inner, item, depth, separator),
-                          ] as const,
+                          [literals, treeOf(inner, item, depth)] as const,
                   ),
               }
             : {
@@ -459,10 +450,7 @@ const treeOf = (
                   discriminator: arm.discriminator,
                   arms: Object.entries(arm.spec).map(
                       ([literal, inner]) =>
-                          [
-                              literal,
-                              treeOf(inner, item, depth, separator),
-                          ] as const,
+                          [literal, treeOf(inner, item, depth)] as const,
                   ),
               }
         : {
@@ -475,7 +463,7 @@ const treeOf = (
                         : {
                               kind: 'leaf',
                               full: arm.length,
-                              parts: partsOf(arm, item, depth, separator),
+                              parts: partsOf(arm, item, depth),
                           },
           }
 
@@ -627,7 +615,7 @@ const keyRows = (): KeyRow[] => {
                         const outcome = hostOutcome(run, item, config)
                         const draft = {
                             name: '',
-                            tree: treeOf(one.spec, item, depth, separator),
+                            tree: treeOf(one.spec, item, depth),
                             item: itemOf(one.spec, item),
                             allowPartial: allowPartial === true,
                             enforce: enforceBoundary === true,

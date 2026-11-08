@@ -114,10 +114,10 @@ describe('a block that holds a component of a table key', () => {
         expect(typeof _whole).toBe('function')
     })
 
-    it('names the table key and the component that joins it, at runtime', () => {
+    it('names the key that refuses and then the table key that freezes the block, at runtime', () => {
         const untyped = Orders.keyUpdates as (c: object) => unknown
         expect(() => untyped({ buyerId: 'b1' })).toThrow(
-            /'PK' is the table's own key.*writes 'buyerId'.*holds 'TAG', 'id' of 'PK'.*freezes its block/s,
+            /'GSI1PK' is built from.*touches 'buyerId'.*'TAG' is not given.*holds 'TAG', 'id' of 'PK'.*freezes its block/s,
         )
     })
 
@@ -234,5 +234,29 @@ describe('the key option names the keys, and each spec keeps the type that the c
             set: { SK: { S: 'b' } },
             remove: [],
         })
+    })
+})
+
+describe('a refusal names the key that refused', () => {
+    type Pet = { petId: string; species: string; name: string }
+    const Pets = tableEntry<Pet>()(
+        {
+            PK: ['petId'],
+            SK: ['species', 'name'],
+            GSI1SK: ['species', 'petId'],
+        },
+        { key: { partition: 'PK', sort: 'SK' } },
+    )
+
+    it('names SK, which lacks `name`, and not the table key PK that the block also meets', () => {
+        const untyped = Pets.keyUpdates as (changed: object) => unknown
+        expect(() => untyped({ species: 'DOG' })).toThrow(RotoriseError)
+        expect(() => untyped({ species: 'DOG' })).toThrow(
+            /^'SK' is the table's own key and is built from 'species', 'name'\./,
+        )
+        // the block meets PK through GSI1SK, and the message then says why the block is frozen
+        expect(() => untyped({ species: 'DOG' })).toThrow(
+            /the block holds 'petId' of 'PK'.*freezes its block/s,
+        )
     })
 })

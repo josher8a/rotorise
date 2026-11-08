@@ -1485,6 +1485,16 @@ type ErasedMatch<Entity> = {
     }
 }
 
+/**
+ * The key of a spec for an attributes object: `keyOf` of `KeyMatch`. `select` reads the arm that
+ * the attributes reach. A leaf builds the word of `DerivedKey`: `printed` stops at the first absent
+ * part, each part prints its segments as a `Comp`, `boundary` marks a partial key, and the test of
+ * `Good` refuses a segment that holds the separator. The host checks the separator half of `Good`
+ * only: the model also requires a non-empty list of segments, and the host keeps the empty prefix,
+ * because a depth of 0 builds the empty prefix of a sort-key condition, and `asKey` refuses an
+ * empty `S` or `B` at carry time. The host adds the refusal of an object segment, which the model
+ * does not state, because a JS value can be an object.
+ */
 const key =
     <const Entity>() =>
     <
@@ -1568,28 +1578,18 @@ const key =
                 }
                 structure = structure.slice(0, config.depth)
             }
-            const composite: joinable[] = []
+            const segments: { component: string; segment: joinable }[] = []
             let printed = 0
 
-            // A segment that holds the separator reads back as two. The refusal names the component,
-            // and never the value that it printed.
+            // An object has no text of its own, so the key cannot print it. The refusal names the
+            // component, and never the value.
             const push = (component: string, segment: joinable) => {
                 if (typeof segment === 'object' && segment !== null) {
                     throw new RotoriseError(
                         `buildCompositeKey: the value of ${component} is an object, so the key cannot print it. Give the attribute a codec that writes text or a number.`,
                     )
                 }
-                if (
-                    segment !== undefined &&
-                    segment !== null &&
-                    String(segment).includes(separator)
-                ) {
-                    throw new RotoriseError(
-                        `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
-                        'separator',
-                    )
-                }
-                composite.push(segment)
+                segments.push({ component, segment })
             }
 
             for (const [at, part] of parts(
@@ -1640,6 +1640,29 @@ const key =
                 printed++
             }
 
+            /**
+             * The separator half of `Good` of `DerivedKey`: no segment holds the separator, because a
+             * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: a
+             * depth of 0 builds the empty prefix of a sort-key condition, and `asKey` refuses an
+             * empty `S` or `B` at carry time. The test runs over the segments that the parts print, after
+             * `printed` has stopped at the first absent part, so an absent part refuses before a
+             * separator in a part that precedes it. The refusal names the component, and never the
+             * value that it printed.
+             */
+            for (const { component, segment } of segments) {
+                if (
+                    segment !== undefined &&
+                    segment !== null &&
+                    String(segment).includes(separator)
+                ) {
+                    throw new RotoriseError(
+                        `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
+                        'separator',
+                    )
+                }
+            }
+            const composite = segments.map(({ segment }) => segment)
+
             // A component prints one or two segments: a transform that gives a value with no tag prints
             // one. So the components are counted, and not the segments. If the print stops before the
             // last component (a partial key), append a trailing separator.
@@ -1651,58 +1674,11 @@ const key =
         }
     }
 
-const toEntry =
-    <const Entity extends Record<string, unknown>>() =>
-    <
-        const Schema extends Record<
-            string,
-            | InputSpec<MergeIntersectionObject<Entity>>[]
-            | keyof Entity
-            | ErasedMatch<Entity>
-        >,
-        Separator extends string = '#',
-    >(
-        schema: Schema,
-        separator: Separator = '#' as Separator,
-        text?: (
-            path: string,
-            value: unknown,
-            attributes: Record<string, unknown>,
-            alone?: boolean,
-        ) => unknown,
-        /** The check of a key that an entry with a codec makes: the key that the row holds. */
-        confirm?: (
-            name: string,
-            item: Record<string, unknown>,
-            value: unknown,
-        ) => void,
-    ) =>
-    <const ExactEntity extends Entity>(
-        item: ExactEntity,
-    ): ExactEntity extends infer E extends Entity
-        ? TableEntryImpl<E, Schema, Separator>
-        : never => {
-        const entry = { ...item }
-        const buildKey = key<Entity>()(schema, separator, text)
-
-        for (const key_ in schema) {
-            const val = buildKey(key_, item)
-            if (val !== undefined) {
-                // a key of one attribute holds the value of the attribute, which can be a Uint8Array.
-                // `asKey` owns the rule of a key value: a non-empty `S`, an `N` or a non-empty `B`
-                if (confirm === undefined) asKey(key_, val)
-                else confirm(key_, item, val)
-                entry[key_] = val satisfies string as never
-            }
-        }
-        return entry as never
-    }
-
 /** The entry without its derived keys. A read never reads a key: the entity holds the information. */
 const fromEntry =
     (schema: object) =>
-    (entry: object): object => {
-        const item: Record<string, unknown> = { ...entry }
+    <V>(entry: Record<string, V>): Record<string, V> => {
+        const item = { ...entry }
         for (const key_ in schema) delete item[key_]
         return item
     }
@@ -3383,15 +3359,6 @@ export const tableEntry =
         for (const [index, given] of Object.entries(indexes ?? {}))
             namesOf(`the index '${index}'`, given)
 
-        const buildEntry = toEntry()(
-            expanded as never,
-            sep,
-            (path, value, given, alone) =>
-                storedText(path, value, given, alone),
-            (name, given, value) => {
-                carried(name, given, value)
-            },
-        ) as (item: never) => Record<string, unknown>
         const buildKey = key()(
             expanded as never,
             sep,
@@ -3475,16 +3442,16 @@ export const tableEntry =
         const quoted = (names: Iterable<string>) =>
             [...names].map((x) => `'${x}'`).join(', ')
 
-        /** The components of a key that this change carries, which is what rewrites it. */
-        const touchedIn = (
-            components: Iterable<string>,
-            changed: Record<string, unknown>,
-        ) =>
-            [...components].filter(
-                (component) =>
-                    relatedToAny(component, Object.keys(changed)) &&
-                    !Object.hasOwn(decided, component),
-            )
+        /**
+         * `touched` of `KeyDef`, as the model states it in `KeyUpdate`: the component that this change
+         * carries, which is what rewrites a key. A component that the codec decides is never carried.
+         * This is the one statement of the predicate: the step of a key and the message of a refusal
+         * both read it.
+         */
+        const touchedBy =
+            (changed: Record<string, unknown>) => (component: string) =>
+                relatedToAny(component, Object.keys(changed)) &&
+                !Object.hasOwn(decided, component)
 
         /**
          * The attributes that the keys tie to the change, the change included.
@@ -3522,13 +3489,32 @@ export const tableEntry =
             return block
         }
 
-        /** The error for a change that is not a union of blocks, once a touched key shows it. */
+        /**
+         * The error of a step that refuses: the `Refusal` of the model in `KeyUpdate`, with the key
+         * that refused.
+         *
+         * The message names the key that refused first. Where the block of the change meets a table
+         * key, the message then names that table key and says why its block is frozen.
+         */
         const refusal = (
             changed: Record<string, unknown>,
             given: Record<string, unknown>,
-            touched: { name: string; components: ReadonlySet<string> },
+            step: {
+                kind: 'rewrite'
+                key: string
+                ofTable: boolean
+                components: ReadonlySet<string>
+            },
         ): RotoriseError => {
             const block = blockOf(changed, given)
+            const touched = [...step.components].filter(touchedBy(changed))
+            const givenNames = Object.keys(given)
+            const missing = [...step.components].filter(
+                (c) => !holdsPath(c, givenNames),
+            )
+            const head = step.ofTable
+                ? `'${step.key}' is the table's own key and is built from ${quoted(step.components)}. This change writes ${quoted(Object.keys(changed))}.`
+                : `'${step.key}' is built from ${quoted(step.components)} and this change touches ${quoted(touched)}, so it has to be rebuilt, but ${quoted(missing)} ${missing.length === 1 ? 'is' : 'are'} not given.`
             for (const key of keys) {
                 if (!key.ofTable) continue
                 const components =
@@ -3538,17 +3524,13 @@ export const tableEntry =
                 )
                 if (held.length === 0) continue
                 return new RotoriseError(
-                    `'${key.name}' is the table's own key and is built from ${quoted(components)}. This change writes ${quoted(Object.keys(changed))}. The keys tie it to ${quoted(block)}, and the block holds ${quoted(held)} of '${key.name}'. A table key freezes its block, because rewriting the block would move the item and DynamoDB cannot update a key attribute. Write the new item and delete the old one.`,
+                    `${head} The keys tie ${step.ofTable ? 'it' : 'the change'} to ${quoted(block)}, and the block holds ${quoted(held)} of '${key.name}'. A table key freezes its block, because rewriting the block would move the item and DynamoDB cannot update a key attribute. Write the new item and delete the old one.`,
                     'rewrite',
                 )
             }
-            const givenNames = Object.keys(given)
-            const missing = [...touched.components].filter(
-                (c) => !holdsPath(c, givenNames),
-            )
             const needed = [...block].filter((c) => !holdsPath(c, givenNames))
             return new RotoriseError(
-                `'${touched.name}' is built from ${quoted(touched.components)} and this change touches ${quoted(touchedIn(touched.components, changed))}, so it has to be rebuilt, but ${quoted(missing)} ${missing.length === 1 ? 'is' : 'are'} not given. The keys tie ${quoted(block)} together. Write ${quoted(needed)} in the change.`,
+                `${head} The keys tie ${quoted(block)} together. Write ${quoted(needed)} in the change.`,
                 'rewrite',
             )
         }
@@ -3914,14 +3896,20 @@ export const tableEntry =
             return { ...decided, ...given }
         }
 
+        /**
+         * The keys that a change rebuilds: `update` of `KeyUpdate`, as the model states it. Each key
+         * takes one `step` of `KeyDef`. A key that the change does not touch gives no entry. A key
+         * that the change touches either builds its value, or refuses with the key that refused,
+         * which is the `Refusal` of the step.
+         */
         const keyUpdates = (
             changed: Record<string, unknown>,
         ): KeyUpdate<string> => {
             const set: Record<string, AttributeValue> = {}
             const remove: string[] = []
             const given = overDecided(changed)
-            const changedNames = Object.keys(changed)
             const givenNames = Object.keys(given)
+            const touched = touchedBy(changed)
 
             for (const key of keys) {
                 const components =
@@ -3940,18 +3928,16 @@ export const tableEntry =
                 let touches = false
                 let lacks = false
                 for (const component of components) {
-                    if (
-                        relatedToAny(component, changedNames) &&
-                        !Object.hasOwn(decided, component)
-                    )
-                        touches = true
+                    if (touched(component)) touches = true
                     else if (!holdsPath(component, givenNames)) lacks = true
                 }
                 if (!touches) continue
 
                 if (key.ofTable || lacks) {
                     throw refusal(changed, given, {
-                        name: key.name,
+                        kind: 'rewrite',
+                        key: key.name,
+                        ofTable: key.ofTable,
                         components,
                     })
                 }
@@ -4052,6 +4038,47 @@ export const tableEntry =
 
         const dropKeys = fromEntry(expanded)
 
+        /**
+         * The key part of an item: the value that each key name builds, and no name that builds no
+         * value. `keysMap` of `keyOf`: at each key name, `keyOf` gives the value or none, so a sparse
+         * key has no entry. `carry` gives the carrier of each value. `toItem` carries each value as the
+         * attribute that the codec writes. `toEntry` carries nothing, because `toEntry` writes JS values
+         * and the AWS SDK marshaller picks the member of each value, so a key of one attribute holds
+         * the value itself. The carrier is the one difference between the two routes, so each route
+         * passes it.
+         */
+        const keyPart = <V>(
+            item: Record<string, unknown>,
+            carry: (name: string, value: unknown) => V,
+        ): Record<string, V> => {
+            const part: Record<string, V> = {}
+            for (const name of keyNames) {
+                const value = buildKey(name as never, item as never)
+                if (value !== undefined) part[name] = carry(name, value)
+            }
+            return part
+        }
+
+        /**
+         * The row with a key part: `joinMap` of `dropMap`. The key names leave the row first, and the
+         * key part is written over the rest, so a key that builds no value leaves no value in the row,
+         * whatever the item or the codec wrote at the name of the key.
+         */
+        const joinRow = <V>(
+            row: Record<string, V>,
+            part: Record<string, V>,
+        ): Record<string, V> => ({ ...dropKeys(row), ...part })
+
+        const buildEntry = (item: Record<string, unknown>) =>
+            joinRow(
+                item,
+                keyPart(item, (name, value) => {
+                    // the key that the row holds is a key that the carrier accepts
+                    carried(name, item, value)
+                    return value
+                }),
+            )
+
         const definition = {
             keyUpdates,
             keys: (
@@ -4120,20 +4147,13 @@ export const tableEntry =
         if (attributes === undefined) return definition as never
 
         const toItem = (item: Record<string, unknown>): Result<AttributeMap> =>
-            andThen(
-                attributes.encode(item as never),
-                (written: AttributeMap) => {
-                    // the keys are gathered into their own small object and merged in one spread.
-                    // Adding them to a copy of the attributes one at a time is the same result and
-                    // a hidden-class transition per key, on an object that already has thirty
-                    const built: Record<string, AttributeValue> = {}
-                    for (const name of keyNames) {
-                        const value = buildKey(name as never, item as never)
-                        if (value !== undefined)
-                            built[name] = carried(name, item, value, written)
-                    }
-                    return { ...written, ...built }
-                },
+            andThen(attributes.encode(item as never), (written: AttributeMap) =>
+                joinRow(
+                    written,
+                    keyPart(item, (name, value) =>
+                        carried(name, item, value, written),
+                    ),
+                ),
             )
         /**
          * The keys are removed before decoding, not merely left undeclared.
@@ -4145,7 +4165,7 @@ export const tableEntry =
          * policy.
          */
         const fromItem = (item: AttributeMap) =>
-            attributes.decode(dropKeys(item) as AttributeMap) as Result<unknown>
+            attributes.decode(dropKeys(item)) as Result<unknown>
 
         return {
             ...definition,
