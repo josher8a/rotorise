@@ -6834,12 +6834,14 @@ type HeldStored<Field> = Field extends { readonly [termMarker]?: infer M }
         : never
     : never
 
-/** The term under each `refine`, as `pinOfG` reads it. */
+/** The term under each `refine` and each presence mark, as `pinOfG` reads it. */
 type Unrefined<M> = M extends ['refine', infer I, ...unknown[]]
     ? Unrefined<I>
-    : M
+    : M extends ['optional' | 'undefinable' | 'fill', infer J]
+      ? Unrefined<J>
+      : M
 
-/** Whether a field is under the adapter of a caller, through each `refine`. */
+/** Whether a field is under the adapter of a caller, through each `refine` and each presence mark. */
 type CallerHeld<Field> = Field extends { readonly [termMarker]?: infer M }
     ? Unrefined<M> extends [
           'held',
@@ -6856,8 +6858,8 @@ type CallerHeld<Field> = Field extends { readonly [termMarker]?: infer M }
 /**
  * The text that a field of an entity prints in a key, where the entity holds `Value`. A field under
  * the adapter of a caller prints the stored text, which the caller's value does not give: the
- * literal of the inner term where the inner term pins one, and `string` where it pins none. A
- * `DynamoNumber` prints its digits, so it is `string`. Any other field prints its value.
+ * literal of the inner term where the inner term pins one, and `string` where it pins none. Any
+ * other field prints its value.
  *
  * A key of one attribute reads this type too. That key holds the stored payload of an attribute
  * under the adapter of a caller, as the row does, because an entry that holds a value such as a
@@ -6869,47 +6871,7 @@ export type KeyText<Value, Field> = [Field] extends [never]
       ? [HeldStored<Field>] extends [never]
           ? string
           : HeldStored<Field>
-      : [Value] extends [DynamoNumber]
-        ? string
-        : Value
-
-/**
- * `true` where a path cannot go into the field: `at` gives a codec that refuses at a `refine`, at a
- * `legacy` and at a `held`. The predicate of a `refine` reads the whole value, an older encoding
- * has another shape, and an adapter converts the whole value. The field itself is no path, so a
- * field of these kinds still prints its own text in a key: the block applies to the path below it.
- */
-export type PathBlocked<Field> = [Field] extends [never]
-    ? false
-    : Field extends { readonly [termMarker]?: infer M }
-      ? M extends
-            | ['refine', ...unknown[]]
-            | ['legacy', unknown]
-            | ['held', ...unknown[]]
-          ? true
-          : false
-      : false
-
-/**
- * `true` where the field stores an object, through each `refine`, `legacy` and `held`. A path below
- * such a field is no path of the codec, so a key reads each leaf below it as no text. A field that
- * stores a scalar under the same wrappers prints its own text.
- */
-export type ObjectStored<Field> = [Field] extends [never]
-    ? false
-    : Field extends { readonly [termMarker]?: infer M }
-      ? StoresObject<M>
-      : false
-
-type StoresObject<M> = M extends ['refine', infer I, ...unknown[]]
-    ? StoresObject<I>
-    : M extends ['legacy', infer I]
-      ? StoresObject<I>
-      : M extends ['held', unknown, infer I, ...unknown[]]
-        ? StoresObject<I>
-        : M extends ['object', ...unknown[]]
-          ? true
-          : false
+      : Value
 
 /**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
@@ -7054,7 +7016,10 @@ type DiffersSomewhere<A, B, Ks extends readonly PropertyKey[]> = true extends {
  * narrowing:** the type states the overlap of the decoded tags, and it compares the values by
  * their types, so `1` and `'1'` are two values. The type does not state the lookup law of the
  * run time: that the write of each decoded value gives the text of its own option. A caller
- * adapter that does not write its own literal stays a refusal at construction.
+ * adapter that does not write its own literal stays a refusal at construction. The narrowing has a
+ * second direction: the type refuses a pair that the run time admits. The overlap reads the
+ * decoded type of the adapter, so an adapter whose decoded type is wider than the values that its
+ * schema admits overlaps every tag of that type, and the pair is refused.
  */
 type DecodesTogether<A, B, Ks extends readonly PropertyKey[]> = true extends {
     [K in Ks[number]]: [DecodedTags<A, K> & DecodedTags<B, K>] extends [never]

@@ -4,11 +4,13 @@ import type {
     AttributeName,
     AttributeValue,
     Carrying,
+    DynamoNumber,
     StoredItem,
 } from './codec/attribute'
 import { carrying, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
+    AttributeOf,
     Closed,
     ConstantOf,
     EncodedBy,
@@ -20,8 +22,6 @@ import type {
     KnownKeys,
     ObjectOf,
     ObjectSlot,
-    ObjectStored,
-    PathBlocked,
     PathOf,
     Result,
     TaggedCodec,
@@ -452,7 +452,7 @@ type ComputeTableKeyType<
           false
       >
     : Spec extends keyof Entity
-      ? Replace<TextAt<Entity, Spec, CodecSpec>, null, undefined>
+      ? Replace<SingleText<Entity, Spec, CodecSpec>, null, undefined>
       : Spec extends AnyPath
         ? PathText<Entity, Spec, CodecSpec>
         : Spec extends null
@@ -742,9 +742,15 @@ type ValidateComponent<E, C> = C extends string
             : [P, Second]
       : C
 
-/** A spec against the options of the entity that it reads. */
+/**
+ * A spec against the options of the entity that it reads. A bare name is a key of one attribute,
+ * which takes no transform and gives no key where the value is absent, so only a name that no option
+ * holds is refused there.
+ */
 type ValidateSpec<E, S> = S extends string
-    ? NameOfValue<S, ValueOfKey<E, S>>
+    ? [ValueOfKey<E, S>] extends [never]
+        ? ErrorMessage<`'${S}' is no name or path of the entity`>
+        : S
     : S extends readonly unknown[]
       ? { [I in keyof S]: ValidateComponent<E, S[I]> }
       : S extends { discriminator: infer D extends string; spec: infer Arms }
@@ -943,15 +949,49 @@ type CodecMember<Enc, Name extends string> = Enc extends unknown
     : never
 
 /**
- * The member that a key of one attribute takes. A key of a top-level attribute of an entry with a
- * codec takes the member that the codec writes for that field. Any other key of one attribute takes
- * the member that `native` writes for the value. A path below the top level has no field of the
- * codec, so it takes the second rule.
+ * The field that the codec declares at a path, or `never`. A name goes below a field into the
+ * `spec` of that field. A field that holds no `spec` has no field below it, so the path ends in
+ * `never` there. `refine`, `legacy` and `held` write no `spec`, which is how the type refuses a path
+ * below them, as `at` does at run time. The walk reads the codec, as `at` does at
+ * run time, and never the value of the entity.
  */
-type MemberOfName<E, Enc, Name extends string> = [Enc] extends [never]
+type FieldAtPath<Spec, Path extends string> = Spec extends unknown
+    ? Path extends `${infer Head}.${infer Tail}`
+        ? Head extends keyof Spec
+            ? Spec[Head] extends { readonly spec: infer Nested }
+                ? FieldAtPath<Nested, Tail>
+                : never
+            : never
+        : Path extends keyof Spec
+          ? Spec[Path]
+          : never
+    : never
+
+/**
+ * The member that the codec writes at a path: the member of the field at the path, over every
+ * variant that declares it. `never` where the codec has no field at the path.
+ */
+type CodecMemberAtPath<CodecSpec, Path extends string> = FieldAtPath<
+    IsVariantSpec<CodecSpec> extends true ? VariantsOf<CodecSpec> : CodecSpec,
+    Path
+> extends infer Field
+    ? [Field] extends [never]
+        ? never
+        : Exclude<MemberOf<AttributeOf<Field>>, 'NULL'>
+    : never
+
+/**
+ * The member that a key of one attribute takes. A key of an entry with a codec takes the member
+ * that the codec writes for that field, or at that path. A key of an entry with no codec takes the
+ * member that `native` writes for the value. A top-level name that the codec does not declare takes
+ * the second rule.
+ */
+type MemberOfName<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
+    never,
+]
     ? NativeMember<ValueOfKey<E, Name>>
     : Name extends `${string}.${string}`
-      ? NativeMember<ValueOfKey<E, Name>>
+      ? CodecMemberAtPath<CodecSpec, Name>
       : [CodecMember<Enc, Name>] extends [never]
         ? NativeMember<ValueOfKey<E, Name>>
         : CodecMember<Enc, Name>
@@ -986,11 +1026,11 @@ type KeyListArms<Spec> = string extends Spec
  * The members that the arms of a key spec give. A list of components prints one string, so it is
  * `S`, with a codec or without one.
  */
-type KeyMembers<E, Enc, Spec> =
+type KeyMembers<E, Enc, CodecSpec, Spec> =
     | KeyListArms<Spec>
     | (KeyLeaves<Spec> extends infer N
           ? N extends string
-              ? MemberOfName<E, Enc, N>
+              ? MemberOfName<E, Enc, CodecSpec, N>
               : never
           : never)
 
@@ -1000,9 +1040,14 @@ type KeyMembers<E, Enc, Spec> =
  * attribute has one type, so the arms of one key give one member. The refusal names the key and the
  * attribute and holds no value.
  */
-type ValidateLeaf<E, Enc, KeyName extends string, Name extends string, All> = [
-    MemberOfName<E, Enc, Name>,
-] extends [infer Own]
+type ValidateLeaf<
+    E,
+    Enc,
+    CodecSpec,
+    KeyName extends string,
+    Name extends string,
+    All,
+> = [MemberOfName<E, Enc, CodecSpec, Name>] extends [infer Own]
     ? [Own] extends [never]
         ? NoKeyMember<KeyName, Name>
         : [Exclude<Own, KeyMember>] extends [never]
@@ -1024,11 +1069,12 @@ type NoKeyMember<
 type ValidateKeyCarrier<
     E,
     Enc,
+    CodecSpec,
     KeyName extends string,
     Spec,
-    All = KeyMembers<E, Enc, Spec>,
+    All = KeyMembers<E, Enc, CodecSpec, Spec>,
 > = Spec extends string
-    ? ValidateLeaf<E, Enc, KeyName, Spec, All>
+    ? ValidateLeaf<E, Enc, CodecSpec, KeyName, Spec, All>
     : Spec extends readonly unknown[]
       ? Spec
       : Spec extends { discriminator: infer D; spec: infer Arms }
@@ -1038,6 +1084,7 @@ type ValidateKeyCarrier<
                   [L in keyof Arms]: ValidateKeyCarrier<
                       E,
                       Enc,
+                      CodecSpec,
                       KeyName,
                       Arms[L],
                       All
@@ -1054,7 +1101,14 @@ type ValidateKeyCarrier<
                     ]
                         ? [
                               Literals,
-                              ValidateKeyCarrier<E, Enc, KeyName, Arm, All>,
+                              ValidateKeyCarrier<
+                                  E,
+                                  Enc,
+                                  CodecSpec,
+                                  KeyName,
+                                  Arm,
+                                  All
+                              >,
                           ]
                         : C[I]
                 }
@@ -1100,6 +1154,7 @@ type ValidateCarriers<Schema, E, CodecSpec, CodecRest> =
                     [CodecSpec] extends [undefined]
                         ? never
                         : EncodedAttributes<CodecSpec, CodecRest>,
+                    CodecSpec,
                     K & string,
                     Schema[K]
                 >
@@ -1929,16 +1984,6 @@ type TextView<Entity, CodecSpec> = [CodecSpec] extends [undefined]
     ? Entity
     : { [K in keyof Entity]: TextAt<Entity, K, CodecSpec> }
 
-declare const unaddressable: unique symbol
-
-/** What a path below a `refine`, a `legacy` or a `held` reads: no codec states a stored text there. */
-type Unaddressable = { readonly [unaddressable]: true }
-
-/** The value below a field that a path cannot go into: each leaf is {@link Unaddressable}. */
-type BelowBlocked<Value> = Value extends object
-    ? { [K in keyof Value]: BelowBlocked<Value[K]> }
-    : Unaddressable
-
 /** The value that one attribute prints in a key: its stored text, or the view of its object. */
 type TextAt<Entity, K extends PropertyKey, CodecSpec> = [CodecSpec] extends [
     undefined,
@@ -1952,18 +1997,17 @@ type TextAt<Entity, K extends PropertyKey, CodecSpec> = [CodecSpec] extends [
         > extends infer Field
       ? [Field] extends [never]
           ? Entity[K & keyof Entity]
-          : true extends PathBlocked<Field>
-            ? true extends ObjectStored<Field>
-                ? BelowBlocked<Entity[K & keyof Entity]>
-                : KeyText<Entity[K & keyof Entity], Field>
-            : Field extends { readonly spec: infer Nested }
-              ? Entity[K & keyof Entity] extends infer Value
-                  ? Value extends object
-                      ? TextView<Value, Nested>
-                      : Value
-                  : never
-              : KeyText<Entity[K & keyof Entity], Field>
+          : Field extends { readonly spec: infer Nested }
+            ? Entity[K & keyof Entity] extends infer Value
+                ? Value extends object
+                    ? TextView<Value, Nested>
+                    : Value
+                : never
+            : DigitsOf<KeyText<Entity[K & keyof Entity], Field>>
       : never
+
+/** The text that a `DynamoNumber` component prints: its digits. A key of one attribute holds the value itself. */
+type DigitsOf<Text> = Text extends DynamoNumber ? string : Text
 
 type VariantsOf<CodecSpec> = CodecSpec extends readonly unknown[]
     ? CodecSpec[number]
@@ -1973,12 +2017,12 @@ type VariantsOf<CodecSpec> = CodecSpec extends readonly unknown[]
  * The variants that a call names. A variant is named where each attribute of the call that the
  * variant declares admits the value of the call, so `{ kind: 'cat' }` names the cat and not the
  * dog. The call holds a part of the entity and the discriminator is no type parameter, so the
- * type reads the attributes and not the name of the discriminator. **The narrowing:** where two
- * variants declare every attribute that the call names and admit its values, the type stays the
- * union of the two variants, as at the base. The text of a union of two codecs is the text that
- * {@link KeyText} gives the union, which reads the variants that hold an adapter of a caller only.
- * A call that names the discriminator with the tags of two variants, `{ kind: 'dog' | 'cat' }`,
- * is such a call.
+ * type reads the attributes and not the name of the discriminator. **The narrowing:** the type
+ * stays the union of all variants in two cases. Two variants admit the call, as `{ adopted: true }`
+ * does where both declare `adopted`. No variant admits the call, as `{ kind: 'dog' | 'cat' }`
+ * does, because `'dog' | 'cat'` is assignable to neither literal. The text of a union of two
+ * codecs is the text that {@link KeyText} gives the union, which reads the variants that hold an
+ * adapter of a caller only, so the second case gives `'D'` for that call.
  */
 type VariantFor<Attrs, CodecSpec> = [
     NamedVariants<Attrs, VariantsOf<CodecSpec>>,
@@ -2274,6 +2318,7 @@ type EncodedItem<
                     KeyMembers<
                         Entity,
                         EncodedAttributes<CodecSpec, CodecRest>,
+                        CodecSpec,
                         Schema[K]
                     >
                 >
@@ -2287,6 +2332,7 @@ type EncodedItem<
                     KeyMembers<
                         Entity,
                         EncodedAttributes<CodecSpec, CodecRest>,
+                        CodecSpec,
                         Schema[K]
                     >
                 >
@@ -3028,32 +3074,42 @@ type RefuseObject<
     Own extends string,
 > = unknown extends ValueOfKey<E, Name>
     ? unknown
-    : [Extract<ValueOfKey<E, Name>, Unaddressable>] extends [never]
-      ? [ValueOfKey<E, Name>] extends [PlainComponent]
-          ? unknown
-          : ErrorMessage<`[tableEntry] '${Name}' holds an object, and ${Own} prints its toString. Give the attribute a codec that writes text or a number`>
-      : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path cannot go into refine, legacy or held. Address the attribute itself`>
+    : [ValueOfKey<E, Name>] extends [PlainComponent]
+      ? unknown
+      : ErrorMessage<`[tableEntry] '${Name}' holds an object, and ${Own} prints its toString. Give the attribute a codec that writes text or a number`>
 
 /**
  * The refusals of a key spec, on the component that is wrong, in a list and in each arm of a match.
  * `Refuse` reads one name. `E` is the entity and `Enc` the attributes that the codec writes, or
  * `never` for an entry with no codec.
  */
-type RefuseComponents<E, Enc, Spec> = Spec extends readonly unknown[]
+type RefuseComponents<E, Enc, CodecSpec, Spec> = Spec extends readonly unknown[]
     ? {
           [I in keyof Spec]: Spec[I] extends string
-              ? RefuseComponent<E, Enc, Spec[I]>
+              ? RefuseComponent<E, Enc, CodecSpec, Spec[I]>
               : unknown
       }
     : Spec extends AnyPath
-      ? RefuseComponent<E, Enc, Spec>
+      ? RefuseComponent<E, Enc, CodecSpec, Spec>
       : Spec extends { readonly spec: infer Arms }
-        ? { spec: { [L in keyof Arms]: RefuseComponents<E, Enc, Arms[L]> } }
+        ? {
+              spec: {
+                  [L in keyof Arms]: RefuseComponents<
+                      E,
+                      Enc,
+                      CodecSpec,
+                      Arms[L]
+                  >
+              }
+          }
         : Spec extends { readonly cases: infer C }
           ? {
                 cases: {
                     [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
-                        ? readonly [unknown, RefuseComponents<E, Enc, Arm>]
+                        ? readonly [
+                              unknown,
+                              RefuseComponents<E, Enc, CodecSpec, Arm>,
+                          ]
                         : unknown
                 }
             }
@@ -3062,13 +3118,21 @@ type RefuseComponents<E, Enc, Spec> = Spec extends readonly unknown[]
 /**
  * One component. An entry with no codec prints the value, so an object is refused. An entry with a
  * codec prints the text that the codec writes, so a member other than `S` and `N` is refused: a
- * list, a map and a boolean print nothing. A path has no field of the codec, and the codec prints the
- * raw value there, so an object at a path is refused with a codec too.
+ * list, a map and a boolean print nothing. A path reads the member that the codec writes at the
+ * path, and a path that the codec cannot address is refused with the reason of `at`.
  */
-type RefuseComponent<E, Enc, Name extends string> = [Enc] extends [never]
+type RefuseComponent<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
+    never,
+]
     ? RefuseObject<E, Name, 'an entry with no codec'>
     : Name extends `${string}.${string}`
-      ? RefuseObject<E, Name, 'a path component'>
+      ? [CodecMemberAtPath<CodecSpec, Name>] extends [never]
+          ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path cannot go into refine, legacy or held, and the codec declares no field there. Address the attribute itself`>
+          : [Exclude<CodecMemberAtPath<CodecSpec, Name>, 'S' | 'N'>] extends [
+                  never,
+              ]
+            ? unknown
+            : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<CodecMemberAtPath<CodecSpec, Name>, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>
       : [Exclude<CodecMember<Enc, Name>, 'S' | 'N'>] extends [never]
         ? unknown
         : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<CodecMember<Enc, Name>, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>
@@ -3085,7 +3149,14 @@ type ValidateComponents<Schema, E, CodecSpec, CodecRest> =
         : [CodecSpec] extends [undefined]
           ? [ValuesOfNames<E, ComponentNames<Schema>>] extends [PlainComponent]
               ? unknown
-              : { [K in keyof Schema]: RefuseComponents<E, never, Schema[K]> }
+              : {
+                    [K in keyof Schema]: RefuseComponents<
+                        E,
+                        never,
+                        never,
+                        Schema[K]
+                    >
+                }
           : string extends keyof EncodedAttributes<CodecSpec, CodecRest>
             ? unknown
             : [
@@ -3097,27 +3168,20 @@ type ValidateComponents<Schema, E, CodecSpec, CodecRest> =
                         'S' | 'N'
                     >,
                 ] extends [never]
-              ? [
-                    ValuesOfNames<
-                        TextView<E, CodecSpec>,
-                        Extract<ComponentNames<Schema>, `${string}.${string}`>
-                    >,
-                ] extends [PlainComponent]
+              ? [Extract<ComponentNames<Schema>, AnyPath>] extends [never]
                   ? unknown
-                  : {
-                        [K in keyof Schema]: RefuseComponents<
-                            TextView<E, CodecSpec>,
-                            EncodedAttributes<CodecSpec, CodecRest>,
-                            Schema[K]
-                        >
-                    }
-              : {
-                    [K in keyof Schema]: RefuseComponents<
-                        TextView<E, CodecSpec>,
-                        EncodedAttributes<CodecSpec, CodecRest>,
-                        Schema[K]
-                    >
-                }
+                  : RefuseEach<Schema, E, CodecSpec, CodecRest>
+              : RefuseEach<Schema, E, CodecSpec, CodecRest>
+
+/** The refusals of each key of a schema, over the text view of the entity and the codec. */
+type RefuseEach<Schema, E, CodecSpec, CodecRest> = {
+    [K in keyof Schema]: RefuseComponents<
+        TextView<E, CodecSpec>,
+        EncodedAttributes<CodecSpec, CodecRest>,
+        CodecSpec,
+        Schema[K]
+    >
+}
 
 /**
  * Whether a literal separator holds more than one character. A plain `string` is no literal, so the
