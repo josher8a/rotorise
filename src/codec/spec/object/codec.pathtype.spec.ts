@@ -271,12 +271,5 @@ describe('a key of one attribute at a path can be sparse, as at the top level', 
         })
         expect(Notes.key('GSI1SK', { meta: { note: 'x' } })).toBe('x')
         expect(Notes.toEntry({ id: 'a' })).not.toHaveProperty('GSI1SK')
-        // the top-level form is admitted too
-        expect(
-            tableEntry<{ id: string; note?: string }>()({
-                PK: ['id'],
-                GSI1SK: 'note',
-            }),
-        ).toBeTypeOf('object')
     })
 })

@@ -747,12 +747,14 @@ describe('keys and toItem write one key for each key name, over generated entiti
     }
     /**
      * The reason of a refusal of `keyUpdates`, without the key that the step names first. The step
-     * puts `'KEY' cannot be rebuilt from this change: ` before the reason of the builder, so the
-     * reason is the one that every route gives, and the prefix is the key that refused.
+     * puts `'KEY' cannot be rebuilt from this change: ` before the reason of the builder or of the
+     * carrier, so the reason is the one that every route gives. The answer is `undefined` where the
+     * message does not start with the prefix of the key that refused, so a step that names no key,
+     * or another key, fails the comparison.
      */
     const afterKey = (said: string | undefined, key: string) => {
         const prefix = `'${key}' cannot be rebuilt from this change: `
-        return said?.startsWith(prefix) ? said.slice(prefix.length) : said
+        return said?.startsWith(prefix) ? said.slice(prefix.length) : undefined
     }
     const said = (run: () => unknown): { value?: unknown; said?: string } => {
         try {

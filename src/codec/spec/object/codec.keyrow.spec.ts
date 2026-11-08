@@ -2,8 +2,8 @@
  * The row is the key part joined over the row without its key names, and a key is the segments that
  * the parts print.
  *
- * A key that builds no value is no attribute of the row, whatever the item or the codec wrote at the
- * name of the key. Every route that holds a row gives that key no value. The refusal of a key that
+ * A key that builds no value is no attribute of the row, also where the entity holds `undefined` at
+ * the name of the key. Every route that holds a row gives that key no value. The refusal of a key that
  * cannot print is the refusal of the first rule that fails in the model order: an absent part first,
  * then a separator in a part that is printed.
  */
@@ -257,5 +257,29 @@ describe('an entity that holds the name of a key', () => {
             GSI1PK: undefined,
         })
         expect(entry).not.toHaveProperty('GSI1PK')
+    })
+})
+
+describe('a key whose discriminator is null', () => {
+    const Pets = tableEntry<{
+        petId: string
+        shelter: string
+        status: string | null
+    }>()({
+        PK: ['petId'],
+        GSI1PK: {
+            discriminator: 'status',
+            spec: { ADOPTED: ['petId'], AVAILABLE: ['shelter'] },
+        },
+    } as never) as unknown as {
+        keyUpdates: (changed: object) => unknown
+    }
+
+    it('names the components of every arm in the refusal of keyUpdates, as an absent discriminator does', () => {
+        // a null is no value, so the change selects no arm and each arm is a candidate
+        const refused = () => Pets.keyUpdates({ status: null })
+        expect(refused).toThrow(RotoriseError)
+        expect(refused).toThrow(/petId/)
+        expect(refused).toThrow(/shelter/)
     })
 })

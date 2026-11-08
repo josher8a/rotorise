@@ -8,7 +8,15 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { optional, string, undefinable } from '../../codec'
+import {
+    CodecError,
+    fill,
+    item,
+    object,
+    optional,
+    string,
+    undefinable,
+} from '../../codec'
 
 describe('the optionality of a key in a short codec', () => {
     it('refuses undefinable where the entity key is optional, because the read holds the key', () => {
@@ -60,5 +68,27 @@ describe('the optionality of a key in a short codec', () => {
         expect(Object.hasOwn(Undefinables.unsafeFromItem(row), 'nick')).toBe(
             true,
         )
+    })
+})
+
+describe('a row written before a field existed', () => {
+    const row = { petId: { S: 'p1' } } as never
+
+    it('round-trips where the field is optional, because encode writes no attribute for it', () => {
+        const Pet = item(object({ petId: string, name: optional(string) }))
+        expect(Pet.unsafeEncode(Pet.unsafeDecode(row))).toEqual(row)
+    })
+
+    it('is refused where the field is required', () => {
+        const Pet = item(object({ petId: string, name: string }))
+        expect(Pet.decode(row)).toBeInstanceOf(CodecError)
+    })
+
+    it('decodes to the default where the field is fill, so encode writes the default and is not the identity', () => {
+        const Pet = item(object({ petId: string, name: fill(string, 'none') }))
+        expect(Pet.unsafeEncode(Pet.unsafeDecode(row))).toEqual({
+            petId: { S: 'p1' },
+            name: { S: 'none' },
+        })
     })
 })

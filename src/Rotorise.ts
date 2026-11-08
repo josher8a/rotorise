@@ -1571,7 +1571,8 @@ type ErasedMatch<Entity> = {
  * part, each part prints its segments as a `Comp`, `boundary` marks a partial key, and the test of
  * `Good` refuses a segment that holds the separator. The host checks the separator half of `Good`
  * only: the model also requires a non-empty list of segments, and the host keeps the empty list
- * for one caller. The public `key` at a depth of 0 returns the empty string. A sort-key condition
+ * for one caller. The public `key` returns the empty string at a depth of 0, and with `allowPartial`
+ * where the first part is absent. A sort-key condition
  * never uses the empty prefix, because `sortCondition` refuses it, and `asKey` refuses an empty `S`
  * or `B` at carry time. The host adds the refusal of an object segment, which the model does not
  * state, because a JS value can be an object.
@@ -1724,8 +1725,9 @@ const key =
             /**
              * The separator half of `Good` of `DerivedKey`: no segment holds the separator, because a
              * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: the
-             * public `key` at a depth of 0 returns the empty string, `sortCondition` refuses the empty
-             * prefix, and `asKey` refuses an empty `S` or `B` at carry time. The test runs over the
+             * public `key` returns the empty string at a depth of 0 and with `allowPartial` where the
+             * first part is absent, `sortCondition` refuses the empty prefix, and `asKey` refuses an
+             * empty `S` or `B` at carry time. The test runs over the
              * segments that the parts print, after
              * `printed` has stopped at the first absent part, so an absent part refuses before a
              * separator in a part that precedes it. The refusal names the component, and never the
@@ -4041,11 +4043,18 @@ export const tableEntry =
                     })
                 }
 
-                const built = ((): unknown => {
+                const step = ((): [string, AttributeValue] | undefined => {
                     try {
-                        return buildKey(key.name as never, given as never)
+                        const built = buildKey(
+                            key.name as never,
+                            given as never,
+                        )
+                        return built === undefined
+                            ? undefined
+                            : [key.name, carried(key.name, given, built)]
                     } catch (error) {
-                        // the step names the key that refused, and keeps the kind of the refusal
+                        // the step names the key that refused, and keeps the kind of the refusal,
+                        // whether the builder or the carrier refused
                         if (!(error instanceof RotoriseError)) throw error
                         throw new RotoriseError(
                             `'${key.name}' cannot be rebuilt from this change: ${error.message}`,
@@ -4054,8 +4063,8 @@ export const tableEntry =
                         )
                     }
                 })()
-                if (built === undefined) remove.push(key.name)
-                else set.push([key.name, carried(key.name, given, built)])
+                if (step === undefined) remove.push(key.name)
+                else set.push(step)
             }
 
             return { set: Object.fromEntries(set), remove }
@@ -4177,7 +4186,7 @@ export const tableEntry =
         /**
          * The row with a key part: `joinMap` of `dropMap`. The key names leave the row first, and the
          * key part is written over the rest, so a key that builds no value leaves no value in the row,
-         * whatever the item or the codec wrote at the name of the key.
+         * also where the entity holds `undefined` at the name of the key.
          */
         const joinRow = <V>(
             row: Record<string, V>,
@@ -4186,11 +4195,12 @@ export const tableEntry =
 
         /**
          * The refusal of a row that holds a key name, or `undefined`. The model derives the item for
-         * a write that holds no key name (`write_row`): the key is written over the attribute of
-         * that name, and a read removes it. Construction refuses a declared key name, so a row
-         * holds a key name only through an open key entry, or through the entity. The premise is a
-         * test on the row that the route writes, stated once. `toItem` writes the write of the
-         * codec, and `toEntry` writes the entity, which no codec checks.
+         * a write that holds no key name: the key is written over the attribute of that name, and a
+         * read removes it. `write_row` proves that premise for a declared name, and construction
+         * refuses a declared key name. The open key entry is outside `write_row`. The premise of a
+         * write is `hw` of `Split.derive_core`, and it is a test on the row that the route writes,
+         * stated once. `toItem` writes the write of the codec, and `toEntry` writes the entity,
+         * which no codec checks.
          */
         const holdsKeyName = (
             row: Record<string, unknown>,

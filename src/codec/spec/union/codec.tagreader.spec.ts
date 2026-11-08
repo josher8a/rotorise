@@ -461,6 +461,31 @@ describe('the write of a tag that refuses', () => {
 })
 
 describe('a tag whose adapter breaks the pair that it owes', () => {
+    it('keeps the path and the cause of the refusal of the own write, as the own write gives them', () => {
+        const cause = new Error('the cause of the adapter')
+        const Broken = held(string('D'), string('dog'), {
+            encode: (_: 'dog') =>
+                new CodecError('the adapter refuses its own value', 'refused', {
+                    cause,
+                }),
+            decode: (_: 'D') => 'dog' as const,
+        })
+        let thrown: unknown
+        try {
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: Broken, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ] as never),
+            )
+        } catch (error) {
+            thrown = error
+        }
+        expect(thrown).toBeInstanceOf(CodecError)
+        expect((thrown as CodecError).path).toEqual(['kind'])
+        expect((thrown as CodecError).cause).toBe(cause)
+    })
+
     it('is refused where the adapter refuses to read its own stored literal, as it is where the adapter throws', () => {
         const Unread = held(string('D'), string('dog'), {
             encode: (_: 'dog') => 'D' as const,

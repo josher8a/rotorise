@@ -437,8 +437,10 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
         /**
          * A closed body refuses an attribute that it does not declare, because the schema and the
          * data have drifted apart, and an open key entry takes it. A row written before a field
-         * existed decodes without that field, which is why `encode ∘ decode` is not identity on
-         * items.
+         * existed decodes without an `optional` field, and `encode` then writes no attribute for it,
+         * so the row round-trips. A required field refuses the row. A `fill` field decodes to its
+         * default, and `encode` then writes the default, so `encode ∘ decode` is not identity on a
+         * row that lacks a `fill` field.
          */
         decode: (item, enclosing = 0) => {
             const out: Record<string, unknown> = {}
