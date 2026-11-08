@@ -76,6 +76,33 @@ const fromWire = (value: unknown, key?: string): unknown => {
     return value
 }
 
+/**
+ * A refusal of the service. The `name` is the error type that the service names in `__type`, as the
+ * AWS SDK names the error that it throws: `ValidationException` for a value that the service
+ * refuses, so a test asserts the rule and not the text of the message.
+ */
+class DynamoError extends Error {
+    constructor(
+        target: string,
+        readonly status: number,
+        body: string,
+    ) {
+        super(`${target}: ${status} ${body}`)
+        this.name = DynamoError.typeOf(body)
+    }
+
+    private static typeOf(body: string): string {
+        try {
+            const type = (JSON.parse(body) as { __type?: unknown }).__type
+            return typeof type === 'string'
+                ? (type.split('#').pop() ?? type)
+                : 'DynamoError'
+        } catch {
+            return 'DynamoError'
+        }
+    }
+}
+
 const call = async (
     target: string,
     body: unknown,
@@ -91,7 +118,7 @@ const call = async (
         body: JSON.stringify(toWire(body)),
     })
     const text = await response.text()
-    if (!response.ok) throw new Error(`${target}: ${response.status} ${text}`)
+    if (!response.ok) throw new DynamoError(target, response.status, text)
     return text ? (fromWire(JSON.parse(text)) as Record<string, unknown>) : {}
 }
 
@@ -261,7 +288,7 @@ suite('the law, against DynamoDB', () => {
                     TableName: TABLE,
                     Item: { pk: { S: `refused-${n}` }, n: { N: n } },
                 }),
-            ).rejects.toThrow()
+            ).rejects.toMatchObject({ name: 'ValidationException' })
         }
     }, 60_000)
 

@@ -367,15 +367,12 @@ export const checkStable = <T>(
  * attributes that `encode` produced. That is the wrong direction for (C): the attribute that
  * breaks it is by definition one `encode` would never make.
  *
- * Three defects lived in that gap and all three shipped. `set` refused the empty set on the way in
- * and returned it on the way out. `decimal` accepted `'1.50'`, which DynamoDB stores as `'1.5'`, so
- * an item could be read and not written back. `numeric` cast a read without checking it. None was
- * reachable from a generated value; each needed an attribute nobody would write, which is what this
- * builds.
+ * A defect of this class is not reachable from a generated value. It needs an attribute that
+ * nobody would write, which is what this builds.
  *
  * The corpus is every encoded item, plus one **named mutation** at a time at every position in it.
  * The names are the point: a counterexample says which shape found it, and each shape is a class of
- * defect this project has actually had rather than a random perturbation.
+ * defect, not a random perturbation.
  *
  * A refusal of a mutated attribute, a `CodecError`, is never reported: refusing it is exactly right, and
  * is what most of these do. What is reported is a mutation that decodes and then cannot be encoded,
@@ -595,7 +592,7 @@ const SHAPES: readonly {
     ) => { readonly value: unknown } | undefined
 }[] = [
     {
-        // `set`'s encode refused this and its decode returned it for as long as both existed
+        // DynamoDB stores no empty set, so a decode that returns one is a read that cannot be written back
         what: 'an empty set',
         to: (v) => {
             const m = memberOf(v)
@@ -606,7 +603,7 @@ const SHAPES: readonly {
         },
     },
     {
-        // the form DynamoDB normalises away, which `decimal` was writing and reading
+        // the form that DynamoDB normalises away, so a decode that returns it is a read that cannot be written back
         what: 'a denormalised N',
         to: (v) =>
             memberOf(v) === 'N'
@@ -1296,8 +1293,8 @@ const draw = (
              * run rather than folded into a value.
              */
             if (def.arbitrary) return def.arbitrary(rng, size)
-            // a numeric policy of `opaque` generates the JS values it holds, as before it was a
-            // `held`. The derived arbitrary would hand it an `NS` read, which the policy refuses
+            // a numeric policy of `opaque` generates the JS values it holds. The derived arbitrary
+            // would hand it an `NS` read, which the policy refuses
             if (def.via === 'opaqueLossy')
                 return someUnknown(rng, size, 'lossy')
             if (def.via === 'opaqueRefuse')

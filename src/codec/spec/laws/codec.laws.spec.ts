@@ -2,9 +2,9 @@
  * The combinators, as algebra.
  *
  * Every combinator here rewrites one codec into another, so the interesting facts about them are
- * *equations*: which rewrites leave a codec's behaviour alone, and which do not. Three times while
- * building these, reasoning about what a combinator could express was wrong and a test settled it in
- * seconds — so the equations are checked rather than asserted in a comment.
+ * *equations*: which rewrites leave a codec's behaviour alone, and which do not. Reasoning about
+ * what a combinator can express is unreliable and a test settles it in seconds, so the equations
+ * are checked rather than asserted in a comment.
  *
  * `checkEquivalent` is the primitive: two codecs that agree on both directions, and on which values
  * they refuse, over generated values. What it cannot see is anything a caller cannot see either,
@@ -172,7 +172,7 @@ describe('held', () => {
  * **The five obligations the model carries as premises and this library does not type.**
  *
  * Each is a side condition that the judgement or the laws ask of a constructor that takes a caller's function or value.
- * Three are decidable from what the caller hands over and are now refused where the declaration is
+ * Three are decidable from what the caller hands over and are refused where the declaration is
  * — `fill`'s fill value, `legacy`'s `ran(r) ⊆ dom(e)`, and a `rest` out of position. Two are not
  * decidable at all, so what is pinned here is the failure mode, which is the only thing a test can
  * say about an obligation nothing enforces.
@@ -222,7 +222,7 @@ describe('the obligations a caller owes', () => {
         expect(disagreeing.unsafeDecode({ N: '1' })).toBe('DISAGREE')
     })
 
-    /** `legacy`'s first half, now refused at the read that produces the unwritable value. */
+    /** `legacy`'s first half, refused at the read that produces the unwritable value. */
     it('legacy: an older reading the current encoding cannot write is refused', () => {
         const migrating = legacy({
             current: string('A'),
@@ -232,7 +232,7 @@ describe('the obligations a caller owes', () => {
         expect(() => migrating.unsafeDecode({ N: '1' })).toThrow(CodecError)
     })
 
-    /** `fill`'s fill value, now refused at the declaration. */
+    /** `fill`'s fill value, refused at the declaration. */
     it('fill: a fill value the codec cannot write is refused at construction', () => {
         expect(() => fill(string('A'), 'B' as 'A')).toThrow(CodecError)
         expect(() => fill(string('A'), 'A' as const)).not.toThrow()
@@ -489,9 +489,8 @@ describe('optional', () => {
     /**
      * Not idempotent, because it is not derivable: a marker marks a declaration once.
      *
-     * This read as an equation that held until the two markers were checked against each other. Only
-     * the outermost mark was ever read, so `optional(fill(c, v))` silently dropped the fill value —
-     * which makes nesting a thing to refuse rather than a law to state.
+     * Nesting is refused rather than stated as a law, because only the outermost mark is read:
+     * `optional(fill(c, v))` would drop the fill value silently.
      */
     it('cannot wrap another marker', () => {
         const _wrong = () => [
@@ -736,19 +735,17 @@ describe('the laws that do NOT hold', () => {
     })
 
     /**
-     * **A union of sets was refused and is not any more, and an empty container is what decides it.**
+     * **A union of sets resolves, and an empty container is what decides it.**
      *
-     * The old reason was that "a `Set` says nothing about what is in it, and neither option checks",
-     * so the value side could not be resolved and the declaration was refused. Both halves of that
-     * are now false: the elements check, and the declaration guard asks whether the two are
-     * separated by what they hold.
+     * The elements of a set check, so the value side resolves, and the declaration guard asks
+     * whether the two options are separated by what they hold.
      *
-     * The asymmetry that survives is admission's own: `[]` is admitted by every `array` and an
+     * The asymmetry is admission's own: `[]` is admitted by every `array` and an
      * empty `Set` is admitted by none, because **DynamoDB has no empty set**. So
      * `union([array(string), array(number)])` shares one value, which both options write to one
      * attribute, while these two sets share no value at all.
      */
-    it('a union of sets resolves, now that its elements check', () => {
+    it('a union of sets resolves, because its elements check', () => {
         const either = union([string.set(), number.set()])
         expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
             SS: ['a'],
@@ -783,8 +780,8 @@ describe('the laws that do NOT hold', () => {
      * tuple and a union option have no name at that position, so one of those there is a
      * category error rather than a weaker element.
      *
-     * It was silent, and it corrupted: `array(optional(string))` compiled and wrote `{}` into the
-     * list — an attribute carrying no member at all, which DynamoDB rejects on arrival.
+     * The corruption is silent: `array(optional(string))` would write `{}` into the list, an
+     * attribute carrying no member at all, which DynamoDB rejects on arrival.
      */
     it('an element cannot be about absence', () => {
         const _wrong = () => [
@@ -883,8 +880,8 @@ describe('(C): what a codec reads, it can write', () => {
      * the containment most likely to be untrue, so asking (R) of generated values and never asking
      * (Q) of stored ones leaves the gap this file exists to close.
      *
-     * It was exercised in two files, both of them about one entity apiece. Here it runs over the
-     * whole table the other laws use, on the items that `encode` wrote for generated values.
+     * It runs over the whole table that the other laws use, on the items that `encode` wrote for
+     * generated values.
      */
     const itemsOf = <T>(
         subject: { encode: (v: T) => unknown },
@@ -940,9 +937,9 @@ describe('(C): what a codec reads, it can write', () => {
      * is the whole content of stability — one pass through storage reaches a fixed point, and the
      * fixed point is a value rather than an attribute.
      *
-     * Not `decimal`: `'1.50'` is *refused*, not normalised. Closing the (C) defect below made a
-     * numeral outside DynamoDB's stored form unreadable rather than readable-and-unwritable, so
-     * there is no lossy numeral left to make the point with.
+     * Not `decimal`: `'1.50'` is *refused*, not normalised. A numeral outside DynamoDB's stored
+     * form is unreadable rather than readable-and-unwritable, so there is no lossy numeral to make
+     * the point with.
      */
     it('is stable where the stored form is not recovered exactly', () => {
         const Stored = item(object({ tags: string.set() }))
@@ -961,18 +958,17 @@ describe('(C): what a codec reads, it can write', () => {
     })
 
     /**
-     * **The two planted (C) defects left with the `custom` term, and nothing replaced them.**
+     * **No planted (C) defect is expressible.**
      *
-     * Both read an attribute this library would not write and then failed to write it back: a
-     * codec refusing the empty set while its read returned one, and one writing only normalised
-     * numerals while its read took any. Neither is expressible now. `held` inherits the carrier
-     * underneath, and every carrier has closed the hole the defect needed — `string.set()` and
-     * `opaque` both refuse an empty `SS`, and `decimal` refuses `1.50`,
-     * so the mutation never reaches the adapter. `custom` was the only definition that took a
-     * pair from outside, which is what made an outside defect writable at all.
+     * Such a defect reads an attribute this library would not write and then fails to write it
+     * back: a codec refusing the empty set while its read returns one, or one writing only
+     * normalised numerals while its read takes any. `held` inherits the carrier underneath, and
+     * every carrier closes the hole that the defect needs — `string.set()` and `opaque` both
+     * refuse an empty `SS`, and `decimal` refuses `1.50`, so the mutation never reaches the
+     * adapter. The pair of a `held` comes from outside, but it runs only on what the carrier
+     * read, so no outside pair reads an attribute that the carrier refuses.
      *
-     * `checkDecodesAreWritable` is unchanged and still runs over every other codec here. What is
-     * gone is the test that it catches anything, and it found three shipped defects.
+     * `checkDecodesAreWritable` runs over every other codec here.
      */
 })
 
@@ -1024,17 +1020,15 @@ describe('`accepts` answers the rows that the model states', () => {
         expect(accepts(asSet, ['a', 'b'])).toBe(true)
         expect(accepts(asSet, 5)).toBe(false)
 
-        // `refine` runs its predicate in both directions now, which was the last row to close
+        // `refine` runs its predicate in both directions
         const tagged = refine(string, isTag)
         expect(accepts(tagged, 't-1')).toBe(true)
         expect(accepts(tagged, 'x')).toBe(false)
         expect(failed(tagged.encode('x' as never))).toBe(true)
         expect(failed(tagged.encode('t-1'))).toBe(false)
 
-        // There is no longer a case for "a codec with no definition makes no claim", and the
-        // assertion that used to sit here is gone with it. It read
-        // `accepts({} as AnyCodec, 'anything')` — a cast manufacturing a value the type forbids, to
-        // check a branch reachable only by making it. `def` is required, so the branch is gone and
-        // the cast would be the only thing keeping it alive.
+        // "A codec with no definition makes no claim" has no case, and no assertion states it:
+        // `def` is required, so a test of it would need a cast that manufactures a value which the
+        // type forbids.
     })
 })

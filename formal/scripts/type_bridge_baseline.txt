@@ -11,6 +11,11 @@
 #   extract      one member of the union under a clause that the run time accepts: the run
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
+#   decoded      one sample value of the codec at a path, assigned to `Decoded` of that codec.
+#   encoded      one key that the run time writes at a path: `encode` at the path admits it.
+#   meet         the call of `meet` on two codecs: `accept` where the run time gives a codec,
+#                `refuse` where the run time gives none.
+#   meetvalue    one sample value of the codec that `meet` gives, assigned to `Decoded` of it.
 #   declaration  one constant of the generated codecs file: the run time built each one.
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|20f6d97843|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1

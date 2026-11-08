@@ -217,10 +217,8 @@ type TrimTrailingZeros<T extends string> = T extends `${infer Rest}0`
 
 // ── the carrier `N` actually has ─────────────────────────────────────
 //
-// The two predicates above are properties of the carrier rather than of any codec, and until now
-// there was no carrier for them to be properties OF: `N` was carried as `string` at every surface,
-// so the predicate had to be re-checked at each boundary and the type never said it had passed.
-// `DynamoNumber` is that carrier. It holds the stored form of a `WFNumeral` from
+// The two predicates above are properties of the carrier rather than of any codec.
+// `DynamoNumber` is that carrier, so the type says that a numeral passed them. It holds the stored form of a `WFNumeral` from
 // `formal/Calculus/Dynamo/Domain.lean`: `from` normalises, so two spellings of one number are one
 // `DynamoNumber` and two `WFNumeral`s.
 

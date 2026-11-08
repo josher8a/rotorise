@@ -1501,15 +1501,10 @@ end Calculus
  * One proposed **read verdict**: this codec, given this attribute, decodes exactly when the
  * model's read row admits it.
  *
- * **The differential that replaced a port.** HANDOFF's fourth item was to give the resolver's
- * read side a decision through a port of `Closed.AdmA`.
- * Measured
- * first: over 864 (codec, attribute) pairs the two agree at **861 of 861 checkable** ones and
- * disagree at none. `decode` validates — it parses data somebody else wrote, which is its job —
- * where `encode` trusted its argument's *type*, and that asymmetry is the whole reason wiring
- * `admits` into the write side changed real answers and a read-side port would change none. So a
- * def-reading port would be a second description of what `decode` already computes exactly, and
- * two descriptions of one thing need a guard between them. **The guard is what landed.**
+ * `decode` validates — it parses data somebody else wrote, which is its job — where `encode`
+ * trusts the *type* of its argument. A read-side port of `Closed.AdmA` would be a second
+ * description of what `decode` already computes exactly, and two descriptions of one thing need a
+ * guard between them. **This verdict is the guard.**
  *
  * `#eval` runs `Closed.AdmA`, but a printed verdict proves nothing. The kernel unfolds it, which is the
  * fact `Vectors.lean` opens with, so the verdict is asserted and elaboration is the test.

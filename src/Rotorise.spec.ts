@@ -1486,43 +1486,33 @@ describe('DynamoDB Utils', () => {
  *
  * `Rotorise.ts` enumerates the codec values rather than starring them, so that an export is a
  * decision rather than a consequence of where a function happens to live. That only holds if
- * something notices when the two lists drift, and nothing did: the reader then called `admits`
- * reached the surface in `46cb950` because the re-export was `export * from './codec/codec'`, and no test
- * could have said so.
+ * something notices when the two lists drift. A re-export written as `export * from './codec/codec'`
+ * puts every export of that module on the surface, and only a test can say so.
  *
  * The absent half is the load-bearing one. The names below read a **term** for this library's own
  * resolver, declaration guard and emitter to ask what a codec is; a caller has the codec's
  * behaviour, which is what they are derived from. Re-adding one is a decision, and this makes it a
  * visible one.
  *
- * **The list is the live names, and that is a rule this test learned the hard way.** It held eight
- * names that had been deleted — `admits`, `writes`, `decides`, `setBase`, `deeper`, `occupies`,
- * `reads`, `admitsAttribute` — and `Object.hasOwn` answers `false` for a name nothing declares, so
- * eight of its twelve rows passed by asserting nothing while their replacements went unguarded. A
- * deleted name cannot leak. Only a live one can, so a row for a dead name is a row that has stopped
- * being a test, and a deletion pass moves the row to the name that replaced it.
+ * **The list is the live names.** `Object.hasOwn` answers `false` for a name that nothing declares,
+ * so a row for a dead name passes by asserting nothing. A deleted name cannot leak. Only a live one
+ * can, so a row for a dead name is not a test, and a deletion pass moves the row to the name that
+ * replaced it.
  */
 describe('the published surface', () => {
     const internal = [
-        // the two that ask the pair, which is what admission is: `accepts` replaced `admits` and
-        // `readsBack` replaced `admitsAttribute`, both asking the codec rather than reading a term
+        // the two that ask the pair, which is what admission is: `accepts` and `readsBack` ask the
+        // codec rather than read a term
         'accepts',
         'readsBack',
-        // deleted public names remain absent from the value and type surfaces
-        'Slot',
-        'fallback',
-        'drop',
-        'RestPolicy',
-        'RestDeclaration',
-        // a cycle is a `scope`, and the thunk under a `ref` is internal
-        'lazy',
-        // the functions of a term the model computes, which `writes` and `decides` became, and the
-        // tag of a variant, which `assignmentOf` reads off the body of the option
+        // the functions of a term the model computes, and the tag of a variant, which
+        // `assignmentOf` reads off the body of the option
         'member',
         'occV',
         'assignmentOf',
-        // the declaration guard and what it reads, which `identifying` and `deeper` became
-        'compatible',
+        // the disjointness decision of the scoped walk, which the declaration guard and the
+        // narrowing of a path share
+        'agrees',
         // the predicate a refinement carries, run
         'holds',
         // the value kinds a term takes, the two halves of the term cache, and the mark reader
@@ -1539,18 +1529,32 @@ describe('the published surface', () => {
         }
     })
 
+    it('names only declarations that a module of the library holds, so no row asserts nothing', async () => {
+        const modules = await Promise.all([
+            import('./codec/codec'),
+            import('./codec/denote'),
+            import('./codec/scoped'),
+            import('./codec/term'),
+        ])
+        for (const name of internal) {
+            expect(
+                modules.some((module) => Object.hasOwn(module, name)),
+                name,
+            ).toBe(true)
+        }
+    })
+
     /**
-     * **The other half of the same fact, and it was unpinned while twelve names leaked.**
+     * **The other half of the same fact.**
      *
      * The list above is a run-time check, and a run-time check cannot see a type. `export type *
-     * from './codec/codec'` re-exported every one of that module's exports — the values among them as
-     * *types* — so `import { decides } from 'rotorise'` type-checked and was `undefined` when it
-     * ran. The value list was a decision and the type surface was still a consequence of where a
-     * function lived, which is the thing `46cb950` was supposed to have ended.
+     * from './codec/codec'` would re-export every export of that module, the values among them as
+     * *types*, so `import { accepts } from 'rotorise'` would type-check and be `undefined` when
+     * it ran. The type surface must be a decision, as the value list is, and not a consequence of
+     * where a function lives.
      *
-     * Written as one rule rather than as twelve suppressions: no name held back at run time is a
-     * key of the module's type either. A thirteenth added to `internal` is checked by both halves
-     * without a line here.
+     * One rule covers both halves: no name held back at run time is a key of the module's type
+     * either. A name added to `internal` is checked by both halves without a line here.
      */
     it('does not carry them at the type level either', () => {
         type Entry = typeof import('./Rotorise')

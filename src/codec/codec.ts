@@ -594,16 +594,15 @@ export const constantOf = (declared: ObjectSlot): unknown => {
     )
         return undefined
     const t = 'mark' in def ? def.t : def
-    // **A single-valued literal decides; two admissible values narrow without deciding.** This was
-    // `decides`, a reader that walked the definition to answer it, and the term answers the same
-    // row — deliberately *not* through the wrappers `member` descends: a constant is a claim about
+    // **A single-valued literal decides; two admissible values narrow without deciding.** The term
+    // answers the row, deliberately *not* through the wrappers `member` descends: a constant is a claim about
     // the value, and `refine` can reject it, `legacy` can decode an older encoding into something
     // else, and `optional` admits absence, which is not the value. `fill` is the one that keeps
     // it, always writing the attribute at a value typed to the same alternative.
     //
     // **An adapter is the second that keeps it**, and it has to be: `number` and `decimal` are
-    // adapters over the one numeric base now, so a numeric discriminator is a literal under a
-    // `held` and reading only the bare row would have lost every one of them. The value is the
+    // adapters over the one numeric base, so a numeric discriminator is a literal under a
+    // `held` and reading only the bare row would lose every one of them. The value is the
     // caller's rather than the carrier's, so it is the inner literal's put back through the
     // adapter — well defined because `held` owes that the pair cancels.
     //
@@ -622,9 +621,7 @@ export const constantOf = (declared: ObjectSlot): unknown => {
  * disagree about it.
  *
  * A union is the only definition that branches, and what it branches into is a *set of codecs* —
- * not a codec. This used to be a `Def` kind, a pseudo-codec whose `encode` and `decode` both
- * threw, which meant every reader of a definition had to know about a definition that was not one.
- * The disagreement belongs to the walk, so it is the walk that carries it.
+ * not a codec. The disagreement belongs to the walk, so it is the walk that carries it.
  *
  * **A segment has four answers.** The model's `childG` has the same four, and its `none` is the
  * refusal. The codecs at the segment. No

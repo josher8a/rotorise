@@ -4415,14 +4415,13 @@ export * from './codec/attribute'
  * `carries`, `member`, `occV`, `agrees` and `constantOf`
  * read a **term**, and `accepts` and `readsBack` ask the **pair**. Both kinds exist
  * so this library's own resolver, declaration guard and emitter can ask what a codec is; a caller
- * has the codec's behaviour instead, which is the thing they are derived from. Every one of them
- * reached the published surface once, because this was `export * from './codec/codec'`, and `46cb950`
- * shipped the reader then called `admits` that way without the export being a decision anyone took.
+ * has the codec's behaviour instead, which is the thing they are derived from. A re-export written
+ * as `export * from './codec/codec'` would publish each of them, so each export here is a decision.
  * `Rotorise.spec.ts` holds the list, and holds it at the live names for the reason written there.
  *
  * Six of the listed values reach here *through* `codec.ts` from `result.ts`, which is where the
  * pair's error and its combinators live — `CodecError`, `andThen`, `every`, `everyEntry`,
- * `failed`, `orThrow`. They were starred before and are listed now like the rest.
+ * `failed`, `orThrow`. They are listed like the rest.
  *
  * So the values are listed and the types are starred. **Adding a codec means adding a line here**,
  * which is the cost of the list and the point of it: an export becomes a decision rather than a
