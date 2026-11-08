@@ -1128,11 +1128,18 @@ corollary of this rule.
 A key update is a function of the keys of the schema, the values that the codec decides, and a
 change. The update reads each key at the change over the decided values. A key is touched where its
 footprint holds a written name that the codec does not decide. A touched key of the table is a
-refusal. A touched key that lacks a component at that item is a refusal. Any other touched key gives
-its key at that item, or no key at a `null` arm. The result is a refusal, or a patch. The patch maps
-each touched key to the text that the key prints, or to no text. The member of a key is static, so the
-patch holds no member. The SET clause of an update writes the text as the attribute of the member of
-the key: a string at an `S` key, and a numeral at an `N` key. No text goes to the REMOVE clause.
+refusal. A touched key that lacks a component at that item is a refusal, where a component lacks when
+neither the change nor the codec holds the name. Any other touched key gives its key at that item,
+or no key at a `null` arm. The result is a refusal, or a patch. The patch maps each touched key to
+the text that the key prints, or to no text. The member of a key is static, so the patch holds no
+member. The SET clause of an update writes the text as the attribute of the member of the key: a
+string at an `S` key, and a numeral at an `N` key. No text goes to the REMOVE clause.
+
+A change writes a value at a name, or removes the attribute. A removal is a write, and the item that
+the update reads has no value at the removed name. A removed name is held by the change, so the key
+is built at that item. A key of one attribute then gives no key, and the update removes it. A key
+with a part that reads the removed name, and prints nothing where the value is absent, is a refusal,
+as the build of the changed item refuses.
 
 The update commutes with encode. Let `x` be an item that agrees with the decided values. Let `y` be
 `x` with the change applied. A key of the patch is the key of `y`. A key outside the patch has one

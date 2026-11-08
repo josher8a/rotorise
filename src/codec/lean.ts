@@ -4209,7 +4209,8 @@ export type UpdateRow = {
     readonly name: string
     readonly keys: readonly UpdateKey[]
     readonly decided: readonly (readonly [string, string])[]
-    readonly changed: readonly (readonly [string, string])[]
+    /** A written value, or `null` where the change removes the attribute. */
+    readonly changed: readonly (readonly [string, string | null])[]
     readonly separator: string
     readonly outcome: UpdateOutcome
 }
@@ -4238,6 +4239,16 @@ const leanUpdateTree = (tree: UpdateTree): string =>
 
 const leanPairs = (pairs: readonly (readonly [string, string])[]): string =>
     `[${pairs.map(([name, value]) => `(${leanString(name)}, ${leanString(value)})`).join(', ')}]`
+
+const leanChanges = (
+    pairs: readonly (readonly [string, string | null])[],
+): string =>
+    `[${pairs
+        .map(
+            ([name, value]) =>
+                `(${leanString(name)}, ${value === null ? 'none' : `some ${leanString(value)}`})`,
+        )
+        .join(', ')}]`
 
 const leanUpdateOutcome = (outcome: UpdateOutcome): string =>
     outcome.kind === 'patch'
@@ -4274,7 +4285,7 @@ export const leanUpdateModule = (rows: readonly UpdateRow[]): string => {
                 `{ name := ${leanString(key.name)}, tree := ${leanUpdateTree(key.tree)}, ofTable := ${key.ofTable}, footprint := [${key.footprint.map(leanString).join(', ')}] }`,
         )
         .join(',\n      ')}],
-    decided := ${leanPairs(row.decided)}, changed := ${leanPairs(row.changed)},
+    decided := ${leanPairs(row.decided)}, changed := ${leanChanges(row.changed)},
     sep := Char.ofNat ${(chars[i]?.[0] ?? '').codePointAt(0)}, host := ${leanUpdateOutcome(row.outcome)} }`,
     )
     return leanModule(`import Calculus.Bridge.UpdateRows

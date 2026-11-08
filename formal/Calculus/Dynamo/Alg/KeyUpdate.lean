@@ -12,8 +12,9 @@ reads less (`ReadsAt.mono`), and two items that agree on the footprint of the fi
 nothing (`readsAt_none_iff`), so `keyOf_congr` is a corollary and not a second theorem.
 
 A key update is a function of the keys of the schema, the values that the codec decides, and the
-change. The change is the written attributes. The update reads the keys at the item that the change
-makes over the decided values. A key that the change touches is rebuilt. A key that the change does
+change. The change is the written attributes: a written attribute has a value, or the change removes
+it. The update reads the keys at the item that the change makes over the decided values, which has
+no value at a removed name. A key that the change touches is rebuilt. A key that the change does
 not touch is left alone. The result is a refusal, or a patch: a touched key name maps to the key as
 an optional string, where `some` is a SET and `none` is a REMOVE.
 
@@ -103,12 +104,19 @@ theorem keyOf_congr {s : KeySpec N} (h : ∀ n, s.Reads n → i n = i' n) :
 
 /-! ## The key update -/
 
-/-- The change over an item: a written name has the written value, and any other name has the value
-    of the item. -/
-def applied (ch x : Item N) : Item N := fun n => (ch n).or (x n)
+/-- A change: at a written name, the written value, or `none` where the change removes the
+    attribute. A name that the change does not write has no entry. -/
+abbrev Change (N : Type) := N → Option (Option String)
+
+/-- The change over an item: a written name has the written value, a removed name has no value, and
+    any other name has the value of the item. -/
+def applied (ch : Change N) (x : Item N) : Item N :=
+  fun n => match ch n with
+    | some v => v
+    | none => x n
 
 /-- **The item that the update reads**: the change over the decided values. -/
-abbrev given (d ch : Item N) : Item N := applied ch d
+abbrev given (d : Item N) (ch : Change N) : Item N := applied ch d
 
 /-- A key of the schema: the name, the spec, whether the key is the key of the table, and the
     footprint of the spec at an item as a list, with the proof that the list is the predicate. -/
@@ -134,17 +142,20 @@ inductive Step where
   | written (v : Option String)
 
 /-- A key is touched where the footprint at the given item holds a written name that the codec does
-    not decide. -/
-def KeyDef.touched (k : KeyDef N) (d ch : Item N) : Bool :=
+    not decide. A removal is a write. -/
+def KeyDef.touched (k : KeyDef N) (d : Item N) (ch : Change N) : Bool :=
   (k.foot (given d ch)).any fun n => (ch n).isSome && (d n).isNone
 
-/-- A key lacks a component where the footprint holds a name that the given item does not hold. -/
-def KeyDef.lacks (k : KeyDef N) (d ch : Item N) : Bool :=
-  (k.foot (given d ch)).any fun n => (given d ch n).isNone
+/-- A key lacks a component where the footprint holds a name that is held by neither the change nor
+    the codec. A removal holds the name: the change names the attribute, so the key is built from
+    the given item, which has no value there, and the build gives a refusal or no key. -/
+def KeyDef.lacks (k : KeyDef N) (d : Item N) (ch : Change N) : Bool :=
+  (k.foot (given d ch)).any fun n => (ch n).isNone && (d n).isNone
 
 /-- **The step of one key.** A touched key of the table, or a touched key that lacks a component, is
     a refusal. Any other touched key is the key of the given item. -/
-def KeyDef.step (print : Out → Option (Option String)) (d ch : Item N) (k : KeyDef N) : Step :=
+def KeyDef.step (print : Out → Option (Option String)) (d : Item N) (ch : Change N) (k : KeyDef N) :
+    Step :=
   if k.touched d ch then
     if k.ofTable || k.lacks d ch then .refused (.rewrite k.name)
     else
@@ -170,10 +181,11 @@ inductive Verdict where
 
 /-- **The key update.** The decided values and the change are lists of a name and a printed value.
     The update refuses where the change writes a decided name at another value. Otherwise the first
-    refusal of a key in order is the result, or the patch of the written keys. -/
+    refusal of a key in order is the result, or the patch of the written keys. A change at a name
+    is a value, or `none` for a removal, and a removal of a decided name writes another value. -/
 def update [DecidableEq N] (print : Out → Option (Option String)) (keys : List (KeyDef N))
-    (dec ch : List (N × String)) : Verdict :=
-  if dec.any (fun p => (ch.lookup p.1).any fun v => v != p.2) then .refused .decided
+    (dec : List (N × String)) (ch : List (N × Option String)) : Verdict :=
+  if dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2) then .refused .decided
   else
     match keys.findSome? fun k => (k.step print (fun n => dec.lookup n) (fun n => ch.lookup n)).refusal with
     | some r => .refused r
@@ -181,12 +193,13 @@ def update [DecidableEq N] (print : Out → Option (Option String)) (keys : List
         (k.step print (fun n => dec.lookup n) (fun n => ch.lookup n)).entry k)
 
 /-- A change is consistent with the decided values where each written decided name has the decided
-    value. -/
-def Consistent (d ch : Item N) : Prop := ∀ n v w, ch n = some v → d n = some w → v = w
+    value. A removal of a decided name is not consistent. -/
+def Consistent (d : Item N) (ch : Change N) : Prop :=
+  ∀ n v w, ch n = some v → d n = some w → v = some w
 
 /-- The item that the update reads extends nothing but itself: a name that it holds is held by the
     change over any item that agrees with the decided values. -/
-theorem given_extends {d ch x : Item N} (hx : ∀ n v, d n = some v → x n = some v) :
+theorem given_extends {d x : Item N} {ch : Change N} (hx : ∀ n v, d n = some v → x n = some v) :
     ∀ n v, given d ch n = some v → applied ch x n = some v := by
   intro n v h
   simp only [given, applied] at h ⊢
@@ -194,13 +207,13 @@ theorem given_extends {d ch x : Item N} (hx : ∀ n v, d n = some v → x n = so
   | some w => rw [hc] at h; exact h
   | none =>
       rw [hc] at h
-      simp only [Option.or] at h ⊢
       exact hx n v h
 
 /-- **A written key is the key of the changed item.** The update gives `v` at a key, and the key of
     the item with the change applied is `v`. The proof reads the dynamic congruence at the given
     item. -/
-theorem KeyDef.step_written {print : Out → Option (Option String)} {d ch x : Item N} {k : KeyDef N}
+theorem KeyDef.step_written {print : Out → Option (Option String)} {d x : Item N} {ch : Change N}
+    {k : KeyDef N}
     {v : Option String}
     (hx : ∀ n v, d n = some v → x n = some v) (hs : k.step print d ch = .written v) :
     print (keyOf false false (applied ch x) k.spec) = some v := by
@@ -224,21 +237,24 @@ theorem KeyDef.step_written {print : Out → Option (Option String)} {d ch x : I
               keyOf false false (applied ch x) k.spec := by
             refine keyOf_congr_at fun n hn => ?_
             have hmem : n ∈ k.foot (given d ch) := (k.foot_iff _ n).mp hn
-            have hheld : ¬ given d ch n = none := by
+            have hheld : ¬ (ch n = none ∧ d n = none) := by
               have := hlacks
               simp only [KeyDef.lacks, List.any_eq_false] at this
               simpa using this n hmem
-            cases hv : given d ch n with
-            | none => exact absurd hv hheld
-            | some w => rw [given_extends hx n w hv]
+            cases hc : ch n with
+            | some w => simp [given, applied, hc]
+            | none =>
+                cases hd : d n with
+                | none => exact absurd ⟨hc, hd⟩ hheld
+                | some u => simp [given, applied, hc, hd, hx n u hd]
           rw [← hcong]
           exact hb
   · rw [if_neg ht] at hs; cases hs
 
 /-- **An untouched key is the key of the item.** The footprint at the changed item is inside the
     footprint at the given item (the antitone law), and the change writes none of it. -/
-theorem KeyDef.step_untouched {print : Out → Option (Option String)} {d ch x : Item N}
-    {k : KeyDef N}
+theorem KeyDef.step_untouched {print : Out → Option (Option String)} {d x : Item N}
+    {ch : Change N} {k : KeyDef N}
     (hc : Consistent d ch) (hx : ∀ n v, d n = some v → x n = some v)
     (hs : k.step print d ch = .untouched) :
     keyOf false false (applied ch x) k.spec = keyOf false false x k.spec := by
@@ -267,13 +283,13 @@ theorem KeyDef.step_untouched {print : Out → Option (Option String)} {d ch x :
       cases hdn : d n with
       | none => exact absurd ⟨by simp [hcn], by simp [hdn]⟩ hnot
       | some u =>
-          have hwu : w = u := hc n w u hcn hdn
+          have hwu : w = some u := hc n w u hcn hdn
           subst hwu
-          simp [applied, hcn, hx n w hdn]
+          simp [applied, hcn, hx n u hdn]
 
 /-- **A name that the lookup finds is in the list.** -/
-theorem lookup_mem [DecidableEq N] :
-    ∀ (l : List (N × String)) (n : N) (w : String), l.lookup n = some w → (n, w) ∈ l
+theorem lookup_mem [DecidableEq N] {β : Type} :
+    ∀ (l : List (N × β)) (n : N) (w : β), l.lookup n = some w → (n, w) ∈ l
   | [], n, w, h => by simp [List.lookup] at h
   | (a, b) :: rest, n, w, h => by
       rcases Decidable.em (n = a) with hn | hn
@@ -295,7 +311,7 @@ theorem lookup_mem [DecidableEq N] :
     of an object). -/
 theorem update_commute [DecidableEq N] {print : Out → Option (Option String)}
     {keys : List (KeyDef N)}
-    {dec ch : List (N × String)} {P : List (String × Option String)}
+    {dec : List (N × String)} {ch : List (N × Option String)} {P : List (String × Option String)}
     (hnd : (keys.map KeyDef.name).Nodup) (hP : update print keys dec ch = .patch P)
     {x : Item N} (hx : ∀ n v, dec.lookup n = some v → x n = some v) :
     ∀ k ∈ keys,
@@ -305,11 +321,11 @@ theorem update_commute [DecidableEq N] {print : Out → Option (Option String)}
         keyOf false false (applied (fun n => ch.lookup n) x) k.spec =
           keyOf false false x k.spec) := by
   unfold update at hP
-  rcases Decidable.em (dec.any (fun p => (ch.lookup p.1).any fun v => v != p.2) = true) with hdec | hdec
+  rcases Decidable.em (dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2) = true) with hdec | hdec
   · rw [if_pos hdec] at hP; cases hP
   · rw [if_neg hdec] at hP
-    have hdec' : dec.any (fun p => (ch.lookup p.1).any fun v => v != p.2) = false := by
-      cases h : dec.any (fun p => (ch.lookup p.1).any fun v => v != p.2)
+    have hdec' : dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2) = false := by
+      cases h : dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2)
       · rfl
       · exact absurd h hdec
     have hcons : Consistent (fun n => dec.lookup n) (fun n => ch.lookup n) := by
@@ -527,23 +543,23 @@ def KeyDef.ofTree {N : Type} (name : String) (t : Tree N) (ofTable : Bool) : Key
 /-! ## The blocks -/
 
 /-- The change off the decided names: the written names that the codec does not decide. -/
-def Written (d ch : Item N) (n : N) : Prop := (ch n).isSome = true ∧ d n = none
+def Written (d : Item N) (ch : Change N) (n : N) : Prop := (ch n).isSome = true ∧ d n = none
 
 /-- Two names are tied where one key reads both at the given item, and the codec decides neither. -/
-def Tie (keys : List (KeyDef N)) (d ch : Item N) (n m : N) : Prop :=
+def Tie (keys : List (KeyDef N)) (d : Item N) (ch : Change N) (n m : N) : Prop :=
   ∃ k ∈ keys, n ∈ k.foot (given d ch) ∧ m ∈ k.foot (given d ch) ∧ d n = none ∧ d m = none
 
 /-- The block of a name is the names that the ties reach from the name. -/
-inductive Tied (keys : List (KeyDef N)) (d ch : Item N) : N → N → Prop
+inductive Tied (keys : List (KeyDef N)) (d : Item N) (ch : Change N) : N → N → Prop
   | refl (n : N) : Tied keys d ch n n
   | step {n m o : N} : Tie keys d ch n m → Tied keys d ch m o → Tied keys d ch n o
 
 /-- A set of names is a union of blocks where the set holds the block of each name that it holds. -/
-def UnionOfBlocks (keys : List (KeyDef N)) (d ch : Item N) (W : N → Prop) : Prop :=
+def UnionOfBlocks (keys : List (KeyDef N)) (d : Item N) (ch : Change N) (W : N → Prop) : Prop :=
   ∀ n m, Tied keys d ch n m → W n → W m
 
 /-- **A union of blocks is a set that one tie does not leave.** -/
-theorem unionOfBlocks_iff {keys : List (KeyDef N)} {d ch : Item N} {W : N → Prop} :
+theorem unionOfBlocks_iff {keys : List (KeyDef N)} {d : Item N} {ch : Change N} {W : N → Prop} :
     UnionOfBlocks keys d ch W ↔ ∀ n m, Tie keys d ch n m → W n → W m := by
   refine ⟨fun h n m ht hn => h n m (.step ht (.refl m)) hn, fun h n m hs => ?_⟩
   induction hs with
@@ -551,44 +567,46 @@ theorem unionOfBlocks_iff {keys : List (KeyDef N)} {d ch : Item N} {W : N → Pr
   | step ht _ ih => exact fun hn => ih (h _ _ ht hn)
 
 /-- A key is touched where the footprint at the given item holds a name of the change. -/
-theorem KeyDef.touched_iff {k : KeyDef N} {d ch : Item N} :
+theorem KeyDef.touched_iff {k : KeyDef N} {d : Item N} {ch : Change N} :
     k.touched d ch = true ↔ ∃ n ∈ k.foot (given d ch), Written d ch n := by
   simp [KeyDef.touched, Written, List.any_eq_true]
 
-/-- A key lacks a component where the footprint holds a name that the given item lacks. -/
-theorem KeyDef.lacks_iff {k : KeyDef N} {d ch : Item N} :
-    k.lacks d ch = true ↔ ∃ n ∈ k.foot (given d ch), given d ch n = none := by
+/-- A key lacks a component where the footprint holds a name that neither the change nor the codec
+    holds. -/
+theorem KeyDef.lacks_iff {k : KeyDef N} {d : Item N} {ch : Change N} :
+    k.lacks d ch = true ↔ ∃ n ∈ k.foot (given d ch), ch n = none ∧ d n = none := by
   simp [KeyDef.lacks, List.any_eq_true]
 
-/-- A name that the given item lacks is a name that the codec does not decide and the change does not
-    write. -/
-theorem given_eq_none {d ch : Item N} {n : N} :
-    given d ch n = none ↔ ch n = none ∧ d n = none := by
+/-- **The given item lacks a name where the change removes it, or neither the change nor the codec
+    holds it.** A removal is the one write that leaves the name without a value. -/
+theorem given_eq_none {d : Item N} {ch : Change N} {n : N} :
+    given d ch n = none ↔ ch n = some none ∨ (ch n = none ∧ d n = none) := by
   simp only [given, applied]
-  cases hc : ch n <;> simp [Option.or]
+  cases hc : ch n with
+  | none => simp
+  | some v => cases v <;> simp
 
 /-- **No touched key lacks a component exactly where the change is a union of blocks.** The
     refusal of a touched key that lacks a component says that the change cuts a block. -/
-theorem noLacks_iff_unionOfBlocks {keys : List (KeyDef N)} {d ch : Item N} :
+theorem noLacks_iff_unionOfBlocks {keys : List (KeyDef N)} {d : Item N} {ch : Change N} :
     (∀ k ∈ keys, k.touched d ch = true → k.lacks d ch = false) ↔
       UnionOfBlocks keys d ch (Written d ch) := by
   rw [unionOfBlocks_iff]
   constructor
   · rintro h n m ⟨k, hk, hn, hm, dn, dm⟩ wn
     have hl := h k hk (KeyDef.touched_iff.mpr ⟨n, hn, wn⟩)
-    have hh : ¬ given d ch m = none := fun e =>
+    have hh : ¬ (ch m = none ∧ d m = none) := fun e =>
       absurd (KeyDef.lacks_iff.mpr ⟨m, hm, e⟩) (by simp [hl])
     refine ⟨?_, dm⟩
     cases hc : ch m with
     | some _ => rfl
-    | none => exact absurd (given_eq_none.mpr ⟨hc, dm⟩) hh
+    | none => exact absurd ⟨hc, dm⟩ hh
   · intro h k hk ht
     obtain ⟨n, hn, wn⟩ := KeyDef.touched_iff.mp ht
     cases hl : k.lacks d ch with
     | false => rfl
     | true =>
-        obtain ⟨m, hm, hg⟩ := KeyDef.lacks_iff.mp hl
-        obtain ⟨hcm, hdm⟩ := given_eq_none.mp hg
+        obtain ⟨m, hm, hcm, hdm⟩ := KeyDef.lacks_iff.mp hl
         have := (h n m ⟨k, hk, hn, hm, wn.2, hdm⟩ wn).1
         rw [hcm] at this
         cases this
@@ -597,7 +615,7 @@ theorem noLacks_iff_unionOfBlocks {keys : List (KeyDef N)} {d ch : Item N} :
     component of a key of the table.** A touched key of the table is a refusal, and a touched key
     that lacks a component is a refusal. The block of a name of a union of blocks is inside the
     union, so the second clause reads the change itself. -/
-theorem noRewrite_iff {keys : List (KeyDef N)} {d ch : Item N} :
+theorem noRewrite_iff {keys : List (KeyDef N)} {d : Item N} {ch : Change N} :
     (∀ k ∈ keys, ¬ (k.touched d ch = true ∧ (k.ofTable || k.lacks d ch) = true)) ↔
       UnionOfBlocks keys d ch (Written d ch) ∧
         ∀ k ∈ keys, k.ofTable = true → ∀ n ∈ k.foot (given d ch), ¬ Written d ch n := by
@@ -618,6 +636,75 @@ theorem noRewrite_iff {keys : List (KeyDef N)} {d ch : Item N} :
         rw [hT] at hr
         simp only [Bool.false_or] at hr
         simp [h1 k hk ht] at hr
+
+/-! ## A removal -/
+
+/-- **A strict print stops at an absent part.** A list with an absent part prints nothing. -/
+theorem printed_false_of_none : ∀ {ps : List (Option Comp)}, none ∈ ps → printed false ps = none
+  | [], h => by simp at h
+  | none :: _, _ => rfl
+  | some _ :: r, h => by
+      have hr : none ∈ r := by simpa using h
+      simp [printed, printed_false_of_none hr]
+
+/-- A leaf of plain parts: a part prints nothing where the attribute that it reads has no value. -/
+def Leaf.Plain (l : Leaf N) : Prop := ∀ p ∈ l.comps, p.print none = none
+
+/-- **A leaf of plain parts gives no key at an item that lacks an attribute that a part reads.** The
+    strict build prints each part, so an absent part is a refusal. -/
+theorem keyOf_leaf_removed {l : Leaf N} (hp : l.Plain) {p : Part N} (hpm : p ∈ l.comps) {n : N}
+    (hn : p.name = some n) (hi : i n = none) :
+    keyOf false enforce i (.arm (.leaf l)) = .refused := by
+  have hmem : none ∈ l.parts i :=
+    List.mem_map.mpr ⟨p, hpm, by simp [Part.eval, hn, hi, hp p hpm]⟩
+  simp [keyOf, select, Arm.key, build, printed_false_of_none hmem]
+
+/-- **A removal of a component of a leaf of plain parts is the refusal of the build of the changed
+    item.** The change removes the attribute that a part reads, the codec does not decide it, and
+    the key is not a key of the table and lacks no other component. The item that the update reads
+    has no value there, so the key of that item is a refusal, and the update answers as that key
+    does: the build throws. -/
+theorem KeyDef.step_removal_leaf {print : Out → Option (Option String)} (hprint : print .refused = none)
+    {d : Item N} {ch : Change N} {k : KeyDef N} {l : Leaf N} (hs : k.spec = .arm (.leaf l))
+    (hp : l.Plain) {p : Part N} (hpm : p ∈ l.comps) {n : N} (hn : p.name = some n)
+    (hch : ch n = some none) (hd : d n = none) (hT : k.ofTable = false)
+    (hl : k.lacks d ch = false) : k.step print d ch = .refused (.unbuilt k.name) := by
+  have hmem : n ∈ k.foot (given d ch) :=
+    (k.foot_iff _ n).mp (hs ▸ KeySpec.ReadsAt.arm (by
+      simp only [Arm.reads, Leaf.reads, List.mem_flatMap]
+      exact ⟨p, hpm, by simp [hn]⟩))
+  have ht : k.touched d ch = true :=
+    KeyDef.touched_iff.mpr ⟨n, hmem, by simp [Written, hch, hd]⟩
+  have hg : given d ch n = none := by simp [given, applied, hch]
+  have hk : keyOf false false (given d ch) k.spec = .refused := by
+    rw [hs]; exact keyOf_leaf_removed hp hpm hn hg
+  simp [KeyDef.step, ht, hT, hl, hk, hprint]
+
+/-- **A removal of a key of one attribute is a removal of the key.** The change removes the
+    attribute, and the codec does not decide it. The key of the item that the update reads is no
+    key, so the update answers as that key does: a removal. -/
+theorem KeyDef.step_removal_attr {print : Out → Option (Option String)}
+    (hprint : print .nothing = some none) {d : Item N} {ch : Change N} {k : KeyDef N} {n : N}
+    (hs : k.spec = .arm (.attr n)) (hch : ch n = some none) (hd : d n = none)
+    (hT : k.ofTable = false) : k.step print d ch = .written none := by
+  have hmem : n ∈ k.foot (given d ch) :=
+    (k.foot_iff _ n).mp (hs ▸ KeySpec.ReadsAt.arm (by simp [Arm.reads]))
+  have ht : k.touched d ch = true :=
+    KeyDef.touched_iff.mpr ⟨n, hmem, by simp [Written, hch, hd]⟩
+  have hl : k.lacks d ch = false := by
+    simp only [KeyDef.lacks, List.any_eq_false]
+    intro m hm
+    have hm' : KeySpec.ReadsAt (given d ch) k.spec m := (k.foot_iff _ m).mpr hm
+    rw [hs] at hm'
+    cases hm' with
+    | arm h =>
+        have : m = n := by simpa [Arm.reads] using h
+        subst this
+        simp [hch]
+  have hg : given d ch n = none := by simp [given, applied, hch]
+  have hk : keyOf false false (given d ch) k.spec = .nothing := by
+    rw [hs]; simp [keyOf, select, Arm.key, hg]
+  simp [KeyDef.step, ht, hT, hl, hk, hprint]
 
 end DerivedKey
 

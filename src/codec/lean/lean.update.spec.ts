@@ -25,6 +25,14 @@ import {
 } from '../lean'
 
 type Pairs = readonly (readonly [string, string])[]
+/** A change: a written value, or `null` where the change removes the attribute. */
+type Changes = readonly (readonly [string, string | null])[]
+
+/** The change as the object that `keyUpdates` reads: a removal is an own property `undefined`. */
+const changeObject = (changed: Changes): Record<string, string | undefined> =>
+    Object.fromEntries(
+        changed.map(([name, value]) => [name, value ?? undefined]),
+    )
 
 /** A leaf of plain components. */
 const parts = (...names: string[]): UpdateTree => ({
@@ -124,10 +132,10 @@ const entryOf = (schema: Schema): Host => {
 const hostOutcome = (
     host: Host,
     schema: Schema,
-    changed: Pairs,
+    changed: Changes,
 ): UpdateOutcome => {
     try {
-        const { set, remove } = host.keyUpdates(Object.fromEntries(changed))
+        const { set, remove } = host.keyUpdates(changeObject(changed))
         const entries: (readonly [string, string | null])[] = []
         for (const { name } of schema.keys) {
             const inSet = Object.hasOwn(set, name)
@@ -150,18 +158,18 @@ const hostOutcome = (
 const footprintOf = (
     key: KeyDefinition,
     decided: Pairs,
-    changed: Pairs,
+    changed: Changes,
 ): string[] => [
     ...keyComponents(specOf(key.tree), {
         ...Object.fromEntries(decided),
-        ...Object.fromEntries(changed),
+        ...changeObject(changed),
     }),
 ]
 
 const rowOf = (
     name: string,
     schema: Schema,
-    changed: Pairs,
+    changed: Changes,
     separator = '#',
 ): UpdateRow => {
     const keys: UpdateKey[] = schema.keys.map((key) => ({
@@ -224,7 +232,7 @@ const shipments: Schema = {
     ],
 }
 
-const cases: readonly [string, Schema, Pairs][] = [
+const cases: readonly [string, Schema, Changes][] = [
     [
         'into_a_null_arm',
         pets,
@@ -292,6 +300,19 @@ const cases: readonly [string, Schema, Pairs][] = [
     ['rebuilds_one_key', shipments, [['provider', 'p1']]],
     ['holds_the_separator', shipments, [['status', 'A#B']]],
     ['moves_the_item_by_a_component', shipments, [['shipmentId', 's2']]],
+    ['removes_an_attribute_key', pets, [['nickname', null]]],
+    ['removes_a_component_of_a_leaf', shipments, [['provider', null]]],
+    ['removes_a_discriminator', pets, [['status', null]]],
+    [
+        'removes_a_component_of_a_match_arm',
+        pets,
+        [
+            ['status', 'AVAILABLE'],
+            ['shelter', null],
+            ['species', 'CAT'],
+        ],
+    ],
+    ['removes_a_decided_name', shipments, [['TAG', null]]],
 ]
 
 const rows: readonly UpdateRow[] = cases.map(([name, schema, changed]) =>
@@ -341,6 +362,34 @@ describe('the key updates of the pool', () => {
         })
         expect(row('pets_lacks_the_inner_discriminator').outcome).toEqual({
             kind: 'rewrite',
+        })
+    })
+
+    it('removes the key of an attribute that the change removes', () => {
+        expect(row('pets_removes_an_attribute_key').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI4PK', null]],
+        })
+    })
+
+    it('refuses to build the key of a component that the change removes', () => {
+        expect(row('shipments_removes_a_component_of_a_leaf').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+        expect(row('pets_removes_a_component_of_a_match_arm').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+    })
+
+    it('refuses as a rewrite where the change removes a discriminator, because the key then reads every arm', () => {
+        expect(row('pets_removes_a_discriminator').outcome).toEqual({
+            kind: 'rewrite',
+        })
+    })
+
+    it('refuses the removal of a name that the codec decides', () => {
+        expect(row('shipments_removes_a_decided_name').outcome).toEqual({
+            kind: 'decided',
         })
     })
 

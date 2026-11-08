@@ -12,9 +12,9 @@ comparator reads the footprint of each key at the given item (`Tree.foot`), and 
 update of the model (`update`) gives the result of the host.
 
 A part of a row names the attribute that it reads, and prints the value as the plain component of
-the host does: the upper case name, then the value. A part with a transform, a tag or a path of
-names is outside the rows. The host reads a path by a prefix of names, and the model reads a name as
-one opaque symbol.
+the host does: the upper case name, then the value. A change writes a value or removes the attribute.
+A part with a transform, a tag or a path of names is outside the rows. The host reads a path by a
+prefix of names, and the model reads a name as one opaque symbol.
 -/
 
 namespace Calculus
@@ -57,7 +57,7 @@ structure UpdateRow where
   name : String
   keys : List UpdateKey
   decided : List (String × String)
-  changed : List (String × String)
+  changed : List (String × Option String)
   sep : Char
   host : HostUpdate
 
