@@ -1,5 +1,6 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it, test } from 'vitest'
+import { DynamoNumber } from './codec/attribute'
 import {
     type CompositeKeyBuilder,
     type CompositeKeyParams,
@@ -309,7 +310,7 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a1-B-1-C-true'
-                  readonly SK: 1
+                  readonly SK: DynamoNumber
               })
             | ({
                   a: 'a2'
@@ -318,7 +319,7 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a2-B-2-C-true'
-                  readonly SK: 2
+                  readonly SK: DynamoNumber
               })
 
         attest<entries>(testTableEntry.infer)
@@ -375,7 +376,7 @@ describe('DynamoDB Utils', () => {
         expect(testTableEntryObj).toEqual({
             ...entity,
             PK: 'A-a1-B-1-C-true',
-            SK: 1,
+            SK: DynamoNumber.from('1'),
         })
 
         const fromEntry = testTableEntry.fromEntry(testTableEntryObj)
@@ -448,7 +449,10 @@ describe('DynamoDB Utils', () => {
         // inside the tolerance, so no single change moved the pin out of it
         // 8483 -> 8590: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([8590, 'instantiations'])
+        // 8590 -> 11406: `toEntry`, `fromEntry`, `infer` and `path` type each key as the member that
+        // the codec stores, so an N key reads as a `DynamoNumber`. The owner accepted the cost for
+        // the exact type
+        attest.instantiations([11406, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -759,8 +763,8 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a1-B-1-C-VERDADERO' | 'A-a1-B-1-C-FALSO'
-                  readonly SK: 1n
-                  readonly GSI1PK: 1n
+                  readonly SK: DynamoNumber
+                  readonly GSI1PK: DynamoNumber
                   readonly GSI1SK:
                       | 'A-a1-B-1-NEW_TAG-VERDADERO'
                       | 'A-a1-B-1-NEW_TAG-FALSO'
@@ -773,10 +777,10 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a2-B-2-C-VERDADERO' | 'A-a2-B-2-C-FALSO'
-                  readonly SK: 2
-                  readonly GSI1PK: 2
+                  readonly SK: DynamoNumber
+                  readonly GSI1PK: DynamoNumber
                   readonly GSI1SK: 'B-2'
-                  readonly GSI2PK: 2
+                  readonly GSI2PK: DynamoNumber
               })
         >
 

@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { native } from '../../native'
 
 type OwnerId = string
 type Owner = { ownerId: OwnerId; name: string }
@@ -206,7 +207,7 @@ describe('an order of the store', () => {
             id: 'r1',
             updatedAt: 7,
         })
-        expect(pending.GSI3SK).toBe(7)
+        expect(native.encode(pending.GSI3SK)).toEqual({ N: '7' })
         expect(pending.GSI2PK).toBe('STATUS#PLACED')
         expect(
             GroupedOrder.toEntry({

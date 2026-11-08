@@ -4,10 +4,9 @@ import type {
     AttributeName,
     AttributeValue,
     Carrying,
-    DynamoNumber,
     StoredItem,
 } from './codec/attribute'
-import { carrying, memberOf } from './codec/attribute'
+import { carrying, DynamoNumber, memberOf } from './codec/attribute'
 import type {
     AnyCodec,
     AttributeOf,
@@ -472,6 +471,24 @@ type ComputeTableKeyType<
               >
             : never
 
+/**
+ * The value that `toEntry` holds for a key, over the text that the key prints and the member that
+ * the key takes. `native` writes the member of the value, so the value is the carrier of the
+ * member: a string for `S`, a `DynamoNumber` for `N`, and a `Uint8Array` for `B`. A key that is
+ * absent stays absent, and a key with no member keeps the text.
+ */
+type HeldKey<Text, Members> = [Members] extends [never]
+    ? Text
+    : Text extends undefined | ErrorMessage<string>
+      ? Text
+      : Members extends 'S'
+        ? Text extends string
+            ? Text
+            : string
+        : Members extends 'N'
+          ? DynamoNumber
+          : Uint8Array
+
 type TableEntryImpl<
     Entity,
     Schema,
@@ -506,6 +523,38 @@ type TableEntryImpl<
                     : ErrorMessage<'Invalid schema definition'>
           } & Entity
       >
+    : never
+
+/**
+ * The entry that `toEntry` returns: {@link TableEntryImpl} with each key held as the carrier that
+ * `native` writes as the member that `toItem` writes for the same key. {@link StoredMembers} is
+ * that member, so the two routes read one fact.
+ */
+type HeldEntry<
+    Entity,
+    Schema,
+    Separator extends string,
+    CodecSpec,
+    CodecRest,
+> = Entity extends unknown
+    ? TableEntryImpl<Entity, Schema, Separator, CodecSpec> extends infer Entry
+        ? show<
+              {
+                  readonly [Key in keyof Schema]: Schema[Key] extends InputSpecShape
+                      ? Entry[Key & keyof Entry]
+                      : HeldKey<
+                            Entry[Key & keyof Entry],
+                            StoredMembers<
+                                Entity,
+                                Schema,
+                                CodecSpec,
+                                CodecRest,
+                                Key
+                            >
+                        >
+              } & Entity
+          >
+        : never
     : never
 
 /**
@@ -2111,7 +2160,7 @@ type TableEntryDefinition<
      */
     toEntry: <const ExactEntity>(
         item: Exact<Entity, ExactEntity>,
-    ) => TableEntryImpl<ExactEntity, Schema, Separator, CodecSpec>
+    ) => HeldEntry<ExactEntity, Schema, Separator, CodecSpec, CodecRest>
 
     /**
      * Extracts the raw entity from a table entry by removing all computed keys.
@@ -2121,11 +2170,12 @@ type TableEntryDefinition<
      * Use this when processing items retrieved from DynamoDB.
      */
     fromEntry: <
-        const Entry extends TableEntryImpl<
+        const Entry extends HeldEntry<
             Entity,
             Schema,
             Separator,
-            CodecSpec
+            CodecSpec,
+            CodecRest
         >,
     >(
         entry: Entry,
@@ -2203,7 +2253,7 @@ type TableEntryDefinition<
      * A zero-runtime inference helper. Use this with `typeof` to get the
      * total type of a table entry.
      */
-    infer: TableEntryImpl<Entity, Schema, Separator, CodecSpec>
+    infer: HeldEntry<Entity, Schema, Separator, CodecSpec, CodecRest>
 
     /**
      * Creates a proxy to generate property paths as strings.
@@ -2212,7 +2262,9 @@ type TableEntryDefinition<
      * @example
      * table.path().data.nested.property.toString() // returns "data.nested.property"
      */
-    path: () => PathOf<TableEntryImpl<Entity, Schema, Separator, CodecSpec>>
+    path: () => PathOf<
+        HeldEntry<Entity, Schema, Separator, CodecSpec, CodecRest>
+    >
 } & ([CodecSpec] extends [undefined]
     ? Record<never, never>
     : EntryCodecMethods<Entity, Schema, CodecSpec, CodecRest, Separator>) &
@@ -2353,12 +2405,7 @@ type EncodedItem<
                     K,
                     false
                 >]: KeyAttribute<
-                    KeyMembers<
-                        Entity,
-                        EncodedAttributes<CodecSpec, CodecRest>,
-                        CodecSpec,
-                        Schema[K]
-                    >
+                    StoredMembers<Entity, Schema, CodecSpec, CodecRest, K>
                 >
             } & {
                 [K in keyof Schema as NamedKey<
@@ -2367,16 +2414,28 @@ type EncodedItem<
                     K,
                     true
                 >]?: KeyAttribute<
-                    KeyMembers<
-                        Entity,
-                        EncodedAttributes<CodecSpec, CodecRest>,
-                        CodecSpec,
-                        Schema[K]
-                    >
+                    StoredMembers<Entity, Schema, CodecSpec, CodecRest, K>
                 >
             }
         >
       : never
+
+/**
+ * The member that the codec stores for key `K` of the schema. `toItem` writes it as an attribute,
+ * and `toEntry` holds it as the value that `native` writes as the same member.
+ */
+type StoredMembers<
+    Entity,
+    Schema,
+    CodecSpec,
+    CodecRest,
+    K extends keyof Schema,
+> = KeyMembers<
+    Entity,
+    EncodedAttributes<CodecSpec, CodecRest>,
+    CodecSpec,
+    Schema[K]
+>
 
 /**
  * The member that a key takes, which `Members` holds: the member of the attribute of a key of one
@@ -2828,6 +2887,24 @@ const refuseBareSeparator = (): never => {
     throw new RotoriseError(
         'tableEntry takes the separator in the options: pass { separator }, not a bare string',
     )
+}
+
+/**
+ * The value that `toEntry` holds for a carried key: the carrier that `native` writes as the same
+ * member, so `native.encode` of the value is the key that `toItem` writes. `S` holds the string,
+ * `N` holds a `DynamoNumber`, because a JS number past the safe range has no `native` form, and
+ * `B` holds the `Uint8Array`. The digits of an `N` carrier come from the codec or from `native`,
+ * so `DynamoNumber.from` accepts them, and the refusal is a broken invariant.
+ */
+const heldKey = (
+    name: string,
+    key: Carrying<KeyMember>,
+): string | DynamoNumber | Uint8Array => {
+    if ('S' in key) return key.S
+    if ('B' in key) return key.B
+    const number = DynamoNumber.from(key.N)
+    if (number instanceof CodecError) throw notAKey(name)
+    return number
 }
 
 /** The refusal of a key value that DynamoDB cannot store. It names the key and holds no value. */
@@ -4164,10 +4241,9 @@ export const tableEntry =
          * `keyOf` gives a value, or none, so a sparse key has no entry. Where `keyOf` refuses, the
          * host builder throws inside this function, which the model does not state. `carry` gives
          * the carrier of each value. `toItem` carries each value as the attribute that the codec
-         * writes. `toEntry` writes JS values and the AWS SDK marshaller picks the member of each
-         * value, so `toEntry` keeps the value. The carrier is the one difference between the two
-         * routes, so each route passes it. `buildEntry` also calls `carried` as a check, and under
-         * a caller adapter the value of a key of one attribute is then the stored text. The pairs
+         * writes. `toEntry` holds the carrier that `native` writes as the member of `toItem`, so
+         * `native.encode` of the held key is the key that `toItem` writes. The carrier is the one
+         * difference between the two routes, so each route passes it. The pairs
          * go through `Object.fromEntries`, so a key named `__proto__` is an own attribute.
          */
         const keyPart = <V>(
@@ -4219,11 +4295,9 @@ export const tableEntry =
             if (held !== undefined) throw new RotoriseError(held)
             return joinRow(
                 item,
-                keyPart(item, (name, value) => {
-                    // the key that the row holds is a key that the carrier accepts
-                    carried(name, item, value)
-                    return value
-                }),
+                keyPart(item, (name, value) =>
+                    heldKey(name, carried(name, item, value)),
+                ),
             )
         }
 

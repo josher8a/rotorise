@@ -79,15 +79,14 @@ describe('a key of one number attribute is N in every path that writes a row', (
         })
     })
 
-    it('toEntry writes the number, which a marshaller writes as N', () => {
-        expect(
-            Pets.toEntry({
-                petId: 'p1',
-                status: 'AVAILABLE',
-                shelter: 's1',
-                age: 3,
-            }).GSI1SK,
-        ).toBe(3)
+    it('toEntry holds the number as the key that a marshaller writes as N', () => {
+        const entry = Pets.toEntry({
+            petId: 'p1',
+            status: 'AVAILABLE',
+            shelter: 's1',
+            age: 3,
+        })
+        expect(native.encode(entry.GSI1SK)).toEqual({ N: '3' })
     })
 })
 
@@ -278,8 +277,11 @@ describe('a key follows its attribute in every path that writes a row', () => {
                 .GSI1SK,
         ).toEqual({ N: String(past) })
         expect(
-            Litters.toEntry({ litterId: 'l1', born: past, name: 'a' }).GSI1SK,
-        ).toBe(past)
+            native.encode(
+                Litters.toEntry({ litterId: 'l1', born: past, name: 'a' })
+                    .GSI1SK,
+            ),
+        ).toEqual({ N: String(past) })
     })
 })
 
@@ -298,8 +300,8 @@ describe('a key follows its attribute in every path that writes a row', () => {
  *
  * A draw that is refused is counted and pinned, not skipped: a string that holds the separator cannot
  * be a part of a composite key. A name that one route answers as another route does not is a failure.
- * Two counted rows state a gap that the owner has not ruled on: `toEntry` holds a string where the
- * row holds `N`, and a number past the safe range, which `native` refuses.
+ * `toEntry` holds the carrier of each key, so `native.encode` of the held key is the key that
+ * `toItem` writes, for an `N` key and for a number past the safe range.
  */
 describe('keys and toItem write one key for each key name, over generated entities', () => {
     const dateSchema: StandardSchemaV1<Date> = {
@@ -623,114 +625,82 @@ describe('keys and toItem write one key for each key name, over generated entiti
         some: number
         none: number
         refused: number
-        toEntryString: number
-        toEntryUnsafe: number
     }
     const pinned: Record<string, Counts> = {
         Tagged: {
             some: 150,
             none: 0,
             refused: 25,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         TaggedComposite: {
             some: 150,
             none: 0,
             refused: 25,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         TaggedRest: {
-            some: 100,
+            some: 200,
             none: 0,
             refused: 0,
-            toEntryString: 100,
-            toEntryUnsafe: 0,
         },
         TaggedRestComposite: {
             some: 200,
             none: 0,
             refused: 0,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         Rest: {
-            some: 100,
+            some: 200,
             none: 0,
             refused: 0,
-            toEntryString: 100,
-            toEntryUnsafe: 0,
         },
         HeldTag: {
             some: 228,
             none: 0,
             refused: 24,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         HeldRef: {
             some: 228,
             none: 0,
             refused: 24,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         Discriminator: {
             some: 152,
             none: 0,
             refused: 24,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         PathNumber: {
-            some: 149,
+            some: 154,
             none: 0,
             refused: 23,
-            toEntryString: 0,
-            toEntryUnsafe: 5,
         },
         PathBinary: {
             some: 134,
             none: 0,
             refused: 33,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         Sparse: {
             some: 119,
             none: 33,
             refused: 24,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         HeldComposite: {
             some: 156,
             none: 0,
             refused: 22,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         Born: {
             some: 156,
             none: 0,
             refused: 22,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
         Litters: {
-            some: 152,
+            some: 162,
             none: 0,
             refused: 19,
-            toEntryString: 0,
-            toEntryUnsafe: 10,
         },
         Prices: {
             some: 78,
             none: 0,
             refused: 22,
-            toEntryString: 0,
-            toEntryUnsafe: 0,
         },
     }
 
@@ -775,8 +745,6 @@ describe('keys and toItem write one key for each key name, over generated entiti
                 some: 0,
                 none: 0,
                 refused: 0,
-                toEntryString: 0,
-                toEntryUnsafe: 0,
             }
             const failures: string[] = []
             for (let at = 0; at < 100; at++) {
@@ -862,19 +830,9 @@ describe('keys and toItem write one key for each key name, over generated entiti
                         failures.push(`${where} ${name}: two keys`)
                         continue
                     }
+                    // the marshaller writes the key of `toEntry` as the key of `toItem`
                     const marshalled = native.encode(entry2[name] as never)
                     if (structuralEquals(marshalled, row[name])) count.some++
-                    else if (
-                        typeof entry2[name] === 'string' &&
-                        (row[name] as { N?: string }).N === entry2[name]
-                    )
-                        count.toEntryString++
-                    else if (
-                        typeof entry2[name] === 'number' &&
-                        marshalled instanceof CodecError &&
-                        Number((row[name] as { N?: string }).N) === entry2[name]
-                    )
-                        count.toEntryUnsafe++
                     else
                         failures.push(
                             `${where} ${name}: toEntry is another key`,

@@ -482,6 +482,8 @@ before `'9'`.
 - `null` and `undefined` give no key in every method.
 - DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `toEntry`, `keys`, `toItem`
   and `keyUpdates` throw a `RotoriseError` for one. The message names the key and not the value.
+- `toEntry` holds a key of `N` as a `DynamoNumber`, so `native.encode` of the entry writes the key
+  that `toItem` writes.
 - DynamoDB limits a partition key to 2048 bytes and a sort key to 1024 bytes. DynamoDB refuses a
   write over the limit, and Rotorise does not check the length.
 

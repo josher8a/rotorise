@@ -17,6 +17,7 @@ import {
     object,
     string,
 } from '../../codec'
+import { native } from '../../native'
 import type { StandardSchemaV1 } from '../../standard'
 
 const schema = <T>(is: (v: unknown) => v is T): StandardSchemaV1<T> => ({
@@ -146,7 +147,9 @@ describe('the type of a key component under an adapter of a caller', () => {
             { codec: { petId: string, age: number } },
         )
         expectTypeOf(Aged.key('SK', { age: 3 })).toEqualTypeOf<3>()
-        expect(Aged.toEntry({ petId: 'p1', age: 3 }).SK).toBe(3)
+        expect(native.encode(Aged.toEntry({ petId: 'p1', age: 3 }).SK)).toEqual(
+            { N: '3' },
+        )
     })
 
     it('prints the stored text of a held number at a path', () => {

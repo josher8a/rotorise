@@ -23,6 +23,7 @@ import {
     scope,
     string,
 } from '../../codec'
+import { native } from '../../native'
 import type { StandardSchemaV1 } from '../../standard'
 
 type Route = {
@@ -205,7 +206,9 @@ describe('a key of one attribute at a path is the attribute that the codec write
             GSI1SK: { N: '90' },
         })
         expect(Numbers.key('GSI1SK', entity(90) as never)).toBe(90)
-        expect(Numbers.toEntry(entity(90) as never).GSI1SK).toBe(90)
+        expect(
+            native.encode(Numbers.toEntry(entity(90) as never).GSI1SK as never),
+        ).toEqual({ N: '90' })
         expect(Numbers.keyUpdates(entity(90) as never).set.GSI1SK).toEqual({
             N: '90',
         })
@@ -243,7 +246,9 @@ describe('a key of one attribute at a path is the attribute that the codec write
         expect(Bare.keys(['GSI1SK'], entity(90) as never)).toEqual({
             GSI1SK: { N: '90' },
         })
-        expect(Bare.toEntry(entity(90) as never).GSI1SK).toBe(90)
+        expect(
+            native.encode(Bare.toEntry(entity(90) as never).GSI1SK as never),
+        ).toEqual({ N: '90' })
     })
 })
 
