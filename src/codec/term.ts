@@ -882,17 +882,17 @@ export const storedAlternatives = (t: Term): Alternatives | undefined => {
 /**
  * A stored literal, put back through the adapter that a pin passed: the literal itself where no
  * adapter holds the pin, and `g` of the literal where one does, because a `held` owes that the pair
- * cancels (`pinOfG` reads the pin, and the value is the one that `g` gives for it). `undefined`
- * where the adapter returns a refusal of its own literal, which breaks the pair that the adapter
- * owes. A throw of `g` is not caught, and each caller decides what the throw means.
+ * cancels (`pinOfG` reads the pin, and the value is the one that `g` gives for it). The refusal
+ * where the adapter refuses its own literal breaks the pair that the adapter owes, and the
+ * refusal is the answer. A throw of `g` is not caught, and each caller decides what the throw
+ * means.
  */
 const throughAdapter = (
     pin: StoredPin | undefined,
     literal: unknown,
 ): unknown => {
     if (pin?.held === undefined) return literal
-    const value = (pin.held.g as (held: unknown) => unknown)(literal)
-    return failed(value) ? undefined : value
+    return (pin.held.g as (held: unknown) => unknown)(literal)
 }
 
 /**
@@ -900,14 +900,18 @@ const throughAdapter = (
  * adapter. `undefined` where the term below is no literal. A union of literals, one literal
  * included, decides no constant, as the type `ConstantOf` states.
  */
-export const pinnedValue = (pin: StoredPin | undefined): unknown =>
-    pin?.under.kind === 'literal' ? throughAdapter(pin, pin.under.v) : undefined
+export const pinnedValue = (pin: StoredPin | undefined): unknown => {
+    if (pin?.under.kind !== 'literal') return undefined
+    const value = throughAdapter(pin, pin.under.v)
+    return failed(value) ? undefined : value
+}
 
 /**
  * The value that a tag decodes to: the one literal that {@link storedAlternatives} names for the
  * tag, put back through the adapter. The reader is the one that `assignmentOf` reads the stored
  * text with, so a tag that has a stored text has a decoded value, a union of one literal included.
- * `undefined` where the tag names no one literal.
+ * `undefined` where the tag names no one literal, and the refusal of the adapter where the adapter
+ * refuses its own literal.
  */
 export const decodedTag = (t: Term): unknown => {
     const stored = storedAlternatives(t)?.ls

@@ -978,7 +978,7 @@ export const byTagSem = <V>(
 })
 
 /** The value that a member's tag decodes to at each key, as {@link decodedTagOf} reads it. */
-type Decoded = Readonly<Record<string, unknown>> | undefined
+type Decoded = Readonly<Record<string, unknown>>
 
 /** A member of a dissection: the stored text of each tag, the variant, and the decoded value of each tag. */
 type Member<V> = readonly [Readonly<Record<string, string>>, V, Decoded]
@@ -996,8 +996,10 @@ type Written<V> = (
  * adapter writes `'dog'` as `'D'`, and a member that does not admit the value refuses it. A member
  * with no adapter of a caller writes the literal as it is, so the value matches only where it is
  * the value that the member decodes to: numbers by digits, bytes by content, any other by `===`,
- * and no refusal is built. A value that no member writes keeps its own text, and the pick
- * names it. A number spells its text through the carrier: `String(1e21)` is '1e+21', and the store
+ * and no refusal is built. Where no member writes the value and some member refuses it, the
+ * answer is the refusal of that member, and the reasons of several members are joined in one
+ * refusal. A value that no member writes or refuses keeps its own text, and the pick names it. A
+ * number spells its text through the carrier: `String(1e21)` is '1e+21', and the store
  * holds '1000000000000000000000'. The write of a dissection and the refusal of {@link membersOf}
  * read this one function, so the two cannot differ.
  */
@@ -1010,41 +1012,45 @@ const storedTag = <V>(
     const asText = typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
     const plain = failed(asText) ? asText : String(asText)
     if (written) {
-        for (const [assignment, member, decoded] of members) {
+        const refused: CodecError[] = []
+        for (const [, member, decoded] of members) {
             const row = written(member, { [name]: tag })
             if (row === undefined) {
                 // a member with no adapter of a caller matches the value that it decodes to, so
                 // the number 1 never matches the text '1'
-                const matches =
-                    decoded === undefined
-                        ? plain === assignment[name]
-                        : sameLiteral(decoded[name], tag)
-                if (matches) return plain
+                if (sameLiteral(decoded[name], tag)) return plain
                 continue
             }
-            if (failed(row)) continue
+            if (failed(row)) {
+                refused.push(row)
+                continue
+            }
             const attribute = own(row as Record<string, unknown>, name) as
                 | { readonly S?: string; readonly N?: string }
                 | undefined
             const text = attribute?.S ?? attribute?.N
             if (text !== undefined) return text
         }
+        const [first, ...others] = refused
+        if (first !== undefined) {
+            return others.length === 0
+                ? first
+                : new CodecError(
+                      `'${name}' = '${String(tag)}' is refused by each option that writes it: ${refused.map((one) => one.reason).join('; ')}`,
+                  )
+        }
     }
     return plain
 }
 
 /**
- * The value that a member's tag decodes to at each key, or `undefined` where a key decodes to no
- * value that construction can read: the tag names no one literal, or the adapter returns a
- * refusal. The reader is {@link decodedTag}, which reads the stored literal as `assignmentOf` does,
- * through each `refine` and one `held`, as the model reads a tag. The caller's value is `g` of the
- * stored literal, because a `held` owes that the pair cancels. A throw of the adapter is a refusal
- * of the construction.
+ * The value that a member's tag decodes to at each key. The reader is {@link decodedTag}, which
+ * reads the stored literal as `assignmentOf` does, through each `refine` and one `held`, as the
+ * model reads a tag. `assignmentOf` refuses a tag that names no one literal before this read, so
+ * each tag here has one. The caller's value is `g` of the stored literal, because a `held` owes
+ * that the pair cancels. A refusal or a throw of the adapter is a refusal of the construction.
  */
-const decodedTagOf = (
-    ks: readonly string[],
-    body: Body,
-): Result<Readonly<Record<string, unknown>> | undefined> => {
+const decodedTagOf = (ks: readonly string[], body: Body): Result<Decoded> => {
     const out: Record<string, unknown> = {}
     for (const name of ks) {
         const field = own(body.fields, name)
@@ -1058,7 +1064,12 @@ const decodedTagOf = (
                 { cause },
             )
         }
-        if (value === undefined) return undefined
+        if (failed(value)) {
+            return restated(
+                value,
+                `'${name}' is a tag under the adapter of a caller, and the adapter refuses to read its own stored literal: ${value.reason}`,
+            )
+        }
         setOwn(out, name, value)
     }
     return out
@@ -1106,7 +1117,6 @@ export const membersOf = <V>(
     }
     // the law that `held` owes, `decode` then `encode` is the identity, stated at the tag table
     for (const [at, [assignment, member, decoded]] of out.entries()) {
-        if (decoded === undefined) continue
         for (const name of ks) {
             const said = `'${name}' = '${String(decoded[name])}'`
             // the member under check owes a write of its own value, so its refusal is the answer
@@ -1114,20 +1124,21 @@ export const membersOf = <V>(
             if (failed(own)) {
                 return restated(
                     own,
-                    `option ${at} decodes ${said}, and its adapter refuses to write that value: ${own.reason}`,
+                    `option ${at} decodes ${said}, and the write of that value refuses: ${own.reason}`,
                 )
             }
             const stored = storedTag(out, written, name, decoded[name])
             if (stored === assignment[name]) continue
             if (failed(stored)) {
-                return new CodecError(
-                    `option ${at} decodes ${said}, and a write of that value refuses: ${stored.reason}`,
+                return restated(
+                    stored,
+                    `option ${at} decodes ${said}, and a later write of that value refuses: ${stored.reason} — give the adapter a pure pair`,
                 )
             }
             const owner = out.findIndex(([one]) => one[name] === stored)
             return new CodecError(
                 owner < 0
-                    ? `option ${at} decodes ${said}, and a write of that value gives '${stored}', which no option carries — give the adapter a pair that cancels`
+                    ? `option ${at} decodes ${said}, and a later write of that value gives '${stored}', which no option carries — give the adapter a pure pair`
                     : `two options decode to ${said}, and a write of that value gives '${stored}', the text of option ${owner}, so option ${at} is never written — give them distinct values`,
             )
         }

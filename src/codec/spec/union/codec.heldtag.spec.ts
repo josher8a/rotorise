@@ -54,10 +54,12 @@ describe('a tag under a caller adapter', () => {
         expect(Pets.unsafeDecode(row)).toEqual(cat)
     })
 
-    it('refuses a tag that no variant writes, and names the stored literals', () => {
+    it('refuses a tag that no variant writes, with the reason of the variant that refuses it', () => {
         const refused = Pets.encode({ kind: 'bird' } as never)
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toContain("expected 'D', 'cat'")
+        expect((refused as CodecError).message).toContain(
+            'the held side of this `held`',
+        )
     })
 })
 

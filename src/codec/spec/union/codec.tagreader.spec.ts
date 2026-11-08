@@ -253,7 +253,7 @@ describe('two members that decode their tag to one value', () => {
                 ]),
             ),
         ).toThrow(
-            /option 0 decodes 'kind' = 'dog', and its adapter refuses to write that value: the adapter refuses its own value/,
+            /option 0 decodes 'kind' = 'dog', and the write of that value refuses: the adapter refuses its own value/,
         )
     })
 
@@ -372,5 +372,146 @@ describe('a key component whose adapter throws', () => {
             decode: (_: 'D'): 'dog' | CodecError => new CodecError('no dog'),
         })
         expect(constantOf(object({ kind: Kind }).spec.kind)).toBeUndefined()
+    })
+})
+
+describe('the write of a tag that refuses', () => {
+    const refusing = (v: 'dog'): v is 'dog' => v !== 'dog'
+
+    it('names the write and not the adapter where a refinement over the tag refuses the decoded tag', () => {
+        const refused = () =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: refine(DogTag, refusing), bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ] as never),
+            )
+        expect(refused).toThrow(CodecError)
+        expect(refused).toThrow(/and the write of that value refuses: /)
+        expect(refused).not.toThrow(/its adapter refuses/)
+    })
+
+    it('names no adapter at a key that holds no adapter', () => {
+        const none = (v: 'small'): v is 'small' => v !== 'small'
+        const refused = () =>
+            item(
+                mdunion(['kind', 'size'], [
+                    object({
+                        kind: DogTag,
+                        size: refine(string('small'), none),
+                        bark: string,
+                    }),
+                    object({
+                        kind: string('cat'),
+                        size: string('large'),
+                        lives: number,
+                    }),
+                ] as never) as never,
+            )
+        expect(refused).toThrow(/at size: .*the write of that value refuses/)
+        expect(refused).not.toThrow(/adapter/)
+    })
+
+    it('keeps the reason of the one member that refuses the value at encode, and lists no stored text', () => {
+        const DogOnly = held(string('D'), string, {
+            encode: (v: string) =>
+                v === 'dog'
+                    ? ('D' as const)
+                    : new CodecError('only dog is a dog'),
+            decode: (_: 'D') => 'dog',
+        })
+        const Pets = item(
+            discriminatedUnion('kind', [
+                object({ kind: DogOnly, bark: string }),
+                object({ kind: string('cat'), lives: number }),
+            ] as never),
+        ) as unknown as { encode: (value: unknown) => unknown }
+        const refused = Pets.encode({ kind: 'dgo', bark: 'woof' })
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).message).toMatch(/only dog is a dog/)
+        expect((refused as CodecError).message).not.toMatch(/expected 'D'/)
+    })
+
+    it('gives the reason of each member that refuses the value at encode', () => {
+        const DogOnly = held(string('D'), string, {
+            encode: (v: string) =>
+                v === 'dog'
+                    ? ('D' as const)
+                    : new CodecError('only dog is a dog'),
+            decode: (_: 'D') => 'dog',
+        })
+        const CatOnly = held(string('C'), string, {
+            encode: (v: string) =>
+                v === 'cat'
+                    ? ('C' as const)
+                    : new CodecError('only cat is a cat'),
+            decode: (_: 'C') => 'cat',
+        })
+        const Pets = item(
+            discriminatedUnion('kind', [
+                object({ kind: DogOnly, bark: string }),
+                object({ kind: CatOnly, lives: number }),
+            ] as never),
+        ) as unknown as { encode: (value: unknown) => unknown }
+        const refused = Pets.encode({ kind: 'dgo', bark: 'woof' })
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).message).toMatch(/only dog is a dog/)
+        expect((refused as CodecError).message).toMatch(/only cat is a cat/)
+    })
+})
+
+describe('a tag whose adapter breaks the pair that it owes', () => {
+    it('is refused where the adapter refuses to read its own stored literal, as it is where the adapter throws', () => {
+        const Unread = held(string('D'), string('dog'), {
+            encode: (_: 'dog') => 'D' as const,
+            decode: (_: 'D') =>
+                new CodecError('the adapter refuses its own literal'),
+        })
+        expect(() =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: Unread, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ] as never),
+            ),
+        ).toThrow(/the adapter refuses its own literal/)
+    })
+
+    it('is refused at construction where a later write of the adapter refuses the value', () => {
+        let calls = 0
+        const Flaky = held(string('D'), string('dog'), {
+            encode: (_: 'dog') =>
+                ++calls === 1
+                    ? ('D' as const)
+                    : new CodecError('the second write refuses'),
+            decode: (_: 'D') => 'dog' as const,
+        })
+        expect(() =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: Flaky, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ] as never),
+            ),
+        ).toThrow(
+            /a later write of that value refuses: .*the second write refuses/,
+        )
+    })
+
+    it('is refused at construction where a later write of the adapter gives a text that the tag does not hold', () => {
+        let calls = 0
+        const Moves = held(string('D'), string('dog'), {
+            encode: (_: 'dog') =>
+                ++calls === 1 ? ('D' as const) : ('E' as never),
+            decode: (_: 'D') => 'dog' as const,
+        })
+        expect(() =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: Moves, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ] as never),
+            ),
+        ).toThrow(/a later write of that value refuses: .*'E'/)
     })
 })
