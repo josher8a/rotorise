@@ -25,11 +25,31 @@ import {
 } from '../lean'
 
 type Pairs = readonly (readonly [string, string])[]
-/** A change: a written value, or `null` where the change removes the attribute. */
-type Changes = readonly (readonly [string, string | null])[]
+/** The value of a change at a name: a string, `null` where the change removes the attribute, or an object. */
+type Value = string | null | { readonly [key: string]: Value }
+/** A change: a value at each written name. */
+type Changes = readonly (readonly [string, Value])[]
+
+/**
+ * The entries of a change, as the model reads them: a string at its path, and a removal. An object
+ * replaces the attribute, so it is `null` at its path, and each name of the object is an entry
+ * below it.
+ */
+const flatten = (
+    name: string,
+    value: Value,
+): (readonly [string, string | null])[] =>
+    value === null || typeof value === 'string'
+        ? [[name, value]]
+        : [
+              [name, null],
+              ...Object.entries(value).flatMap(([key, below]) =>
+                  flatten(`${name}.${key}`, below),
+              ),
+          ]
 
 /** The change as the object that `keyUpdates` reads: a removal is an own property `undefined`. */
-const changeObject = (changed: Changes): Record<string, string | undefined> =>
+const changeObject = (changed: Changes): Record<string, unknown> =>
     Object.fromEntries(
         changed.map(([name, value]) => [name, value ?? undefined]),
     )
@@ -81,6 +101,8 @@ type Schema = {
     readonly name: string
     readonly keys: readonly KeyDefinition[]
     readonly decided: Pairs
+    /** The entry has no codec, so a name with a `.` is a path into an object. */
+    readonly plain?: boolean
 }
 
 type Host = {
@@ -123,7 +145,7 @@ const entryOf = (schema: Schema): Host => {
         .filter((key) => key.ofTable)
         .map((key) => key.name)
     return make(keys, {
-        codec,
+        ...(schema.plain ? {} : { codec }),
         ...(partition === undefined ? {} : { key: { partition, sort } }),
     })
 }
@@ -182,7 +204,7 @@ const rowOf = (
         name,
         keys,
         decided: schema.decided,
-        changed,
+        changed: changed.flatMap(([key, value]) => flatten(key, value)),
         separator,
         outcome: hostOutcome(entryOf(schema), schema, changed),
     }
@@ -218,6 +240,28 @@ const pets: Schema = {
             ),
         },
         { name: 'GSI4PK', tree: attr('nickname') },
+    ],
+}
+
+/** A pet and its owner: a key reads a path into the object of the owner, and the entry has no codec. */
+const owners: Schema = {
+    name: 'owners',
+    decided: [],
+    plain: true,
+    keys: [
+        { name: 'PK', tree: parts('petId'), ofTable: true },
+        { name: 'GSI1PK', tree: parts('owner.name') },
+    ],
+}
+
+/** A key that reads the whole attribute of the owner. */
+const wholes: Schema = {
+    name: 'wholes',
+    decided: [],
+    plain: true,
+    keys: [
+        { name: 'PK', tree: parts('petId'), ofTable: true },
+        { name: 'GSI1PK', tree: parts('owner') },
     ],
 }
 
@@ -313,6 +357,12 @@ const cases: readonly [string, Schema, Changes][] = [
         ],
     ],
     ['removes_a_decided_name', shipments, [['TAG', null]]],
+    ['writes_a_parent_of_a_component', owners, [['owner', { name: 'ann' }]]],
+    ['writes_an_empty_parent', owners, [['owner', {}]]],
+    ['removes_a_parent', owners, [['owner', null]]],
+    ['writes_a_child_of_a_component', wholes, [['owner.name', 'ann']]],
+    ['writes_a_sibling_of_a_component', owners, [['owner.age', '3']]],
+    ['writes_a_child_of_a_path', owners, [['owner.name.first', 'ann']]],
 ]
 
 const rows: readonly UpdateRow[] = cases.map(([name, schema, changed]) =>
@@ -384,6 +434,38 @@ describe('the key updates of the pool', () => {
     it('refuses as a rewrite where the change removes a discriminator, because the key then reads every arm', () => {
         expect(row('pets_removes_a_discriminator').outcome).toEqual({
             kind: 'rewrite',
+        })
+    })
+
+    it('rebuilds the key of a component below a written object, and reads its value from the object', () => {
+        expect(row('owners_writes_a_parent_of_a_component').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI1PK', 'NAME#ann']],
+        })
+    })
+
+    it('refuses to build the key of a component that a written parent leaves out, or removes', () => {
+        expect(row('owners_writes_an_empty_parent').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+        expect(row('owners_removes_a_parent').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+    })
+
+    it('refuses to build the key of a component above a written path', () => {
+        expect(row('wholes_writes_a_child_of_a_component').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+        expect(row('owners_writes_a_child_of_a_path').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+    })
+
+    it('leaves a key alone where the written path is no path above or below a component', () => {
+        expect(row('owners_writes_a_sibling_of_a_component').outcome).toEqual({
+            kind: 'patch',
+            entries: [],
         })
     })
 

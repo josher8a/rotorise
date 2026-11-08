@@ -4220,7 +4220,7 @@ const leanUpdateArm = (arm: UpdateArm): string =>
         ? `.leaf ⟨${arm.names.length}, [${arm.names
               .map(
                   (n) =>
-                      `Part.named ${leanString(n)} ${leanString(n.toUpperCase())}`,
+                      `Part.named ${leanString(n)} ${leanString((n.split('.').pop() ?? n).toUpperCase())}`,
               )
               .join(', ')}]⟩`
         : arm.kind === 'attr'

@@ -1126,11 +1126,12 @@ key. The static footprint is the footprint at the item that holds nothing, so th
 corollary of this rule.
 
 A key update is a function of the keys of the schema, the values that the codec decides, and a
-change. The update reads each key at the change over the decided values. A key is touched where its
-footprint holds a written name that the codec does not decide. A touched key of the table is a
-refusal. A touched key that lacks a component at that item is a refusal, where a component lacks when
-neither the change nor the codec holds the name. Any other touched key gives its key at that item,
-or no key at a `null` arm. The result is a refusal, or a patch. The patch maps each touched key to
+change. The update reads each key at the change over the decided values. A change reaches a written
+name, each path above it, and each path below it. A key is touched where its footprint holds a name
+that the change reaches and the codec does not decide. A touched key of the table is a refusal. A
+touched key that lacks a component at that item is a refusal, where a component lacks when the change
+does not reach the name and the codec does not decide it. Any other touched key gives its key at that
+item, or no key at a `null` arm. The result is a refusal, or a patch. The patch maps each touched key to
 the text that the key prints, or to no text. The member of a key is static, so the patch holds no
 member. The SET clause of an update writes the text as the attribute of the member of the key: a
 string at an `S` key, and a numeral at an `N` key. No text goes to the REMOVE clause.
@@ -1140,6 +1141,12 @@ the update reads has no value at the removed name. A removed name is held by the
 is built at that item. A key of one attribute then gives no key, and the update removes it. A key
 with a part that reads the removed name, and prints nothing where the value is absent, is a refusal,
 as the build of the changed item refuses.
+
+A write to a path replaces the attribute at the path. The item that the update reads is the decided
+values and the written names, so it holds no value at a path that the change reaches and does not
+write. The changed item has no value there either, except where the codec decides the name: a path
+below a written name is replaced, and a path above one holds an object. A written object is the entry
+of its path with no value, and the entries of its names below it.
 
 The update commutes with encode. Let `x` be an item that agrees with the decided values. Let `y` be
 `x` with the change applied. A key of the patch is the key of `y`. A key outside the patch has one

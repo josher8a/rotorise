@@ -21,6 +21,17 @@ namespace Calculus
 
 namespace DerivedKey
 
+/-- **The order of the names of a row.** A name is a path of names joined by `.`. A path is above
+    another where the characters of the first, and one `.`, begin the characters of the second. The
+    host refuses an empty name, so the prefix at a `.` is the prefix of the lists of names. A row
+    reads the characters of a string, so this instance is in the host bridge, and the key update
+    reads no string. -/
+instance : PathName String where
+  pre m n := decide (m.toList = n.toList) || (m.toList ++ ['.']).isPrefixOf n.toList
+  pre_refl n := by
+    rw [show decide (n.toList = n.toList) = true from decide_eq_true rfl]
+    rfl
+
 /-- The key of an item as the host gives it to a patch: a printed key, no key, or a throw. The host
     throws where a segment holds the separator, and where the spec selects nothing. -/
 def Out.written (c : Char) : Out → Option (Option String)
@@ -78,7 +89,7 @@ def sameNames (a b : List String) : Bool := a.all (b.contains ·) && b.all (a.co
 
 /-- The footprint that the host read at the given item, against the footprint of the model. -/
 def UpdateRow.footOk (r : UpdateRow) : Bool :=
-  let g : Item String := given (fun n => r.decided.lookup n) (fun n => r.changed.lookup n)
+  let g : Item String := given (fun n => r.decided.lookup n) ⟨r.changed⟩
   r.keys.all fun k => sameNames k.footprint (k.tree.foot g)
 
 /-- The comparator of a row: the footprints are the host's, and the result is the host's. -/

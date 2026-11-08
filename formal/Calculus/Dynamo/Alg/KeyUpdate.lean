@@ -104,19 +104,72 @@ theorem keyOf_congr {s : KeySpec N} (h : ∀ n, s.Reads n → i n = i' n) :
 
 /-! ## The key update -/
 
-/-- A change: at a written name, the written value, or `none` where the change removes the
-    attribute. A name that the change does not write has no entry. -/
-abbrev Change (N : Type) := N → Option (Option String)
+/-- **The order of the names that a key reads.** `pre m n` holds where the path `m` is the path `n`,
+    or a path above it: a prefix at a name. The host reads a write to a path as a write to each
+    path above it and below it, and reads a path as held by a given name above it. The order is a
+    decidable `Bool`, so no decision reads a classical instance. -/
+class PathName (N : Type) where
+  pre : N → N → Bool
+  pre_refl : ∀ n, pre n n = true
 
-/-- The change over an item: a written name has the written value, a removed name has no value, and
-    any other name has the value of the item. -/
-def applied (ch : Change N) (x : Item N) : Item N :=
+variable [DecidableEq N] [PathName N]
+
+/-- A change: finitely many written names, each with a value, or with `none` where the change
+    removes the attribute. A name that the change does not write has no entry. The host change is
+    an object with finitely many own properties. -/
+structure Change (N : Type) where
+  entries : List (N × Option String)
+
+/-- The entry of a change at a name. -/
+def Change.apply (ch : Change N) (n : N) : Option (Option String) := ch.entries.lookup n
+
+instance : CoeFun (Change N) (fun _ => N → Option (Option String)) := ⟨Change.apply⟩
+
+omit [PathName N] in
+/-- **A name that the lookup finds is in the list.** -/
+theorem lookup_mem {β : Type} :
+    ∀ (l : List (N × β)) (n : N) (w : β), l.lookup n = some w → (n, w) ∈ l
+  | [], n, w, h => by simp [List.lookup] at h
+  | (a, b) :: rest, n, w, h => by
+      rcases Decidable.em (n = a) with hn | hn
+      · subst hn
+        simp only [List.lookup, beq_self_eq_true] at h
+        have := Option.some.inj h
+        subst this
+        exact List.mem_cons_self
+      · have hb : (n == a) = false := by simpa using hn
+        simp only [List.lookup, hb] at h
+        exact List.mem_cons_of_mem _ (lookup_mem rest n w h)
+
+/-- **The names that a change reaches**: each name that is a written name, above one, or below one.
+    The host decides the same relation for a component and a written name. -/
+def reached (ch : Change N) (n : N) : Bool :=
+  ch.entries.any fun e => PathName.pre e.1 n || PathName.pre n e.1
+
+/-- **A written name is reached.** -/
+theorem reached_of_apply {ch : Change N} {n : N} {v : Option String} (h : ch n = some v) :
+    reached ch n = true := by
+  have hm := lookup_mem ch.entries n v h
+  simp only [reached, List.any_eq_true]
+  exact ⟨(n, v), hm, by simp [PathName.pre_refl]⟩
+
+/-- **The item that the update reads**: the change over the decided values. The host builds it as
+    `{ ...decided, ...changed }`, and never reads the item that the entry replaces. So a name that
+    the change does not write has the decided value, or none. -/
+def given (d : Item N) (ch : Change N) : Item N :=
   fun n => match ch n with
     | some v => v
-    | none => x n
+    | none => d n
 
-/-- **The item that the update reads**: the change over the decided values. -/
-abbrev given (d : Item N) (ch : Change N) : Item N := applied ch d
+/-- The change over an item: a written name has the written value, a removed name has no value, and
+    a name that the change reaches without writing it has no value, because it is below a written
+    name, which replaces the attribute, or above one, which then holds an object. A name that the
+    codec decides keeps the value of the item, because the codec writes it again. Any other name has
+    the value of the item. -/
+def applied (d : Item N) (ch : Change N) (x : Item N) : Item N :=
+  fun n => match ch n with
+    | some v => v
+    | none => if reached ch n && (d n).isNone then none else x n
 
 /-- A key of the schema: the name, the spec, whether the key is the key of the table, and the
     footprint of the spec at an item as a list, with the proof that the list is the predicate. -/
@@ -141,16 +194,19 @@ inductive Step where
   | refused (r : Refusal)
   | written (v : Option String)
 
-/-- A key is touched where the footprint at the given item holds a written name that the codec does
-    not decide. A removal is a write. -/
+/-- A key is touched where the footprint at the given item holds a name that the change reaches and
+    the codec does not decide. A removal is a write, and a write to a path reaches the paths above
+    it and below it. -/
 def KeyDef.touched (k : KeyDef N) (d : Item N) (ch : Change N) : Bool :=
-  (k.foot (given d ch)).any fun n => (ch n).isSome && (d n).isNone
+  (k.foot (given d ch)).any fun n => reached ch n && (d n).isNone
 
-/-- A key lacks a component where the footprint holds a name that is held by neither the change nor
-    the codec. A removal holds the name: the change names the attribute, so the key is built from
-    the given item, which has no value there, and the build gives a refusal or no key. -/
+/-- A key lacks a component where the footprint holds a name that the change does not reach and the
+    codec does not decide. A name that the change reaches is held: a removal, or a write above or
+    below it, so the key is built from the given item, which has no value there, and the build
+    gives a refusal or no key. The host reads a name below a decided name as held, and a decided
+    name is a constant, so it has no name below it. -/
 def KeyDef.lacks (k : KeyDef N) (d : Item N) (ch : Change N) : Bool :=
-  (k.foot (given d ch)).any fun n => (ch n).isNone && (d n).isNone
+  (k.foot (given d ch)).any fun n => !reached ch n && (d n).isNone
 
 /-- **The step of one key.** A touched key of the table, or a touched key that lacks a component, is
     a refusal. Any other touched key is the key of the given item. -/
@@ -183,14 +239,14 @@ inductive Verdict where
     The update refuses where the change writes a decided name at another value. Otherwise the first
     refusal of a key in order is the result, or the patch of the written keys. A change at a name
     is a value, or `none` for a removal, and a removal of a decided name writes another value. -/
-def update [DecidableEq N] (print : Out → Option (Option String)) (keys : List (KeyDef N))
+def update (print : Out → Option (Option String)) (keys : List (KeyDef N))
     (dec : List (N × String)) (ch : List (N × Option String)) : Verdict :=
   if dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2) then .refused .decided
   else
-    match keys.findSome? fun k => (k.step print (fun n => dec.lookup n) (fun n => ch.lookup n)).refusal with
+    match keys.findSome? fun k => (k.step print (fun n => dec.lookup n) ⟨ch⟩).refusal with
     | some r => .refused r
     | none => .patch (keys.filterMap fun k =>
-        (k.step print (fun n => dec.lookup n) (fun n => ch.lookup n)).entry k)
+        (k.step print (fun n => dec.lookup n) ⟨ch⟩).entry k)
 
 /-- A change is consistent with the decided values where each written decided name has the decided
     value. A removal of a decided name is not consistent. -/
@@ -200,14 +256,14 @@ def Consistent (d : Item N) (ch : Change N) : Prop :=
 /-- The item that the update reads extends nothing but itself: a name that it holds is held by the
     change over any item that agrees with the decided values. -/
 theorem given_extends {d x : Item N} {ch : Change N} (hx : ∀ n v, d n = some v → x n = some v) :
-    ∀ n v, given d ch n = some v → applied ch x n = some v := by
+    ∀ n v, given d ch n = some v → applied d ch x n = some v := by
   intro n v h
   simp only [given, applied] at h ⊢
   cases hc : ch n with
   | some w => rw [hc] at h; exact h
   | none =>
       rw [hc] at h
-      exact hx n v h
+      simp [h, hx n v h]
 
 /-- **A written key is the key of the changed item.** The update gives `v` at a key, and the key of
     the item with the change applied is `v`. The proof reads the dynamic congruence at the given
@@ -216,7 +272,7 @@ theorem KeyDef.step_written {print : Out → Option (Option String)} {d x : Item
     {k : KeyDef N}
     {v : Option String}
     (hx : ∀ n v, d n = some v → x n = some v) (hs : k.step print d ch = .written v) :
-    print (keyOf false false (applied ch x) k.spec) = some v := by
+    print (keyOf false false (applied d ch x) k.spec) = some v := by
   unfold KeyDef.step at hs
   rcases Decidable.em (k.touched d ch = true) with ht | ht
   · rw [if_pos ht] at hs
@@ -234,19 +290,25 @@ theorem KeyDef.step_written {print : Out → Option (Option String)} {d x : Item
           have hw : w = v := by cases hs; rfl
           subst hw
           have hcong : keyOf false false (given d ch) k.spec =
-              keyOf false false (applied ch x) k.spec := by
+              keyOf false false (applied d ch x) k.spec := by
             refine keyOf_congr_at fun n hn => ?_
             have hmem : n ∈ k.foot (given d ch) := (k.foot_iff _ n).mp hn
-            have hheld : ¬ (ch n = none ∧ d n = none) := by
+            have hheld : ¬ (reached ch n = false ∧ d n = none) := by
               have := hlacks
               simp only [KeyDef.lacks, List.any_eq_false] at this
               simpa using this n hmem
             cases hc : ch n with
             | some w => simp [given, applied, hc]
             | none =>
-                cases hd : d n with
-                | none => exact absurd ⟨hc, hd⟩ hheld
-                | some u => simp [given, applied, hc, hd, hx n u hd]
+                cases hr : reached ch n with
+                | true =>
+                    cases hd : d n with
+                    | none => simp [given, applied, hc, hr, hd]
+                    | some u => simp [given, applied, hc, hr, hd, hx n u hd]
+                | false =>
+                    cases hd : d n with
+                    | none => exact absurd ⟨hr, hd⟩ hheld
+                    | some u => simp [given, applied, hc, hr, hd, hx n u hd]
           rw [← hcong]
           exact hb
   · rw [if_neg ht] at hs; cases hs
@@ -257,7 +319,7 @@ theorem KeyDef.step_untouched {print : Out → Option (Option String)} {d x : It
     {ch : Change N} {k : KeyDef N}
     (hc : Consistent d ch) (hx : ∀ n v, d n = some v → x n = some v)
     (hs : k.step print d ch = .untouched) :
-    keyOf false false (applied ch x) k.spec = keyOf false false x k.spec := by
+    keyOf false false (applied d ch x) k.spec = keyOf false false x k.spec := by
   have ht : k.touched d ch = false := by
     unfold KeyDef.step at hs
     rcases Decidable.em (k.touched d ch = true) with ht | ht
@@ -272,35 +334,27 @@ theorem KeyDef.step_untouched {print : Out → Option (Option String)} {d x : It
   refine keyOf_congr_at fun n hn => ?_
   have hmem : n ∈ k.foot (given d ch) :=
     (k.foot_iff _ n).mp (KeySpec.ReadsAt.mono (given_extends hx) hn)
-  have hnot : ¬ ((ch n).isSome = true ∧ (d n).isNone = true) := by
+  have hnot : ¬ (reached ch n = true ∧ (d n).isNone = true) := by
     intro h
     have := ht
     simp only [KeyDef.touched, List.any_eq_false] at this
     exact this n hmem (by simp [h.1, h.2])
   cases hcn : ch n with
-  | none => simp [applied, hcn]
+  | none =>
+      cases hr : reached ch n with
+      | false => simp [applied, hcn, hr]
+      | true =>
+          cases hd : d n with
+          | none => exact absurd ⟨hr, by simp [hd]⟩ hnot
+          | some u => simp [applied, hcn, hr, hd]
   | some w =>
+      have hr : reached ch n = true := reached_of_apply hcn
       cases hdn : d n with
-      | none => exact absurd ⟨by simp [hcn], by simp [hdn]⟩ hnot
+      | none => exact absurd ⟨hr, by simp [hdn]⟩ hnot
       | some u =>
           have hwu : w = some u := hc n w u hcn hdn
           subst hwu
           simp [applied, hcn, hx n u hdn]
-
-/-- **A name that the lookup finds is in the list.** -/
-theorem lookup_mem [DecidableEq N] {β : Type} :
-    ∀ (l : List (N × β)) (n : N) (w : β), l.lookup n = some w → (n, w) ∈ l
-  | [], n, w, h => by simp [List.lookup] at h
-  | (a, b) :: rest, n, w, h => by
-      rcases Decidable.em (n = a) with hn | hn
-      · subst hn
-        simp only [List.lookup, beq_self_eq_true] at h
-        have := Option.some.inj h
-        subst this
-        exact List.mem_cons_self
-      · have hb : (n == a) = false := by simpa using hn
-        simp only [List.lookup, hb] at h
-        exact List.mem_cons_of_mem _ (lookup_mem rest n w h)
 
 /-- **The update commutes with encode.** Where the update gives a patch `P`, and `x` is an item that
     agrees with the decided values, the key part of `x` with the change applied is the key part of
@@ -309,16 +363,16 @@ theorem lookup_mem [DecidableEq N] {β : Type} :
     host: the change agrees with the decided values (the host checks it first), the item agrees
     with the decided values (the codec decides them), and the names of the keys differ (the keys
     of an object). -/
-theorem update_commute [DecidableEq N] {print : Out → Option (Option String)}
+theorem update_commute {print : Out → Option (Option String)}
     {keys : List (KeyDef N)}
     {dec : List (N × String)} {ch : List (N × Option String)} {P : List (String × Option String)}
     (hnd : (keys.map KeyDef.name).Nodup) (hP : update print keys dec ch = .patch P)
     {x : Item N} (hx : ∀ n v, dec.lookup n = some v → x n = some v) :
     ∀ k ∈ keys,
       (∀ v, (k.name, v) ∈ P →
-        print (keyOf false false (applied (fun n => ch.lookup n) x) k.spec) = some v) ∧
+        print (keyOf false false (applied (fun n => dec.lookup n) ⟨ch⟩ x) k.spec) = some v) ∧
       ((∀ v, (k.name, v) ∉ P) →
-        keyOf false false (applied (fun n => ch.lookup n) x) k.spec =
+        keyOf false false (applied (fun n => dec.lookup n) ⟨ch⟩ x) k.spec =
           keyOf false false x k.spec) := by
   unfold update at hP
   rcases Decidable.em (dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2) = true) with hdec | hdec
@@ -328,14 +382,15 @@ theorem update_commute [DecidableEq N] {print : Out → Option (Option String)}
       cases h : dec.any (fun p => (ch.lookup p.1).any fun v => v != some p.2)
       · rfl
       · exact absurd h hdec
-    have hcons : Consistent (fun n => dec.lookup n) (fun n => ch.lookup n) := by
+    have hcons : Consistent (fun n => dec.lookup n) ⟨ch⟩ := by
       intro n v w hv hw
+      have hv' : ch.lookup n = some v := hv
       have hmem := lookup_mem dec n w hw
       have := List.any_eq_false.mp hdec' (n, w) hmem
-      simp only [hv, Option.any_some, bne_iff_ne, ne_eq] at this
+      simp only [hv', Option.any_some, bne_iff_ne, ne_eq] at this
       exact Decidable.of_not_not this
     cases hf : keys.findSome? (fun k =>
-        (k.step print (fun n => dec.lookup n) (fun n => ch.lookup n)).refusal) with
+        (k.step print (fun n => dec.lookup n) ⟨ch⟩).refusal) with
     | some r => rw [hf] at hP; cases hP
     | none =>
         rw [hf] at hP
@@ -346,7 +401,7 @@ theorem update_commute [DecidableEq N] {print : Out → Option (Option String)}
         · intro v hv
           rw [← hP'] at hv
           obtain ⟨k', hk', he⟩ := List.mem_filterMap.mp hv
-          cases hs : k'.step print (fun n => dec.lookup n) (fun n => ch.lookup n) with
+          cases hs : k'.step print (fun n => dec.lookup n) ⟨ch⟩ with
           | untouched => rw [hs] at he; cases he
           | refused r => rw [hs] at he; cases he
           | written w =>
@@ -359,7 +414,7 @@ theorem update_commute [DecidableEq N] {print : Out → Option (Option String)}
               subst hkk
               exact KeyDef.step_written hx hs
         · intro hnot
-          cases hs : k.step print (fun n => dec.lookup n) (fun n => ch.lookup n) with
+          cases hs : k.step print (fun n => dec.lookup n) ⟨ch⟩ with
           | untouched => exact KeyDef.step_untouched hcons hx hs
           | refused r =>
               have := hnone k hk
@@ -542,8 +597,9 @@ def KeyDef.ofTree {N : Type} (name : String) (t : Tree N) (ofTable : Bool) : Key
 
 /-! ## The blocks -/
 
-/-- The change off the decided names: the written names that the codec does not decide. -/
-def Written (d : Item N) (ch : Change N) (n : N) : Prop := (ch n).isSome = true ∧ d n = none
+/-- The change off the decided names: the names that the change reaches and the codec does not
+    decide. -/
+def Written (d : Item N) (ch : Change N) (n : N) : Prop := reached ch n = true ∧ d n = none
 
 /-- Two names are tied where one key reads both at the given item, and the codec decides neither. -/
 def Tie (keys : List (KeyDef N)) (d : Item N) (ch : Change N) (n m : N) : Prop :=
@@ -558,6 +614,7 @@ inductive Tied (keys : List (KeyDef N)) (d : Item N) (ch : Change N) : N → N �
 def UnionOfBlocks (keys : List (KeyDef N)) (d : Item N) (ch : Change N) (W : N → Prop) : Prop :=
   ∀ n m, Tied keys d ch n m → W n → W m
 
+omit [PathName N] in
 /-- **A union of blocks is a set that one tie does not leave.** -/
 theorem unionOfBlocks_iff {keys : List (KeyDef N)} {d : Item N} {ch : Change N} {W : N → Prop} :
     UnionOfBlocks keys d ch W ↔ ∀ n m, Tie keys d ch n m → W n → W m := by
@@ -571,17 +628,18 @@ theorem KeyDef.touched_iff {k : KeyDef N} {d : Item N} {ch : Change N} :
     k.touched d ch = true ↔ ∃ n ∈ k.foot (given d ch), Written d ch n := by
   simp [KeyDef.touched, Written, List.any_eq_true]
 
-/-- A key lacks a component where the footprint holds a name that neither the change nor the codec
-    holds. -/
+/-- A key lacks a component where the footprint holds a name that the change does not reach and the
+    codec does not decide. -/
 theorem KeyDef.lacks_iff {k : KeyDef N} {d : Item N} {ch : Change N} :
-    k.lacks d ch = true ↔ ∃ n ∈ k.foot (given d ch), ch n = none ∧ d n = none := by
+    k.lacks d ch = true ↔ ∃ n ∈ k.foot (given d ch), reached ch n = false ∧ d n = none := by
   simp [KeyDef.lacks, List.any_eq_true]
 
+omit [PathName N] in
 /-- **The given item lacks a name where the change removes it, or neither the change nor the codec
     holds it.** A removal is the one write that leaves the name without a value. -/
 theorem given_eq_none {d : Item N} {ch : Change N} {n : N} :
     given d ch n = none ↔ ch n = some none ∨ (ch n = none ∧ d n = none) := by
-  simp only [given, applied]
+  simp only [given]
   cases hc : ch n with
   | none => simp
   | some v => cases v <;> simp
@@ -595,20 +653,20 @@ theorem noLacks_iff_unionOfBlocks {keys : List (KeyDef N)} {d : Item N} {ch : Ch
   constructor
   · rintro h n m ⟨k, hk, hn, hm, dn, dm⟩ wn
     have hl := h k hk (KeyDef.touched_iff.mpr ⟨n, hn, wn⟩)
-    have hh : ¬ (ch m = none ∧ d m = none) := fun e =>
+    have hh : ¬ (reached ch m = false ∧ d m = none) := fun e =>
       absurd (KeyDef.lacks_iff.mpr ⟨m, hm, e⟩) (by simp [hl])
     refine ⟨?_, dm⟩
-    cases hc : ch m with
-    | some _ => rfl
-    | none => exact absurd ⟨hc, dm⟩ hh
+    cases hr : reached ch m with
+    | true => rfl
+    | false => exact absurd ⟨hr, dm⟩ hh
   · intro h k hk ht
     obtain ⟨n, hn, wn⟩ := KeyDef.touched_iff.mp ht
     cases hl : k.lacks d ch with
     | false => rfl
     | true =>
-        obtain ⟨m, hm, hcm, hdm⟩ := KeyDef.lacks_iff.mp hl
+        obtain ⟨m, hm, hrm, hdm⟩ := KeyDef.lacks_iff.mp hl
         have := (h n m ⟨k, hk, hn, hm, wn.2, hdm⟩ wn).1
-        rw [hcm] at this
+        rw [hrm] at this
         cases this
 
 /-- **The refusal rule is: the change is a union of blocks, and no block of the change holds a
@@ -650,6 +708,7 @@ theorem printed_false_of_none : ∀ {ps : List (Option Comp)}, none ∈ ps → p
 /-- A leaf of plain parts: a part prints nothing where the attribute that it reads has no value. -/
 def Leaf.Plain (l : Leaf N) : Prop := ∀ p ∈ l.comps, p.print none = none
 
+omit [DecidableEq N] [PathName N] in
 /-- **A leaf of plain parts gives no key at an item that lacks an attribute that a part reads.** The
     strict build prints each part, so an absent part is a refusal. -/
 theorem keyOf_leaf_removed {l : Leaf N} (hp : l.Plain) {p : Part N} (hpm : p ∈ l.comps) {n : N}
@@ -674,8 +733,8 @@ theorem KeyDef.step_removal_leaf {print : Out → Option (Option String)} (hprin
       simp only [Arm.reads, Leaf.reads, List.mem_flatMap]
       exact ⟨p, hpm, by simp [hn]⟩))
   have ht : k.touched d ch = true :=
-    KeyDef.touched_iff.mpr ⟨n, hmem, by simp [Written, hch, hd]⟩
-  have hg : given d ch n = none := by simp [given, applied, hch]
+    KeyDef.touched_iff.mpr ⟨n, hmem, by simp [Written, reached_of_apply hch, hd]⟩
+  have hg : given d ch n = none := by simp [given, hch]
   have hk : keyOf false false (given d ch) k.spec = .refused := by
     rw [hs]; exact keyOf_leaf_removed hp hpm hn hg
   simp [KeyDef.step, ht, hT, hl, hk, hprint]
@@ -690,7 +749,7 @@ theorem KeyDef.step_removal_attr {print : Out → Option (Option String)}
   have hmem : n ∈ k.foot (given d ch) :=
     (k.foot_iff _ n).mp (hs ▸ KeySpec.ReadsAt.arm (by simp [Arm.reads]))
   have ht : k.touched d ch = true :=
-    KeyDef.touched_iff.mpr ⟨n, hmem, by simp [Written, hch, hd]⟩
+    KeyDef.touched_iff.mpr ⟨n, hmem, by simp [Written, reached_of_apply hch, hd]⟩
   have hl : k.lacks d ch = false := by
     simp only [KeyDef.lacks, List.any_eq_false]
     intro m hm
@@ -700,8 +759,8 @@ theorem KeyDef.step_removal_attr {print : Out → Option (Option String)}
     | arm h =>
         have : m = n := by simpa [Arm.reads] using h
         subst this
-        simp [hch]
-  have hg : given d ch n = none := by simp [given, applied, hch]
+        simp [reached_of_apply hch]
+  have hg : given d ch n = none := by simp [given, hch]
   have hk : keyOf false false (given d ch) k.spec = .nothing := by
     rw [hs]; simp [keyOf, select, Arm.key, hg]
   simp [KeyDef.step, ht, hT, hl, hk, hprint]
