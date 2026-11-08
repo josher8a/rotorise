@@ -160,7 +160,7 @@ describe('a key component with a codec', () => {
         ).toThrow(refused)
         expect(() =>
             tableEntry<Noted>()(
-                // @ts-expect-error a key of one attribute at that path is refused too
+                // @ts-expect-error a key of one attribute at a path is a component too, and a path cannot go into refine
                 { PK: ['id'], SK: 'meta.note' },
                 { codec },
             ),
@@ -217,7 +217,7 @@ describe('a key component with a codec', () => {
         ).toThrow(/'meta\.note' is a component of a key/)
     })
 
-    it('refuses at construction a path below an adapter of a caller', () => {
+    it('refuses a path below an adapter of a caller, in the type and at construction', () => {
         const noteSchema: StandardSchemaV1<{ readonly note: string }> = {
             '~standard': {
                 version: 1,
@@ -231,6 +231,7 @@ describe('a key component with a codec', () => {
         })
         expect(() =>
             tableEntry<{ id: string; meta: { readonly note: string } }>()(
+                // @ts-expect-error a path cannot go into an adapter
                 { PK: ['id'], SK: ['meta.note'] },
                 { codec: { id: string, meta: wholeNote } },
             ),

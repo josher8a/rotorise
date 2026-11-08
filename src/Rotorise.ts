@@ -20,6 +20,7 @@ import type {
     KnownKeys,
     ObjectOf,
     ObjectSlot,
+    ObjectStored,
     PathBlocked,
     PathOf,
     Result,
@@ -452,20 +453,22 @@ type ComputeTableKeyType<
       >
     : Spec extends keyof Entity
       ? Replace<TextAt<Entity, Spec, CodecSpec>, null, undefined>
-      : Spec extends null
-        ? NullAs
-        : Spec extends DiscriminatedSchemaShape
-          ? ComputeTableKeyType<
-                Entity,
-                ValueOf<
-                    Spec['spec'],
-                    ValueOfKey<Entity, Spec['discriminator']>
-                >,
-                Separator,
-                NullAs,
-                CodecSpec
-            >
-          : never
+      : Spec extends AnyPath
+        ? PathText<Entity, Spec, CodecSpec>
+        : Spec extends null
+          ? NullAs
+          : Spec extends DiscriminatedSchemaShape
+            ? ComputeTableKeyType<
+                  Entity,
+                  ValueOf<
+                      Spec['spec'],
+                      ValueOfKey<Entity, Spec['discriminator']>
+                  >,
+                  Separator,
+                  NullAs,
+                  CodecSpec
+              >
+            : never
 
 type TableEntryImpl<
     Entity,
@@ -486,7 +489,11 @@ type TableEntryImpl<
                         never,
                         CodecSpec
                     >
-                  : Schema[Key] extends keyof Entity | InputSpecShape | null
+                  : Schema[Key] extends
+                          | keyof Entity
+                          | InputSpecShape
+                          | AnyPath
+                          | null
                     ? ComputeTableKeyType<
                           Entity,
                           Schema[Key],
@@ -556,6 +563,18 @@ type NameOf<E, P extends string> = P extends `${string}.${string}`
         ? Uppercase<P>
         : Uppercase<LastName<P>>
     : Uppercase<P>
+
+/** The text that a key of one attribute at a path prints: the value at the path of the view of the entity. */
+type PathText<Entity, Spec extends string, CodecSpec> = Replace<
+    ValueAt<TextView<Entity, CodecSpec>, Spec>,
+    null,
+    undefined
+>
+
+/** The attributes of a call for a key of one attribute at a path: the object that holds the value, for each option. */
+type PathAttributes<Entity, P extends string> = Entity extends unknown
+    ? AtPath<P, ValueAt<Entity, P>>
+    : never
 
 /** The object that holds one value at a path. */
 type AtPath<
@@ -1113,6 +1132,7 @@ type extractHeadOrPass<T> = T extends readonly unknown[] ? T[0] : T
 type FullKeySpecSimple<Entity> =
     | NonEmptyArray<InputSpec<MergeIntersectionObject<Entity>>>
     | (keyof Entity & string)
+    | AnyPath
     | null
 
 /**
@@ -1692,7 +1712,11 @@ type ProcessSpecType<
     Spec,
     Config extends SpecConfigShape,
 > = Spec extends string
-    ? DistributivePick<Entity, Spec>
+    ? Spec extends keyof Entity
+        ? DistributivePick<Entity, Spec>
+        : Spec extends AnyPath
+          ? PathAttributes<Entity, Spec>
+          : never
     : Spec extends InputSpecShape
       ? CompositeKeyParamsImpl<
             Entity,
@@ -1842,30 +1866,32 @@ type ProcessKey<
       ? never
       : Spec extends keyof Entity
         ? Replace<Entity[Spec], null, undefined>
-        : Spec extends InputSpecShape
-          ? CompositeKeyBuilderImpl<
-                TextView<Entity, CodecSpec>,
-                Spec,
-                Separator,
-                Exclude<Config['depth'], undefined>,
-                Exclude<Config['allowPartial'], undefined>,
-                [Config['enforceBoundary']] extends [true] ? true : false
-            >
-          : Spec extends null | undefined
-            ? NullAs
-            : Spec extends DiscriminatedSchemaShape
-              ? ProcessKey<
-                    Entity,
-                    ValueOf<
-                        Spec['spec'],
-                        ValueOfKey<Entity, Spec['discriminator']>
-                    >,
-                    Separator,
-                    NullAs,
-                    Config,
-                    CodecSpec
-                >
-              : ErrorMessage<'Invalid Spec'>
+        : Spec extends AnyPath
+          ? PathText<Entity, Spec, CodecSpec>
+          : Spec extends InputSpecShape
+            ? CompositeKeyBuilderImpl<
+                  TextView<Entity, CodecSpec>,
+                  Spec,
+                  Separator,
+                  Exclude<Config['depth'], undefined>,
+                  Exclude<Config['allowPartial'], undefined>,
+                  [Config['enforceBoundary']] extends [true] ? true : false
+              >
+            : Spec extends null | undefined
+              ? NullAs
+              : Spec extends DiscriminatedSchemaShape
+                ? ProcessKey<
+                      Entity,
+                      ValueOf<
+                          Spec['spec'],
+                          ValueOfKey<Entity, Spec['discriminator']>
+                      >,
+                      Separator,
+                      NullAs,
+                      Config,
+                      CodecSpec
+                  >
+                : ErrorMessage<'Invalid Spec'>
 
 type OptimizedBuiltKey<
     Entity,
@@ -1920,7 +1946,7 @@ type OptimizedBuiltKey<
  * The entity as a key prints it. A component of a key prints the stored text of its attribute, so
  * a field under the adapter of a caller prints the stored literal where the entity holds the
  * caller's value. A variant spec declares one field per variant, and the text is the union of the
- * texts of the variants that declare the field. An attribute that an `object` codec writes prints
+ * texts of the variants that {@link VariantFor} names for the call. An attribute that an `object` codec writes prints
  * as the view of that object, so a path reads the text of the field below.
  */
 type TextView<Entity, CodecSpec> = [CodecSpec] extends [undefined]
@@ -1929,7 +1955,7 @@ type TextView<Entity, CodecSpec> = [CodecSpec] extends [undefined]
 
 declare const unaddressable: unique symbol
 
-/** What a path below a `refine` or a `legacy` reads: no codec states a stored text there. */
+/** What a path below a `refine`, a `legacy` or a `held` reads: no codec states a stored text there. */
 type Unaddressable = { readonly [unaddressable]: true }
 
 /** The value below a field that a path cannot go into: each leaf is {@link Unaddressable}. */
@@ -1944,14 +1970,16 @@ type TextAt<Entity, K extends PropertyKey, CodecSpec> = [CodecSpec] extends [
     ? Entity[K & keyof Entity]
     : FieldOf<
             IsVariantSpec<CodecSpec> extends true
-                ? VariantsOf<CodecSpec>
+                ? VariantFor<Entity, CodecSpec>
                 : CodecSpec,
             K
         > extends infer Field
       ? [Field] extends [never]
           ? Entity[K & keyof Entity]
           : true extends PathBlocked<Field>
-            ? BelowBlocked<Entity[K & keyof Entity]>
+            ? true extends ObjectStored<Field>
+                ? BelowBlocked<Entity[K & keyof Entity]>
+                : KeyText<Entity[K & keyof Entity], Field>
             : Field extends { readonly spec: infer Nested }
               ? Entity[K & keyof Entity] extends infer Value
                   ? Value extends object
@@ -1964,6 +1992,30 @@ type TextAt<Entity, K extends PropertyKey, CodecSpec> = [CodecSpec] extends [
 type VariantsOf<CodecSpec> = CodecSpec extends readonly unknown[]
     ? CodecSpec[number]
     : CodecSpec[keyof CodecSpec]
+
+/**
+ * The variants that a call names. A variant is named where each attribute of the call that the
+ * variant declares admits the value of the call, so `{ kind: 'cat' }` names the cat and not the
+ * dog. The call holds a part of the entity and the discriminator is no type parameter, so the
+ * type reads the attributes and not the name of the discriminator. **The narrowing:** where two
+ * variants declare every attribute that the call names and admit its values, the type stays the
+ * union of the two variants, as at the base. The text of a union of two codecs is the text that
+ * {@link KeyText} gives the union, which reads the variants that hold an adapter of a caller only.
+ * A call that names the discriminator with the tags of two variants, `{ kind: 'dog' | 'cat' }`,
+ * is such a call.
+ */
+type VariantFor<Attrs, CodecSpec> = [
+    NamedVariants<Attrs, VariantsOf<CodecSpec>>,
+] extends [never]
+    ? VariantsOf<CodecSpec>
+    : NamedVariants<Attrs, VariantsOf<CodecSpec>>
+type NamedVariants<Attrs, Variant> = Variant extends unknown
+    ? [Attrs] extends [
+          Pick<ObjectOf<Variant>, keyof Attrs & keyof ObjectOf<Variant>>,
+      ]
+        ? Variant
+        : never
+    : never
 
 type FieldOf<Spec, K> = Spec extends unknown
     ? K extends keyof Spec
@@ -1980,7 +2032,7 @@ type SingleText<Entity, Spec extends keyof Entity, CodecSpec> = [
           Entity[Spec],
           FieldOf<
               IsVariantSpec<CodecSpec> extends true
-                  ? VariantsOf<CodecSpec>
+                  ? VariantFor<Entity, CodecSpec>
                   : CodecSpec,
               Spec
           >
@@ -2975,11 +3027,13 @@ type PlainComponent = string | number | bigint | boolean | null | undefined
 /** The names that a key spec uses as a component: each list, at any depth of a match. */
 type ComponentsOf<Spec> = Spec extends readonly unknown[]
     ? Extract<Spec[number], string>
-    : Spec extends { readonly spec: infer Arms }
-      ? ComponentsOf<Arms[keyof Arms]>
-      : Spec extends { readonly cases: infer C }
-        ? ComponentsOf<ArmOfCases<C>>
-        : never
+    : Spec extends AnyPath
+      ? Spec
+      : Spec extends { readonly spec: infer Arms }
+        ? ComponentsOf<Arms[keyof Arms]>
+        : Spec extends { readonly cases: infer C }
+          ? ComponentsOf<ArmOfCases<C>>
+          : never
 
 /** The names that the specs of `Schema` use as a component. One test of the union is the cheap path. */
 type ComponentNames<Schema> = {
@@ -3002,7 +3056,7 @@ type RefuseObject<
       ? [ValueOfKey<E, Name>] extends [PlainComponent]
           ? unknown
           : ErrorMessage<`[tableEntry] '${Name}' holds an object, and ${Own} prints its toString. Give the attribute a codec that writes text or a number`>
-      : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path cannot go into refine or legacy. Address the attribute itself`>
+      : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path cannot go into refine, legacy or held. Address the attribute itself`>
 
 /**
  * The refusals of a key spec, on the component that is wrong, in a list and in each arm of a match.
@@ -3015,17 +3069,19 @@ type RefuseComponents<E, Enc, Spec> = Spec extends readonly unknown[]
               ? RefuseComponent<E, Enc, Spec[I]>
               : unknown
       }
-    : Spec extends { readonly spec: infer Arms }
-      ? { spec: { [L in keyof Arms]: RefuseComponents<E, Enc, Arms[L]> } }
-      : Spec extends { readonly cases: infer C }
-        ? {
-              cases: {
-                  [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
-                      ? readonly [unknown, RefuseComponents<E, Enc, Arm>]
-                      : unknown
-              }
-          }
-        : unknown
+    : Spec extends AnyPath
+      ? RefuseComponent<E, Enc, Spec>
+      : Spec extends { readonly spec: infer Arms }
+        ? { spec: { [L in keyof Arms]: RefuseComponents<E, Enc, Arms[L]> } }
+        : Spec extends { readonly cases: infer C }
+          ? {
+                cases: {
+                    [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
+                        ? readonly [unknown, RefuseComponents<E, Enc, Arm>]
+                        : unknown
+                }
+            }
+          : unknown
 
 /**
  * One component. An entry with no codec prints the value, so an object is refused. An entry with a
@@ -3103,8 +3159,13 @@ type ManyCharacters<S extends string> = string extends S
 /**
  * The check of a short codec: the spec decodes to the entity.
  *
- * Each field decodes to a type that the entity admits, and a field that the codec reads as optional
- * is optional in the entity. Each attribute that the entity states has a field. The spec names no
+ * Each field decodes to a key that the entity admits, as a key and not only as a value: the object
+ * that holds the one key is assignable to the entity. `optional` is a key that the type may lack,
+ * and `undefinable` is a key that is always there and may hold `undefined`. Under
+ * `exactOptionalPropertyTypes` the two are two types, so `optional` is refused where the entity
+ * requires the key, and `undefinable` where the entity makes the key optional. A required field is
+ * admitted where the entity makes the key optional. Each attribute that the entity states has a
+ * field. The spec names no
  * attribute that the entity lacks. A refusal lands on the field that is wrong, or on the spec where
  * a field is missing. A built codec states its own decoded type, so it passes unchecked here.
  */
@@ -3114,7 +3175,9 @@ type ShortCodecCheck<E, S> = [S] extends [undefined]
       ? unknown
       : {
             readonly [K in keyof S]: K extends keyof E
-                ? [ObjectOf<S>[K & keyof ObjectOf<S>]] extends [E[K]]
+                ? [Pick<ObjectOf<S>, K & keyof ObjectOf<S>>] extends [
+                      Pick<E, K>,
+                  ]
                     ? unknown
                     : ErrorMessage<`[tableEntry] '${K & string}' decodes to a type that the entity does not admit`>
                 : ErrorMessage<`[tableEntry] the entity has no attribute '${K & string}'`>

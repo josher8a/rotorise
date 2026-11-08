@@ -511,6 +511,7 @@ describe('DynamoDB Utils', () => {
                     | 'b'
                     | 'c'
                     | 'z'
+                    | `${string}.${string}`
                     | NonEmptyArray<
                           | 'a'
                           | 'b'
@@ -534,6 +535,7 @@ describe('DynamoDB Utils', () => {
                                   | 'b'
                                   | 'c'
                                   | 'z'
+                                  | `${string}.${string}`
                                   | NonEmptyArray<
                                         | 'a'
                                         | 'b'
@@ -556,6 +558,7 @@ describe('DynamoDB Utils', () => {
                                   | 'b'
                                   | 'c'
                                   | 'z'
+                                  | `${string}.${string}`
                                   | NonEmptyArray<
                                         | 'a'
                                         | 'b'
@@ -584,6 +587,7 @@ describe('DynamoDB Utils', () => {
                                   | 'b'
                                   | 'c'
                                   | 'z'
+                                  | `${string}.${string}`
                                   | NonEmptyArray<
                                         | 'a'
                                         | 'b'
@@ -618,6 +622,7 @@ describe('DynamoDB Utils', () => {
                                                 | 'b'
                                                 | 'c'
                                                 | 'z'
+                                                | `${string}.${string}`
                                                 | NonEmptyArray<
                                                       | 'a'
                                                       | 'b'
@@ -657,6 +662,7 @@ describe('DynamoDB Utils', () => {
                                                 | 'b'
                                                 | 'c'
                                                 | 'z'
+                                                | `${string}.${string}`
                                                 | NonEmptyArray<
                                                       | 'a'
                                                       | 'b'
@@ -1195,6 +1201,7 @@ describe('DynamoDB Utils', () => {
                     string,
                     | 'a'
                     | 'b'
+                    | `${string}.${string}`
                     | NonEmptyArray<
                           | 'a'
                           | 'b'
@@ -1213,6 +1220,7 @@ describe('DynamoDB Utils', () => {
                                   | 'a'
                                   | 'b'
                                   | 'extra'
+                                  | `${string}.${string}`
                                   | NonEmptyArray<
                                         | 'a'
                                         | 'b'
@@ -1231,6 +1239,7 @@ describe('DynamoDB Utils', () => {
                               a2:
                                   | 'a'
                                   | 'b'
+                                  | `${string}.${string}`
                                   | NonEmptyArray<
                                         | 'a'
                                         | 'b'

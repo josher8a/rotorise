@@ -6856,8 +6856,8 @@ type CallerHeld<Field> = Field extends { readonly [termMarker]?: infer M }
 /**
  * The text that a field of an entity prints in a key, where the entity holds `Value`. A field under
  * the adapter of a caller prints the stored text, which the caller's value does not give: the
- * literal of the inner term where the inner term pins one, and `string` where it pins none. Any
- * other field prints its value.
+ * literal of the inner term where the inner term pins one, and `string` where it pins none. A
+ * `DynamoNumber` prints its digits, so it is `string`. Any other field prints its value.
  *
  * A key of one attribute reads this type too. That key holds the stored payload of an attribute
  * under the adapter of a caller, as the row does, because an entry that holds a value such as a
@@ -6869,19 +6869,47 @@ export type KeyText<Value, Field> = [Field] extends [never]
       ? [HeldStored<Field>] extends [never]
           ? string
           : HeldStored<Field>
-      : Value
+      : [Value] extends [DynamoNumber]
+        ? string
+        : Value
 
 /**
- * `true` where a path cannot go into the field: `at` gives a codec that refuses at a `refine` and at
- * a `legacy`, because the predicate reads the whole value and an older encoding has another shape.
+ * `true` where a path cannot go into the field: `at` gives a codec that refuses at a `refine`, at a
+ * `legacy` and at a `held`. The predicate of a `refine` reads the whole value, an older encoding
+ * has another shape, and an adapter converts the whole value. The field itself is no path, so a
+ * field of these kinds still prints its own text in a key: the block applies to the path below it.
  */
 export type PathBlocked<Field> = [Field] extends [never]
     ? false
     : Field extends { readonly [termMarker]?: infer M }
-      ? M extends ['refine', ...unknown[]] | ['legacy', unknown]
+      ? M extends
+            | ['refine', ...unknown[]]
+            | ['legacy', unknown]
+            | ['held', ...unknown[]]
           ? true
           : false
       : false
+
+/**
+ * `true` where the field stores an object, through each `refine`, `legacy` and `held`. A path below
+ * such a field is no path of the codec, so a key reads each leaf below it as no text. A field that
+ * stores a scalar under the same wrappers prints its own text.
+ */
+export type ObjectStored<Field> = [Field] extends [never]
+    ? false
+    : Field extends { readonly [termMarker]?: infer M }
+      ? StoresObject<M>
+      : false
+
+type StoresObject<M> = M extends ['refine', infer I, ...unknown[]]
+    ? StoresObject<I>
+    : M extends ['legacy', infer I]
+      ? StoresObject<I>
+      : M extends ['held', unknown, infer I, ...unknown[]]
+        ? StoresObject<I>
+        : M extends ['object', ...unknown[]]
+          ? true
+          : false
 
 /**
  * The tag values a variant answers to — its discriminator's whole admissible set, not one value.
@@ -7020,6 +7048,24 @@ type DiffersSomewhere<A, B, Ks extends readonly PropertyKey[]> = true extends {
     ? true
     : false
 
+/**
+ * Whether two options decode one value at a key where they store two texts. The run time refuses
+ * such a pair, because the write of the value reaches only one of the two stored texts. **The
+ * narrowing:** the type states the overlap of the decoded tags, and it compares the values by
+ * their types, so `1` and `'1'` are two values. The type does not state the lookup law of the
+ * run time: that the write of each decoded value gives the text of its own option. A caller
+ * adapter that does not write its own literal stays a refusal at construction.
+ */
+type DecodesTogether<A, B, Ks extends readonly PropertyKey[]> = true extends {
+    [K in Ks[number]]: [DecodedTags<A, K> & DecodedTags<B, K>] extends [never]
+        ? false
+        : [`${TagsOf<A, K>}` & `${TagsOf<B, K>}`] extends [never]
+          ? true
+          : false
+}[Ks[number]]
+    ? true
+    : false
+
 type SharedAssignmentsFrom<
     Head,
     Rest extends readonly unknown[],
@@ -7029,7 +7075,9 @@ type SharedAssignmentsFrom<
 > = Rest extends readonly [infer Next, ...infer Tail extends readonly unknown[]]
     ?
           | (DiffersSomewhere<Head, Next, Ks> extends true
-                ? never
+                ? DecodesTogether<Head, Next, Ks> extends true
+                    ? `options ${At} and ${Cursor['length']}`
+                    : never
                 : `options ${At} and ${Cursor['length']}`)
           | SharedAssignmentsFrom<Head, Tail, Ks, At, [...Cursor, unknown]>
     : never

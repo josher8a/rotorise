@@ -637,9 +637,9 @@ export namespace native {
           ? NULL
           : T extends boolean
             ? BOOL
-            : T extends number | bigint | DynamoNumber
+            : T extends number | bigint | DynamoNumber | BoxedNumber
               ? N
-              : T extends string
+              : T extends string | BoxedString
                 ? OrNull<S, T, '', Empties>
                 : T extends Promised
                   ? never
@@ -693,6 +693,17 @@ export namespace native {
         readonly stream: Fn
         readonly text: () => Promise<string>
     }
+
+    /**
+     * The boxed primitives, which the marshaller writes as their primitive. The type reads them as the
+     * interfaces `Number` and `String`, which a plain object does not satisfy. A boxed `Boolean` has
+     * no row: the interface `Boolean` is `{ valueOf(): boolean }`, so a class with that method
+     * would read as a `BOOL`, and the run time writes it as a map.
+     */
+    // biome-ignore lint/complexity/noBannedTypes: `Number` is the type of `new Number(1)`
+    type BoxedNumber = Number
+    // biome-ignore lint/complexity/noBannedTypes: `String` is the type of `new String('a')`
+    type BoxedString = String
 
     /** A member that the marshaller drops from a map and from a list: a function. */
     type Fn = (...args: never[]) => unknown

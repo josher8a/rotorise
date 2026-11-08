@@ -119,20 +119,25 @@ describe('two members that decode their tag to one value', () => {
     const refusal =
         /two options decode to 'kind' = 'dog', and a write of that value gives '(D|dog)', the text of option 0, so option 1 is never written/
 
-    it('are refused at construction, where a caller adapter and a plain literal meet', () => {
-        for (const options of [
-            [
-                object({ kind: DogTag, bark: string }),
-                object({ kind: string('dog'), lives: number }),
-            ],
-            [
-                object({ kind: string('dog'), lives: number }),
-                object({ kind: DogTag, bark: string }),
-            ],
-        ])
-            expect(() =>
-                item(discriminatedUnion('kind', options as never)),
-            ).toThrow(refusal)
+    it('are refused in the type and at construction, where a caller adapter and a plain literal meet', () => {
+        expect(() =>
+            item(
+                // @ts-expect-error two options decode 'kind' to 'dog'
+                discriminatedUnion('kind', [
+                    object({ kind: DogTag, bark: string }),
+                    object({ kind: string('dog'), lives: number }),
+                ]),
+            ),
+        ).toThrow(refusal)
+        expect(() =>
+            item(
+                // @ts-expect-error two options decode 'kind' to 'dog'
+                discriminatedUnion('kind', [
+                    object({ kind: string('dog'), lives: number }),
+                    object({ kind: DogTag, bark: string }),
+                ]),
+            ),
+        ).toThrow(refusal)
     })
 
     it('are refused where the two differ only by a refine over the caller tag', () => {
@@ -142,6 +147,7 @@ describe('two members that decode their tag to one value', () => {
         })
         expect(() =>
             item(
+                // @ts-expect-error two options decode 'kind' to 'dog'
                 discriminatedUnion('kind', [
                     object({ kind: refine(DogTag, isDog), bark: string }),
                     object({ kind: Other, lives: number }),
@@ -187,18 +193,22 @@ describe('two members that decode their tag to one value', () => {
     it('are refused where the two differ at another key, because the write reads each key alone', () => {
         expect(() =>
             item(
-                mdunion(['kind', 'size'], [
-                    object({
-                        kind: DogTag,
-                        size: string('small'),
-                        bark: string,
-                    }),
-                    object({
-                        kind: string('dog'),
-                        size: string('large'),
-                        pen: string,
-                    }),
-                ] as never) as never,
+                mdunion(
+                    ['kind', 'size'],
+                    // @ts-expect-error two options decode 'kind' to 'dog', and store two texts
+                    [
+                        object({
+                            kind: DogTag,
+                            size: string('small'),
+                            bark: string,
+                        }),
+                        object({
+                            kind: string('dog'),
+                            size: string('large'),
+                            pen: string,
+                        }),
+                    ],
+                ),
             ),
         ).toThrow(refusal)
     })
@@ -210,13 +220,11 @@ describe('two members that decode their tag to one value', () => {
         })
         const caller = object({ kind: OneTag, bark: string })
         const plain = object({ kind: string('1'), lives: number })
-        for (const options of [
-            [caller, plain],
-            [plain, caller],
-        ]) {
-            const Pets = item(
-                discriminatedUnion('kind', options as never),
-            ) as unknown as Store
+        // the type accepts both orders, because `1` and `'1'` are two values
+        for (const Pets of [
+            item(discriminatedUnion('kind', [caller, plain])),
+            item(discriminatedUnion('kind', [plain, caller])),
+        ] as unknown as Store[]) {
             const read = Pets.decode({ kind: { S: 'D' }, bark: { S: 'woof' } })
             expect(read).toEqual({ kind: 1, bark: 'woof' })
             for (const stored of [
@@ -233,12 +241,13 @@ describe('two members that decode their tag to one value', () => {
                 new CodecError('the adapter refuses its own value'),
             decode: (_: 'D') => 'dog' as const,
         })
+        // the type accepts the pair: it states the overlap of the decoded tags and no lookup law
         expect(() =>
             item(
                 discriminatedUnion('kind', [
                     object({ kind: Broken, bark: string }),
                     object({ kind: string('cat'), lives: number }),
-                ] as never),
+                ]),
             ),
         ).toThrow(
             /option 0 decodes 'kind' = 'dog', and a write of that value gives 'dog', which no option carries/,

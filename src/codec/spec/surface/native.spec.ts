@@ -915,6 +915,35 @@ describe('the type says what the marshaller writes', () => {
     })
 })
 
+describe('a boxed primitive, in the type and at run time', () => {
+    it('is written as its primitive, and the type follows for Number and String', () => {
+        expectTypeOf<native.Encode<Number>>().toEqualTypeOf<
+            native.Encode<number>
+        >()
+        expectTypeOf<native.Encode<String>>().toEqualTypeOf<
+            native.Encode<string>
+        >()
+        expect(native.encode(new Number(1))).toEqual({ N: '1' })
+        expect(native.encode(new String('a'))).toEqual({ S: 'a' })
+    })
+
+    it('narrows the type at a boxed Boolean, because the interface admits any class with valueOf(): boolean', () => {
+        // the run time reads `new Boolean(true)` as BOOL, as the SDK does
+        expect(native.encode(new Boolean(true))).toEqual({ BOOL: true })
+        // the type cannot tell a boxed Boolean from a class that has `valueOf(): boolean`
+        expectTypeOf<native.Encode<Boolean>>().not.toEqualTypeOf<BOOL>()
+    })
+
+    it('keeps a set of boxed numbers refused in the type, because the SDK picks the writer from a first member that is no number', () => {
+        expectTypeOf<
+            native.Encode<ReadonlySet<Number>>
+        >().toEqualTypeOf<never>()
+        expect(native.encode(new Set([new Number(1)]))).toBeInstanceOf(
+            CodecError,
+        )
+    })
+})
+
 describe('a set takes the writer of its first member, as the SDK does', () => {
     const outcome = (written: () => unknown) => {
         try {
