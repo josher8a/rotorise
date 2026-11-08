@@ -1413,7 +1413,8 @@ const select = (spec: unknown, attributes: Record<string, unknown>): Arm => {
     while (isMatch(arm)) {
         const discriminator = String(arm.discriminator)
         const literal = valueAt(attributes, discriminator)
-        if (literal === undefined)
+        // a `null` value is no value, as the model reads an item: it selects no arm
+        if (literal === undefined || literal === null)
             return { kind: 'missing', discriminator, named: false }
         arm = Object.hasOwn(arm.spec, String(literal))
             ? arm.spec[String(literal)]
@@ -1545,10 +1546,11 @@ type ErasedMatch<Entity> = {
  * the attributes reach. A leaf builds the word of `DerivedKey`: `printed` stops at the first absent
  * part, each part prints its segments as a `Comp`, `boundary` marks a partial key, and the test of
  * `Good` refuses a segment that holds the separator. The host checks the separator half of `Good`
- * only: the model also requires a non-empty list of segments, and the host keeps the empty prefix,
- * because a depth of 0 builds the empty prefix of a sort-key condition, and `asKey` refuses an
- * empty `S` or `B` at carry time. The host adds the refusal of an object segment, which the model
- * does not state, because a JS value can be an object.
+ * only: the model also requires a non-empty list of segments, and the host keeps the empty list
+ * for one caller. The public `key` at a depth of 0 returns the empty string. A sort-key condition
+ * never uses the empty prefix, because `sortCondition` refuses it, and `asKey` refuses an empty `S`
+ * or `B` at carry time. The host adds the refusal of an object segment, which the model does not
+ * state, because a JS value can be an object.
  */
 const key =
     <const Entity>() =>
@@ -1697,9 +1699,10 @@ const key =
 
             /**
              * The separator half of `Good` of `DerivedKey`: no segment holds the separator, because a
-             * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: a
-             * depth of 0 builds the empty prefix of a sort-key condition, and `asKey` refuses an
-             * empty `S` or `B` at carry time. The test runs over the segments that the parts print, after
+             * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: the
+             * public `key` at a depth of 0 returns the empty string, `sortCondition` refuses the empty
+             * prefix, and `asKey` refuses an empty `S` or `B` at carry time. The test runs over the
+             * segments that the parts print, after
              * `printed` has stopped at the first absent part, so an absent part refuses before a
              * separator in a part that precedes it. The refusal names the component, and never the
              * value that it printed.
@@ -3031,7 +3034,7 @@ const componentsOf = (
         // the discriminant chooses which list applies, so when its value is known only that
         // variant's components are needed — the others describe an item this is not
         const chosen = valueAt(given, discriminator)
-        if (chosen === undefined) {
+        if (chosen === undefined || chosen === null) {
             for (const variant of Object.values(variants ?? {})) walk(variant)
             return
         }
@@ -3564,7 +3567,6 @@ export const tableEntry =
             changed: Record<string, unknown>,
             given: Record<string, unknown>,
             step: {
-                kind: 'rewrite'
                 key: string
                 ofTable: boolean
                 components: ReadonlySet<string>
@@ -3999,14 +4001,25 @@ export const tableEntry =
 
                 if (key.ofTable || lacks) {
                     throw refusal(changed, given, {
-                        kind: 'rewrite',
                         key: key.name,
                         ofTable: key.ofTable,
                         components,
                     })
                 }
 
-                const built = buildKey(key.name as never, given as never)
+                const built = ((): unknown => {
+                    try {
+                        return buildKey(key.name as never, given as never)
+                    } catch (error) {
+                        // the step names the key that refused, and keeps the kind of the refusal
+                        if (!(error instanceof RotoriseError)) throw error
+                        throw new RotoriseError(
+                            `'${key.name}' cannot be rebuilt from this change: ${error.message}`,
+                            error.kind,
+                            { cause: error },
+                        )
+                    }
+                })()
                 if (built === undefined) remove.push(key.name)
                 else set[key.name] = carried(key.name, given, built)
             }
@@ -4104,24 +4117,28 @@ export const tableEntry =
 
         /**
          * The key part of an item: the value that each key name builds, and no name that builds no
-         * value. `keysMap` of `keyOf`: at each key name, `keyOf` gives the value or none, so a sparse
-         * key has no entry. `carry` gives the carrier of each value. `toItem` carries each value as the
-         * attribute that the codec writes. `toEntry` carries nothing, because `toEntry` writes JS values
-         * and the AWS SDK marshaller picks the member of each value, so a key of one attribute holds
-         * the value itself. The carrier is the one difference between the two routes, so each route
-         * passes it.
+         * value. `keysMap` of `keyOf`, over the keys that `keyOf` gives a value: at each key name,
+         * `keyOf` gives a value, or none, so a sparse key has no entry. Where `keyOf` refuses, the
+         * host builder throws inside this function, which the model does not state. `carry` gives
+         * the carrier of each value. `toItem` carries each value as the attribute that the codec
+         * writes. `toEntry` writes JS values and the AWS SDK marshaller picks the member of each
+         * value, so `toEntry` keeps the value. The carrier is the one difference between the two
+         * routes, so each route passes it. `buildEntry` also calls `carried` as a check, and under
+         * a caller adapter the value of a key of one attribute is then the stored text. The pairs
+         * go through `Object.fromEntries`, so a key named `__proto__` is an own attribute.
          */
         const keyPart = <V>(
             item: Record<string, unknown>,
             carry: (name: string, value: unknown) => V,
-        ): Record<string, V> => {
-            const part: Record<string, V> = {}
-            for (const name of keyNames) {
-                const value = buildKey(name as never, item as never)
-                if (value !== undefined) part[name] = carry(name, value)
-            }
-            return part
-        }
+        ): Record<string, V> =>
+            Object.fromEntries(
+                keyNames.flatMap((name) => {
+                    const value = buildKey(name as never, item as never)
+                    return value === undefined
+                        ? []
+                        : [[name, carry(name, value)] as const]
+                }),
+            )
 
         /**
          * The row with a key part: `joinMap` of `dropMap`. The key names leave the row first, and the
@@ -4133,8 +4150,39 @@ export const tableEntry =
             part: Record<string, V>,
         ): Record<string, V> => ({ ...dropKeys(row), ...part })
 
-        const buildEntry = (item: Record<string, unknown>) =>
-            joinRow(
+        /**
+         * The refusal of a write that holds a key name, or `undefined`. The model derives the item
+         * for a codec whose write holds no key name (`write_row`): the key is written over the
+         * attribute of that name, and a read removes it. Construction refuses a declared key name,
+         * and an open key entry writes any other name, a key name included. So the premise is a
+         * test on the write of the codec, stated once: `toItem` and `toEntry` both read it.
+         */
+        const writesKeyName = (written: object): string | undefined => {
+            const held = keyNames.find((name) => Object.hasOwn(written, name))
+            return held === undefined
+                ? undefined
+                : `'${held}' is a key of the schema, and the write of the codec holds an attribute of that name through its open key entry. The codec writes no key name, because the item holds each key name once. Remove the attribute from the entity, or rename the key`
+        }
+
+        /** Whether the codec writes an open key entry: the only way that a write holds a key name. */
+        const isOpen =
+            attributes !== undefined &&
+            (isTagged(attributes)
+                ? attributes.variants().some((one) => one.rest !== undefined)
+                : attributes.rest !== undefined)
+
+        const buildEntry = (item: Record<string, unknown>) => {
+            if (isOpen && attributes !== undefined) {
+                const written = attributes.encode(item as never)
+                // `toEntry` does not check the entity against the codec. A write that refuses holds
+                // no attribute, so it holds no key name, and the refusal is no answer of this test
+                const held =
+                    written instanceof CodecError
+                        ? undefined
+                        : writesKeyName(written)
+                if (held !== undefined) throw new RotoriseError(held)
+            }
+            return joinRow(
                 item,
                 keyPart(item, (name, value) => {
                     // the key that the row holds is a key that the carrier accepts
@@ -4142,6 +4190,7 @@ export const tableEntry =
                     return value
                 }),
             )
+        }
 
         const definition = {
             keyUpdates,
@@ -4211,13 +4260,19 @@ export const tableEntry =
         if (attributes === undefined) return definition as never
 
         const toItem = (item: Record<string, unknown>): Result<AttributeMap> =>
-            andThen(attributes.encode(item as never), (written: AttributeMap) =>
-                joinRow(
-                    written,
-                    keyPart(item, (name, value) =>
-                        carried(name, item, value, written),
-                    ),
-                ),
+            andThen(
+                attributes.encode(item as never),
+                (written: AttributeMap) => {
+                    const held = writesKeyName(written)
+                    return held !== undefined
+                        ? new CodecError(held)
+                        : joinRow(
+                              written,
+                              keyPart(item, (name, value) =>
+                                  carried(name, item, value, written),
+                              ),
+                          )
+                },
             )
         /**
          * The keys are removed before decoding, not merely left undeclared.

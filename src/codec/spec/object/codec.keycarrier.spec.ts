@@ -745,6 +745,15 @@ describe('keys and toItem write one key for each key name, over generated entiti
         }
         return at
     }
+    /**
+     * The reason of a refusal of `keyUpdates`, without the key that the step names first. The step
+     * puts `'KEY' cannot be rebuilt from this change: ` before the reason of the builder, so the
+     * reason is the one that every route gives, and the prefix is the key that refused.
+     */
+    const afterKey = (said: string | undefined, key: string) => {
+        const prefix = `'${key}' cannot be rebuilt from this change: `
+        return said?.startsWith(prefix) ? said.slice(prefix.length) : said
+    }
     const said = (run: () => unknown): { value?: unknown; said?: string } => {
         try {
             return { value: run() }
@@ -794,14 +803,18 @@ describe('keys and toItem write one key for each key name, over generated entiti
                         ),
                 )
                 if (refusedBy !== undefined) {
-                    // refused: every route refuses with the one reason
+                    // refused: every route refuses with the one reason, and the step of `keyUpdates` names the key
                     const reason = keyed[refusedBy]?.said
                     for (const [route, run] of [
                         ['toItem', written],
                         ['toEntry', entered],
                         ['keyUpdates', updated],
                     ] as const)
-                        if (run.said !== reason)
+                        if (
+                            (route === 'keyUpdates'
+                                ? afterKey(run.said, refusedBy)
+                                : run.said) !== reason
+                        )
                             failures.push(
                                 `${where}: keys says ${reason}, ${route} says ${run.said ?? 'a result'}`,
                             )

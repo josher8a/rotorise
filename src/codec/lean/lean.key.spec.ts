@@ -565,7 +565,14 @@ const itemsOf = (one: Case): Item[] => {
     const onPaths = pathsOf(one.spec).flatMap((path) => {
         const start = reach(path)
         const items: Item[] = [start]
-        for (const name of namesOf(one.spec)) {
+        const names = namesOf(one.spec)
+        // a separator in a part that precedes an absent part: the model refuses the absent part first
+        for (const [at, first] of names.entries())
+            for (const second of names.slice(at + 1))
+                items.push(
+                    writeAt(writeAt(start, first, `x${sep}y`), second, DROP),
+                )
+        for (const name of names) {
             items.push(
                 writeAt(start, name, DROP),
                 writeAt(start, name, ''),

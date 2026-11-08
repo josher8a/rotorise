@@ -3994,8 +3994,9 @@ export type KeyTree =
 /**
  * **One row of the key builder**: the key spec as a tree, with each leaf evaluated by the host for
  * the item, the printed attributes of the item that the tree reads, the options as the host read
- * them, the separator, and what the host gave. The parts of a leaf are the spec cut to the depth,
- * up to and including the first component that the builder refuses. `lawful` says that the segments
+ * them, the separator, and what the host gave. The parts of a leaf are the components of the spec
+ * cut to the depth, each one read, as the model reads them: `printed` stops at the first absent
+ * part, and `Good` tests the segments of the parts that it keeps. `lawful` says that the segments
  * have a segment and that none holds the separator.
  */
 export type KeyRow = {
