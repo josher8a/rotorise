@@ -6566,6 +6566,13 @@ const dissectionOf = (
             (andThen(andThen(readTags(item, ks), pick), (variant) =>
                 variant.decode(item),
             ) as Result<T>),
+        // the variant that the tags of an item select, read as `encode` reads them. The key layer
+        // reads each variant through this one reader, so a tag under an adapter of a caller selects
+        // the variant by the stored literal
+        variantOf: (item: Partial<T>) =>
+            openRefusal(unionDef) ?? andThen(tagOf(item), pick),
+        // each variant, in the order of the options, for a key that no item names the variant of
+        variants: () => resolution().members.map(([, variant]) => variant),
         unsafeEncode: (item: T) => orThrow(self.encode(item)),
         unsafeEncodePartial: (patch: Partial<T>) =>
             orThrow(self.encodePartial(patch)),
@@ -6867,8 +6874,8 @@ export type KeyText<Value, Field> = [Field] extends [never]
       : Value
 
 /**
- * `true` where a path cannot go into the field: `at` throws a `CodecError` at a `refine` and at a
- * `legacy`, because the predicate reads the whole value and an older encoding has another shape.
+ * `true` where a path cannot go into the field: `at` gives a codec that refuses at a `refine` and at
+ * a `legacy`, because the predicate reads the whole value and an older encoding has another shape.
  */
 export type PathBlocked<Field> = [Field] extends [never]
     ? false

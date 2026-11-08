@@ -35,16 +35,9 @@ import {
     orThrow,
     pathBuilder,
 } from './codec/codec'
-import { codecOfTerm } from './codec/denote'
 import { native } from './codec/native'
 import type { Field, Term } from './codec/term'
-import {
-    isCallerPin,
-    literalAlternatives,
-    member,
-    sameTerm,
-    storedPin,
-} from './codec/term'
+import { isCallerPin, member, sameTerm, storedPin } from './codec/term'
 import { own } from './codec/value'
 import type {
     DistributiveOmit,
@@ -2836,6 +2829,10 @@ type TaggedRuntime = TaggedCodec<
     readonly encodePartial: (
         patch: Record<string, unknown>,
     ) => AttributeMap | CodecError
+    readonly variantOf: (
+        item: Record<string, unknown>,
+    ) => ItemCodecRuntime | CodecError
+    readonly variants: () => readonly ItemCodecRuntime[]
 }
 
 /** A codec that decides its variant from the item, rather than having one set of attributes. */
@@ -2844,6 +2841,8 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
         'unsafeEncode',
         'unsafeDecode',
         'encodePartial',
+        'variantOf',
+        'variants',
     ]) && typeof (value as TaggedRuntime).discriminator === 'string'
 
 /**
@@ -3531,6 +3530,11 @@ export const tableEntry =
         }
 
         const pathSlots = new Map<string, ObjectSlot | undefined>()
+        /** The refusal of a path that the codec cannot address, with the reason of `at`. */
+        const pathRefusal = (path: string, error: CodecError): RotoriseError =>
+            new RotoriseError(
+                `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
+            )
         /**
          * The codec that the entry writes at a path below the top level. The located codec of `at`
          * is that codec. A path that the codec cannot address is refused with the reason of `at`,
@@ -3540,10 +3544,7 @@ export const tableEntry =
             // an entry without a codec states no slot
             if (attributes === undefined) return undefined
             if (pathSlots.has(path)) return pathSlots.get(path)
-            const refused = (error: CodecError) =>
-                new RotoriseError(
-                    `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
-                )
+            const refused = (error: CodecError) => pathRefusal(path, error)
             let found: AnyCodec
             try {
                 found = at(attributes as never, path as never) as never
@@ -3565,31 +3566,6 @@ export const tableEntry =
             return found
         }
 
-        const restsOfTags = new Map<string, ObjectSlot | undefined>()
-        /** The slot of the rest of the variant that a tag selects, or `undefined` where it has none. */
-        const restOfTag = (tag: string): ObjectSlot | undefined => {
-            if (restsOfTags.has(tag)) return restsOfTags.get(tag)
-            const def = (attributes as unknown as { readonly def: Term }).def
-            const options = def.kind === 'union' ? def.options : [def]
-            let found: ObjectSlot | undefined
-            for (const option of options) {
-                if (option.kind !== 'object' || option.body.rest === undefined)
-                    continue
-                const field =
-                    option.body.fields[
-                        (attributes as TaggedRuntime).discriminator
-                    ]
-                const pin = field && storedPin(field.t)
-                const stored = pin && literalAlternatives(pin.under)
-                if (stored?.ls.some((v) => String(v) === tag))
-                    found = codecOfTerm(
-                        option.body.rest,
-                    ) as unknown as ObjectSlot
-            }
-            restsOfTags.set(tag, found)
-            return found
-        }
-
         /**
          * The slots that write a field: the declared slots, or the slot of the rest where the codec
          * declares none and holds a rest. The rest writes each attribute that the fields lack, so a
@@ -3602,17 +3578,21 @@ export const tableEntry =
             if (attributes === undefined) return []
             if (isTagged(attributes)) {
                 // each variant writes the field with its own slot, or with its rest where it
-                // declares none
-                const named = item?.[attributes.discriminator]
-                const tags =
-                    named === undefined
-                        ? Object.keys(attributes.spec)
-                        : [String(named)]
-                return tags.flatMap((tag) => {
-                    const declared = own(attributes.spec, tag)?.[field]
+                // declares none. The tags of the item select the variant as `encode` reads them, so a
+                // tag under an adapter of a caller selects by the stored literal. An item that gives
+                // no tag reads every variant
+                const named =
+                    item === undefined ||
+                    item[attributes.discriminator] === undefined
+                        ? undefined
+                        : attributes.variantOf(item)
+                if (named instanceof CodecError) return []
+                const variants =
+                    named === undefined ? attributes.variants() : [named]
+                return variants.flatMap((variant) => {
+                    const declared = own(variant.spec, field)
                     if (declared !== undefined) return [declared]
-                    const rest = restOfTag(tag)
-                    return rest === undefined ? [] : [rest]
+                    return variant.rest === undefined ? [] : [variant.rest]
                 })
             }
             const declared = slotsAt(field)
@@ -3636,28 +3616,15 @@ export const tableEntry =
             alone = false,
         ): unknown => {
             if (attributes === undefined) return value
-            if (path.includes('.')) {
-                const slot = pathSlot(path)
-                if (slot === undefined) return value
-                const written = keyAttribute([slot], value)
-                if (written !== undefined && !(written instanceof CodecError)) {
-                    if (
-                        memberOf(written) === 'S' &&
-                        typeof written.S === 'string'
-                    )
-                        return written.S
-                    if (
-                        memberOf(written) === 'N' &&
-                        typeof written.N === 'string'
-                    )
-                        return written.N
-                }
-                throw new RotoriseError(
-                    `'${path}' is a component of a key, and the codec writes no text or number for the value, so the key cannot print it.`,
-                )
-            }
-            const slots = fieldSlots(path, item)
+            const slots = path.includes('.')
+                ? [pathSlot(path)].filter((slot) => slot !== undefined)
+                : fieldSlots(path, item)
             if (slots.length === 0) return value
+            const written = keyAttribute(slots, value)
+            // a path that variants declare differently, or only some of them, refuses on use with the
+            // reason of `at`
+            if (written instanceof CodecError && written.kind !== 'refused')
+                throw pathRefusal(path, written)
             if (alone) {
                 // a key of one attribute under no adapter of a caller holds the value, which the type says
                 if (
@@ -3666,19 +3633,17 @@ export const tableEntry =
                     )
                 )
                     return value
-                const stored = keyAttribute(slots, value)
-                if (stored === undefined || stored instanceof CodecError)
+                if (written === undefined || written instanceof CodecError)
                     return value
-                const member = memberOf(stored)
-                if (member === 'S' && typeof stored.S === 'string')
-                    return stored.S
-                if (member === 'N' && typeof stored.N === 'string')
-                    return stored.N
-                if (member === 'B' && stored.B instanceof Uint8Array)
-                    return stored.B
+                const member = memberOf(written)
+                if (member === 'S' && typeof written.S === 'string')
+                    return written.S
+                if (member === 'N' && typeof written.N === 'string')
+                    return written.N
+                if (member === 'B' && written.B instanceof Uint8Array)
+                    return written.B
                 return value
             }
-            const written = keyAttribute(slots, value)
             if (written !== undefined && !(written instanceof CodecError)) {
                 if (memberOf(written) === 'S' && typeof written.S === 'string')
                     return written.S
@@ -3693,13 +3658,16 @@ export const tableEntry =
         /**
          * Two variants that write a field with two codecs are refused. No value exists at
          * construction, so the test is the identity of the two terms: two codecs that write the same
-         * text for every value are refused too.
+         * text for every value are refused too. The discriminator is the exception: each variant
+         * states its own literal there, and the item names the variant.
          */
         const oneCodec = (
             name: string,
             field: string,
             slots: readonly ObjectSlot[],
         ): void => {
+            if (isTagged(attributes) && field === attributes.discriminator)
+                return
             const [firstSlot, ...otherSlots] = slots
             if (
                 firstSlot !== undefined &&
@@ -3753,15 +3721,7 @@ export const tableEntry =
                                   (slot) => slot !== undefined,
                               )
                             : fieldSlots(field)
-                        // the discriminator names the variant, so each variant states its own literal and
-                        // the item that builds the key names the variant
-                        if (
-                            !(
-                                isTagged(attributes) &&
-                                field === attributes.discriminator
-                            )
-                        )
-                            oneCodec(name, field, slots)
+                        oneCodec(name, field, slots)
                         for (const slot of slots) {
                             const stored = storedAt(slot)
                             if (
@@ -3774,12 +3734,12 @@ export const tableEntry =
                                 )
                         }
                     }
-                } else if (typeof value === 'string' && value.includes('.')) {
-                    pathSlot(value)
                 } else if (typeof value === 'string') {
                     // a slot of two members is one field stored as two types. A second slot of the
-                    // field is another variant
-                    const written = fieldSlots(value)
+                    // field is another variant. A path has the one slot of the codec at the path
+                    const written = value.includes('.')
+                        ? [pathSlot(value)].filter((slot) => slot !== undefined)
+                        : fieldSlots(value)
                     oneCodec(name, value, written)
                     for (const [at, slot] of written.entries()) {
                         const stored = storedAt(slot)
@@ -3830,11 +3790,11 @@ export const tableEntry =
         /**
          * A built key as the attribute that carries it.
          *
-         * A key of one top-level attribute of an entry with a codec takes the attribute that the
-         * codec writes for that field, as the row holds it: a decimal that the codec writes as `N`
-         * is an `N` key. The variants that hold the field store one member, so the first variant
-         * that writes the value gives the attribute, and the variant that the item names comes
-         * first. Any other key takes the member that `native` writes.
+         * A key of one attribute of an entry with a codec takes the attribute that the codec writes
+         * for that field or at that path, as the row holds it: a decimal that the codec writes as `N`
+         * is an `N` key, and so is a number at a path. The variants that hold the field store one
+         * member, and the variant that the item names gives the attribute. Any other key takes the
+         * member that `native` writes.
          */
         const carried = (
             name: string,
@@ -3843,17 +3803,20 @@ export const tableEntry =
             written?: AttributeMap,
         ): Carrying<KeyMember> => {
             const selected = select(expanded[name], item)
-            // a list of components, a `null` arm and a path below the top level read no field of the codec
-            const field =
-                attributes !== undefined &&
-                selected.kind === 'attr' &&
-                !selected.name.includes('.')
-                    ? selected.name
-                    : undefined
-            if (field === undefined) return asKey(name, value)
-            const encoded =
-                written?.[field] ??
-                keyAttribute(fieldSlots(field, item), item[field])
+            // a list of components and a `null` arm read no attribute of the codec
+            if (attributes === undefined || selected.kind !== 'attr')
+                return asKey(name, value)
+            const field = selected.name
+            let encoded: AttributeValue | CodecError | undefined
+            if (field.includes('.')) {
+                const slot = pathSlot(field)
+                if (slot === undefined) return asKey(name, value)
+                encoded = keyAttribute([slot], valueAt(item, field))
+            } else {
+                encoded =
+                    written?.[field] ??
+                    keyAttribute(fieldSlots(field, item), item[field])
+            }
             if (encoded === undefined) return asKey(name, value)
             const stored = keyMembers.get(name)
             // the member is decided at construction, so a write at another member is no key

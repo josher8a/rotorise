@@ -293,7 +293,7 @@ const setKind = (first: unknown) =>
 const toCanonical = (
     value: unknown,
     options: native.Options,
-    write: (value: number | bigint) => Result<DynamoNumber>,
+    write: (value: number | bigint, ranged?: boolean) => Result<DynamoNumber>,
     /**
      * How many `L`/`M` this value already sits inside.
      *
@@ -468,10 +468,11 @@ const configured = (
     options: native.Options = {},
     deviations: native.Deviations = {},
 ): AttributeCodec<unknown> => {
-    const writeAttribute =
-        deviations.writeNumber ??
-        ((value: number | bigint, ranged?: boolean) =>
-            nativeNumber(value, options, ranged))
+    // the caller's writer receives the number alone, and `ranged` reaches the port's own writer only
+    const writeAttribute = (value: number | bigint, ranged?: boolean) =>
+        deviations.writeNumber
+            ? deviations.writeNumber(value)
+            : nativeNumber(value, options, ranged)
     const write = (
         value: number | bigint,
         ranged = true,

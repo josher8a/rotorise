@@ -15,6 +15,7 @@ import { RotoriseError, tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
 import {
     binary,
+    CodecError,
     decimal,
     discriminatedUnion,
     held,
@@ -24,9 +25,12 @@ import {
     object,
     opaque,
     optional,
+    ref,
+    scope,
     string,
     union,
 } from '../../codec'
+import { native } from '../../native'
 import type { StandardSchemaV1 } from '../../standard'
 import { arbitraryOf, rngFrom, structuralEquals } from '../../testing'
 
@@ -280,13 +284,22 @@ describe('a key follows its attribute in every path that writes a row', () => {
 })
 
 /**
- * **Every route writes one key for each key name**, over generated entities. A key has four routes,
- * the key builder of `keys`, the update of `keyUpdates`, the entry of `toEntry` and the write of the
- * item, and each must give the key that the codec gives for the attribute. The entities are drawn
- * from the codec of each entry. A draw that both routes refuse is counted and pinned, not skipped: a
- * string that holds the separator cannot be a part of a composite key, and `keys` and `toItem` give
- * one reason. A draw that one route writes and the other refuses is a failure, as is a draw that
- * the two write as two keys.
+ * **Every route gives one answer for each key name**, over generated entities. A key has five
+ * routes: the builder `keys`, the update of `keyUpdates`, the entry of `toEntry`, the write of the
+ * item, and the written item that holds the attribute. For each draw and each key name, `keys` is
+ * called with that name alone, and exactly one of three rows holds.
+ *
+ * - **some**: `keys`, `toItem` and `keyUpdates.set` give one attribute, equal by member and text,
+ *   and the marshalled `toEntry` is that attribute. Where the key is one attribute of the codec, the
+ *   attribute is the one that the written item holds at the field or at the path.
+ * - **none**: `keys` refuses with "gives no key", `toItem` and `toEntry` lack the name, and
+ *   `keyUpdates.remove` holds it.
+ * - **refused**: every route refuses with one reason.
+ *
+ * A draw that is refused is counted and pinned, not skipped: a string that holds the separator cannot
+ * be a part of a composite key. A name that one route answers as another route does not is a failure.
+ * Two counted rows state a gap that the owner has not ruled on: `toEntry` holds a string where the
+ * row holds `N`, and a number past the safe range, which `native` refuses.
  */
 describe('keys and toItem write one key for each key name, over generated entities', () => {
     const dateSchema: StandardSchemaV1<Date> = {
@@ -313,6 +326,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
         ) => Record<string, unknown>
         readonly keyUpdates: (changed: never) => {
             readonly set: Record<string, unknown>
+            readonly remove: readonly string[]
         }
         readonly toEntry: (item: never) => Record<string, unknown>
         readonly toItem: (item: never) => unknown
@@ -351,199 +365,505 @@ describe('keys and toItem write one key for each key name, over generated entiti
     type Visit =
         | { kind: 'DOG'; petId: string; at: Date }
         | { kind: 'CAT'; petId: string; at: Date }
+    const numberSchema: StandardSchemaV1<number> = {
+        '~standard': {
+            version: 1,
+            vendor: 'handwritten',
+            validate: (value) =>
+                typeof value === 'number'
+                    ? { value }
+                    : { issues: [{ message: 'not a number' }] },
+        },
+    }
+    const hexed = held(string, numberSchema, {
+        encode: (n: number) => n.toString(16),
+        decode: (text: string) => Number.parseInt(text, 16),
+        arbitrary: (rng) => Math.floor(rng() * 1e6),
+    })
+    // a tag that the caller writes as another literal: 'dog' is stored as 'D'
+    const Dog = held(string('D'), string('dog'), {
+        encode: (_: 'dog') => 'D' as const,
+        decode: (_: 'D') => 'dog' as const,
+    })
+    const unionOf = (dog: unknown) =>
+        item(
+            discriminatedUnion('kind', [
+                object({
+                    kind: dog as never,
+                    petId: string,
+                    chip: hexed,
+                    at: isoAt,
+                }),
+                object({
+                    kind: string('cat'),
+                    petId: string,
+                    chip: hexed,
+                    at: isoAt,
+                }),
+            ] as never),
+        )
+    const { Pets: refUnion } = scope({
+        Pets: discriminatedUnion('kind', [
+            object({
+                kind: ref('DogTag'),
+                petId: string,
+                chip: hexed,
+                at: isoAt,
+            }),
+            object({
+                kind: string('cat'),
+                petId: string,
+                chip: hexed,
+                at: isoAt,
+            }),
+        ] as never),
+        DogTag: Dog,
+    } as never) as { Pets: never }
+    /** An entry that the type need not admit, as the entities under a caller tag are. */
+    const route = (schema: unknown, codec?: unknown): Route =>
+        tableEntry<Record<string, unknown>>()(
+            schema as never,
+            (codec === undefined ? undefined : { codec }) as never,
+        ) as unknown as Route
     const entries: Record<
         string,
         {
-            entry: Route
+            entry: () => Route
             names: readonly string[]
             draw?: (rng: () => number) => unknown
+            /** The field or the path that a key of one attribute is, by key name. */
+            attribute?: Record<string, string>
         }
     > = {
         Tagged: {
-            entry: tableEntry<Visit>()(
-                { PK: ['petId'], GSI1SK: 'at' },
-                {
-                    codec: item(
-                        discriminatedUnion('kind', [
-                            object({
-                                kind: string('DOG'),
-                                petId: string,
-                                at: isoAt,
-                            }),
-                            object({
-                                kind: string('CAT'),
-                                petId: string,
-                                at: isoAt,
-                            }),
-                        ]),
-                    ),
-                },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<Visit>()(
+                    { PK: ['petId'], GSI1SK: 'at' },
+                    {
+                        codec: item(
+                            discriminatedUnion('kind', [
+                                object({
+                                    kind: string('DOG'),
+                                    petId: string,
+                                    at: isoAt,
+                                }),
+                                object({
+                                    kind: string('CAT'),
+                                    petId: string,
+                                    at: isoAt,
+                                }),
+                            ]),
+                        ),
+                    },
+                ) as unknown as Route,
             names: ['PK', 'GSI1SK'],
+            attribute: { GSI1SK: 'at' },
         },
         TaggedComposite: {
-            entry: tableEntry<Visit>()(
-                { PK: ['petId'], GSI1SK: ['at'] },
-                {
-                    codec: item(
-                        discriminatedUnion('kind', [
-                            object({
-                                kind: string('DOG'),
-                                petId: string,
-                                at: isoAt,
-                            }),
-                            object({
-                                kind: string('CAT'),
-                                petId: string,
-                                at: isoAt,
-                            }),
-                        ]),
-                    ),
-                },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<Visit>()(
+                    { PK: ['petId'], GSI1SK: ['at'] },
+                    {
+                        codec: item(
+                            discriminatedUnion('kind', [
+                                object({
+                                    kind: string('DOG'),
+                                    petId: string,
+                                    at: isoAt,
+                                }),
+                                object({
+                                    kind: string('CAT'),
+                                    petId: string,
+                                    at: isoAt,
+                                }),
+                            ]),
+                        ),
+                    },
+                ) as unknown as Route,
             names: ['PK', 'GSI1SK'],
         },
         TaggedRest: {
-            entry: tableEntry<Priced>()(
-                { PK: ['petId'], GSI1SK: 'price' },
-                { codec: pricedVariants() as never },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<Priced>()(
+                    { PK: ['petId'], GSI1SK: 'price' },
+                    { codec: pricedVariants() as never },
+                ) as unknown as Route,
             names: ['PK', 'GSI1SK'],
+            attribute: { GSI1SK: 'price' },
             draw: drawPriced,
         },
         TaggedRestComposite: {
-            entry: tableEntry<Priced>()(
-                { PK: ['petId'], GSI1SK: ['kind', 'price'] },
-                { codec: pricedVariants() as never },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<Priced>()(
+                    { PK: ['petId'], GSI1SK: ['kind', 'price'] },
+                    { codec: pricedVariants() as never },
+                ) as unknown as Route,
             names: ['PK', 'GSI1SK'],
             draw: drawPriced,
         },
         Rest: {
-            entry: tableEntry<{ petId: string; price: string }>()(
-                { PK: ['petId'], GSI1SK: 'price' },
-                {
-                    codec: item(
-                        object({ petId: string }, [string, optional(decimal)]),
-                    ) as never,
-                },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<{ petId: string; price: string }>()(
+                    { PK: ['petId'], GSI1SK: 'price' },
+                    {
+                        codec: item(
+                            object({ petId: string }, [
+                                string,
+                                optional(decimal),
+                            ]),
+                        ) as never,
+                    },
+                ) as unknown as Route,
             names: ['PK', 'GSI1SK'],
+            attribute: { GSI1SK: 'price' },
             draw: (rng) => ({
                 petId: `p${Math.floor(rng() * 9)}`,
                 price: `${1 + Math.floor(rng() * 90)}.5`,
             }),
         },
+        HeldTag: {
+            entry: () =>
+                route(
+                    {
+                        PK: ['petId'],
+                        GSI1SK: 'at',
+                        SK: ['kind', 'chip'],
+                    },
+                    unionOf(Dog),
+                ),
+            names: ['PK', 'GSI1SK', 'SK'],
+            attribute: { GSI1SK: 'at' },
+        },
+        HeldRef: {
+            entry: () =>
+                route(
+                    {
+                        PK: ['petId'],
+                        GSI1SK: 'at',
+                        SK: ['kind', 'chip'],
+                    },
+                    item(refUnion),
+                ),
+            names: ['PK', 'GSI1SK', 'SK'],
+            attribute: { GSI1SK: 'at' },
+        },
+        Discriminator: {
+            entry: () =>
+                route(
+                    { PK: ['petId'], GSI1PK: 'kind' },
+                    unionOf(string('DOG')),
+                ),
+            names: ['PK', 'GSI1PK'],
+            attribute: { GSI1PK: 'kind' },
+        },
+        PathNumber: {
+            entry: () =>
+                route(
+                    { PK: ['litterId'], GSI1SK: 'body.grams' },
+                    { litterId: string, body: object({ grams: number }) },
+                ),
+            names: ['PK', 'GSI1SK'],
+            attribute: { GSI1SK: 'body.grams' },
+        },
+        PathBinary: {
+            entry: () =>
+                route(
+                    { PK: ['litterId'], GSI1SK: 'body.chip' },
+                    { litterId: string, body: object({ chip: binary }) },
+                ),
+            names: ['PK', 'GSI1SK'],
+            attribute: { GSI1SK: 'body.chip' },
+        },
+        Sparse: {
+            entry: () =>
+                route(
+                    {
+                        PK: ['petId'],
+                        GSI1SK: {
+                            discriminator: 'kind',
+                            spec: { dog: 'at', cat: null },
+                        },
+                    },
+                    unionOf(Dog),
+                ),
+            names: ['PK', 'GSI1SK'],
+        },
         HeldComposite: {
-            entry: tableEntry<{ petId: string; at: Date }>()(
-                { PK: ['petId'], SK: ['at'] },
-                { codec: { petId: string, at: isoAt } },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<{ petId: string; at: Date }>()(
+                    { PK: ['petId'], SK: ['at'] },
+                    { codec: { petId: string, at: isoAt } },
+                ) as unknown as Route,
             names: ['PK', 'SK'],
         },
         Born: {
-            entry: tableEntry<{ petId: string; bornAt: Date }>()(
-                { PK: ['petId'], SK: 'bornAt' },
-                { codec: { petId: string, bornAt: bornOn } },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<{ petId: string; bornAt: Date }>()(
+                    { PK: ['petId'], SK: 'bornAt' },
+                    { codec: { petId: string, bornAt: bornOn } },
+                ) as unknown as Route,
             names: ['PK', 'SK'],
+            attribute: { SK: 'bornAt' },
         },
         Litters: {
-            entry: Litters as unknown as Route,
+            entry: () => Litters as unknown as Route,
             names: ['PK', 'GSI1SK'],
+            attribute: { GSI1SK: 'born' },
         },
         Prices: {
-            entry: tableEntry<{ id: string; price: string }>()(
-                { PK: ['id', 'price'] },
-                { codec: { id: string, price: decimal } },
-            ) as unknown as Route,
+            entry: () =>
+                tableEntry<{ id: string; price: string }>()(
+                    { PK: ['id', 'price'] },
+                    { codec: { id: string, price: decimal } },
+                ) as unknown as Route,
             names: ['PK'],
         },
     }
-    const pinned: Record<string, { agree: number; bothRefuse: number }> = {
-        Born: { agree: 78, bothRefuse: 22 },
-        Litters: { agree: 81, bothRefuse: 19 },
-        Prices: { agree: 78, bothRefuse: 22 },
-        Tagged: { agree: 75, bothRefuse: 25 },
-        TaggedComposite: { agree: 75, bothRefuse: 25 },
-        TaggedRest: { agree: 100, bothRefuse: 0 },
-        TaggedRestComposite: { agree: 100, bothRefuse: 0 },
-        Rest: { agree: 100, bothRefuse: 0 },
-        HeldComposite: { agree: 78, bothRefuse: 22 },
+    type Counts = {
+        some: number
+        none: number
+        refused: number
+        toEntryString: number
+        toEntryUnsafe: number
+    }
+    const pinned: Record<string, Counts> = {
+        Tagged: {
+            some: 150,
+            none: 0,
+            refused: 25,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        TaggedComposite: {
+            some: 150,
+            none: 0,
+            refused: 25,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        TaggedRest: {
+            some: 100,
+            none: 0,
+            refused: 0,
+            toEntryString: 100,
+            toEntryUnsafe: 0,
+        },
+        TaggedRestComposite: {
+            some: 200,
+            none: 0,
+            refused: 0,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        Rest: {
+            some: 100,
+            none: 0,
+            refused: 0,
+            toEntryString: 100,
+            toEntryUnsafe: 0,
+        },
+        HeldTag: {
+            some: 228,
+            none: 0,
+            refused: 24,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        HeldRef: {
+            some: 228,
+            none: 0,
+            refused: 24,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        Discriminator: {
+            some: 152,
+            none: 0,
+            refused: 24,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        PathNumber: {
+            some: 149,
+            none: 0,
+            refused: 23,
+            toEntryString: 0,
+            toEntryUnsafe: 5,
+        },
+        PathBinary: {
+            some: 134,
+            none: 0,
+            refused: 33,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        Sparse: {
+            some: 119,
+            none: 33,
+            refused: 24,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        HeldComposite: {
+            some: 156,
+            none: 0,
+            refused: 22,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        Born: {
+            some: 156,
+            none: 0,
+            refused: 22,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
+        Litters: {
+            some: 152,
+            none: 0,
+            refused: 19,
+            toEntryString: 0,
+            toEntryUnsafe: 10,
+        },
+        Prices: {
+            some: 78,
+            none: 0,
+            refused: 22,
+            toEntryString: 0,
+            toEntryUnsafe: 0,
+        },
     }
 
-    for (const [label, { entry, names, draw }] of Object.entries(entries)) {
+    /** The attribute that a written item holds at a field or at a path. */
+    const heldAt = (written: Record<string, unknown>, path: string) => {
+        let at: unknown = written
+        for (const [index, segment] of path.split('.').entries()) {
+            const map = (index === 0 ? at : (at as { M?: unknown })?.M) as
+                | Record<string, unknown>
+                | undefined
+            at = map?.[segment]
+        }
+        return at
+    }
+    const said = (run: () => unknown): { value?: unknown; said?: string } => {
+        try {
+            return { value: run() }
+        } catch (error) {
+            return { said: (error as Error).message }
+        }
+    }
+
+    for (const [
+        label,
+        { entry: build, names, draw, attribute },
+    ] of Object.entries(entries)) {
         it(`holds for ${label}`, () => {
+            const entry = build()
             const rng = rngFrom(20261107)
-            const count = { agree: 0, bothRefuse: 0 }
+            const count: Counts = {
+                some: 0,
+                none: 0,
+                refused: 0,
+                toEntryString: 0,
+                toEntryUnsafe: 0,
+            }
             const failures: string[] = []
             for (let at = 0; at < 100; at++) {
-                const entity = draw
-                    ? draw(rng)
-                    : arbitraryOf(entry.codec as never, rng, 3)
-                let keyed: Record<string, unknown> | undefined
-                let keysSaid: string | undefined
-                try {
-                    keyed = entry.keys(names, entity as never)
-                } catch (error) {
-                    keysSaid = (error as Error).message
+                const entity = (
+                    draw ? draw(rng) : arbitraryOf(entry.codec as never, rng, 3)
+                ) as never
+                const where = `${label} ${at}`
+                const keyed = Object.fromEntries(
+                    names.map((name) => [
+                        name,
+                        said(() => entry.keys([name], entity)[name]),
+                    ]),
+                )
+                const written = said(() => {
+                    const result = entry.toItem(entity)
+                    if (result instanceof Error) throw result
+                    return result as Record<string, unknown>
+                })
+                const entered = said(() => entry.toEntry(entity))
+                const updated = said(() => entry.keyUpdates(entity))
+                const refusedBy = names.find(
+                    (name) =>
+                        keyed[name]?.said !== undefined &&
+                        !/gives no key for these attributes/.test(
+                            keyed[name]?.said ?? '',
+                        ),
+                )
+                if (refusedBy !== undefined) {
+                    // refused: every route refuses with the one reason
+                    const reason = keyed[refusedBy]?.said
+                    for (const [route, run] of [
+                        ['toItem', written],
+                        ['toEntry', entered],
+                        ['keyUpdates', updated],
+                    ] as const)
+                        if (run.said !== reason)
+                            failures.push(
+                                `${where}: keys says ${reason}, ${route} says ${run.said ?? 'a result'}`,
+                            )
+                    count.refused++
+                    continue
                 }
-                let item: Record<string, unknown> | undefined
-                let itemSaid: string | undefined
-                try {
-                    const written = entry.toItem(entity as never)
-                    if (written instanceof Error) itemSaid = written.message
-                    else item = written as Record<string, unknown>
-                } catch (error) {
-                    itemSaid = (error as Error).message
-                }
-                if (keyed === undefined && item === undefined) {
-                    if (keysSaid === itemSaid) count.bothRefuse++
-                    else
-                        failures.push(
-                            `${label} ${at}: keys says ${keysSaid}, toItem says ${itemSaid}`,
-                        )
-                } else if (keyed === undefined || item === undefined) {
+                const row = written.value as Record<string, unknown> | undefined
+                const entry2 = entered.value as
+                    | Record<string, unknown>
+                    | undefined
+                const update = updated.value as
+                    | { set: Record<string, unknown>; remove: string[] }
+                    | undefined
+                if (!row || !entry2 || !update) {
                     failures.push(
-                        `${label} ${at}: keys ${keysSaid ?? 'writes'}, toItem ${itemSaid ?? 'writes'}`,
+                        `${where}: no key is refused, and a route refuses: ${written.said ?? entered.said ?? updated.said}`,
                     )
-                } else if (
-                    names.every((name) =>
-                        structuralEquals(keyed[name], item[name]),
-                    )
-                ) {
-                    // the other two routes write the key that the item holds
-                    let updated: Record<string, unknown> | undefined
-                    let entered: Record<string, unknown> | undefined
-                    try {
-                        updated = entry.keyUpdates(entity as never).set
-                        entered = entry.toEntry(entity as never)
-                    } catch (error) {
-                        failures.push(
-                            `${label} ${at}: ${(error as Error).message}`,
+                    continue
+                }
+                for (const name of names) {
+                    const key = keyed[name]?.value
+                    if (keyed[name]?.said !== undefined) {
+                        // none: the key of this name is absent on every route
+                        if (
+                            row[name] === undefined &&
+                            entry2[name] === undefined &&
+                            update.remove.includes(name) &&
+                            update.set[name] === undefined
                         )
+                            count.none++
+                        else
+                            failures.push(`${where} ${name}: none on keys only`)
                         continue
                     }
-                    const held = (name: string) => {
-                        const stored = item[name] as {
-                            S?: string
-                            N?: string
-                        }
-                        return stored.S ?? stored.N
-                    }
+                    const oracle = attribute?.[name]
+                        ? heldAt(row, attribute[name])
+                        : row[name]
                     if (
-                        names.every(
-                            (name) =>
-                                structuralEquals(updated?.[name], item[name]) &&
-                                (typeof entered?.[name] === 'number'
-                                    ? entered[name] === Number(held(name))
-                                    : entered?.[name] === held(name)),
-                        )
+                        !structuralEquals(key, row[name]) ||
+                        !structuralEquals(update.set[name], row[name]) ||
+                        !structuralEquals(oracle, row[name])
+                    ) {
+                        failures.push(`${where} ${name}: two keys`)
+                        continue
+                    }
+                    const marshalled = native.encode(entry2[name] as never)
+                    if (structuralEquals(marshalled, row[name])) count.some++
+                    else if (
+                        typeof entry2[name] === 'string' &&
+                        (row[name] as { N?: string }).N === entry2[name]
                     )
-                        count.agree++
-                    else failures.push(`${label} ${at}: two keys`)
-                } else {
-                    failures.push(`${label} ${at}: two keys`)
+                        count.toEntryString++
+                    else if (
+                        typeof entry2[name] === 'number' &&
+                        marshalled instanceof CodecError &&
+                        Number((row[name] as { N?: string }).N) === entry2[name]
+                    )
+                        count.toEntryUnsafe++
+                    else
+                        failures.push(
+                            `${where} ${name}: toEntry is another key`,
+                        )
                 }
             }
             expect(failures).toEqual([])
@@ -551,7 +871,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
         })
     }
 
-    it('refuses at construction a key that two variants write with two codecs, as the key of each route', () => {
+    it('refuses at construction a key that two variants write with two codecs', () => {
         expect(() =>
             tableEntry<Visit>()(
                 { PK: ['petId'], GSI1SK: 'at' },
@@ -576,69 +896,12 @@ describe('keys and toItem write one key for each key name, over generated entiti
     })
 })
 
-describe('two variants that write a key attribute with two codecs are refused, at a name and at a component', () => {
-    const dateSchema: StandardSchemaV1<Date> = {
-        '~standard': {
-            version: 1,
-            vendor: 'handwritten',
-            validate: (value) =>
-                value instanceof Date
-                    ? { value }
-                    : { issues: [{ message: 'not a Date' }] },
-        },
-    }
-    const iso = held(string, dateSchema, {
-        encode: (day: Date) => day.toISOString(),
-        decode: (text: string) => new Date(text),
-    })
-    const epoch = held(string, dateSchema, {
-        encode: (day: Date) => String(day.getTime()),
-        decode: (text: string) => new Date(Number(text)),
-    })
-    type Visit =
-        | { kind: 'DOG'; petId: string; at: Date }
-        | { kind: 'CAT'; petId: string; at: Date }
-    const build = (spec: never, first: unknown, second: unknown) =>
-        tableEntry<Visit>()(spec, {
-            codec: item(
-                discriminatedUnion('kind', [
-                    object({
-                        kind: string('DOG'),
-                        petId: string,
-                        at: first as never,
-                    }),
-                    object({
-                        kind: string('CAT'),
-                        petId: string,
-                        at: second as never,
-                    }),
-                ]),
-            ),
-        } as never)
-
-    it('refuses the key of one attribute, and each plain component of a list', () => {
-        for (const spec of [
-            { PK: ['petId'], GSI1SK: 'at' },
-            { PK: ['petId'], GSI1SK: ['at'] },
-            { PK: ['petId'], GSI1SK: ['petId', 'at'] },
-        ])
-            expect(() => build(spec as never, iso, epoch)).toThrow(
-                /'GSI1SK' is built from 'at', which two variants write with two codecs/,
-            )
-    })
-
-    it('accepts one codec that both variants share', () => {
-        expect(() =>
-            build({ PK: ['petId'], GSI1SK: ['at'] } as never, iso, iso),
-        ).not.toThrow()
-    })
-})
-
 /**
  * **A variant that does not declare a key attribute has no codec for it.** The type refuses a key
  * that names an attribute which a variant lacks, so the check at run time reads the entity that
  * the type forbids. A value at that attribute is read with no codec, and the codec of another
- * variant never reads it. `keys` and `toItem` both refuse it.
+ * variant never reads it, so `keys` refuses it. The closed body of the variant refuses the same
+ * entity in `toItem` before any key is built, and that refusal is a rule of the codec.
  */
 describe('a key attribute that the variant of the entity lacks is read with no codec of another variant', () => {
     const dateSchema: StandardSchemaV1<Date> = {
@@ -685,11 +948,6 @@ describe('a key attribute that the variant of the entity lacks is read with no c
         expect(() => Absent.keys(['GSI1SK'], stray)).toThrow(
             /built from a value that DynamoDB cannot store as a key/,
         )
-    })
-
-    it('refuses the item of a CAT that carries the attribute that no codec declares', () => {
-        const written = Absent.toItem(stray)
-        expect(written).toBeInstanceOf(Error)
     })
 })
 

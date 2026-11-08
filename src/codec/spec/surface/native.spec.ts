@@ -695,6 +695,24 @@ describe('a writeNumber deviation sees each number that the codec writes', () =>
         expect(seen).toEqual([2])
     })
 
+    it('hands the writer the number alone, as its type declares', () => {
+        const seen: unknown[][] = []
+        const recording = native(
+            {},
+            {
+                writeNumber: (...args: [number | bigint]) => {
+                    seen.push(args)
+                    return { N: args[0].toString() }
+                },
+            },
+        )
+        recording.encode(1)
+        expect(seen).toEqual([[1]])
+        seen.length = 0
+        recording.encode(new Set([1n, 2]))
+        expect(seen).toEqual([[1n], [2]])
+    })
+
     it('keeps the numeral refusal of a NaN that is not the first member of a bigint-first set', () => {
         const refused = native.encode(new Set([1n, Number.NaN]))
         expect(refused).toBeInstanceOf(CodecError)
