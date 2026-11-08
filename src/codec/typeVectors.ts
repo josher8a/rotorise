@@ -22,6 +22,12 @@
  * pairs in the order of the hash. A slice root also takes each literal that its options hold, a union
  * pattern that covers or part-covers a name, and a union pattern at two names.
  *
+ * A foreign root is a codec and a value of another kind, such as a number where the codec decodes
+ * a string. The run time refuses the value, so the `decoded` row is a `refuse` row: the value
+ * sits under `@ts-expect-error`, and a type that widened `Decoded` to `unknown` would accept it.
+ * The pool rows are `accept` rows, and `unknown` admits each of them, so only a foreign root sees
+ * the widening.
+ *
  * A path row where the run time resolves has a `decoded` row. The row checks that a value which the
  * run-time codec at the path decodes is assignable to the decoded type of the call. The `encoded`
  * rows check only the names of the attributes that the codec writes. The value is one draw of the
@@ -1041,6 +1047,46 @@ export type MeetPair = {
     readonly pinned?: boolean
 }
 
+/** A codec and a value of another kind, which no decoded type of the codec admits. */
+export type ForeignSample = {
+    readonly codec: AnyCodec
+    /** A value that the codec refuses, and that the decoded type of the codec does not admit. */
+    readonly sample: unknown
+}
+
+/**
+ * One foreign sample: the codec as a constant, and the value as a `refuse` row of the `decoded`
+ * group. The value must be one that the run time refuses, so the verdict is the answer of the run
+ * time and not an assumption.
+ */
+const foreignRoot = (
+    foreign: ForeignSample,
+    p: ReturnType<typeof printerOf>,
+    root: string,
+): Root => {
+    if (!failed(foreign.codec.encode(foreign.sample as never)))
+        refuse(root, 'a foreign sample that the codec writes')
+    p.constant('c', 'foreign', foreign.codec.def)
+    const sample = valueText(foreign.sample, `${root} foreign`)
+    const b = block()
+    b.lines.push('{')
+    assert(
+        b,
+        {
+            id: rowId(
+                'decoded',
+                'refuse',
+                root,
+                `Decoded of the codec = ${sample}`,
+            ),
+            expect: 'refuse',
+        },
+        `const d: Decoded<typeof C.${p.full('c')}> = ${sample}`,
+    )
+    b.lines.push('}')
+    return { root, declarations: p.declarations, checks: b }
+}
+
 // one cast, where the run time takes erased factors and `meet` takes the tuple that it validates
 const meetOfCodecs = meet as unknown as (
     ...factors: readonly AnyCodec[]
@@ -1312,11 +1358,13 @@ export const typeVectorFiles = ({
     slices,
     paths,
     meets,
+    foreign,
     clauses,
 }: {
     readonly slices: readonly Slice[]
     readonly paths: readonly PathVectors[]
     readonly meets: readonly MeetPair[]
+    readonly foreign: readonly ForeignSample[]
     readonly clauses: readonly (() => AnyCodec)[]
 }): readonly (readonly [string, string])[] => {
     /** The meets whose two factors print as library calls, each once by the identity of its pair. */
@@ -1353,6 +1401,7 @@ export const typeVectorFiles = ({
         ]),
         ...paths.map((v) => v.codec.def),
         ...meetRootsOf.flatMap(([, pair]) => [pair.left.def, pair.right.def]),
+        ...foreign.map((v) => v.codec.def),
     ])
     const sliceRoots = byHash(
         slices,
@@ -1378,17 +1427,26 @@ export const typeVectorFiles = ({
             'meet',
         ),
     )
+    const foreignRoots = byHash(
+        foreign,
+        (v) =>
+            `foreign|${valueText(v.sample, 'foreign')}|${leanClosedOf(v.codec, 'foreign', freshBound())}`,
+    ).map(([root, v], i) =>
+        foreignRoot(v, printerOf(constants, `f${i}`, 'foreign'), root),
+    )
     const codecs = placed(
         'codecs.ts',
         codecsHeader,
-        [...sliceRoots, ...pathRoots, ...meetRoots].map(({ declarations }) => ({
-            lines: declarations.map((d) => d.line),
-            checks: declarations.map((d, i) => ({
-                id: rowId('declaration', 'accept', hash(d.content), d.kind),
-                expect: 'accept' as const,
-                at: i + 1,
-            })),
-        })),
+        [...sliceRoots, ...pathRoots, ...meetRoots, ...foreignRoots].map(
+            ({ declarations }) => ({
+                lines: declarations.map((d) => d.line),
+                checks: declarations.map((d, i) => ({
+                    id: rowId('declaration', 'accept', hash(d.content), d.kind),
+                    expect: 'accept' as const,
+                    at: i + 1,
+                })),
+            }),
+        ),
     )
     const parts = split(
         sliceRoots.map((r) => r.checks),
@@ -1407,7 +1465,7 @@ export const typeVectorFiles = ({
         ...placed(file, checksHeader, pathParts[i] ?? []),
     }))
     const meetParts = split(
-        meetRoots.map((r) => r.checks),
+        [...meetRoots, ...foreignRoots].map((r) => r.checks),
         MEET_FILES.length,
     )
     const meetFiles = MEET_FILES.map(([file], i) => ({

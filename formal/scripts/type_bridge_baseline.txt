@@ -12,6 +12,8 @@
 #   exclude      time keeps the member (`accept`) or drops it (`refuse`).
 #   path         one path under `at`: `accept` where the run time resolves one codec.
 #   decoded      one sample value of the codec at a path, assigned to `Decoded` of that codec.
+#                A `refuse` row is a foreign sample: a value of another kind, one for each family of
+#                codec, which the run time refuses and the type must refuse.
 #   encoded      one key that the run time writes at a path: `encode` at the path admits it.
 #   meet         the call of `meet` on two codecs: `accept` where the run time gives a codec,
 #                `refuse` where the run time gives none.

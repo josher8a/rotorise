@@ -112,7 +112,7 @@ import {
     rngFrom,
     structuralEquals,
 } from '../testing'
-import type { MeetPair } from '../typeVectors'
+import type { ForeignSample, MeetPair } from '../typeVectors'
 import { typeVectorFiles } from '../typeVectors'
 
 /** The emitter takes the erased codec; the constructors return precise ones. */
@@ -938,6 +938,21 @@ const typeOnlyMeets: readonly MeetPair[] = (() => {
         pinned: true,
     }))
 })()
+
+/**
+ * **One foreign sample for each family of codec that decodes a plain value**: a value of another
+ * kind, which the run time refuses and no decoded type of the codec admits. The `decoded` rows of
+ * the pool are `accept` rows, and a decoded type of `unknown` admits each of them, so these rows
+ * are what sees the widening.
+ */
+const typeOnlyForeign: readonly ForeignSample[] = [
+    { codec: string, sample: 1 },
+    { codec: number, sample: '1' },
+    { codec: dynamoNumber, sample: 1 },
+    { codec: decimal, sample: 1 },
+    { codec: boolean, sample: 'true' },
+    { codec: binary, sample: 'x' },
+].map(({ codec, sample }) => ({ codec: erase(codec), sample }))
 
 /**
  * **The roots whose slots differ in presence, adapter and layout**, against the patterns that the
@@ -2167,6 +2182,7 @@ describe('the generated pool, against the model', () => {
             ],
             paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
             meets: [...pairs, ...typeOnlyMeets],
+            foreign: typeOnlyForeign,
             clauses: clauseVocabulary,
         })
         if (process.env.EMIT_LEAN_REFUSALS) {
@@ -2179,12 +2195,18 @@ describe('the generated pool, against the model', () => {
         const rows: readonly { readonly id: string }[] = JSON.parse(
             files.find(([file]) => file === 'rows.json')?.[1] ?? '[]',
         )
-        const rowsOf = (group: string) =>
-            rows.filter((row) => row.id.startsWith(`${group}|accept|`)).length
+        const rowsOf = (group: string, verdict = 'accept') =>
+            rows.filter((row) => row.id.startsWith(`${group}|${verdict}|`))
+                .length
         expect({
             resolvedPathRows: rowsOf('path'),
             decodedRows: rowsOf('decoded'),
-        }).toEqual({ resolvedPathRows: 7359, decodedRows: 7210 })
+            foreignRows: rowsOf('decoded', 'refuse'),
+        }).toEqual({
+            resolvedPathRows: 7359,
+            decodedRows: 7210,
+            foreignRows: 6,
+        })
         expect(files.map(([file]) => file)).toEqual([
             'codecs.ts',
             'slices0.ts',
