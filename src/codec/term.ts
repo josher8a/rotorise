@@ -26,7 +26,7 @@ import type {
     Rng,
     SetSlot,
 } from './codec'
-import { CodecError } from './result'
+import { CodecError, failed } from './result'
 import { asRecord, own, sameLiteral } from './value'
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
@@ -509,7 +509,9 @@ export const readMember = (t: Term): AttributeName | undefined => {
  * **The member that a set element stores**, read at the node that each `ref` names. The type gates
  * `.set()` on the attribute of the element, and the attribute of a scope entry is the attribute of
  * the definition that the entry names, so the run time reads the same node. A stored set holds no
- * recursion, so a node that the read already passed answers nothing.
+ * recursion, so a node that the read already passed answers nothing. At an entry of a cycle the
+ * read gives the member where `printedMember` answers none. A set refuses both answers, because the
+ * element is then a container or a union of mixed members.
  */
 export const elementMember = (
     t: Term,
@@ -839,20 +841,9 @@ export const holdsNoValue = (
 }
 
 /**
- * **The alternatives an adapter stores**, which is not what it pins.
- *
- * {@link literalAlternatives} answers what a term pins at the *caller's* level, because that is
- * what admission compares a caller's value against. An adapter pins nothing there: `decimal('1')`
- * admits the string `'1'` and the literal beneath it holds a numeral, so reading through would
- * answer with a value no caller ever hands in.
- *
- * A tag table wants the other one. `assignmentOf` builds the lookup a *stored* attribute is
- * matched against, so it wants the alternative under the adapter, and this is that reader. The two
- * are different questions and the split is why they are two functions.
- *
- * The reader is the model's `pinOfG`: it reads through each `refine`, then through one `held`, and
- * the term under that `held` pins itself. A second adapter or a refinement under the first adapter
- * pins nothing.
+ * The pin of a term, read as the model's `pinOfG` reads it: through each `refine`, then through one
+ * `held`, and the term under that `held` pins itself. A second adapter or a refinement under the
+ * first adapter pins nothing.
  */
 export const storedPin = (t: Term): StoredPin | undefined => {
     const at = resolvedTerm(t)
@@ -871,10 +862,34 @@ export type StoredPin = {
     readonly under: Term
 }
 
-/** The alternatives that the stored side of a term pins, or `undefined` where it pins none. */
+/**
+ * **The alternatives an adapter stores**, which is not what it pins.
+ *
+ * {@link literalAlternatives} answers what a term pins at the *caller's* level, because that is
+ * what admission compares a caller's value against. An adapter pins nothing there: `decimal('1')`
+ * admits the string `'1'` and the literal beneath it holds a numeral, so reading through would
+ * answer with a value no caller ever hands in.
+ *
+ * A tag table wants the other one. `assignmentOf` builds the lookup a *stored* attribute is
+ * matched against, so it wants the alternative under the adapter, and this is that reader. The two
+ * are different questions and the split is why they are two functions.
+ */
 export const storedAlternatives = (t: Term): Alternatives | undefined => {
     const pin = storedPin(t)
     return pin && literalAlternatives(pin.under)
+}
+
+/**
+ * The value that a pin decodes to: the stored literal, or `g` of the literal where an adapter
+ * holds the pin. `undefined` where the term below is no literal, or where the adapter returns a
+ * refusal of its own literal, which breaks the pair that the adapter owes. A throw of `g` is not
+ * caught, and each caller decides what the throw means.
+ */
+export const pinnedValue = (pin: StoredPin | undefined): unknown => {
+    if (pin?.under.kind !== 'literal') return undefined
+    if (pin.held === undefined) return pin.under.v
+    const value = (pin.held.g as (held: unknown) => unknown)(pin.under.v)
+    return failed(value) ? undefined : value
 }
 
 /** Whether the adapter that {@link storedPin} passed is the adapter of a caller. */

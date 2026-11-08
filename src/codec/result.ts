@@ -8,11 +8,22 @@
 
 type CodecErrorKind = 'refused' | 'vacant' | 'someVariants' | 'ambiguous'
 
-/** The stack of an error with the header of a copy: the header of the original names the reason alone. */
-const headed = (stack: string | undefined, copy: Error): string | undefined => {
+/**
+ * The stack of a copy. Where the stack of the original starts with the header of the original, the
+ * copy puts its own header in place of that prefix. Where the stack has another form, the copy puts
+ * its header above the whole stack. The function reads no frame format.
+ */
+const headed = (
+    stack: string | undefined,
+    original: Error,
+    copy: Error,
+): string | undefined => {
     if (stack === undefined) return undefined
-    const frames = stack.indexOf('\n    at ')
-    return `${copy.name}: ${copy.message}${frames < 0 ? '' : stack.slice(frames)}`
+    const header = `${original.name}: ${original.message}`
+    const head = `${copy.name}: ${copy.message}`
+    return stack.startsWith(header)
+        ? head + stack.slice(header.length)
+        : `${head}\n${stack}`
 }
 
 /**
@@ -70,20 +81,52 @@ export class CodecError extends Error {
      * stack is the name and the message of the copy, so a printed stack names the path.
      */
     under(segment: string | number): this {
-        const path = [segment, ...this.path]
-        const deeper: this = Object.create(Object.getPrototypeOf(this))
-        Object.defineProperty(deeper, 'stack', {
-            get: () => headed(this.stack, deeper),
-            configurable: true,
-        })
-        // the own fields of a subclass, such as the term of a refused recursion, stay on the copy
-        Object.assign(deeper, this, {
-            message: `at ${asPath(path)}: ${this.reason}`,
-            path,
-        })
-        return deeper
+        return copied(this, [segment, ...this.path])
     }
 }
+
+/**
+ * The copy that {@link CodecError.under} makes: the refusal at a path, with a reason. The one rule
+ * of a path on a copy, so each copy gives the message `at <path>: <reason>`, or the reason alone
+ * at the empty path.
+ */
+const copied = <E extends CodecError>(
+    from: E,
+    path: readonly (string | number)[],
+    reason: string = from.reason,
+): E => {
+    const copy: E = Object.create(Object.getPrototypeOf(from))
+    Object.defineProperty(copy, 'stack', {
+        get: () => headed(from.stack, from, copy),
+        configurable: true,
+    })
+    // the own fields of a subclass, such as the term of a refused recursion, stay on the copy
+    Object.assign(copy, from, {
+        message: path.length === 0 ? reason : `at ${asPath(path)}: ${reason}`,
+        path,
+        reason,
+    })
+    // `cause` is an own field that no enumeration lists, so the copy defines it
+    if (Object.hasOwn(from, 'cause'))
+        Object.defineProperty(copy, 'cause', {
+            value: from.cause,
+            writable: true,
+            configurable: true,
+        })
+    return copy
+}
+
+/**
+ * The refusal of a union at the path of the refusal of its option. The reason is the sentence of
+ * the union. The kind, the subclass and the cause are the option's, and the path rule is `under`.
+ */
+export const restated = <E extends CodecError>(option: E, reason: string): E =>
+    [...option.path]
+        .reverse()
+        .reduce<E>(
+            (error, segment) => error.under(segment),
+            copied(option, [], reason),
+        )
 
 /**
  * Two codecs that a property check found to differ. The failure is of the check and no codec

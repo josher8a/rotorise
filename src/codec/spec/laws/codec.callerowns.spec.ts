@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CodecError, failed } from '../../../Rotorise'
-import { held, item, object, refine, string, union } from '../../codec'
+import { held, item, number, object, refine, string, union } from '../../codec'
 import { RecursionRefused } from '../../term'
 
 describe('a refinement whose predicate throws', () => {
@@ -71,6 +71,128 @@ describe('a refusal that an adapter returns', () => {
         expect(notTitled.stack?.split('\n')[0]).toBe(
             'CodecError: the name is not in title case',
         )
+    })
+})
+
+describe('the stack and the cause of a copy', () => {
+    const frames = (stack: string | undefined) => stack?.split('\n').slice(1)
+
+    it('the stack of a copy keeps the frames of the original, under the V8 form', () => {
+        const notTitled = new CodecError('the name is not in title case')
+        const Name = held(string, string, {
+            encode: (text) => text,
+            decode: (text) => (text === text.toLowerCase() ? notTitled : text),
+        })
+        const read = item(object({ name: Name })).decode({ name: { S: 'rex' } })
+        expect(frames(notTitled.stack)?.length).toBeGreaterThan(0)
+        expect(failed(read) && frames(read.stack)).toEqual(
+            frames(notTitled.stack),
+        )
+    })
+
+    it('the stack of a copy keeps every line of an original that has no header', () => {
+        const original = new CodecError('r')
+        Object.defineProperty(original, 'stack', {
+            value: 'f@a.js:1:1\ng@a.js:2:2',
+        })
+        expect(original.under('name').stack).toBe(
+            'CodecError: at name: r\nf@a.js:1:1\ng@a.js:2:2',
+        )
+    })
+
+    it('the stack of a copy of a copy names the whole path, and keeps the frames', () => {
+        const original = new CodecError('r')
+        Object.defineProperty(original, 'stack', {
+            value: 'CodecError: r\n    at f (a.js:1:1)\n    at g (a.js:2:2)',
+        })
+        expect(original.under('b').under('a').stack).toBe(
+            'CodecError: at a.b: r\n    at f (a.js:1:1)\n    at g (a.js:2:2)',
+        )
+    })
+
+    it('a refusal keeps the cause that the adapter gave it, at every level', () => {
+        const bug = new Error('the schema said no')
+        const Name = held(string, string, {
+            encode: (text) => text,
+            decode: (text) =>
+                text === text.toLowerCase()
+                    ? new CodecError(
+                          'the name is not in title case',
+                          'refused',
+                          { cause: bug },
+                      )
+                    : text,
+        })
+        const read = item(object({ outer: object({ name: Name }) })).decode({
+            outer: { M: { name: { S: 'rex' } } },
+        })
+        expect(failed(read) && read.path).toEqual(['outer', 'name'])
+        expect(failed(read) && read.cause).toBe(bug)
+        expect(failed(read) && Object.keys(read)).not.toContain('cause')
+    })
+})
+
+describe('the refusal of a union write', () => {
+    const bug = new Error('the schema said no')
+    const Name = held(string, string, {
+        encode: () =>
+            new CodecError('the name is refused', 'refused', { cause: bug }),
+        decode: (text) => text,
+    })
+
+    it('names the path of the option in its message, at the root, as a read does', () => {
+        const Pet = union([object({ name: string }), number])
+        const wrote = Pet.encode({ name: 5 } as never)
+        const read = Pet.decode({ M: { name: { N: '5' } } } as never)
+        expect(failed(read) && read.message.startsWith('at name: ')).toBe(true)
+        expect(failed(wrote) && wrote.path).toEqual(['name'])
+        expect(
+            failed(wrote) &&
+                wrote.message.startsWith('at name: no option admits'),
+        ).toBe(true)
+    })
+
+    it('keeps the kind and the cause of the refusal of the option', () => {
+        const Pet = union([object({ name: Name }), number])
+        const wrote = Pet.encode({ name: 'rex' } as never)
+        expect(failed(wrote) && wrote.path).toEqual(['name'])
+        expect(failed(wrote) && wrote.cause).toBe(bug)
+        expect(failed(wrote) && wrote.reason).toMatch(
+            /^no option admits.*refuses: the name is refused/,
+        )
+    })
+
+    it('keeps the subclass and the fields of the refusal of the option', () => {
+        const Tree = held(string, string, {
+            encode: () =>
+                new RecursionRefused(
+                    { kind: 'never' } as never,
+                    2,
+                    'the cycle has no guard',
+                ),
+            decode: (text) => text,
+        })
+        const wrote = union([object({ name: Tree }), number]).encode({
+            name: 'rex',
+        } as never)
+        expect(wrote).toBeInstanceOf(RecursionRefused)
+        const refused = wrote as RecursionRefused
+        expect([refused.term, refused.use, refused.path]).toEqual([
+            { kind: 'never' },
+            2,
+            ['name'],
+        ])
+        expect(refused.reason).toMatch(
+            /^no option admits.*refuses: the cycle has no guard/,
+        )
+    })
+
+    it('adds no path where the option refuses at no path', () => {
+        const wrote = union([string, number]).encode(true as never)
+        expect(failed(wrote) && wrote.path).toEqual([])
+        expect(
+            failed(wrote) && wrote.message.startsWith('no option admits'),
+        ).toBe(true)
     })
 })
 

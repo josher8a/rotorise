@@ -58,7 +58,7 @@ import type {
 } from './codec'
 import { at, CodecError, codecOfTerm, failed, orThrow } from './codec'
 import { accepts, holds, termOf } from './denote'
-import { asPath, Disagreement } from './result'
+import { asPath, Disagreement, setOwn } from './result'
 import type { Term } from './term'
 import {
     componentsOf,
@@ -1378,10 +1378,10 @@ const draw = (
                 if (field.mark === 'optional' && sparse) continue
                 // the key is always emitted; what varies is whether it holds a value
                 if (field.mark === 'undefinable' && sparse) {
-                    out[name] = undefined
+                    setOwn(out, name, undefined)
                     continue
                 }
-                out[name] = draw(codecOfTerm(field.t), rng, size, drew)
+                setOwn(out, name, draw(codecOfTerm(field.t), rng, size, drew))
             }
             return out
         }

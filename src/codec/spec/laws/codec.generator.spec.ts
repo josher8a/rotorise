@@ -18,6 +18,7 @@ import {
     string,
 } from '../../codec'
 import { native } from '../../native'
+import { failed } from '../../result'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
@@ -105,5 +106,14 @@ describe('a value is attributed to the read of the pair by one condition', () =>
                 } as never,
             ),
         ).not.toThrow()
+    })
+
+    it('draws a declared field named __proto__ as an own key, which the encode then writes', () => {
+        const Odd = object({ ['__proto__']: string } as never)
+        const drawn = arbitraryOf(Odd as never, rngFrom(1), 3)
+        expect(Object.hasOwn(drawn as object, '__proto__')).toBe(true)
+        const write = (Odd as unknown as { encode: (v: unknown) => unknown })
+            .encode
+        expect(failed(write(drawn))).toBe(false)
     })
 })

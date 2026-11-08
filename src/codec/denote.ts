@@ -48,6 +48,7 @@ import {
     every,
     everyEntry,
     failed,
+    restated,
     setOwn,
 } from './result'
 import { agrees, guardAt, sideOf } from './scoped'
@@ -62,6 +63,7 @@ import {
     literalForm,
     occV,
     openRefusal,
+    pinnedValue,
     RecursionRefused,
     readMember,
     recursionUse,
@@ -824,12 +826,10 @@ export const altSem = (
         if (sole === undefined) return unmatched(named)
         const refused = through(sole)
         if (!failed(refused)) return unmatched(named)
-        // the union keeps its own sentence, and the path of the refusal is the path of the option
-        return Object.assign(
-            new CodecError(
-                `${unmatched(named).reason}; ${sole.describe} refuses: ${refused.reason}`,
-            ),
-            { path: refused.path },
+        // the union keeps its own sentence, and the refusal is the option's, at the option's path
+        return restated(
+            refused,
+            `${unmatched(named).reason}; ${sole.describe} refuses: ${refused.reason}`,
         )
     }
 
@@ -924,11 +924,8 @@ export const altSem = (
  */
 export const byTagSem = <V>(
     ks: readonly string[],
-    members: readonly (readonly [Readonly<Record<string, string>>, V])[],
-    written?: (
-        member: V,
-        patch: Readonly<Record<string, unknown>>,
-    ) => unknown | undefined,
+    members: readonly Member<V>[],
+    written?: Written<V>,
 ): {
     readonly pick: (assignment: Readonly<Record<string, string>>) => Result<V>
     readonly tagOf: (
@@ -963,42 +960,6 @@ export const byTagSem = <V>(
         )
     },
     tagOf: (item) => {
-        /**
-         * The stored text of a tag. A tag is the stored literal on both sides. Where a member holds
-         * the tag under the adapter of a caller, `written` is given for that member, and the
-         * caller's value goes through the tag field of the member: the first member that writes it
-         * decides the text. The adapter writes `'dog'` as `'D'`, and a member that does not admit
-         * the value refuses it. Two members that decode their tags to one value are refused at
-         * construction, because a `held` owes `decode(encode(v)) = v`, so no order of the members
-         * decides the text. A member with no adapter of a caller writes the literal as it is, so the value is
-         * compared with the literal, and no refusal is built. A value that no member writes keeps
-         * its own text, and the pick names it. A number spells its text through the carrier:
-         * `String(1e21)` is '1e+21', and the store holds '1000000000000000000000'.
-         */
-        const storedTag = (name: string, tag: unknown): Result<string> => {
-            const asText =
-                typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
-            const plain = failed(asText) ? asText : String(asText)
-            if (written) {
-                for (const [assignment, member] of members) {
-                    const row = written(member, { [name]: tag })
-                    if (row === undefined) {
-                        if (plain === assignment[name]) return plain
-                        continue
-                    }
-                    if (failed(row)) continue
-                    const attribute = own(
-                        row as Record<string, unknown>,
-                        name,
-                    ) as
-                        | { readonly S?: string; readonly N?: string }
-                        | undefined
-                    const text = attribute?.S ?? attribute?.N
-                    if (text !== undefined) return text
-                }
-            }
-            return plain
-        }
         const out: Record<string, string> = {}
         for (const name of ks) {
             const tag = own(item, name)
@@ -1007,13 +968,68 @@ export const byTagSem = <V>(
                     `'${name}' chooses the variant and was not given`,
                 )
             }
-            const stored = storedTag(name, tag)
+            const stored = storedTag(members, written, name, tag)
             if (failed(stored)) return stored
             setOwn(out, name, stored)
         }
         return out
     },
 })
+
+/** The value that a member's tag decodes to at each key, as {@link decodedTagOf} reads it. */
+type Decoded = Readonly<Record<string, unknown>> | undefined
+
+/** A member of a dissection: the stored text of each tag, the variant, and the decoded value of each tag. */
+type Member<V> = readonly [Readonly<Record<string, string>>, V, Decoded]
+
+/** The write of a member that holds a tag under the adapter of a caller: `undefined` for any other member. */
+type Written<V> = (
+    member: V,
+    patch: Readonly<Record<string, unknown>>,
+) => unknown | undefined
+
+/**
+ * The stored text of a tag. A tag is the stored literal on both sides. Where a member holds the
+ * tag under the adapter of a caller, `written` is given for that member, and the caller's value
+ * goes through the tag field of the member: the first member that writes it decides the text. The
+ * adapter writes `'dog'` as `'D'`, and a member that does not admit the value refuses it. A member
+ * with no adapter of a caller writes the literal as it is, so the value matches only where it is
+ * the value that the member decodes to, of the same type, and no refusal is built. A value that no member writes keeps its own text, and the pick
+ * names it. A number spells its text through the carrier: `String(1e21)` is '1e+21', and the store
+ * holds '1000000000000000000000'. The write of a dissection and the refusal of {@link membersOf}
+ * read this one function, so the two cannot differ.
+ */
+const storedTag = <V>(
+    members: readonly Member<V>[],
+    written: Written<V> | undefined,
+    name: string,
+    tag: unknown,
+): Result<string> => {
+    const asText = typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
+    const plain = failed(asText) ? asText : String(asText)
+    if (written) {
+        for (const [assignment, member, decoded] of members) {
+            const row = written(member, { [name]: tag })
+            if (row === undefined) {
+                // a member with no adapter of a caller matches the value that it decodes to, so
+                // the number 1 never matches the text '1'
+                const matches =
+                    decoded === undefined
+                        ? plain === assignment[name]
+                        : tag === decoded[name]
+                if (matches) return plain
+                continue
+            }
+            if (failed(row)) continue
+            const attribute = own(row as Record<string, unknown>, name) as
+                | { readonly S?: string; readonly N?: string }
+                | undefined
+            const text = attribute?.S ?? attribute?.N
+            if (text !== undefined) return text
+        }
+    }
+    return plain
+}
 
 /**
  * The value that a member's tag decodes to at each key, or `undefined` where a key decodes to no
@@ -1030,14 +1046,9 @@ const decodedTagOf = (
     for (const name of ks) {
         const field = own(body.fields, name)
         const pin = field && storedPin(field.t)
-        if (pin?.under.kind !== 'literal') return undefined
-        if (pin.held === undefined) {
-            setOwn(out, name, pin.under.v)
-            continue
-        }
         let value: unknown
         try {
-            value = (pin.held.g as (held: unknown) => unknown)(pin.under.v)
+            value = pinnedValue(pin)
         } catch (cause) {
             return new CodecError(
                 `'${name}' is a tag under the adapter of a caller, and the adapter threw while construction read the value that it decodes the stored literal to. A throw of caller code is a bug in the adapter, and a refusal is a returned value.`,
@@ -1045,15 +1056,11 @@ const decodedTagOf = (
                 { cause },
             )
         }
-        if (failed(value)) return undefined
+        if (value === undefined) return undefined
         setOwn(out, name, value)
     }
     return out
 }
-
-/** Two decoded tags are one value where they are one kind of value with one text. */
-const sameDecoded = (a: unknown, b: unknown): boolean =>
-    typeof a === typeof b && String(a) === String(b)
 
 /**
  * **The members of a dissection, as a set.** Every member's assignment, read off its own body, and
@@ -1064,15 +1071,19 @@ const sameDecoded = (a: unknown, b: unknown): boolean =>
  * here, because no term carries the table; the refusal is the host's alone, and it is stated at
  * construction because the type cannot state it.
  *
+ * **The write must give each member its own text.** A member that decodes a value at a key owes
+ * that the write of the value at the key gives the text of the member, so no order of the members
+ * decides the text. The refusal and the write read one function.
+ *
  * The one caller is `dissectionOf`. It reads the term and not the constructor, so a term that was
  * not built through `mdunion` meets the same rule.
  */
 export const membersOf = <V>(
     ks: readonly string[],
     bodies: readonly (readonly [Body, V])[],
-): Result<readonly (readonly [Readonly<Record<string, string>>, V])[]> => {
-    const out: (readonly [Readonly<Record<string, string>>, V])[] = []
-    const decodedTags: (Readonly<Record<string, unknown>> | undefined)[] = []
+    written?: Written<V>,
+): Result<readonly Member<V>[]> => {
+    const out: Member<V>[] = []
     for (const [body, value] of bodies) {
         const assignment = assignmentOf(ks, body)
         if (failed(assignment)) return assignment
@@ -1089,22 +1100,27 @@ export const membersOf = <V>(
                 `two options answer to ${wrote}, and a lookup reaches only one of them — give them distinct values`,
             )
         }
-        const same = decodedTags.findIndex(
-            (one) =>
-                one !== undefined &&
-                decoded !== undefined &&
-                ks.every((name) => sameDecoded(one[name], decoded[name])),
-        )
-        if (same >= 0) {
-            const wrote = ks
-                .map((name) => `'${name}' = '${String(decoded?.[name])}'`)
-                .join(' and ')
+        out.push([assignment, value, decoded] as const)
+    }
+    // the law that `held` owes, `decode` then `encode` is the identity, stated at the tag table
+    for (const [at, [assignment, , decoded]] of out.entries()) {
+        if (decoded === undefined) continue
+        for (const name of ks) {
+            const stored = storedTag(out, written, name, decoded[name])
+            if (stored === assignment[name]) continue
+            const said = `'${name}' = '${String(decoded[name])}'`
+            if (failed(stored)) {
+                return new CodecError(
+                    `option ${at} decodes ${said}, and a write of that value refuses: ${stored.reason}`,
+                )
+            }
+            const owner = out.findIndex(([one]) => one[name] === stored)
             return new CodecError(
-                `two options decode to ${wrote}, and a write of that value reaches only the first of them — give them distinct values`,
+                owner < 0
+                    ? `option ${at} decodes ${said}, and a write of that value gives '${stored}', which no option carries — give the adapter a pair that cancels`
+                    : `two options decode to ${said}, and a write of that value gives '${stored}', the text of option ${owner}, so option ${at} is never written — give them distinct values`,
             )
         }
-        decodedTags.push(decoded)
-        out.push([assignment, value] as const)
     }
     return out
 }

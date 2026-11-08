@@ -97,6 +97,7 @@ import {
     member as memberOf,
     openRefusal,
     ownsNullOf,
+    pinnedValue,
     resolvedTerm,
     sameAdapter,
     sameTerm,
@@ -611,13 +612,7 @@ export const constantOf = (declared: ObjectSlot): unknown => {
     // function names the attribute in the refusal.
     const at = resolvedTerm(t)
     if (at === undefined || at.kind === 'refine') return undefined
-    const pin = storedPin(at)
-    if (pin?.under.kind !== 'literal') return undefined
-    if (pin.held === undefined) return pin.under.v
-    // a caller's adapter that refuses its own literal breaks the pair it owes, and decides no
-    // value: the codec refuses every row, and its encode and decode report the refusal
-    const value = (pin.held.g as (held: unknown) => unknown)(pin.under.v)
-    return failed(value) ? undefined : value
+    return pinnedValue(storedPin(at))
 }
 
 /* ── the seam: a definition, as the term it denotes ───────────────────────────────────── */
@@ -6488,6 +6483,13 @@ const dissectionOf = (
         // a tag is written through its field only where a caller's adapter holds one: a plain
         // literal is its own stored text
         const callerMembers = new Set<unknown>()
+        const written = (
+            variant: ItemCodec<T, unknown>,
+            patch: Readonly<Record<string, unknown>>,
+        ) =>
+            callerMembers.has(variant)
+                ? variant.encodePartial(patch as never)
+                : undefined
         const members = membersOf(
             ks,
             memberTerms.map((term, at) => {
@@ -6508,17 +6510,13 @@ const dissectionOf = (
                     item as unknown as ItemCodec<T, unknown>,
                 ] as const
             }),
+            callerMembers.size > 0 ? written : undefined,
         )
         if (failed(members)) throw members
         const { pick, tagOf } = byTagSem(
             ks,
             members,
-            callerMembers.size > 0
-                ? (variant, patch) =>
-                      callerMembers.has(variant)
-                          ? variant.encodePartial(patch as never)
-                          : undefined
-                : undefined,
+            callerMembers.size > 0 ? written : undefined,
         ) as unknown as {
             pick: (
                 assignment: Readonly<Record<string, string>>,

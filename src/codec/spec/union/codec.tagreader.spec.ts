@@ -13,6 +13,7 @@ import {
     discriminatedUnion,
     held,
     item,
+    mdunion,
     number,
     object,
     ref,
@@ -116,7 +117,7 @@ describe('a tag whose adapter pins no literal', () => {
 
 describe('two members that decode their tag to one value', () => {
     const refusal =
-        /two options decode to 'kind' = 'dog', and a write of that value reaches only the first of them/
+        /two options decode to 'kind' = 'dog', and a write of that value gives '(D|dog)', the text of option 0, so option 1 is never written/
 
     it('are refused at construction, where a caller adapter and a plain literal meet', () => {
         for (const options of [
@@ -181,6 +182,91 @@ describe('two members that decode their tag to one value', () => {
                 ]),
             ),
         ).not.toThrow()
+    })
+
+    it('are refused where the two differ at another key, because the write reads each key alone', () => {
+        expect(() =>
+            item(
+                mdunion(['kind', 'size'], [
+                    object({
+                        kind: DogTag,
+                        size: string('small'),
+                        bark: string,
+                    }),
+                    object({
+                        kind: string('dog'),
+                        size: string('large'),
+                        pen: string,
+                    }),
+                ] as never) as never,
+            ),
+        ).toThrow(refusal)
+    })
+
+    it('are two members in either order, where a plain tag is the text of the number that a caller tag decodes to', () => {
+        const OneTag = held(string('D'), number(1), {
+            encode: (_: 1) => 'D' as const,
+            decode: (_: 'D') => 1 as const,
+        })
+        const caller = object({ kind: OneTag, bark: string })
+        const plain = object({ kind: string('1'), lives: number })
+        for (const options of [
+            [caller, plain],
+            [plain, caller],
+        ]) {
+            const Pets = item(
+                discriminatedUnion('kind', options as never),
+            ) as unknown as Store
+            const read = Pets.decode({ kind: { S: 'D' }, bark: { S: 'woof' } })
+            expect(read).toEqual({ kind: 1, bark: 'woof' })
+            for (const stored of [
+                { kind: { S: 'D' }, bark: { S: 'woof' } },
+                { kind: { S: '1' }, lives: { N: '9' } },
+            ])
+                expect(Pets.encode(Pets.decode(stored))).toEqual(stored)
+        }
+    })
+
+    it('are refused where the adapter does not write its own value as its own literal', () => {
+        const Broken = held(string('D'), string('dog'), {
+            encode: (_: 'dog') =>
+                new CodecError('the adapter refuses its own value'),
+            decode: (_: 'D') => 'dog' as const,
+        })
+        expect(() =>
+            item(
+                discriminatedUnion('kind', [
+                    object({ kind: Broken, bark: string }),
+                    object({ kind: string('cat'), lives: number }),
+                ] as never),
+            ),
+        ).toThrow(
+            /option 0 decodes 'kind' = 'dog', and a write of that value gives 'dog', which no option carries/,
+        )
+    })
+
+    it('write back the row that each reads, where the write gives each member its own text', () => {
+        const Pets = item(
+            mdunion(['kind', 'size'], [
+                object({ kind: DogTag, size: string('small'), bark: string }),
+                object({
+                    kind: string('cat'),
+                    size: string('large'),
+                    pen: string,
+                }),
+                object({
+                    kind: string('cat'),
+                    size: string('small'),
+                    pen: string,
+                }),
+            ] as never) as never,
+        ) as unknown as Store
+        for (const stored of [
+            { kind: { S: 'D' }, size: { S: 'small' }, bark: { S: 'woof' } },
+            { kind: { S: 'cat' }, size: { S: 'large' }, pen: { S: 'north' } },
+            { kind: { S: 'cat' }, size: { S: 'small' }, pen: { S: 'south' } },
+        ])
+            expect(Pets.encode(Pets.decode(stored))).toEqual(stored)
     })
 })
 
