@@ -663,7 +663,9 @@ describe('the derived key rows, against the model of a key', () => {
                 case 'refused':
                     expect(
                         arm.kind === 'missing' ||
-                            (arm.kind === 'leaf' && segments === undefined),
+                            (arm.kind === 'leaf' && segments === undefined) ||
+                            // a full key of one attribute is not empty
+                            (arm.kind === 'attr' && modelKey(row) === ''),
                         row.name,
                     ).toBe(true)
                     break

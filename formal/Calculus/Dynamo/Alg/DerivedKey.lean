@@ -16,7 +16,8 @@ the collision.
 
 A partial key is the print of the first segments with a trailing separator. A prefix match on it
 selects exactly the items that agree on those segments. The same match without the trailing
-separator selects more.
+separator selects more. A full key has a segment (`build_full_ne_nil`), so it is not empty. A
+partial key may have none, because the host gives it as a prefix.
 
 The builder of the host prints each component as a word of segments: a name and a value, a tag
 and a value, or a value alone. The model states the three shapes, the absent value, and the
@@ -283,6 +284,12 @@ def Comp.segs : Comp → List String
   | .shaped (some t) v => [t, v]
   | .shaped none v => [v]
 
+/-- **A component prints a segment.** Each of the three shapes has one segment or two. -/
+theorem Comp.segs_ne_nil (k : Comp) : k.segs ≠ [] := by
+  cases k with
+  | named n v => simp [Comp.segs]
+  | shaped t v => cases t <;> simp [Comp.segs]
+
 /-- The components that print. A plain component is absent where its value is undefined, null or
     empty. A component with a transform is absent only where its value is undefined, because the
     transform reads a null or empty value. The caller of this function gives each part as `none`
@@ -350,6 +357,19 @@ theorem build_partial_ends_with_boundary {full : Nat} {allowPartial : Bool}
     build full allowPartial true parts = some (cs.flatMap Comp.segs ++ [""]) := by
   have hb : boundary full cs = true := (boundary_iff _ _).mpr hlt
   simp [build, h, hb]
+
+/-- **A full key has a segment.** Where the print holds each of the `full` components of a spec
+    with a component, the key is the segments of those components, and the list is not empty. A
+    partial key is the print that stops before the last component, and it may be empty. -/
+theorem build_full_ne_nil {full : Nat} {allowPartial enforce : Bool}
+    {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
+    (hfull : cs.length = full) (hpos : 0 < full) :
+    ∃ ss, build full allowPartial enforce parts = some ss ∧ ss ≠ [] := by
+  have hb : boundary full cs = false := by simp [boundary, hfull]
+  refine ⟨cs.flatMap Comp.segs, by simp [build, h, hb], ?_⟩
+  cases cs with
+  | nil => simp at hfull; omega
+  | cons c r => simp [List.flatMap_cons, List.append_eq_nil_iff, Comp.segs_ne_nil c]
 
 /-! ## The key as a codec -/
 

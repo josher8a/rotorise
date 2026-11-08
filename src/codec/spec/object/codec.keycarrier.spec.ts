@@ -183,7 +183,7 @@ describe('a key of one Uint8Array attribute is B in every path that writes a row
 describe('DynamoDB refuses an empty key value, so the run time refuses it', () => {
     it('refuses an empty string key, and names the key and not the value', () => {
         expect(() => Tags.keys(['SK'], { nick: '' })).toThrow(
-            "'SK' is built from a value that DynamoDB cannot store as a key",
+            "Key SK: the attribute 'nick' is empty, so the key is empty.",
         )
     })
 
@@ -195,16 +195,14 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
 
     it('keyUpdates refuses an empty key, where the update writes a key that DynamoDB refuses', () => {
         expect(() => Tags.keyUpdates({ nick: '' })).toThrow(
-            "'SK' is built from a value that DynamoDB cannot store as a key",
+            "'SK' cannot be rebuilt from this change: Key SK: the attribute 'nick' is empty, so the key is empty.",
         )
     })
 
     it('toEntry refuses an empty key, which a marshaller writes as a key that DynamoDB refuses', () => {
         expect(() =>
             Tags.toEntry({ tagId: new Uint8Array([1]), petId: 'p1', nick: '' }),
-        ).toThrow(
-            "'SK' is built from a value that DynamoDB cannot store as a key",
-        )
+        ).toThrow("Key SK: the attribute 'nick' is empty, so the key is empty.")
         expect(() =>
             Tags.toEntry({ tagId: new Uint8Array(), petId: 'p1', nick: 'Rex' }),
         ).toThrow(

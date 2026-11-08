@@ -1618,13 +1618,16 @@ type ErasedMatch<Entity> = {
  * The key of a spec for an attributes object: `keyOf` of `KeyMatch`. `select` reads the arm that
  * the attributes reach. A leaf builds the word of `DerivedKey`: `printed` stops at the first absent
  * part, each part prints its segments as a `Comp`, `boundary` marks a partial key, and the test of
- * `Good` refuses a segment that holds the separator. The host checks the separator half of `Good`
- * only: the model also requires a non-empty list of segments, and the host keeps the empty list
- * for one caller. The public `key` returns the empty string at a depth of 0, and with `allowPartial`
- * where the first part is absent. A sort-key condition
- * never uses the empty prefix, because `sortCondition` refuses it, and `asKey` refuses an empty `S`
- * or `B` at carry time. The host adds the refusal of an object segment, which the model does not
- * state, because a JS value can be an object.
+ * `Good` refuses a segment that holds the separator. The host checks both halves of `Good` for a
+ * full key: no segment holds the separator, and the list of segments is not empty. A key of one
+ * attribute refuses an empty value. A list of components prints the name of each component, so a
+ * full key of a list is not empty. A partial key is a call with `allowPartial`, or with a `depth`
+ * below the count of components. A partial key is exempt from the second half, and may be the empty
+ * string, because the public `key` serves a caller that uses the key as a `begins_with` prefix. The
+ * empty string is that prefix at a depth of 0, and with `allowPartial` where the first part is
+ * absent. `sortCondition` refuses the empty prefix, and `asKey` refuses an empty `S` or `B` at
+ * carry time. The host adds the refusal of an object segment, which the model does not state,
+ * because a JS value can be an object.
  */
 const key =
     <const Entity>() =>
@@ -1684,7 +1687,7 @@ const key =
                 if (value === null) return undefined as never
                 // a key of one attribute holds the stored payload of an attribute under the adapter
                 // of a caller, as the row holds it
-                return (
+                const stored =
                     text === undefined || value === undefined
                         ? value
                         : text(
@@ -1693,7 +1696,14 @@ const key =
                               attributes as Record<string, unknown>,
                               true,
                           )
-                ) as never
+                // an attribute has no part of a key, so its key is a full key, and a full key is not
+                // empty. The error names the key and the attribute, and holds no value.
+                if (stored === '') {
+                    throw new RotoriseError(
+                        `Key ${key.toString()}: the attribute '${arm.name}' is empty, so the key is empty. A full key is not empty. Give '${arm.name}' a value, or leave it out.`,
+                    )
+                }
+                return stored as never
             }
 
             const fullLength = arm.components.length
@@ -1773,10 +1783,9 @@ const key =
 
             /**
              * The separator half of `Good` of `DerivedKey`: no segment holds the separator, because a
-             * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: the
-             * public `key` returns the empty string at a depth of 0 and with `allowPartial` where the
-             * first part is absent, `sortCondition` refuses the empty prefix, and `asKey` refuses an
-             * empty `S` or `B` at carry time. The test runs over the
+             * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: a list
+             * of components prints the name of each component, so a full key of a list is not empty, and
+             * a partial key may be empty. The test runs over the
              * segments that the parts print, after
              * `printed` has stopped at the first absent part, so an absent part refuses before a
              * separator in a part that precedes it. The refusal names the component, and never the
@@ -4211,7 +4220,9 @@ export const tableEntry =
                           ...componentsOf(expanded[name], attributes)
                               .components,
                       ].some((c) => isValue(valueAt(attributes, c)))
-                    : printed.some((part) => part !== undefined)
+                    : arm.kind === 'attr'
+                      ? isValue(valueAt(attributes, arm.name))
+                      : printed.some((part) => part !== undefined)
             if (!given) return undefined
             const built = buildKey(
                 name as never,

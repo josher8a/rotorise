@@ -75,7 +75,8 @@ theorem Leaf.parts_const {N : Type} (full : Nat) (ps : List (Option Comp)) (i : 
   simp [Leaf.parts, Leaf.const, Part.eval, List.map_map, Function.comp_def]
 
 /-- An arm that does not match. A leaf prints parts. `null` gives no key. `attr` gives the printed
-    value of one attribute as the key, with no join. `missing` is the arm that the host lacks: the
+    value of one attribute as the key, with no join, and refuses the empty value, because a full key
+    is not empty. `missing` is the arm that the host lacks: the
     host throws there. -/
 inductive Arm (N : Type) where
   | leaf (l : Leaf N)
@@ -192,7 +193,8 @@ def select {N : Type} (i : Item N) : KeySpec N → Arm N
       | none => .missing
       | some v => select i (arms v)
 
-/-- What the host gave: a throw, no key, the printed attribute as the key, or the segments. -/
+/-- What the host gave: a throw, no key, the printed attribute as the key, or the segments. The
+    printed attribute is never the empty string, and the segments of a full key are never empty. -/
 inductive Out where
   | refused
   | nothing
@@ -210,7 +212,7 @@ def Arm.key {N : Type} (allowPartial enforce : Bool) (i : Item N) : Arm N → Ou
   | .attr n =>
       match i n with
       | none => .nothing
-      | some v => .raw v
+      | some v => if v = "" then .refused else .raw v
   | .missing => .refused
 
 /-- The key of a spec for an item: the key of the arm that the item reaches. -/
@@ -253,6 +255,40 @@ theorem keyOf_refused {s : KeySpec N} (h : select i s = .missing) :
 theorem keyOf_null {s : KeySpec N} (h : select i s = .null) :
     keyOf allowPartial enforce i s = .nothing := by
   simp [keyOf, h, Arm.key]
+
+/-- **The key of an attribute whose value is empty is a refusal.** The key of an attribute is the
+    attribute, and a full key is not empty, so the arm refuses the empty value. The options do not
+    enter: an attribute has no part, so no partial key of it exists. -/
+theorem Arm.key_attr_empty {n : N} (h : i n = some "") :
+    (Arm.attr n).key allowPartial enforce i = .refused := by
+  simp [Arm.key, h]
+
+/-- **A match that selects an attribute with an empty value gives a refusal.** -/
+theorem keyOf_attr_empty {s : KeySpec N} {n : N} (hs : select i s = .attr n) (h : i n = some "") :
+    keyOf allowPartial enforce i s = .refused := by
+  simp [keyOf, hs, Arm.key_attr_empty h]
+
+/-- **A key of an attribute that the host gives has a character.** Where the arm is an attribute
+    and the key is the printed value, the value is not empty. -/
+theorem Arm.key_attr_raw_ne_empty {n : N} {k : String}
+    (h : (Arm.attr n).key allowPartial enforce i = .raw k) : k ≠ "" := by
+  intro hk
+  subst hk
+  simp only [Arm.key] at h
+  cases hi : i n with
+  | none => simp [hi] at h
+  | some v =>
+      by_cases hv : v = "" <;> simp [hi, hv] at h
+
+/-- **A full key of a leaf has a segment.** A leaf with a component, whose parts all print, gives
+    a key from a non-empty list of segments. A partial key is the print that stops before the
+    last component, and it may be empty. -/
+theorem Arm.key_leaf_full_ne_nil {l : Leaf N} {cs : List Comp}
+    (h : printed allowPartial (l.parts i) = some cs) (hfull : cs.length = l.full)
+    (hpos : 0 < l.full) :
+    ∃ ss, (Arm.leaf l).key allowPartial enforce i = .segs ss ∧ ss ≠ [] := by
+  obtain ⟨ss, hb, hne⟩ := build_full_ne_nil (enforce := enforce) h hfull hpos
+  exact ⟨ss, by simp [Arm.key, hb], hne⟩
 
 /-! ## The support of a key -/
 

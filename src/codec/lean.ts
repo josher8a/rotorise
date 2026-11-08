@@ -3992,7 +3992,8 @@ export type KeyTree =
  * them, the separator, and what the host gave. The parts of a leaf are the components of the spec
  * cut to the depth, each one read, as the model reads them: `printed` stops at the first absent
  * part, and `Good` tests the segments of the parts that it keeps. `lawful` says that the segments
- * have a segment and that none holds the separator.
+ * have a segment and that none holds the separator. An attribute with the empty value is a
+ * refusal of the builder and of the model, because a full key is not empty.
  */
 export type KeyRow = {
     readonly name: string
@@ -4077,7 +4078,8 @@ segments that the builder joined, that the join of the segments is the key of th
 the read of the key gives the segments back exactly where the row says so. A row where the builder
 threw at an absent value, at an absent discriminator or at a literal that names no arm states that the
 model gives no segments. A row where the builder threw at
-a segment that holds the separator states that the model's segments hold it. A row of a \`null\` arm
+a segment that holds the separator states that the model's segments hold it. A row of an attribute
+with the empty value states that the model gives no key, as the builder does. A row of a \`null\` arm
 states that the null arm writes nothing. A row reads sampled items, so the row states a witness and not the law.
 -/
 

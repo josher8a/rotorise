@@ -15,8 +15,9 @@ segments back exactly where the row says so. The host refuses a segment that hol
 because the join of that list is also the join of another list (`DerivedKey.join_collision`). So a
 row of a key holds no such segment, and a row of that refusal states that the model's segments hold
 the separator. The empty segment list is the one list that the host joins and the read does not
-give back. A tree can nest a match inside an arm, and the host builds one: the arm of a match is selected
-by recursion, as `KeyMatch.select` states.
+give back. A full key of one attribute is not empty, so the host refuses an empty value and the
+model gives a refusal (`Arm.key_attr_empty`). A tree can nest a match inside an arm, and the host
+builds one: the arm of a match is selected by recursion, as `KeyMatch.select` states.
 -/
 
 namespace Calculus
@@ -65,7 +66,8 @@ def holdsSep (c : Char) (segs : List (List Char)) : Bool :=
     gave a key from segments, no segment holds the separator, the join of the segments is the key,
     the flag says whether the list is usable, and the read of the key gives the segments back
     exactly where the flag is `true`. Where the host gave the printed attribute, the key is that
-    value, and the flag is `false` because no join made the key. -/
+    value, the value is not empty (`Arm.key_attr_raw_ne_empty`), and the flag is `false` because no
+    join made the key. -/
 def keyRowOk (r : KeyRow) : Bool :=
   match r.host, r.out with
   | .refused, .refused => true

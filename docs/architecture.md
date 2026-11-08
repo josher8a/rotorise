@@ -1108,6 +1108,10 @@ meets the premises.
 A leaf of a key spec holds its parts, and a part holds the name that the part reads and the print of
 the value at that name. Two items that agree on the names that a spec reads give one key.
 
+The key of one attribute is the printed value of that attribute. A full key is not empty, so the
+model refuses an empty value, and a full key of a leaf has a segment. A partial key may be empty,
+because the host gives it as a prefix.
+
 The footprint of a key spec depends on the item. A match reads the discriminator. Where the item
 holds the discriminator, the match reads the names under the arm that the discriminator selects.
 Where the item lacks the discriminator, the match reads the names under every arm. An item that
