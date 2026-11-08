@@ -6,7 +6,16 @@
  * name as an own key.
  */
 import { describe, expect, it } from 'vitest'
-import { item, object, optional, scope, string } from '../../codec'
+import {
+    exclude,
+    item,
+    meet,
+    narrow,
+    object,
+    optional,
+    scope,
+    string,
+} from '../../codec'
 
 describe('an object that declares an attribute named __proto__', () => {
     const spec = JSON.parse('{"__proto__":{}}') as Record<string, unknown>
@@ -61,5 +70,80 @@ describe('a scope that names an entry __proto__', () => {
         })
         const built = scope(entries as never) as unknown as object
         expect(Object.hasOwn(built, '__proto__')).toBe(true)
+    })
+})
+
+/**
+ * Each builder that writes a declared name writes an own key, so a name `__proto__` survives a meet,
+ * a slice and a partial write. A plain assignment of the name sets the prototype of the record, and
+ * the record then lacks the field.
+ */
+describe('a pattern or a meet over an attribute named __proto__', () => {
+    const named = (value: unknown) => {
+        const spec = JSON.parse('{"__proto__":{}}') as Record<string, unknown>
+        Object.defineProperty(spec, '__proto__', {
+            value,
+            enumerable: true,
+            configurable: true,
+            writable: true,
+        })
+        return spec
+    }
+    type Decoder = { unsafeDecode: (row: unknown) => unknown }
+    const own = (value: unknown) => Object.hasOwn(value as object, '__proto__')
+    const pet = () =>
+        object({
+            kind: string('dog', 'cat'),
+            ...named(string('a', 'b')),
+        } as never)
+    const row = (text: string) => JSON.parse(text)
+
+    it('keeps the name as an own key in a partial write', () => {
+        const written = (
+            item(object(named(string) as never)) as unknown as {
+                encodePartial: (patch: unknown) => unknown
+            }
+        ).encodePartial(row('{"__proto__":"a"}'))
+        expect(own(written)).toBe(true)
+    })
+
+    it('keeps the name as an own key in the meet of two objects that differ', () => {
+        const met = meet(
+            object({ kind: string('dog', 'cat'), ...named(string) } as never),
+            object({ ...named(string) } as never),
+        ) as unknown as Decoder
+        expect(
+            own(
+                met.unsafeDecode(
+                    row('{"M":{"kind":{"S":"dog"},"__proto__":{"S":"a"}}}'),
+                ),
+            ),
+        ).toBe(true)
+    })
+
+    it('keeps the name as an own key in the opening of an exclude pattern and of a narrow pattern', () => {
+        const pattern = () => object({ ...named(string('a')) } as never)
+        const excluded = exclude(
+            pet() as never,
+            pattern() as never,
+        ) as unknown as Decoder
+        expect(
+            own(
+                excluded.unsafeDecode(
+                    row('{"M":{"kind":{"S":"dog"},"__proto__":{"S":"b"}}}'),
+                ),
+            ),
+        ).toBe(true)
+        const narrowed = narrow(
+            pet() as never,
+            pattern() as never,
+        ) as unknown as Decoder
+        expect(
+            own(
+                narrowed.unsafeDecode(
+                    row('{"M":{"kind":{"S":"dog"},"__proto__":{"S":"a"}}}'),
+                ),
+            ),
+        ).toBe(true)
     })
 })

@@ -232,7 +232,8 @@ export type CheckOptions<T = unknown> = {
  * The options of a check with their defaults, and the draw that each check reads: one value of the
  * codec, repaired by `refine`, that `filter` accepts. A value that the filter rejects, or that the
  * check cannot use, is counted by `discard`, and a run that discards too many is reported and not
- * spun on, so a filter that rejects every value cannot give a check that compares nothing.
+ * spun on, so a filter that rejects every value cannot give a check that compares nothing. A count
+ * is a positive integer, because a check that runs no case is no green run.
  */
 const resolved = <T>({
     count = 100,
@@ -242,6 +243,11 @@ const resolved = <T>({
     refine = (value: T) => value,
     filter = () => true,
 }: CheckOptions<T> = {}) => {
+    if (!(Number.isInteger(count) && count >= 1)) {
+        throw new CodecError(
+            `a count of ${count} runs no case, so the check has nothing to test; give a count of one or more whole cases`,
+        )
+    }
     const rng = rngFrom(seed)
     const maxDiscards = Math.max(100, count * 10)
     let discards = 0

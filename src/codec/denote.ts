@@ -2441,9 +2441,8 @@ export const accepts = (codec: AnyCodec, value: unknown): boolean => {
         // running the law's own table: `admits` classified the value's shape *before* dispatching,
         // so it answered `false` for a `null` handed to an object codec. `encode` is typed to its
         // held set and reaches for `value.a`, which throws. A `TypeError` here is a value outside
-        // the codec's type arriving past that type, which is exactly "not admitted" — Rule 14's
-        // boundary: a throw from code that assumes its input becomes a value in the code that does
-        // not.
+        // the codec's type arriving past that type, which is exactly "not admitted". A throw from
+        // code that assumes its input becomes a value at the boundary of the code that does not.
         return false
     }
 }

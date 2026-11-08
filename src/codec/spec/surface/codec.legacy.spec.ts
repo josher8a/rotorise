@@ -165,7 +165,7 @@ describe('an attribute the row does not have', () => {
             id: { S: 'o1' },
             rate: { N: '1' },
         })
-        expect(back.holding).toBeDefined()
+        expect(back.holding).toBe('STORE_V1')
     })
 
     /**

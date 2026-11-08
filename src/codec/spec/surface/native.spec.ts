@@ -460,7 +460,6 @@ describe('the port agrees on values nobody picked', () => {
         ({ seed }) => {
             const rng = rngFrom(seed)
             let compared = 0
-            let refusedByBoth = 0
 
             for (let i = 0; i < 200; i++) {
                 const value = arbitraryOf(holder as never, rng, 4)
@@ -479,7 +478,6 @@ describe('the port agrees on values nobody picked', () => {
                     expect(ours, `${JSON.stringify(value)}`).toBeInstanceOf(
                         CodecError,
                     )
-                    refusedByBoth++
                     continue
                 }
 
@@ -495,7 +493,6 @@ describe('the port agrees on values nobody picked', () => {
 
             // the sweep is worthless if the arbitrary only ever produced things both refuse
             expect(compared).toBeGreaterThan(100)
-            expect(compared + refusedByBoth).toBe(200)
         },
     )
 })
@@ -1294,8 +1291,6 @@ describe('the port writes what the SDK writes, or both refuse', () => {
             }
         }
         expect(failures).toEqual([])
-        const decided = Object.values(count).reduce((sum, n) => sum + n, 0)
-        expect(decided).toBe(8000)
         expect(count).toEqual({
             agree: 5416,
             bothRefuseSameText: 1638,

@@ -46,17 +46,19 @@ describe('the optionality of a key in a short codec', () => {
     it('admits each mark where the entity states the same optionality', () => {
         type Optional = { petId: string; nick?: string }
         type Undefinable = { petId: string; nick: string | undefined }
-        expect(
-            tableEntry<Optional>()(
-                { PK: ['petId'] },
-                { codec: { petId: string, nick: optional(string) } },
-            ),
-        ).toBeDefined()
-        expect(
-            tableEntry<Undefinable>()(
-                { PK: ['petId'] },
-                { codec: { petId: string, nick: undefinable(string) } },
-            ),
-        ).toBeDefined()
+        const Optionals = tableEntry<Optional>()(
+            { PK: ['petId'] },
+            { codec: { petId: string, nick: optional(string) } },
+        )
+        const Undefinables = tableEntry<Undefinable>()(
+            { PK: ['petId'] },
+            { codec: { petId: string, nick: undefinable(string) } },
+        )
+        const row = { petId: { S: 'p1' } } as never
+        // each mark reads a row with no attribute as the entity states it
+        expect(Object.hasOwn(Optionals.unsafeFromItem(row), 'nick')).toBe(false)
+        expect(Object.hasOwn(Undefinables.unsafeFromItem(row), 'nick')).toBe(
+            true,
+        )
     })
 })

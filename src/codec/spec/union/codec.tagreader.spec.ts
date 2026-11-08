@@ -76,8 +76,7 @@ describe('a tag read through a ref and a refine', () => {
         expect(Object.keys(Pets.spec).sort()).toEqual(['D', 'cat'])
         expectTypeOf(Pets.spec).toHaveProperty('D')
         // @ts-expect-error the caller's value is no key of the spec
-        const named: (typeof Pets.spec)['dog'] = undefined as never
-        expect(named).toBeUndefined()
+        void Pets.spec.dog
     })
 })
 
@@ -326,16 +325,11 @@ describe('a key component whose adapter throws', () => {
         expect((thrown as RotoriseError).cause).toBe(bug)
     })
 
-    it('decides nothing where the adapter returns a refusal', () => {
+    it('decides no constant where the adapter returns a refusal of its own literal', () => {
         const Kind = held(string('D'), string('dog'), {
             encode: (_: 'dog') => 'D' as const,
-            decode: (_: 'D') => new CodecError('no dog') as unknown as 'dog',
+            decode: (_: 'D'): 'dog' | CodecError => new CodecError('no dog'),
         })
-        expect(() =>
-            tableEntry<{ kind: 'dog'; petId: string }>()(
-                { PK: ['kind', 'petId'] },
-                { codec: { kind: Kind, petId: string } },
-            ),
-        ).not.toThrow()
+        expect(constantOf(object({ kind: Kind }).spec.kind)).toBeUndefined()
     })
 })

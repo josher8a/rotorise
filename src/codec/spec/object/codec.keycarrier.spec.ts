@@ -1023,7 +1023,15 @@ describe('a key component is the stored text of its attribute, over generated en
                         continue
                     }
                     written = row as typeof written
-                } catch {
+                } catch (error) {
+                    // a refusal is a value, so a throw other than a refusal is a defect that the law reports
+                    if (
+                        !(
+                            error instanceof RotoriseError ||
+                            error instanceof CodecError
+                        )
+                    )
+                        throw error
                     count.refused++
                     continue
                 }

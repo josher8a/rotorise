@@ -175,7 +175,7 @@ describe('the types', () => {
 
         // @ts-expect-error the key is required: leaving it out is not a Pet
         const _missing: Pet = { id: 'p1', chipped: undefined }
-        expect(_missing).toBeDefined()
+        void _missing
     })
 
     it('writes an optional attribute, as the row does', () => {
@@ -207,7 +207,7 @@ describe('the types', () => {
 
         // @ts-expect-error the key is required: a scope entry reads the mark the codec carries
         const _missing: Decoded<typeof Pets.At> = { id: 'p1' }
-        expect(_missing).toBeDefined()
+        void _missing
     })
 })
 

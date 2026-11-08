@@ -48,7 +48,6 @@ describe('the pin refuses a codec that differs from the model in a key path', ()
         codec satisfies AttributeCodec<Model>
         // @ts-expect-error the model has the path '.q?' and the codec has not
         pin<Model>()(codec)
-        expect(codec).toBeDefined()
     })
     it('refuses an optional key that the codec adds, which satisfies accepts', () => {
         type Model = { a: string }
@@ -56,7 +55,6 @@ describe('the pin refuses a codec that differs from the model in a key path', ()
         codec satisfies AttributeCodec<Model>
         // @ts-expect-error the codec has the path '.q?' and the model has not
         pin<Model>()(codec)
-        expect(codec).toBeDefined()
     })
     it('refuses a key dropped two levels down', () => {
         type Model = { o: { a: string; n?: number } }
@@ -64,7 +62,6 @@ describe('the pin refuses a codec that differs from the model in a key path', ()
         codec satisfies AttributeCodec<Model>
         // @ts-expect-error the model has the path '.o.n?' and the codec has not
         pin<Model>()(codec)
-        expect(codec).toBeDefined()
     })
     it('refuses a required key against an optional key', () => {
         // @ts-expect-error '.a' and '.a?' are different paths

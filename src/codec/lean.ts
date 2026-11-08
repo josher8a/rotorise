@@ -16,7 +16,7 @@
  *
  * What Lean *can* do is check. `(Closed.meaning α t).e v = some a` is a closed proposition, and for every
  * term form this library can express it is provable by kernel reduction — see the `vector` tactic
- * this module emits, and `src/codec/lean/lean.spec.ts` for the boundary. So TypeScript proposes and Lean
+ * this module emits. So TypeScript proposes and Lean
  * disposes: {@link leanVectorModule} writes a file of `theorem`s, and `lake build` on it either
  * succeeds or names the vector the two sides disagree about.
  *
@@ -3351,11 +3351,11 @@ end Calculus
  * `select` picks.
  *
  * **Coverage, not a hole.** `lean.sample*.lean` already pins two — `union_of_two` and
- * `discriminated_union`, one value each — and the refusal cross product carries 88 more union and
+ * `discriminated_union`, one value each — and the refusal cross product carries more union and
  * `dunion` lines. Those check the same thing this does: a positive vector *is* an agreement about
  * which option answered, because the attribute it names is the one that option produced. What was
- * thin was the corpus, so this widens two pinned resolutions to 208 on the write side and 226 on
- * the read side, and the artifact is worth having for that and not for closing a gap.
+ * thin was the corpus, so this widens the two pinned resolutions on the write side and on the
+ * read side, and the artifact is worth having for that and not for closing a gap.
  *
  * The write side reuses the `check` comparator, which is what crosses `Attr.m`'s binder. The read
  * side's answer is a `Value`, and `Value.map` carries a function, so it uses `vcheck`, the `Value`

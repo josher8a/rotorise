@@ -51,7 +51,7 @@ const Pets = tableEntry<Pet>()(
 )
 
 describe('the type of a key component under an adapter of a caller', () => {
-    it('names the stored literal on every route, as the run time prints it', () => {
+    it('names the stored literal on key, toEntry, infer and fromEntry, as the run time prints it', () => {
         const key = Pets.key('SK', { adopted: true })
         expectTypeOf(key).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
         expect(key).toBe('ADOPTED#Y')
@@ -59,7 +59,15 @@ describe('the type of a key component under an adapter of a caller', () => {
         expectTypeOf(entry.SK).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
         expect(entry.SK).toBe('ADOPTED#N')
         expectTypeOf(Pets.infer.SK).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
-        expectTypeOf(Pets.path().adopted.toString()).toBeString()
+        // `fromEntry` takes the entry as it is stored, so its key attribute holds the stored literal
+        type Stored = Parameters<typeof Pets.fromEntry>[0]
+        expectTypeOf<Stored['SK']>().toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
+        expectTypeOf<Stored['adopted']>().toEqualTypeOf<boolean>()
+        // `path` names the attribute of the entity, which holds the caller's value
+        const Plain = tableEntry<Pet>()({ PK: ['petId'], SK: ['adopted'] })
+        expectTypeOf(Pets.path().adopted).toEqualTypeOf<
+            ReturnType<typeof Plain.path>['adopted']
+        >()
     })
 
     it('prints a plain field as its value, beside the adapter', () => {

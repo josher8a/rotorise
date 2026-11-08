@@ -68,9 +68,10 @@ describe('the codec decides a component, so no caller passes it', () => {
         expect(() => Pets.keyUpdates(other)).toThrow(
             /'TAG' is decided by the codec as 'PET'/,
         )
-        expect(
-            Pets.keys({ TAG: 'PET', petId: 'p1', createdAt: 'c' }),
-        ).toBeDefined()
+        expect(Pets.keys({ TAG: 'PET', petId: 'p1', createdAt: 'c' })).toEqual({
+            PK: { S: 'TAG#PET#PETID#p1' },
+            SK: { S: 'TAG#PET#CREATEDAT#c' },
+        })
     })
 
     it('reads the key of keys over the decided values, and names the component that is still absent', () => {

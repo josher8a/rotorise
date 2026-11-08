@@ -76,7 +76,7 @@ describe('the reading of a union', () => {
         const either = union([cat, string])
         // @ts-expect-error the union can hold an `S`, so there is no item to read
         const write = item(either).unsafeEncode
-        expect(write).toBeDefined()
+        void write
     })
 })
 
