@@ -7,14 +7,101 @@
  * on the barrel would give it too, at the cost of naming all eighty-odd exports twice and silently
  * dropping whichever one is forgotten next.
  *
- * The types come from `./codec` and the values from `./result`, so the type-level circularity is
- * erased at build time and there is no import cycle at runtime.
+ * The types of a codec are here too: {@link AttributeCodec}, {@link AnyCodec} and {@link ObjectSlot}.
+ * Each file that reads one imports it from this file, and `./codec` names the published ones again.
+ * No file of a lower layer imports a type from `./codec`: `formal/scripts/layer_order.py` checks it.
  */
 import type { AttributeValue } from './attribute'
-import type { AttributeCodec } from './codec'
 import type { Result } from './result'
 import { orThrow } from './result'
-import type { Term } from './term'
+import type { Field, Term } from './term'
+
+/*
+ * **The free names of a codec, in its type**: the names that its term reads through a `ref` and
+ * that no scope binds. Optional, so no value carries it. Wrapped in a tuple, because a reader
+ * infers an optional `never` as `string`. A field carries the names of the codec that it marks.
+ */
+export declare const freeMarker: unique symbol
+
+/**
+ * The `this` of each use: **a use needs a closed codec**, with no free name. `encode` is a
+ * member of each codec, and keeps the type from being weak, so a codec with no mark is closed.
+ */
+export type Closed = {
+    readonly encode: unknown
+    readonly [freeMarker]?: [never]
+}
+
+/**
+ * The capabilities a codec has, with the two directions named separately.
+ *
+ * One record, instantiated twice. {@link AttributeCodec} is the concrete form, where both
+ * directions are the same `T`; {@link AnyCodec} is the erased one, where `In` is `never` and `Out`
+ * is `unknown` so every concrete codec is assignable to it.
+ *
+ * Written once because it was written twice: the erased form was a field-for-field copy, and a
+ * capability added to one and not the other simply stops being visible through the erased form —
+ * which is the form `at`, `set` and `keyUpdates` all read through. Nothing would fail; the fact
+ * would just never arrive.
+ */
+type CodecShape<In, Out, A extends AttributeValue> = {
+    /**
+     * The attribute this value is written as, or why it cannot be.
+     *
+     * A {@link Result}: the failure is returned, not thrown, because a row is data somebody else
+     * wrote and failing to read one is an ordinary outcome rather than an exception. `CodecError`
+     * extends `Error`, so a bare union is enough to tell the two apart and `isError` narrows it.
+     */
+    readonly encode: (this: Closed, value: In) => Result<A>
+    /** The value this attribute holds, or why it cannot be read. */
+    readonly decode: (this: Closed, attribute: AttributeValue) => Result<Out>
+    /**
+     * The same, throwing.
+     *
+     * What every codec calls to compose with another: a nested decode that returned a union would
+     * have to be unwrapped at each of the fifty-odd places one codec reaches into the next, and the
+     * unwrapping is the part that gets forgotten. So composition throws and the boundary converts,
+     * which is why these are the ones the composites are built from.
+     */
+    readonly unsafeEncode: (this: Closed, value: In) => A
+    /** The same, throwing. */
+    readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => Out
+    /**
+     * What this codec is — see {@link Term}.
+     *
+     * A term and not a declaration: the two field kinds denote a field, a field is not a codec,
+     * and so no codec's definition is one. It is what makes each reader total over the kinds it can
+     * be handed rather than over the kinds that exist.
+     */
+    readonly def: Term
+}
+
+/**
+ * Reads and writes one attribute.
+ *
+ * `A` is the attribute type produced, not the member name: a codec may write more than one member
+ * (see {@link nullable}), and naming the members instead would collapse to a value carrying all of
+ * them at once.
+ */
+export type AttributeCodec<
+    T,
+    A extends AttributeValue = AttributeValue,
+> = CodecShape<T, T, A>
+
+/** Any codec, both directions erased — `never` in and `unknown` out, so every codec fits. */
+export type AnyCodec = CodecShape<never, unknown, AttributeValue>
+
+/**
+ * Anything an object member can be declared as: a codec, or a field that marks one.
+ *
+ * `optional` and `fill` state that the attribute at a *name* may be absent, and the name belongs
+ * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
+ * member is read and written through is the one the field marks.
+ *
+ * Written as the definition alone, because the definition is the whole of what both cases carry that
+ * an object reads: `fieldOf` takes the mark off `def.mark` and the child term out of the same record.
+ */
+export type ObjectSlot = AnyCodec | { readonly def: Field }
 
 /**
  * What has to be said to build a codec; the rest of {@link CodecShape} follows from it.

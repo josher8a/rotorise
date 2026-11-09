@@ -7,11 +7,11 @@ import type {
     StoredItem,
 } from './codec/attribute'
 import { carrying, DynamoNumber, memberOf } from './codec/attribute'
+import type { Closed } from './codec/build'
 import type {
     AnyCodec,
     AttributeOf,
     ChildAt,
-    Closed,
     CodecAt,
     ConstantOf,
     EncodedBy,

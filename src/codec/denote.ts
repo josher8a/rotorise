@@ -7,8 +7,8 @@
  *
  * **One import direction.** `codec.ts`'s constructors take their pair from here, and nothing here
  * reaches back for a value in `codec.ts` — a value that did would close the direction into a
- * cycle, which is why `value.ts` exists. Types are free across the boundary, because `import type`
- * is erased, so every type these signatures name still lives where it was declared.
+ * cycle, which is why `value.ts` exists. A type closes the cycle too, so each type that these
+ * signatures name lives in this file or in a lower file.
  *
  * **One item pair per term.** An object term builds its body pair once; `denote`'s map-writing row
  * wraps that pair, and `item` of the codec hands out the same one. They were two objects before
@@ -28,19 +28,8 @@ import {
     memberOf,
     tooDeeplyNested,
 } from './attribute'
-import type { Codec } from './build'
+import type { AnyCodec, AttributeCodec, Codec, ObjectSlot } from './build'
 import { codec } from './build'
-import type {
-    AnyCodec,
-    AttributeCodec,
-    LiteralBase,
-    LiteralValue,
-    ObjectSlot,
-    Option,
-    opaque,
-    Refinement,
-    Shape,
-} from './codec'
 import type { Result } from './result'
 import {
     andThen,
@@ -58,6 +47,9 @@ import type {
     Body,
     Field,
     Literal,
+    LiteralBase,
+    LiteralValue,
+    Refinement,
     StoredPin,
     Term,
 } from './term'
@@ -82,7 +74,7 @@ import {
     usedTargetOf,
     widensRead,
 } from './term'
-import type { SetFamily, SetFault } from './value'
+import type { SetFamily, SetFault, Shape } from './value'
 import {
     asRecord,
     copied,
@@ -326,6 +318,31 @@ export type Pair = {
         enclosing: number,
     ) => Result<unknown>
 }
+
+/**
+ * One option of a union, reduced to what matching it actually asks.
+ *
+ * **Every option is admitted by attempt**, an object option included, as in the model, where a
+ * union acts exactly where one of its options acts (`select_isSome_attempt`). The kind of the value is a cheap filter in front of the attempt, and the
+ * names present select nothing. Two options that both admit one value are well formed, because
+ * compatibility makes the order of the attempts unobservable.
+ */
+export type Option<Item = unknown> = {
+    readonly codec: AnyCodec
+    /** The pair of the codec: a union reads and writes an option at the level of the union through it. */
+    readonly pair: Pair
+    /** The member it reads, where the term bounds the read — a cheap filter on decode. */
+    readonly member: AttributeName | undefined
+    /** The kinds of value it takes, where the kind alone decides — the same filter on encode. */
+    readonly carries: readonly Shape[]
+    /** The whole-item reading, for object options only. */
+    readonly item: Item | undefined
+    /** How it is named in a message — written the way it was declared. */
+    readonly describe: string
+}
+
+/** The numeric policies of `opaque`: what the canonical codec does with a JS `number`. */
+export type OpaqueNumbers = 'refuse' | 'lossy'
 
 /**
  * The ground terms of the judgement, as one construction: the model's `fiberCodec` under this library's word.
@@ -2294,7 +2311,7 @@ export const mapNumberLeaves = (
  * `f` stops at the nesting limit and hands the value on unchanged, so a cyclic value reaches the
  * canonical codec, which refuses it at that depth.
  */
-const numberPolicy = (numbers: opaque.Numbers) => {
+const numberPolicy = (numbers: OpaqueNumbers) => {
     const refuseText =
         "Declare the attribute with `number` or `decimal`, or opt in with `opaque('lossy')`."
 
@@ -2423,7 +2440,7 @@ const everyButNumber: Term = {
     ],
 }
 
-const policyTerm = (numbers: opaque.Numbers): Term => {
+const policyTerm = (numbers: OpaqueNumbers): Term => {
     const { f, g } = numberPolicy(numbers)
     return {
         kind: 'held',
@@ -2616,7 +2633,7 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  * The term decides, and every codec has one, so the former that built a codec classifies no
  * option.
  */
-export const optionOfTerm = (def: Term): Option => {
+export const optionOfTerm = (def: Term): Option<never> => {
     const codec = codecOfTerm(def)
     const pair = pairOf(def)
     /**

@@ -7,7 +7,6 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
-import type { Option } from '../../codec'
 import {
     boolean,
     decimal,
@@ -18,6 +17,7 @@ import {
     string,
     union,
 } from '../../codec'
+import type { Option } from '../../denote'
 import { altSem, optionOfTerm } from '../../denote'
 import { failed } from '../../result'
 

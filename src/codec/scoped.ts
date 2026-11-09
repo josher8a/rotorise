@@ -11,8 +11,33 @@
  * **The host has one disjointness decision**, the walk of this file. {@link agrees}, path narrowing
  * and the disjointness rows each read the walk, and each Lean twin reads `Scoped.disjoint`.
  */
-import type { Precondition, StoredLiteral } from './codec'
+import type { Attribute, AttributeName } from './attribute'
 import type { Alternatives, Body, Field, NonEmpty, Term } from './term'
+
+/** The stored value of a literal: the members a literal stores, and no set, list or map. */
+export type StoredLiteral =
+    | Attribute<'S'>
+    | Attribute<'N'>
+    | Attribute<'BOOL'>
+    | Attribute<'B'>
+
+/**
+ * **A stored fact at a path that a condition expression tests**: the stored attribute at
+ * `segments` holds one of the values in `in`, holds the member `type`, or exists. The three forms
+ * are DynamoDB's `IN`, `attribute_type` and `attribute_exists`. Rotorise states the fact, and the
+ * caller's expression library renders the fact.
+ */
+export type Precondition =
+    | {
+          readonly segments: readonly (string | number)[]
+          readonly in: NonEmpty<StoredLiteral>
+      }
+    | {
+          readonly segments: readonly (string | number)[]
+          readonly type: AttributeName
+      }
+    | { readonly segments: readonly (string | number)[]; readonly exists: true }
+
 import {
     absentBelow,
     childrenOf,

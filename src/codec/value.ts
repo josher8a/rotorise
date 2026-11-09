@@ -6,9 +6,9 @@
  * **They are here for a structural reason, and the reason is worth stating because the grouping is
  * not thematic.** `denote.ts` builds every constructor's pair and `codec.ts`'s constructors take
  * their pair from it, which is one import direction. A *value* `denote.ts` reached back for in
- * `codec.ts` would close that direction into a cycle. A **type** is free across it, because
- * `import type` is erased, so every type these signatures name still lives where it was declared
- * and only the values moved.
+ * `codec.ts` would close that direction into a cycle. A **type** closes it too, so each type that
+ * these signatures name lives in this file or in a lower file, and `codec.ts` names the published
+ * ones again.
  *
  * What they have in common is the level: each answers a question about a **value** or an
  * **attribute**, never about a term. Classifying a value, naming the shape a refusal reports,
@@ -27,7 +27,44 @@ import type {
     StoredItem,
 } from './attribute'
 import { DynamoNumber, memberOf } from './attribute'
-import type { Shape } from './codec'
+
+/**
+ * The kinds of value a codec can be given, as coarsely as a runtime check can tell them apart.
+ *
+ * **The codomain of {@link shapeOf}, which classifies a *value*.** That is what fixes the alphabet
+ * and why it cannot be finer: `shapeOf` sees a `Set` and answers `'set'`, because telling `strSet`
+ * from `numSet` means inspecting the elements, and **an empty `Set` belongs to no family at all**.
+ * The same asymmetry decides which containers separate at `union`.
+ *
+ * {@link SetSlot} is the finer alphabet and is not a replacement. A term knows its base, so `occV`
+ * can answer `strSet`; a value does not carry one, so no total function takes a value to a `SetSlot`.
+ * The two are the codomains of two different functions rather than two spellings of one, which is
+ * the answer to the question `1060c01` left open.
+ */
+export type Shape =
+    | 'string'
+    | 'number'
+    | 'boolean'
+    | 'binary'
+    | 'set'
+    | 'array'
+    | 'map'
+    | 'null'
+
+/**
+ * The `Value` **constructor** a term can write — {@link Shape} with the three set families split.
+ *
+ * A name of the host, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
+ * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
+ * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
+ * was not by the coarser label.
+ *
+ * **The codomain of `occV`, which reads a *term*.** The split is available here precisely because a
+ * term carries its base. {@link Shape} is the value side's alphabet and stays coarse for the reason
+ * written there, so this does not replace it: the two answer different questions.
+ */
+export type SetSlot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
+
 import type { Result } from './result'
 import { CodecError, failed, setOwn } from './result'
 

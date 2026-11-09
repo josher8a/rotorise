@@ -16,8 +16,15 @@ import type {
     StoredItem,
 } from './attribute'
 import { DynamoNumber, isStoredNumeral } from './attribute'
+import type {
+    AnyCodec,
+    AttributeCodec,
+    Closed,
+    freeMarker,
+    ObjectSlot,
+} from './build'
 import { codec } from './build'
-import type { ItemTerm, Pair } from './denote'
+import type { ItemTerm, OpaqueNumbers, Option } from './denote'
 import {
     altSem,
     byTagSem,
@@ -81,10 +88,12 @@ import {
 import type {
     Body,
     Field,
+    LiteralBase,
+    LiteralValue,
     NameForm,
-    NonEmpty,
     Order,
     RefSlot,
+    Rng,
     setMember,
     Term,
 } from './term'
@@ -111,6 +120,11 @@ import {
 } from './term'
 
 /**
+ * The types that the entries publish and that a lower file owns now. A lower file owns a type
+ * where its readers need the type, and this file names the type again for the entries.
+ */
+export type { AnyCodec, AttributeCodec, ObjectSlot } from './build'
+/**
  * Forwarded for the consumers that still name them here.
  *
  * They are `denote.ts`'s now — each answers about a term's *pair* — and this keeps the move to one
@@ -118,8 +132,17 @@ import {
  * and their callers move to the module that owns them there.
  */
 export { codecOfTerm, termOf, valueKinds } from './denote'
+export type { Precondition } from './scoped'
+export type {
+    LiteralBase,
+    LiteralValue,
+    Refinement,
+    Rng,
+} from './term'
+export type { SetSlot, Shape } from './value'
 
 import type { ErrorMessage, show } from '../utils'
+import type { Precondition } from './scoped'
 import type { StandardInput, StandardSchemaV1 } from './standard'
 import {
     describeShape,
@@ -231,12 +254,6 @@ type TermOf<C> = C extends { readonly [termMarker]?: infer T }
     : FreeTerm
 type TermsOf<Cs> = { -readonly [I in keyof Cs]: TermOf<Cs[I]> }
 
-/*
- * **The free names of a codec, in its type**: the names that its term reads through a `ref` and
- * that no scope binds. Optional, so no value carries it. Wrapped in a tuple, because a reader
- * infers an optional `never` as `string`. A field carries the names of the codec that it marks.
- */
-declare const freeMarker: unique symbol
 type Free<F extends string> = { readonly [freeMarker]?: [F] }
 /*
  * **What `item` returns for a union, in its type.** A union has no member for the reading: the
@@ -267,14 +284,6 @@ export type FreeOf<C> = C extends {
 type ObjectFree<Spec, Rest, Tm> = [Tm] extends [OfParts]
     ? FreeOf<Spec[keyof Spec]> | FreeOf<Rest>
     : never
-/**
- * The `this` of each use: **a use needs a closed codec**, with no free name. `encode` is a
- * member of each codec, and keeps the type from being weak, so a codec with no mark is closed.
- */
-export type Closed = {
-    readonly encode: unknown
-    readonly [freeMarker]?: [never]
-}
 type BaseT<K extends string> = ['prim', ['base', K]]
 type LitT<K extends string, V> = ['prim', ['literal', K, V]]
 type LitsT<
@@ -357,70 +366,6 @@ type ListTermOf<Items, Pre extends unknown[] = []> = Items extends readonly [
 declare const spreadMarker: unique symbol
 
 /**
- * A deterministic source of randomness.
- *
- * Seeded rather than `Math.random`, so a counterexample found in CI reproduces exactly from the
- * seed printed alongside it.
- */
-export type Rng = () => number
-
-/**
- * Reads and writes one attribute.
- *
- * `A` is the attribute type produced, not the member name: a codec may write more than one member
- * (see {@link nullable}), and naming the members instead would collapse to a value carrying all of
- * them at once.
- */
-export type AttributeCodec<
-    T,
-    A extends AttributeValue = AttributeValue,
-> = CodecShape<T, T, A>
-
-/**
- * The capabilities a codec has, with the two directions named separately.
- *
- * One record, instantiated twice. {@link AttributeCodec} is the concrete form, where both
- * directions are the same `T`; {@link AnyCodec} is the erased one, where `In` is `never` and `Out`
- * is `unknown` so every concrete codec is assignable to it.
- *
- * Written once because it was written twice: the erased form was a field-for-field copy, and a
- * capability added to one and not the other simply stops being visible through the erased form —
- * which is the form `at`, `set` and `keyUpdates` all read through. Nothing would fail; the fact
- * would just never arrive.
- */
-type CodecShape<In, Out, A extends AttributeValue> = {
-    /**
-     * The attribute this value is written as, or why it cannot be.
-     *
-     * A {@link Result}: the failure is returned, not thrown, because a row is data somebody else
-     * wrote and failing to read one is an ordinary outcome rather than an exception. `CodecError`
-     * extends `Error`, so a bare union is enough to tell the two apart and `isError` narrows it.
-     */
-    readonly encode: (this: Closed, value: In) => Result<A>
-    /** The value this attribute holds, or why it cannot be read. */
-    readonly decode: (this: Closed, attribute: AttributeValue) => Result<Out>
-    /**
-     * The same, throwing.
-     *
-     * What every codec calls to compose with another: a nested decode that returned a union would
-     * have to be unwrapped at each of the fifty-odd places one codec reaches into the next, and the
-     * unwrapping is the part that gets forgotten. So composition throws and the boundary converts,
-     * which is why these are the ones the composites are built from.
-     */
-    readonly unsafeEncode: (this: Closed, value: In) => A
-    /** The same, throwing. */
-    readonly unsafeDecode: (this: Closed, attribute: AttributeValue) => Out
-    /**
-     * What this codec is — see {@link Term}.
-     *
-     * A term and not a declaration: the two field kinds denote a field, a field is not a codec,
-     * and so no codec's definition is one. It is what makes each reader total over the kinds it can
-     * be handed rather than over the kinds that exist.
-     */
-    readonly def: Term
-}
-
-/**
  * Anything that can sit where an attribute codec is expected — which is every codec.
  *
  * There used to be a second thing: an item, tagged or untagged codec, which *was* one `M` attribute
@@ -472,9 +417,6 @@ export type UndefinableCodec<
     readonly def: Extract<Field, { readonly mark: 'undefinable' }>
 }
 
-/** Any codec, both directions erased — `never` in and `unknown` out, so every codec fits. */
-export type AnyCodec = CodecShape<never, unknown, AttributeValue>
-
 /**
  * Anything a {@link spread} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
  * thing that is a position rather than a codec, and the only element type {@link list} accepts that
@@ -488,18 +430,6 @@ export type AnySpread = {
     readonly [spreadMarker]: true
     readonly spread: AnyCodec
 }
-
-/**
- * Anything an object member can be declared as: a codec, or a field that marks one.
- *
- * `optional` and `fill` state that the attribute at a *name* may be absent, and the name belongs
- * to the object rather than to the thing declared at it. So a field is not a codec, and the pair a
- * member is read and written through is the one the field marks.
- *
- * Written as the definition alone, because the definition is the whole of what both cases carry that
- * an object reads: `fieldOf` takes the mark off `def.mark` and the child term out of the same record.
- */
-export type ObjectSlot = AnyCodec | { readonly def: Field }
 
 /**
  * The codec a declaration marks, and the declaration itself where it is already one.
@@ -539,43 +469,6 @@ export type Decoded<C> = C extends {
  * opens with one star rather than two. `docstring_anchor.py` is the check a doc comment here
  * would trip.
  */
-
-/**
- * The kinds of value a codec can be given, as coarsely as a runtime check can tell them apart.
- *
- * **The codomain of {@link shapeOf}, which classifies a *value*.** That is what fixes the alphabet
- * and why it cannot be finer: `shapeOf` sees a `Set` and answers `'set'`, because telling `strSet`
- * from `numSet` means inspecting the elements, and **an empty `Set` belongs to no family at all**.
- * The same asymmetry decides which containers separate at `union`.
- *
- * {@link SetSlot} is the finer alphabet and is not a replacement. A term knows its base, so `occV`
- * can answer `strSet`; a value does not carry one, so no total function takes a value to a `SetSlot`.
- * The two are the codomains of two different functions rather than two spellings of one, which is
- * the answer to the question `1060c01` left open.
- */
-export type Shape =
-    | 'string'
-    | 'number'
-    | 'boolean'
-    | 'binary'
-    | 'set'
-    | 'array'
-    | 'map'
-    | 'null'
-
-/**
- * The `Value` **constructor** a term can write — {@link Shape} with the three set families split.
- *
- * A name of the host, and the split is the whole of its content: `Kind` collapses `strSet`, `numSet`
- * and `binSet` to one label, so `set(string)` and `set(number)` are indistinguishable to it, while
- * the ten constructors tell them apart. `union(set(string), set(number))` is certified by this and
- * was not by the coarser label.
- *
- * **The codomain of `occV`, which reads a *term*.** The split is available here precisely because a
- * term carries its base. {@link Shape} is the value side's alphabet and stays coarse for the reason
- * written there, so this does not replace it: the two answer different questions.
- */
-export type SetSlot = Exclude<Shape, 'set'> | 'strSet' | 'numSet' | 'binSet'
 
 /**
  * What one declared attribute decides, read where the field is held.
@@ -832,30 +725,6 @@ const narrowAcross = (
     )
 }
 
-/** The stored value of a literal: the members a literal stores, and no set, list or map. */
-export type StoredLiteral =
-    | Attribute<'S'>
-    | Attribute<'N'>
-    | Attribute<'BOOL'>
-    | Attribute<'B'>
-
-/**
- * **A stored fact at a path that a condition expression tests**: the stored attribute at
- * `segments` holds one of the values in `in`, holds the member `type`, or exists. The three forms
- * are DynamoDB's `IN`, `attribute_type` and `attribute_exists`. Rotorise states the fact, and the
- * caller's expression library renders the fact.
- */
-export type Precondition =
-    | {
-          readonly segments: readonly (string | number)[]
-          readonly in: NonEmpty<StoredLiteral>
-      }
-    | {
-          readonly segments: readonly (string | number)[]
-          readonly type: AttributeName
-      }
-    | { readonly segments: readonly (string | number)[]; readonly exists: true }
-
 /**
  * **The preconditions of the clauses on a path**, a conjunction. The preconditions of a clause are
  * the stored admission of the clause term at the position of the narrowed union. The narrowing
@@ -963,35 +832,7 @@ const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
 /** A map of attribute name to codec — what `item`, `map` and each `tagged` variant hold. */
 export type Attributes = Readonly<Record<string, AnyCodec>>
 
-/** What {@link refine} narrowed with, for an arbitrary that has to satisfy it. */
-export type Refinement = {
-    readonly is: (value: never) => boolean
-    readonly what: string
-    readonly arbitrary?: ((rng: Rng, size: number) => unknown) | undefined
-    readonly onThinSearch?: ((what: string, rate: number) => void) | undefined
-}
-
 // ── scalars ─────────────────────────────────────────────────────────
-
-/**
- * The ground terms a literal can sit at.
- *
- * **Named by the caller, never guessed.** `literal(...)` read its carrier off the JS type of its
- * arguments — digits meant `N`, text meant `S` — and that was the one place in this library where a
- * term's member followed from its *values* rather than from its name. That constructor is now
- * removed, not merely deprecated: a literal is a capability of the primitive that names the base,
- * so `string('A')`, `number(1)` and `decimal('1')` each say which ground term they narrow.
- *
- * The list is the model's `GroundKind` **minus `null`**. It read "plus `decimal`" while `GroundKind` was
- * `string | number | boolean | binary | null`; `decimal` is a ground base in the model now, so the
- * difference is the other way round and it is a stratification one — `nullValue` is a codec and
- * `nullValue()` is not a literal anyone can write, because the only nonempty subset of `Unit` is
- * `Unit`.
- */
-export type LiteralBase = 'string' | 'number' | 'boolean' | 'binary'
-
-/** An alternative, at whichever base carries it. */
-export type LiteralValue = string | DynamoNumber | boolean | Uint8Array
 
 /**
  * The bases a native set can be built from — `SetBase`.
@@ -3057,7 +2898,7 @@ export namespace opaque {
      * - `'lossy'` — `number` ⇄ `N`. The member always survives a read-modify-write; the digits survive
      *   only while they fit in a float.
      */
-    export type Numbers = 'refuse' | 'lossy'
+    export type Numbers = OpaqueNumbers
 
     /**
      * What {@link opaque} writes for a value of type `T`, or why it refuses to.
@@ -6754,29 +6595,9 @@ export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
     readonly [writesMarker]?: WritesVariantsPin<Specs>
 }
 
-/**
- * One option of a union, reduced to what matching it actually asks.
- *
- * **Every option is admitted by attempt**, an object option included, as in the model, where a
- * union acts exactly where one of its options acts (`select_isSome_attempt`). The kind of the value is a cheap filter in front of the attempt, and the
- * names present select nothing. Two options that both admit one value are well formed, because
- * compatibility makes the order of the attempts unobservable.
- */
-export type Option = {
-    readonly codec: AnyCodec
-    /** The pair of the codec: a union reads and writes an option at the level of the union through it. */
-    readonly pair: Pair
-    /** The member it reads, where the term bounds the read — a cheap filter on decode. */
-    readonly member: AttributeName | undefined
-    /** The kinds of value it takes, where the kind alone decides — the same filter on encode. */
-    readonly carries: readonly Shape[]
-    /** The whole-item reading, for object options only. */
-    readonly item: ItemCodec<Record<string, unknown>, unknown> | undefined
-    /** How it is named in a message — written the way it was declared. */
-    readonly describe: string
-}
-
-const optionOf = (t: Term): Option => {
+const optionOf = (
+    t: Term,
+): Option<ItemCodec<Record<string, unknown>, unknown>> => {
     /**
      * Read from the definition, not from the presence of a reading.
      *
@@ -9466,7 +9287,9 @@ const unionOf = (declared: Extract<Term, { kind: 'union' }>): Reading => {
     // declaration, or at the first scope that binds a name of an option. The resolution reads each
     // option through its `ref`s, so it runs at the first use, where every name is bound
     const settle = () => {
-        const all: readonly Option[] = declared.options.map(optionOf)
+        const all: readonly Option<
+            ItemCodec<Record<string, unknown>, unknown>
+        >[] = declared.options.map(optionOf)
         return { all, ...altSem(all) }
     }
     let settled: ReturnType<typeof settle> | undefined

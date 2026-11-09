@@ -19,15 +19,45 @@ import {
     type AttributeValue,
     DynamoNumber,
 } from './attribute'
-import type {
-    LiteralBase,
-    LiteralValue,
-    Refinement,
-    Rng,
-    SetSlot,
-} from './codec'
 import { CodecError, failed } from './result'
+import type { SetSlot } from './value'
 import { asRecord, own, sameLiteral } from './value'
+
+/**
+ * A deterministic source of randomness.
+ *
+ * Seeded rather than `Math.random`, so a counterexample found in CI reproduces exactly from the
+ * seed printed alongside it.
+ */
+export type Rng = () => number
+
+/** What {@link refine} narrowed with, for an arbitrary that has to satisfy it. */
+export type Refinement = {
+    readonly is: (value: never) => boolean
+    readonly what: string
+    readonly arbitrary?: ((rng: Rng, size: number) => unknown) | undefined
+    readonly onThinSearch?: ((what: string, rate: number) => void) | undefined
+}
+
+/**
+ * The ground terms a literal can sit at.
+ *
+ * **Named by the caller, never guessed.** `literal(...)` read its carrier off the JS type of its
+ * arguments — digits meant `N`, text meant `S` — and that was the one place in this library where a
+ * term's member followed from its *values* rather than from its name. That constructor is now
+ * removed, not merely deprecated: a literal is a capability of the primitive that names the base,
+ * so `string('A')`, `number(1)` and `decimal('1')` each say which ground term they narrow.
+ *
+ * The list is the model's `GroundKind` **minus `null`**. It read "plus `decimal`" while `GroundKind` was
+ * `string | number | boolean | binary | null`; `decimal` is a ground base in the model now, so the
+ * difference is the other way round and it is a stratification one — `nullValue` is a codec and
+ * `nullValue()` is not a literal anyone can write, because the only nonempty subset of `Unit` is
+ * `Unit`.
+ */
+export type LiteralBase = 'string' | 'number' | 'boolean' | 'binary'
+
+/** An alternative, at whichever base carries it. */
+export type LiteralValue = string | DynamoNumber | boolean | Uint8Array
 
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
