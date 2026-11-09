@@ -2213,7 +2213,7 @@ describe('the generated pool, against the model', () => {
             resolvedPathRows: 7359,
             decodedRows: 7210,
             foreignRows: 6,
-            pathForeignRows: 7210,
+            pathForeignRows: 6810,
         })
         expect(files.map(([file]) => file)).toEqual([
             'codecs.ts',

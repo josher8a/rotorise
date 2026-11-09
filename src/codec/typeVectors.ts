@@ -967,12 +967,38 @@ const decodedSample = (codec: AnyCodec, root: string): string | undefined => {
 }
 
 /**
+ * Whether the decoded type of the term is `unknown`: the term is `opaque`, or a union with an
+ * `opaque` option, or a `legacy` over such a term, each read through a `ref` to its target. `unknown`
+ * absorbs a union, so one option decides. The reading is of the term and not of what `encode` writes,
+ * because a codec that writes much can still have a type that refuses a value, and such a codec owes
+ * a row. A union that names itself through a `ref` is read once.
+ */
+const decodesUnknown = (term: Term, seen = new Set<Term>()): boolean => {
+    const t = resolvedTerm(term)
+    if (t === undefined || seen.has(t)) return false
+    seen.add(t)
+    return (
+        t.kind === 'opaq' ||
+        (t.kind === 'union' &&
+            t.options.some((option) => decodesUnknown(option, seen))) ||
+        (t.kind === 'legacy' && decodesUnknown(t.inner, seen))
+    )
+}
+
+/**
  * A value that the codec at a path refuses and that its decoded type does not admit, or nothing. The
  * value is a number where the draw is no number and the numeral `'1'` where it is one, so the kind
  * differs from the kind that the codec decodes. The run time confirms the refusal, because a union
  * of the two kinds writes the value and is no row.
+ *
+ * **A codec that decodes `unknown` gives no row.** `opaque` refuses the JS number `1`, because it
+ * holds a number exactly as a `DynamoNumber`, and it writes every other kind. That is a rule of
+ * value over one kind. TypeScript has no type for "unknown except a number", so `Decoded` of
+ * `opaque` is `unknown` by force of the compiler, and no type can refuse the number. A row there
+ * would count a limit of the host language as a defect of the type of `at`.
  */
 const foreignAt = (codec: AnyCodec): number | string | undefined => {
+    if (decodesUnknown(codec.def)) return undefined
     let drawn: unknown
     try {
         drawn = arbitraryOf(codec, rngFrom(1), 2)
