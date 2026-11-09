@@ -75,6 +75,7 @@ HOST_ORDER = [
     ("codec/denote.ts", "Dynamo/Alg/*.lean and Dynamo/Lang/Equations.lean: the pair of each constructor"),
     ("codec/clause.ts", "Lang/ScopePath.lean: the clause `φ` of `narrowC`, a closed codec, and the opening of a pattern"),
     ("codec/frontier.ts", "Lang/CodecPath.lean and Lang/ScopePath.lean: the segment of a path, and the frontier along a path"),
+    ("codec/adapters.ts", "Alg/Combinators.lean: `Codec.adapt` for `held` and `Codec.extendRead` for `legacy`, with the refusals of an adapter"),
     ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),
