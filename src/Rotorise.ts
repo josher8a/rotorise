@@ -19,7 +19,6 @@ import type {
     ItemCodec,
     itemMark,
     KeyText,
-    KnownKeys,
     Marks,
     ObjectOf,
     ObjectSlot,
@@ -37,6 +36,7 @@ import {
     orThrow,
     pathBuilder,
 } from './codec/codec'
+import type { KnownKeys } from './codec/derivedItem'
 import { native } from './codec/native'
 import type { Field, Term } from './codec/term'
 import { isCallerPin, member, sameTerm, storedPin } from './codec/term'

@@ -156,6 +156,28 @@ import type {
 import type { Clause, ClausePattern } from './clause'
 import { clauseOf, opened } from './clause'
 import type {
+    AnyObjectCodec,
+    AnyObjectEntry,
+    Declares,
+    DecodedTags,
+    DerivedItem,
+    DerivedUnion,
+    DerivedVariants,
+    EntrySpecs,
+    InexactAll,
+    InexactValue,
+    IsUnion,
+    ItemOf,
+    KnownKeys,
+    OptionInexact,
+    RestsOf,
+    SpecsOf,
+    TagIntersection,
+    UnionToIntersection,
+    VariantOf,
+} from './derivedItem'
+import { entryCodec, fieldOf, keySets, slotsOf } from './derivedItem'
+import type {
     ClauseTerms,
     Cycles,
     DecodeFrames,
@@ -240,7 +262,6 @@ import {
 
 export type { Reader } from './adapters'
 export { held, legacy } from './adapters'
-
 export type {
     AnySpread,
     AttributeOf,
@@ -255,6 +276,15 @@ export type {
     SetOf,
     Writes,
 } from './build'
+export type {
+    AnyObjectCodec,
+    DerivedUnion,
+    DerivedVariants,
+    IsUnion,
+    ObjectEntry,
+    SpecsOf,
+    VariantOf,
+} from './derivedItem'
 export type { PathTerminal, Segment } from './frontier'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
@@ -801,22 +831,6 @@ const setOf =
                 ? literal(...(allowed as never[]))
                 : carrier(),
         )
-
-/**
- * The slots of an object term, as a caller reads them: the codec of each field term, and the
- * field itself, `{ codec, def }`, where the mark is not `req`. The rest is the codec of the open
- * term. Each codec is the one that `codecOfTerm` gives the term, so a slot is the codec that the
- * caller wrote, from one source.
- */
-const slotsOf = (body: Body) => ({
-    spec: Object.fromEntries(
-        Object.entries(body.fields).map(([name, f]) => {
-            const codec = codecOfTerm(f.t)
-            return [name, f.mark === 'req' ? codec : { codec, def: f }]
-        }),
-    ),
-    rest: body.rest && codecOfTerm(body.rest),
-})
 
 /**
  * **The capabilities that a term decides**, added to the codec that `codecOfTerm` denotes for it.
@@ -3053,38 +3067,6 @@ type CheckNarrowPath<T, F, C> = NarrowPath<T, F, C> extends Refused
     ? ErrorMessage<'[narrow] the codec at the path is no union'>
     : ClauseOn<T, F, C>
 
-// ── items ───────────────────────────────────────────────────────────
-
-/** The decoded type `T` of an object codec, or the entity that its spec describes. */
-type ItemOf<T, Spec, Rest> = [T] extends [OfParts] ? DerivedItem<Spec, Rest> : T
-
-/**
- * The entity a spec describes.
- *
- * An absent rest says the row holds nothing else, so the entity is closed. A rest codec says it
- * holds anything that codec can read, which is exactly an index signature — the mirror of
- * what {@link EncodedBy} does to the stored shape.
- */
-type DerivedItem<Spec, Rest> = [Rest] extends [undefined]
-    ? show<ObjectOf<Spec>>
-    : show<ObjectOf<Spec>> & {
-          // TypeScript checks each declared key against the index of an intersection, so the index
-          // admits the declared fields too. An optional field adds `undefined`, as the key may hold it
-          readonly [name: string]:
-              | Decoded<Rest>
-              | ObjectOf<Spec>[keyof ObjectOf<Spec>]
-      }
-
-/**
- * The keys a type states, without an index signature's.
- *
- * The value is `0` and not `T[K]`: only the keys are read back out, and naming the property type
- * instantiates one per key of every entity every spec is checked against, to be thrown away.
- */
-export type KnownKeys<T> = keyof {
-    [K in keyof T as string extends K ? never : number extends K ? never : K]: 0
-}
-
 /**
  * The codecs an item needs: one per attribute, optional exactly where the entity is.
  *
@@ -3698,19 +3680,6 @@ export const preconditions = (located: {
     )
 
 /**
- * The marker taken off, once, at the declaration.
- *
- * A field names the codec it marks, so the two halves are that codec's and taking the mark off
- * changes nothing about what the member encodes or decodes. What it changes is that the mark is
- * *named* rather than left to be recovered from a definition kind, which is what {@link Field} is
- * for.
- */
-const fieldOf = (declared: ObjectSlot): Field => {
-    const def = defOf(declared)
-    return 'mark' in def ? def : { mark: 'req', t: def }
-}
-
-/**
  * Declares how an entity is stored, once, in both directions.
  *
  * The spec is the declaration, and the entity is derived from it. Nothing has to be named twice, and
@@ -3899,24 +3868,11 @@ export function item(codec: object): unknown {
     return reading
 }
 
-/**
- * **The key set of each dissection**, keyed by the term. The term of a dissection is a `union`
- * term, and only the builder holds the key set: the one fact of a reading that the term lacks.
- */
-const keySets = new WeakMap<Term, readonly string[]>()
-
 /** The whole-item reading of the node that a term names, or nothing where the node is no object. */
 const objectNamed = (t: Term): ObjectItem | undefined => {
     const node = resolvedTerm(t)
     return node?.kind === 'object' ? objectItem(node) : undefined
 }
-
-export type ObjectEntry<
-    Key extends string = string,
-    Value extends ObjectSlot = ObjectSlot,
-> = readonly [AttributeCodec<Key, Attribute<'S'>>, Value]
-
-type AnyObjectEntry = readonly [AnyCodec, ObjectSlot]
 
 type OptionalObjectSlot = {
     readonly def: Extract<Field, { readonly mark: 'optional' | 'undefinable' }>
@@ -3937,27 +3893,6 @@ type EntryAdmission<Entry> = Entry extends readonly [
 
 type EntriesAdmission<Entries extends readonly AnyObjectEntry[]> =
     UnionToIntersection<EntryAdmission<Entries[number]>>
-
-type UnionToIntersection<Value> = (
-    Value extends unknown
-        ? (value: Value) => void
-        : never
-) extends (value: infer Intersection) => void
-    ? Intersection
-    : never
-
-type EntrySpec<Entry> = Entry extends readonly [
-    AttributeCodec<infer Key extends string, Attribute<'S'>>,
-    infer Value extends ObjectSlot,
-]
-    ? string extends Key
-        ? Record<never, never>
-        : { readonly [K in Key]: Value }
-    : never
-
-type EntrySpecs<Entries extends readonly AnyObjectEntry[]> = show<
-    UnionToIntersection<EntrySpec<Entries[number]>>
->
 
 type WildcardEntry<Entries extends readonly AnyObjectEntry[]> =
     Entries[number] extends infer Entry
@@ -4005,9 +3940,6 @@ const entryNames = (key: AnyCodec): string[] => {
         'an object entry key must be `string` or a string literal key set',
     )
 }
-
-const entryCodec = (slot: ObjectSlot): AnyCodec =>
-    ('codec' in slot ? slot.codec : slot) as AnyCodec
 
 export function object<const Spec extends Record<string, ObjectSlot>>(
     spec: Spec & NoSpreadMember<Spec> & NoNeverField<Spec>,
@@ -5101,27 +5033,6 @@ const methodAt = (
     }
 }
 
-// ── unions ─────────────────────────────────────────────────────────
-
-export type IsUnion<T, U = T> = T extends unknown
-    ? [U] extends [T]
-        ? false
-        : true
-    : never
-
-/**
- * The member a tag selects.
- *
- * `Extract<T, { [D]: V }>` is not enough: a variant may span several tags — a `Vendor` member
- * typed `vendorId: 'ACME' | 'GLOBEX'` does not extend `{ vendorId: 'ACME' }`. Asking whether the
- * tag is *among* the member's tags does reach it.
- */
-export type VariantOf<T, D extends keyof T, V> = T extends unknown
-    ? V extends T[D]
-        ? T
-        : never
-    : never
-
 /**
  * A tagged codec, structural so a signature can ask for one without naming its discriminator —
  * `Tagged` carries `D` contravariantly, so naming it would accept only the one guessed.
@@ -5429,36 +5340,6 @@ type Inexact<T, Env = []> = Norm<T, Env> extends [infer N, infer E]
               ? false
               : Inexact<LibraryInner<N>, E>
     : false
-type OptionInexact<O, E> = Norm<O, E>[0] extends [
-    'prim',
-    ['literal', unknown, infer V],
-]
-    ? InexactValue<V>
-    : 'other'
-type InexactAll<X> = 'other' extends X ? false : true extends X ? true : false
-type InexactValue<V> = IsUnion<V> extends true
-    ? true
-    : [V] extends [PropertyKey]
-      ? Record<never, never> extends Record<V, 1>
-          ? true
-          : false
-      : false
-
-/**
- * An object codec with its spec forgotten — the constraint form, as {@link AnyCodec} is for codecs.
- *
- * Structural, and deliberately: it asks for the members that say "I am an object codec and this is
- * what I declare": a spec beside a decode of one attribute. A bare spec record has no decode, so
- * passing one where an option is expected is refused rather than silently read as a codec. An item
- * reading decodes a whole item and not an attribute, so an item reading is refused too.
- */
-export type AnyObjectCodec = {
-    // `never` in and `unknown` out, the same erasure {@link AnyCodec} uses, so every object codec
-    // fits and none of them has to be named
-    readonly encode: (value: never) => unknown
-    readonly decode: (attribute: AttributeValue) => unknown
-    readonly spec: Record<string, ObjectSlot>
-}
 
 /**
  * Whether every option is an object codec, which decides whether the union has an item reading.
@@ -5488,56 +5369,14 @@ type AnyTaggedCodec = Itemable<{
     readonly discriminator: string
 }>
 
-/** The entity a list of options describes: whatever any one of them reads back. */
-export type DerivedUnion<Options extends readonly unknown[]> = {
-    [I in keyof Options]: Decoded<Options[I]>
-}[number]
-
 /** What a union writes: whatever the option it chose writes. */
 export type WrittenBy<Options extends readonly unknown[]> = Extract<
     { [I in keyof Options]: AttributeOf<Options[I]> }[number],
     AttributeValue
 >
 
-/** What each option declares, read off the options. */
-export type SpecsOf<Options extends readonly unknown[]> = {
-    [I in keyof Options]: Options[I] extends Declares<infer S> ? S : never
-}
-
-/**
- * A codec that declares a spec: an object declares its own, and a union declares the spec of its
- * reading, which is a tag map or a list of the specs of its options.
- */
-type Declares<Spec> =
-    | { readonly spec: Spec }
-    | Itemable<{ readonly spec: Spec }>
-
 /** The variants of an untagged union. There is no tag, so there is nothing to key them by. */
 export type UntaggedSpec<T> = readonly ItemSpec<T>[]
-
-/**
- * The entity a list of variant specs describes: one variant, or another.
- *
- * The union and not the merge, which is the same distinction {@link EncodedVariants} makes about the
- * stored side — a row is exactly one variant, so an attribute only one of them declares is not an
- * attribute the entity always has.
- */
-export type DerivedVariants<
-    Specs extends readonly unknown[],
-    Rests extends readonly unknown[] = [],
-> = {
-    [I in keyof Specs]: DerivedItem<
-        Specs[I],
-        I extends keyof Rests ? Rests[I] : undefined
-    >
-}[number]
-
-/** The rest of each option: the codec of the attributes that its spec does not declare. */
-export type RestsOf<Options extends readonly unknown[]> = {
-    [I in keyof Options]: Options[I] extends { readonly rest: infer R }
-        ? R
-        : undefined
-}
 
 export type Untagged<T, Specs extends readonly unknown[] = UntaggedSpec<T>> = {
     /** The marker of a whole-item reading. Type-level here, run-time in {@link itemMark}. */
@@ -5676,17 +5515,6 @@ type TagsOf<Spec, D extends PropertyKey> = Spec extends unknown
     : never
 
 /**
- * The values that a variant decodes its tag to. The table is keyed by the stored literal, and the
- * entity holds the decoded value, so a member of the entity is found by the second and not by the
- * first. The two are one value except under the adapter of a caller.
- */
-type DecodedTags<Spec, D> = D extends keyof Spec
-    ? Spec[D] extends AttributeCodec<infer Tag, AttributeValue>
-        ? Tag
-        : never
-    : never
-
-/**
  * The options keyed by their own tag, which is what a lookup needs.
  *
  * Derived rather than declared. A record keyed by tag value repeats what the option's own `literal`
@@ -5696,21 +5524,6 @@ type DecodedTags<Spec, D> = D extends keyof Spec
 type ByTag<Specs extends readonly unknown[], D extends PropertyKey> = {
     [Spec in Specs[number] as TagsOf<Spec, D>]: Spec
 }
-
-/**
- * Whether a tag set has more than one member.
- *
- * The intersection of a union of distinct literals is `never`, and of a single literal is itself —
- * so this is the one distinction a conditional cannot make directly, because `extends` on a naked
- * type parameter distributes and every branch then sees one member.
- */
-type TagIntersection<Tags> = (
-    Tags extends unknown
-        ? (x: Tags) => void
-        : never
-) extends (x: infer One) => void
-    ? One
-    : never
 
 /**
  * The options whose discriminator literal admits more than one value.
