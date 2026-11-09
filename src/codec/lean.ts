@@ -60,9 +60,10 @@ import {
     isStoredNumeral,
     memberOf,
 } from './attribute'
+import type { ClausePattern } from './clause'
+import { clauseOf } from './clause'
 import type {
     AnyCodec,
-    ClausePattern,
     LiteralValue,
     ObjectSlot,
     Precondition,
@@ -70,7 +71,6 @@ import type {
 } from './codec'
 import {
     at,
-    clauseOf,
     exclude,
     extract,
     item as itemOf,

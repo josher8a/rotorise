@@ -19,6 +19,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
+import { opened } from '../clause'
 import type { AnyCodec } from '../codec'
 import {
     array,
@@ -47,7 +48,6 @@ import {
     number,
     object,
     opaque,
-    opened,
     optional,
     ref,
     refine,
