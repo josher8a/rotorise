@@ -958,18 +958,29 @@ describe('(C): what a codec reads, it can write', () => {
     })
 
     /**
-     * **No planted (C) defect is expressible.**
+     * **A `held` adapter can plant a (C) defect, and the carrier cannot close it.**
      *
-     * Such a defect reads an attribute this library would not write and then fails to write it
-     * back: a codec refusing the empty set while its read returns one, or one writing only
-     * normalised numerals while its read takes any. `held` inherits the carrier underneath, and
-     * every carrier closes the hole that the defect needs — `string.set()` and `opaque` both
-     * refuse an empty `SS`, and `decimal` refuses `1.50`, so the mutation never reaches the
-     * adapter. The pair of a `held` comes from outside, but it runs only on what the carrier
-     * read, so no outside pair reads an attribute that the carrier refuses.
-     *
-     * `checkDecodesAreWritable` runs over every other codec here.
+     * Such a defect reads an attribute that the codec then fails to write back. The carrier under a
+     * `held` refuses the empty set and a numeral outside the stored form, so the carrier plants none.
+     * The pair of a `held` comes from outside, and it runs on what the carrier read. An adapter whose
+     * `decode` gives a value that its `encode` refuses breaks (C) at that attribute. `held` owes the
+     * cancel law, and `checkDecodesAreWritable` reports a broken adapter like any other codec.
      */
+    it('lets an adapter read a value that its own write refuses, and the check reports it', () => {
+        const Picky = held(string, string, {
+            encode: (v: string) =>
+                v === '' ? new CodecError('no empty text') : v,
+            decode: (v: string) => v,
+        })
+        expect(Picky.unsafeDecode({ S: '' })).toBe('')
+        expect(failed(Picky.encode(''))).toBe(true)
+        expect(() =>
+            checkDecodesAreWritable(item(object({ k: Picky })), {
+                count: 20,
+                seed,
+            }),
+        ).toThrow(/\(C\) fails/)
+    })
 })
 
 /**

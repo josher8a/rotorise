@@ -203,8 +203,9 @@ def KeyDef.touched (k : KeyDef N) (d : Item N) (ch : Change N) : Bool :=
 /-- A key lacks a component where the footprint holds a name that the change does not reach and the
     codec does not decide. A name that the change reaches is held: a removal, or a write above or
     below it, so the key is built from the given item, which has no value there, and the build
-    gives a refusal or no key. The host reads a name below a decided name as held, and a decided
-    name is a constant, so it has no name below it. -/
+    gives a refusal or no key. The host reads a decided name at the name, as this definition does. A
+    decided name is a constant that a key prints, so the entry refuses a path below it at
+    construction. -/
 def KeyDef.lacks (k : KeyDef N) (d : Item N) (ch : Change N) : Bool :=
   (k.foot (given d ch)).any fun n => !reached ch n && (d n).isNone
 

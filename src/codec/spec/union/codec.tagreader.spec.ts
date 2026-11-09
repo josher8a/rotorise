@@ -540,3 +540,17 @@ describe('a tag whose adapter breaks the pair that it owes', () => {
         ).toThrow(/a later write of that value refuses: .*'E'/)
     })
 })
+
+describe('a discriminator is read at its own name', () => {
+    it('refuses a row that lacks a discriminator that the prototype also names', () => {
+        const Ctor = item(
+            discriminatedUnion('constructor', [
+                object({ constructor: string('a'), x: string }),
+                object({ constructor: string('b'), y: string }),
+            ] as never),
+        ) as unknown as { decode: (row: unknown) => unknown }
+        const refused = Ctor.decode({}) as CodecError
+        expect(refused).toBeInstanceOf(CodecError)
+        expect(refused.message).toMatch(/has no such attribute/)
+    })
+})

@@ -4118,7 +4118,6 @@ export const tableEntry =
             const set: [string, AttributeValue][] = []
             const remove: string[] = []
             const given = overDecided(changed)
-            const givenNames = Object.keys(given)
             const touched = touchedBy(changed)
 
             for (const key of keys) {
@@ -4132,14 +4131,15 @@ export const tableEntry =
                  * lists that name the components are only ever read to build a message. They are
                  * gathered on the paths that throw instead of on every key of every update.
                  *
-                 * `else if` is exact rather than a shortcut: `given` contains `changed`, so a
-                 * component the change carries is never one that is missing.
+                 * `else if` is exact rather than a shortcut: a component that the change carries is
+                 * touched, unless the codec decides it, so only a decided name is held without being
+                 * touched. The entry refuses a path below a decided name at construction.
                  */
                 let touches = false
                 let lacks = false
                 for (const component of components) {
                     if (touched(component)) touches = true
-                    else if (!holdsPath(component, givenNames)) lacks = true
+                    else if (!Object.hasOwn(decided, component)) lacks = true
                 }
                 if (!touches) continue
 

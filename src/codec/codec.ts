@@ -64,6 +64,7 @@ import {
     asPath,
     CodecError,
     failed,
+    HeldSideRefusal,
     orThrow,
     type Result,
     setOwn,
@@ -2397,7 +2398,7 @@ const heldSide = (
     ) => CodecError | undefined
 } => {
     const refused = (at: 'encode' | 'decode', side: string, why: string) =>
-        new CodecError(
+        new HeldSideRefusal(
             at === 'encode'
                 ? `the held side of this \`held\`, ${side}, refuses the value before \`encode\` runs: ${why}`
                 : `the held side of this \`held\`, ${side}, refuses the value that \`decode\` returned: ${why}`,
@@ -4731,7 +4732,6 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
      * were two objects before `579ed89`, and nothing said which of them a caller was running.
      */
     const body = itemSem(itemDef)
-    const fields = itemDef.body.fields
     const { spec, rest } = slotsOf(itemDef.body)
     // a term that reads a name that no scope binds refuses each use
     const self: ObjectItem = {
@@ -4741,28 +4741,10 @@ const objectItem = (itemDef: ItemTerm): ObjectItem => {
             itemRefusal(item) ??
             (body.encode(item) as never),
 
-        encodePartial: (patch) => {
-            const open = openRefusal(itemDef)
-            if (open) return open
-            const refused = itemRefusal(patch)
-            if (refused) return refused
-            const held = patch as Record<string, unknown>
-            const out: Record<string, AttributeValue> = {}
-            for (const name in held) {
-                const value = held[name]
-                if (value === undefined) continue
-                // a name the spec does not declare is written through the open entry, as `encode`
-                // writes it
-                const term = own(fields, name)?.t ?? itemDef.body.rest
-                if (!term) {
-                    return new CodecError(`'${name}' is not an attribute`)
-                }
-                const written = codecOfTerm(term).encode(value as never)
-                if (failed(written)) return written.under(name)
-                setOwn(out, name, written)
-            }
-            return out as never
-        },
+        encodePartial: (patch) =>
+            openRefusal(itemDef) ??
+            itemRefusal(patch) ??
+            (body.encode(patch as Record<string, unknown>, 0, true) as never),
 
         decode: (item) =>
             openRefusal(itemDef) ??
@@ -6213,10 +6195,10 @@ export type AttributeOf<C> = C extends {
  * Optional exactly where the patch's own value admits `undefined`, because that is the value the
  * implementation skips — a key present with no value writes no attribute.
  *
- * Based on {@link Encoded} and *not* {@link EncodedBy}: a patch never reaches a rest policy. The
- * implementation looks each name up among the declared attributes and refuses one it does not
- * find, so a type carrying the rest policy's index signature would promise a write that is an
- * error at runtime.
+ * Based on {@link Encoded} and *not* {@link EncodedBy}, so the type is a lower bound. The
+ * implementation writes a name that the spec does not declare through the open entry, as `encode`
+ * writes it, and refuses the name where the codec has no open entry. The type keeps the declared
+ * names only, so a name of the open entry has no type in the result.
  */
 export type EncodedPatch<Spec, Patch> = Encoded<Spec> extends infer Full
     ? show<
@@ -6479,14 +6461,23 @@ const dissectionOf = (
     const index = () => {
         // a tag is written through its field only where a caller's adapter holds one: a plain
         // literal is its own stored text
-        const callerMembers = new Set<unknown>()
+        const callerMembers = new Map<unknown, Set<string>>()
         const written = (
             variant: ItemCodec<T, unknown>,
             patch: Readonly<Record<string, unknown>>,
-        ) =>
-            callerMembers.has(variant)
+            scope: 'member' | 'adapter',
+        ) => {
+            // the write of a tag reads `adapter`: it runs for a name that holds a caller's adapter in
+            // this member, and for no other name, because a plain key of the member is its own
+            // literal and no adapter refused it. The check of a member against its own value reads
+            // `member`, the whole write of a member that holds an adapter at some key.
+            const names = callerMembers.get(variant)
+            return names &&
+                (scope === 'member' ||
+                    Object.keys(patch).every((name) => names.has(name)))
                 ? variant.encodePartial(patch as never)
                 : undefined
+        }
         const members = membersOf(
             ks,
             memberTerms.map((term, at) => {
@@ -6499,8 +6490,10 @@ const dissectionOf = (
                 }
                 for (const name of ks) {
                     const field = own(node.body.fields, name)
-                    if (field && isCallerPin(storedPin(field.t)))
-                        callerMembers.add(item)
+                    if (field && isCallerPin(storedPin(field.t))) {
+                        const names = callerMembers.get(item) ?? new Set()
+                        callerMembers.set(item, names.add(name))
+                    }
                 }
                 return [
                     node.body,

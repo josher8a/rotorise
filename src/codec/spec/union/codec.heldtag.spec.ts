@@ -14,6 +14,7 @@ import {
     exclude,
     held,
     item,
+    mdunion,
     number,
     object,
     string,
@@ -54,12 +55,46 @@ describe('a tag under a caller adapter', () => {
         expect(Pets.unsafeDecode(row)).toEqual(cat)
     })
 
-    it('refuses a tag that no variant writes, with the reason of the variant that refuses it', () => {
+    it('names every variant for a tag that no variant carries, because a member that does not admit the value is no refusal of an adapter', () => {
         const refused = Pets.encode({ kind: 'bird' } as never)
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toContain(
-            'the held side of this `held`',
-        )
+        expect((refused as CodecError).message).toMatch(/cat/)
+        expect((refused as CodecError).message).toMatch(/'D'/)
+    })
+
+    it('answers a plain key by the variants that carry it, and not by the literal of a member that holds an adapter at another key', () => {
+        const Sized = item(
+            mdunion(['kind', 'size'], [
+                object({ kind: Dog, size: string('small'), bark: string }),
+                object({
+                    kind: string('cat'),
+                    size: string('large'),
+                    lives: number,
+                }),
+            ] as never) as never,
+        ) as unknown as { encode: (value: unknown) => unknown }
+        const refused = Sized.encode({ kind: 'cat', size: 'huge', lives: 9 })
+        expect(refused).toBeInstanceOf(CodecError)
+        expect((refused as CodecError).message).toMatch(/large/)
+    })
+
+    it('keeps the path of the tag where several adapters refuse it', () => {
+        const only = (tag: string, text: 'D' | 'C') =>
+            held(string(text), string, {
+                encode: (v: string) =>
+                    v === tag ? text : new CodecError(`only ${tag}`),
+                decode: () => tag,
+            })
+        const Two = item(
+            discriminatedUnion('kind', [
+                object({ kind: only('dog', 'D'), bark: string }),
+                object({ kind: only('cat', 'C'), lives: number }),
+            ] as never),
+        ) as unknown as { encode: (value: unknown) => unknown }
+        const refused = Two.encode({ kind: 'dgo', bark: 'woof' }) as CodecError
+        expect(refused).toBeInstanceOf(CodecError)
+        expect(refused.path).toEqual(['kind'])
+        expect(refused.reason).toContain('each option that refuses it')
     })
 })
 

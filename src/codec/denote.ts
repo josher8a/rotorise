@@ -48,15 +48,22 @@ import {
     every,
     everyEntry,
     failed,
+    HeldSideRefusal,
     restated,
     setOwn,
 } from './result'
 import { agrees, guardAt, sideOf } from './scoped'
-import type { Alternatives, Body, Field, Literal, Term } from './term'
+import type {
+    Alternatives,
+    Body,
+    Field,
+    Literal,
+    StoredPin,
+    Term,
+} from './term'
 import {
     alwaysWritten,
     cycleEntryOf,
-    decodedTag,
     elementMember,
     holdsNoValue,
     isOpaqueSugar,
@@ -69,6 +76,8 @@ import {
     recursionUse,
     setMember as setMembers,
     storedAlternatives,
+    storedPin,
+    throughAdapter,
     unboundRefs,
     usedTargetOf,
     widensRead,
@@ -206,28 +215,16 @@ const refusedBy = (q: Refinement, value: unknown): CodecError => {
     return new CodecError(`${named} is not ${q.what}`)
 }
 
-/**
- * **A member's assignment: one tag per key, read off the member's own body.**
- *
- * The tag table is a host index over a `Term.union`, and no term carries it. The model carries the
- * member's own body, as `Calculus.Closed.spec`, and this reads the same field data one question
- * further — the field is `req`, its term is a `literal`, and it pins exactly one alternative. The
- * slice vectors check each tag: the one-key clause of a tag must admit its own member.
- *
- * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
- * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Closed.spec`
- * reads a field with a fill value as required at the caller side.
- *
- * The model reads a tag through `Calculus.pinOfG`, through each `refine` and then through one `held`
- * under its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
- * under a pair whose content is binary64 rounding, and the model names no such pair, so
- * `src/codec/lean.ts` refuses to emit one and says why.
- */
-export const assignmentOf = (
-    ks: readonly string[],
-    body: Body,
-): Result<Readonly<Record<string, string>>> => {
-    const out: Record<string, string> = {}
+/** One tag of a body: the key, the one literal that the field stores, and the pin that the literal passed. */
+type Tag = {
+    readonly name: string
+    readonly literal: Alternatives['ls'][number]
+    readonly pin: StoredPin | undefined
+}
+
+/** The tags of a body, one per key, or the refusal of a body that names no one literal at a key. */
+const tagsOf = (ks: readonly string[], body: Body): Result<readonly Tag[]> => {
+    const out: Tag[] = []
     for (const name of ks) {
         const field = own(body.fields, name)
         if (field === undefined) {
@@ -257,8 +254,40 @@ export const assignmentOf = (
                 `'${name}' names ${alts.ls.length} values at one option (${alts.ls.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
             )
         }
-        setOwn(out, name, String(alts.ls[0]))
+        out.push({ name, literal: alts.ls[0], pin: storedPin(field.t) })
     }
+    return out
+}
+
+/**
+ * **A member's assignment: one tag per key, read off the member's own body.**
+ *
+ * The tag table is a host index over a `Term.union`, and no term carries it. The model carries the
+ * member's own body, as `Calculus.Closed.spec`, and this reads the same field data one question
+ * further — the field is `req`, its term is a `literal`, and it pins exactly one alternative. The
+ * slice vectors check each tag: the one-key clause of a tag must admit its own member.
+ *
+ * **`req` only.** A discriminator that fills an absent tag with a default would key a member on a
+ * value no item carries, so the index refuses it. The model's slice is wider here: `Calculus.Closed.spec`
+ * reads a field with a fill value as required at the caller side.
+ *
+ * The model reads a tag through `Calculus.pinOfG`, through each `refine` and then through one `held`
+ * under its adapter word, so a `decimal` tag is a model tag. A `number` tag is a literal at the native base
+ * under a pair whose content is binary64 rounding, and the model names no such pair, so
+ * `src/codec/lean.ts` refuses to emit one and says why.
+ */
+export const assignmentOf = (
+    ks: readonly string[],
+    body: Body,
+): Result<Readonly<Record<string, string>>> => {
+    const tags = tagsOf(ks, body)
+    return failed(tags) ? tags : textsOf(tags)
+}
+
+/** The stored text of each tag, as `assignmentOf` gives it. */
+const textsOf = (tags: readonly Tag[]): Record<string, string> => {
+    const out: Record<string, string> = {}
+    for (const { name, literal } of tags) setOwn(out, name, String(literal))
     return out
 }
 
@@ -403,12 +432,13 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
     }
     const restPair = rest && pairOf(rest)
     return {
-        encode: (held, enclosing = 0) => {
+        encode: (held, enclosing = 0, partial = false) => {
             const out: Record<string, AttributeValue> = {}
             for (const { name, pair: attribute, field } of declared) {
                 const value = own(held, name)
                 if (value === undefined) {
-                    if (!alwaysWritten(field)) continue
+                    // a patch writes the names that it holds, so no name is required
+                    if (partial || !alwaysWritten(field)) continue
                     return new CodecError(
                         `'${name}' is required and was not given`,
                     )
@@ -985,10 +1015,15 @@ type Decoded = Readonly<Record<string, unknown>>
 /** A member of a dissection: the stored text of each tag, the variant, and the decoded value of each tag. */
 type Member<V> = readonly [Readonly<Record<string, string>>, V, Decoded]
 
-/** The write of a member that holds a tag under the adapter of a caller: `undefined` for any other member. */
+/**
+ * The write of a member that holds a tag under the adapter of a caller: `undefined` for any other
+ * member. The scope `adapter` writes only a name that holds an adapter in the member. The scope
+ * `member` writes the whole patch through the member.
+ */
 type Written<V> = (
     member: V,
     patch: Readonly<Record<string, unknown>>,
+    scope: 'member' | 'adapter',
 ) => unknown | undefined
 
 /**
@@ -998,9 +1033,10 @@ type Written<V> = (
  * adapter writes `'dog'` as `'D'`, and a member that does not admit the value refuses it. A member
  * with no adapter of a caller writes the literal as it is, so the value matches only where it is
  * the value that the member decodes to: numbers by digits, bytes by content, any other by `===`,
- * and no refusal is built. Where no member writes the value and some member refuses it, the
- * answer is the refusal of that member, and the reasons of several members are joined in one
- * refusal. A value that no member writes or refuses keeps its own text, and the pick names it. A
+ * and no refusal is built. A member whose held side does not admit the value is no write and no
+ * refusal. Where no member writes the value and the adapter of some member refuses it, the answer is
+ * the refusal of that adapter at the path of the tag, and the reasons of several adapters are joined
+ * in one refusal. A value that no member writes or refuses keeps its own text, and the pick names it. A
  * number spells its text through the carrier: `String(1e21)` is '1e+21', and the store
  * holds '1000000000000000000000'. The write of a dissection and the refusal of {@link membersOf}
  * read this one function, so the two cannot differ.
@@ -1016,13 +1052,16 @@ const storedTag = <V>(
     if (written) {
         const refused: CodecError[] = []
         for (const [, member, decoded] of members) {
-            const row = written(member, { [name]: tag })
+            const row = written(member, { [name]: tag }, 'adapter')
             if (row === undefined) {
                 // a member with no adapter of a caller matches the value that it decodes to, so
                 // the number 1 never matches the text '1'
                 if (sameLiteral(decoded[name], tag)) return plain
                 continue
             }
+            // a member that does not admit the value is no write and no refusal of an adapter: the
+            // pick names the variants instead
+            if (row instanceof HeldSideRefusal) continue
             if (failed(row)) {
                 refused.push(row)
                 continue
@@ -1037,8 +1076,9 @@ const storedTag = <V>(
         if (first !== undefined) {
             return others.length === 0
                 ? first
-                : new CodecError(
-                      `'${name}' = '${String(tag)}' is refused by each option that writes it: ${refused.map((one) => one.reason).join('; ')}`,
+                : restated(
+                      first,
+                      `'${name}' = '${String(tag)}' is refused by each option that refuses it: ${refused.map((one) => one.reason).join('; ')}`,
                   )
         }
     }
@@ -1046,19 +1086,17 @@ const storedTag = <V>(
 }
 
 /**
- * The value that a member's tag decodes to at each key. The reader is {@link decodedTag}, which
- * reads the stored literal as `assignmentOf` does, through each `refine` and one `held`, as the
- * model reads a tag. `assignmentOf` refuses a tag that names no one literal before this read, so
- * each tag here has one. The caller's value is `g` of the stored literal, because a `held` owes
- * that the pair cancels. A refusal or a throw of the adapter is a refusal of the construction.
+ * The value that a member's tag decodes to at each key. The stored literal goes through each `refine`
+ * and one `held`, as `assignmentOf` reads the text, and as the model reads a tag. The caller's value
+ * is `g` of the stored literal, because a `held` owes that the pair cancels. A refusal or a throw of
+ * the adapter is a refusal of the construction.
  */
-const decodedTagOf = (ks: readonly string[], body: Body): Result<Decoded> => {
+const decodedTagOf = (tags: readonly Tag[]): Result<Decoded> => {
     const out: Record<string, unknown> = {}
-    for (const name of ks) {
-        const field = own(body.fields, name)
+    for (const { name, literal, pin } of tags) {
         let value: unknown
         try {
-            value = field && decodedTag(field.t)
+            value = throughAdapter(pin, literal)
         } catch (cause) {
             return new CodecError(
                 `'${name}' is a tag under the adapter of a caller, and the adapter threw while construction read the value that it decodes the stored literal to. A throw of caller code is a bug in the adapter, and a refusal is a returned value.`,
@@ -1100,10 +1138,11 @@ export const membersOf = <V>(
 ): Result<readonly Member<V>[]> => {
     const out: Member<V>[] = []
     for (const [body, value] of bodies) {
-        const assignment = assignmentOf(ks, body)
-        if (failed(assignment)) return assignment
+        const tags = tagsOf(ks, body)
+        if (failed(tags)) return tags
+        const assignment = textsOf(tags)
         const clash = out.find(([one]) => sameAssignment(ks, one, assignment))
-        const decoded = decodedTagOf(ks, body)
+        const decoded = decodedTagOf(tags)
         if (failed(decoded)) return decoded
         if (clash !== undefined) {
             // one template at every arity: at one key this reads `'type' = 'A'`, which is what the
@@ -1122,7 +1161,7 @@ export const membersOf = <V>(
         for (const name of ks) {
             const said = `'${name}' = '${String(decoded[name])}'`
             // the member under check owes a write of its own value, so its refusal is the answer
-            const own = written?.(member, { [name]: decoded[name] })
+            const own = written?.(member, { [name]: decoded[name] }, 'member')
             if (failed(own)) {
                 return restated(
                     own,
@@ -1160,6 +1199,8 @@ export type ItemPair = {
     readonly encode: (
         held: Record<string, unknown>,
         enclosing?: number,
+        /** A patch: the write of the names that the map holds, with no name required. */
+        partial?: boolean,
     ) => Result<Record<string, AttributeValue>>
     readonly decode: (
         item: Readonly<Record<string, AttributeValue>>,

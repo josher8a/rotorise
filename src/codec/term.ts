@@ -887,7 +887,7 @@ export const storedAlternatives = (t: Term): Alternatives | undefined => {
  * refusal is the answer. A throw of `g` is not caught, and each caller decides what the throw
  * means.
  */
-const throughAdapter = (
+export const throughAdapter = (
     pin: StoredPin | undefined,
     literal: unknown,
 ): unknown => {
@@ -904,20 +904,6 @@ export const pinnedValue = (pin: StoredPin | undefined): unknown => {
     if (pin?.under.kind !== 'literal') return undefined
     const value = throughAdapter(pin, pin.under.v)
     return failed(value) ? undefined : value
-}
-
-/**
- * The value that a tag decodes to: the one literal that {@link storedAlternatives} names for the
- * tag, put back through the adapter. The reader is the one that `assignmentOf` reads the stored
- * text with, so a tag that has a stored text has a decoded value, a union of one literal included.
- * `undefined` where the tag names no one literal, and the refusal of the adapter where the adapter
- * refuses its own literal.
- */
-export const decodedTag = (t: Term): unknown => {
-    const stored = storedAlternatives(t)?.ls
-    return stored?.length === 1
-        ? throughAdapter(storedPin(t), stored[0])
-        : undefined
 }
 
 /** Whether the adapter that {@link storedPin} passed is the adapter of a caller. */

@@ -300,7 +300,7 @@ export const readTag = (
     item: StoredItem,
     discriminator: string,
 ): Result<string> => {
-    const attribute = item[discriminator]
+    const attribute = own(item, discriminator)
     if (attribute === undefined) {
         return new CodecError(
             `'${discriminator}' chooses the variant and the item has no such attribute`,

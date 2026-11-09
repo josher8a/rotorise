@@ -129,6 +129,13 @@ export const restated = <E extends CodecError>(option: E, reason: string): E =>
         )
 
 /**
+ * The refusal of the held side of a `held`: the value is outside the type that the caller named, and
+ * the adapter never ran. The copy of a refusal keeps the subclass, so a union that reads the write
+ * of a tag tells this structure ("the member does not admit the value") from the refusal of an adapter.
+ */
+export class HeldSideRefusal extends CodecError {}
+
+/**
  * Two codecs that a property check found to differ. The failure is of the check and no codec
  * refused a value, so the failure is a class of its own and not a kind of {@link CodecError}.
  */

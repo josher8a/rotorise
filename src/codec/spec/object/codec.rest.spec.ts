@@ -283,6 +283,15 @@ describe('a strict object', () => {
         ).toThrow(CodecError)
     })
 
+    it('refuses an undeclared name in a patch with the text of the whole write, because one body writes both', () => {
+        const patch = Closed.encodePartial({ retired: 'x' } as never)
+        const whole = Closed.encode({ id: 'w1', retired: 'x' } as never)
+        expect(patch).toBeInstanceOf(CodecError)
+        expect((patch as CodecError).message).toEqual(
+            (whole as CodecError).message,
+        )
+    })
+
     it('is what the member law is told, rather than left to infer', () => {
         // the undeclared attribute refuses on the way in, so no re-encode can lose it
         expect(() =>
