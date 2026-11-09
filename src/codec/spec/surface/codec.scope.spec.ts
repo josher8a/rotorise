@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import type { AttributeValue } from '../../attribute'
+import type { FreeOf } from '../../build'
 import {
     type AttributeCodec,
     array,
@@ -17,7 +18,6 @@ import {
     discriminatedUnion,
     exclude,
     extract,
-    type FreeOf,
     fill,
     held,
     item,

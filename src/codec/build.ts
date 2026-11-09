@@ -12,9 +12,17 @@
  * No file of a lower layer imports a type from `./codec`: `formal/scripts/layer_order.py` checks it.
  */
 import type { AttributeValue } from './attribute'
+import type { HoldsNoValue } from './pathModel'
 import type { Result } from './result'
 import { orThrow } from './result'
-import type { Field, Term } from './term'
+import type {
+    Field,
+    optionalMarker,
+    spreadMarker,
+    Term,
+    TermOf,
+    TermsOf,
+} from './term'
 
 /*
  * **The free names of a codec, in its type**: the names that its term reads through a `ref` and
@@ -134,3 +142,50 @@ export const codec = <T, A extends AttributeValue>({
     unsafeDecode: (attribute) => orThrow(decode(attribute)),
     def,
 })
+
+export type Free<F extends string> = { readonly [freeMarker]?: [F] }
+export type FreeOf<C> = C extends {
+    readonly [freeMarker]?: [infer F extends string]
+}
+    ? F
+    : C extends { readonly codec: infer Marked }
+      ? FreeOf<Marked>
+      : never
+export type ListTermOf<
+    Items,
+    Pre extends unknown[] = [],
+> = Items extends readonly [infer H, ...infer R]
+    ? H extends AnySpread
+        ? ['list', Pre, ['some', TermOf<H>], TermsOf<R>]
+        : ListTermOf<R, [...Pre, TermOf<H>]>
+    : ['list', Pre, ['none'], []]
+
+/**
+ * Anything a {@link spread} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
+ * thing that is a position rather than a codec, and the only element type {@link list} accepts that
+ * is not a codec.
+ *
+ * Written as the marked shape rather than as `SpreadCodec<unknown, AttributeValue>`, for the reason
+ * {@link ListWrites} records: `AttributeCodec` names its value on both sides, so it is invariant
+ * and the `unknown` instantiation matches no real one.
+ */
+export type AnySpread = {
+    readonly [spreadMarker]: true
+    readonly spread: AnyCodec
+}
+
+/**
+ * A declaration that fills a **slot** with a term holding no value.
+ *
+ * A slot is a position a value must fill: a declared element of a list, and a `req` or `fill`
+ * field. `optional` and `undefinable` are not slots, because the key may be absent. A list's
+ * spread is not one either, because a value of the declared length omits it.
+ */
+export type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
+    ? false
+    : // `never`, the node that a `ref` names, and each other form that holds no value
+      HoldsNoValue<
+            TermOf<D extends { readonly codec: infer C } ? C : D>
+        > extends true
+      ? true
+      : false

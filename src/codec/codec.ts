@@ -142,6 +142,7 @@ export type {
 export type { SetSlot, Shape } from './value'
 
 import type { ErrorMessage, show } from '../utils'
+import type { AnySpread, Free, FreeOf, IsNeverSlot, ListTermOf } from './build'
 import type { Precondition } from './scoped'
 import type { StandardInput, StandardSchemaV1 } from './standard'
 import type {
@@ -193,6 +194,8 @@ import {
     thrownReason,
 } from './value'
 
+export type { AnySpread } from './build'
+
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
 export {
@@ -235,15 +238,6 @@ type HasSpreadIn<Cs extends readonly unknown[]> = Cs[number] extends infer E
         ? true
         : false
     : false
-
-type Free<F extends string> = { readonly [freeMarker]?: [F] }
-export type FreeOf<C> = C extends {
-    readonly [freeMarker]?: [infer F extends string]
-}
-    ? F
-    : C extends { readonly codec: infer Marked }
-      ? FreeOf<Marked>
-      : never
 /** The free names of an object: the names of its spec and its rest. An entry of a scope has none. */
 type ObjectFree<Spec, Rest, Tm> = [Tm] extends [OfParts]
     ? FreeOf<Spec[keyof Spec]> | FreeOf<Rest>
@@ -270,14 +264,6 @@ type EveryButNumberT = [
         ['object', ['mk', Record<never, never>, ['some', ['opaq']]]],
     ],
 ]
-type ListTermOf<Items, Pre extends unknown[] = []> = Items extends readonly [
-    infer H,
-    ...infer R,
-]
-    ? H extends AnySpread
-        ? ['list', Pre, ['some', TermOf<H>], TermsOf<R>]
-        : ListTermOf<R, [...Pre, TermOf<H>]>
-    : ['list', Pre, ['none'], []]
 
 /**
  * Anything that can sit where an attribute codec is expected — which is every codec.
@@ -329,20 +315,6 @@ export type UndefinableCodec<
     readonly [undefinableMarker]: true
     readonly codec: C
     readonly def: Extract<Field, { readonly mark: 'undefinable' }>
-}
-
-/**
- * Anything a {@link spread} produced, whatever it marks — {@link AnyCodec}'s counterpart for the one
- * thing that is a position rather than a codec, and the only element type {@link list} accepts that
- * is not a codec.
- *
- * Written as the marked shape rather than as `SpreadCodec<unknown, AttributeValue>`, for the reason
- * {@link ListWrites} records: `AttributeCodec` names its value on both sides, so it is invariant
- * and the `unknown` instantiation matches no real one.
- */
-export type AnySpread = {
-    readonly [spreadMarker]: true
-    readonly spread: AnyCodec
 }
 
 /**
@@ -1410,22 +1382,6 @@ type ArrayOver<C extends AnyCodec> = AttributeCodec<
     TermMark<['list', [], ['some', TermOf<C>], []]> &
     Free<FreeOf<C>> &
     ElementMark<C>
-
-/**
- * A declaration that fills a **slot** with a term holding no value.
- *
- * A slot is a position a value must fill: a declared element of a list, and a `req` or `fill`
- * field. `optional` and `undefinable` are not slots, because the key may be absent. A list's
- * spread is not one either, because a value of the declared length omits it.
- */
-type IsNeverSlot<D> = [D] extends [{ readonly [optionalMarker]: true }]
-    ? false
-    : // `never`, the node that a `ref` names, and each other form that holds no value
-      HoldsNoValue<
-            TermOf<D extends { readonly codec: infer C } ? C : D>
-        > extends true
-      ? true
-      : false
 
 /**
  * Whether any **declared** position of a list is `never`.
