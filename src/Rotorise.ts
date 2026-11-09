@@ -473,9 +473,10 @@ type ComputeTableKeyType<
 
 /**
  * The value that `toEntry` holds for a key, over the text that the key prints and the member that
- * the key takes. `native` writes the member of the value, so the value is the carrier of the
- * member: a string for `S`, a `DynamoNumber` for `N`, and a `Uint8Array` for `B`. A key that is
- * absent stays absent, and a key with no member keeps the text.
+ * the key takes. The AWS SDK marshaller writes the member of the value, so the value is the carrier
+ * of the member: a string for `S`, a `number` or a `bigint` for `N` (the run time decides by the
+ * value, and an SDK read gives the same union), and a `Uint8Array` for `B`. A key that is absent
+ * stays absent, and a key with no member keeps the text.
  */
 type HeldKey<Text, Members> = [Members] extends [never]
     ? Text
@@ -486,7 +487,7 @@ type HeldKey<Text, Members> = [Members] extends [never]
             ? Text
             : string
         : Members extends 'N'
-          ? DynamoNumber
+          ? number | bigint
           : Uint8Array
 
 type TableEntryImpl<
@@ -2431,7 +2432,7 @@ type EncodedItem<
 
 /**
  * The member that the codec stores for key `K` of the schema. `toItem` writes it as an attribute,
- * and `toEntry` holds it as the value that `native` writes as the same member.
+ * and `toEntry` holds it as the value that the AWS SDK marshaller writes as the same member.
  */
 type StoredMembers<
     Entity,
@@ -2899,21 +2900,32 @@ const refuseBareSeparator = (): never => {
 }
 
 /**
- * The value that `toEntry` holds for a carried key: the carrier that `native` writes as the same
- * member, so `native.encode` of the value is the key that `toItem` writes. `S` holds the string,
- * `N` holds a `DynamoNumber`, because a JS number past the safe range has no `native` form, and
- * `B` holds the `Uint8Array`. The digits of an `N` carrier come from the codec or from `native`,
- * so `DynamoNumber.from` accepts them, and the refusal is a broken invariant.
+ * The value that `toEntry` holds for a carried key: the carrier that the AWS SDK marshaller
+ * (`marshall` of `@aws-sdk/util-dynamodb`) writes as the member of `toItem`. `S` holds the string,
+ * and `B` holds the `Uint8Array`. `N` holds a `number` where the number is within the safe integer
+ * range and equals the numeral, because DynamoDB normalises a number on write, so `1e-7` and
+ * `0.0000001` are one number. Otherwise `N` holds a `bigint` where the numeral is an integer, which
+ * the marshaller writes in full. A numeral that is no integer and that no `number` holds exactly has
+ * no form that the marshaller writes, so the refusal is an expected refusal of the data: it points to
+ * `toItem`, which writes the numeral as the attribute that it is.
  */
 const heldKey = (
     name: string,
     key: Carrying<KeyMember>,
-): string | DynamoNumber | Uint8Array => {
+): string | number | bigint | Uint8Array => {
     if ('S' in key) return key.S
     if ('B' in key) return key.B
-    const number = DynamoNumber.from(key.N)
-    if (number instanceof CodecError) throw notAKey(name)
-    return number
+    const numeral = key.N
+    const held = Number(numeral)
+    if (Math.abs(held) <= Number.MAX_SAFE_INTEGER) {
+        const same = DynamoNumber.fromNumber(held)
+        if (!(same instanceof CodecError) && same.digits === numeral)
+            return held
+    }
+    if (/^-?\d+$/.test(numeral)) return BigInt(numeral)
+    throw new RotoriseError(
+        `'${name}' holds a number that the AWS SDK marshaller cannot write: it is no integer, and no JS number holds it exactly. Read the key from toItem, which writes it as the attribute that it is.`,
+    )
 }
 
 /** The refusal of a key value that DynamoDB cannot store. It names the key and holds no value. */
@@ -4252,8 +4264,9 @@ export const tableEntry =
          * `keyOf` gives a value, or none, so a sparse key has no entry. Where `keyOf` refuses, the
          * host builder throws inside this function, which the model does not state. `carry` gives
          * the carrier of each value. `toItem` carries each value as the attribute that the codec
-         * writes. `toEntry` holds the carrier that `native` writes as the member of `toItem`, so
-         * `native.encode` of the held key is the key that `toItem` writes. The carrier is the one
+         * writes. `toEntry` holds the carrier that the AWS SDK marshaller writes as the member of
+         * `toItem`, so `marshall` of the held key is the key that `toItem` writes, and so is
+         * `native.encode`. The carrier is the one
          * difference between the two routes, so each route passes it. The pairs
          * go through `Object.fromEntries`, so a key named `__proto__` is an own attribute.
          */

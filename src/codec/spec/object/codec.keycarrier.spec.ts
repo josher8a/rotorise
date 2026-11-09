@@ -10,9 +10,11 @@
  * path. A key value that the store refuses is refused, and the refusal names the key and never the
  * value.
  */
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
-import type { Attribute } from '../../attribute'
+import type { Attribute, AttributeValue } from '../../attribute'
+import { DynamoNumber } from '../../attribute'
 import {
     binary,
     CodecError,
@@ -724,6 +726,19 @@ describe('keys and toItem write one key for each key name, over generated entiti
         const prefix = `'${key}' cannot be rebuilt from this change: `
         return said?.startsWith(prefix) ? said.slice(prefix.length) : undefined
     }
+    /**
+     * The key that the SDK wrote and the key that `toItem` wrote are one key. DynamoDB normalises a
+     * number on write, so the digits of an `N` are compared as a number: the SDK writes `1e-7` where
+     * `toItem` writes `0.0000001`.
+     */
+    const sameKey = (written: AttributeValue, expected: unknown): boolean => {
+        const key = expected as AttributeValue
+        if (written.N !== undefined && key.N !== undefined) {
+            const digits = DynamoNumber.from(written.N)
+            return digits instanceof DynamoNumber && digits.digits === key.N
+        }
+        return structuralEquals(written, key)
+    }
     const said = (run: () => unknown): { value?: unknown; said?: string } => {
         try {
             return { value: run() }
@@ -828,13 +843,30 @@ describe('keys and toItem write one key for each key name, over generated entiti
                         failures.push(`${where} ${name}: two keys`)
                         continue
                     }
-                    // the marshaller writes the key of `toEntry` as the key of `toItem`
-                    const marshalled = native.encode(entry2[name] as never)
-                    if (structuralEquals(marshalled, row[name])) count.some++
-                    else
+                    // two consumers write the key of `toEntry` as the key of `toItem`: `native`, and
+                    // the marshaller of the AWS SDK, which also reads the key back
+                    const viaNative = native.encode(entry2[name] as never)
+                    const viaSdk = (
+                        marshall({ [name]: entry2[name] }) as Record<
+                            string,
+                            AttributeValue
+                        >
+                    )[name] as AttributeValue
+                    const sdkKey = sameKey(viaSdk, row[name])
+                    const back = unmarshall({ [name]: viaSdk } as never)[name]
+                    if (!structuralEquals(viaNative, row[name]))
                         failures.push(
-                            `${where} ${name}: toEntry is another key`,
+                            `${where} ${name}: native writes another key`,
                         )
+                    else if (!sdkKey)
+                        failures.push(
+                            `${where} ${name}: marshall writes another key`,
+                        )
+                    else if (!structuralEquals(back, entry2[name]))
+                        failures.push(
+                            `${where} ${name}: unmarshall gives another key`,
+                        )
+                    else count.some++
                 }
             }
             expect(failures).toEqual([])

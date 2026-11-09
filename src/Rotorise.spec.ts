@@ -1,6 +1,5 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it, test } from 'vitest'
-import { DynamoNumber } from './codec/attribute'
 import {
     type CompositeKeyBuilder,
     type CompositeKeyParams,
@@ -310,7 +309,7 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a1-B-1-C-true'
-                  readonly SK: DynamoNumber
+                  readonly SK: number | bigint
               })
             | ({
                   a: 'a2'
@@ -319,7 +318,7 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a2-B-2-C-true'
-                  readonly SK: DynamoNumber
+                  readonly SK: number | bigint
               })
 
         attest<entries>(testTableEntry.infer)
@@ -376,7 +375,7 @@ describe('DynamoDB Utils', () => {
         expect(testTableEntryObj).toEqual({
             ...entity,
             PK: 'A-a1-B-1-C-true',
-            SK: DynamoNumber.from('1'),
+            SK: 1,
         })
 
         const fromEntry = testTableEntry.fromEntry(testTableEntryObj)
@@ -450,9 +449,11 @@ describe('DynamoDB Utils', () => {
         // 8483 -> 8590: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
         // 8590 -> 11406: `toEntry`, `fromEntry`, `infer` and `path` type each key as the member that
-        // the codec stores, so an N key reads as a `DynamoNumber`. The owner accepted the cost for
+        // the codec stores, so an N key reads as `number | bigint`. The owner accepted the cost for
         // the exact type
-        attest.instantiations([11406, 'instantiations'])
+        // 11406 -> 11232: an N key of an entry is the union of two primitives, which the SDK
+        // marshaller writes, and no longer the class `DynamoNumber`
+        attest.instantiations([11232, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -763,8 +764,8 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a1-B-1-C-VERDADERO' | 'A-a1-B-1-C-FALSO'
-                  readonly SK: DynamoNumber
-                  readonly GSI1PK: DynamoNumber
+                  readonly SK: number | bigint
+                  readonly GSI1PK: number | bigint
                   readonly GSI1SK:
                       | 'A-a1-B-1-NEW_TAG-VERDADERO'
                       | 'A-a1-B-1-NEW_TAG-FALSO'
@@ -777,10 +778,10 @@ describe('DynamoDB Utils', () => {
                   z: 'never'
               } & {
                   readonly PK: 'A-a2-B-2-C-VERDADERO' | 'A-a2-B-2-C-FALSO'
-                  readonly SK: DynamoNumber
-                  readonly GSI1PK: DynamoNumber
+                  readonly SK: number | bigint
+                  readonly GSI1PK: number | bigint
                   readonly GSI1SK: 'B-2'
-                  readonly GSI2PK: DynamoNumber
+                  readonly GSI2PK: number | bigint
               })
         >
 

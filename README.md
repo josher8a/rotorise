@@ -484,8 +484,13 @@ before `'9'`.
   and `keyUpdates` throw a `RotoriseError` for one. The message names the key and not the value.
   `key` and `keyCondition` refuse an empty full key too. A partial key, which is a call with
   `allowPartial` or with a `depth` below the count of components, may be the empty string.
-- `toEntry` holds a key of `N` as a `DynamoNumber`, so `native.encode` of the entry writes the key
-  that `toItem` writes.
+- `toEntry` holds a key of `N` as the value that `marshall` of `@aws-sdk/util-dynamodb` writes: a
+  `number` where the number is within the safe integer range and equals the numeral that `toItem`
+  writes (DynamoDB normalises a number, so `1e-7` and `0.0000001` are one number), else a `bigint`
+  where the numeral is an integer. A numeral that is no integer and that no `number` holds exactly
+  has no such form, so `toEntry` throws a `RotoriseError` that points to `toItem`. `marshall` of
+  the entry writes the key that `toItem` writes, and `unmarshall` gives the held key back. So does
+  `native.encode`.
 - DynamoDB limits a partition key to 2048 bytes and a sort key to 1024 bytes. DynamoDB refuses a
   write over the limit, and Rotorise does not check the length.
 
