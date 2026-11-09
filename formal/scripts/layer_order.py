@@ -77,6 +77,7 @@ HOST_ORDER = [
     ("codec/frontier.ts", "Lang/CodecPath.lean and Lang/ScopePath.lean: the segment of a path, and the frontier along a path"),
     ("codec/adapters.ts", "Alg/Combinators.lean: `Codec.adapt` for `held` and `Codec.extendRead` for `legacy`, with the refusals of an adapter"),
     ("codec/derivedItem.ts", "Lang/Universe.lean: `HObject` and `HUnion`, the held set of an object and of a union, as a decoded type"),
+    ("codec/products.ts", "Dynamo/Alg/Products.lean: the rules (set), (array) and (list) of the product codecs, with the spread"),
     ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),
