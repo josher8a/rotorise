@@ -1620,9 +1620,9 @@ type ErasedMatch<Entity> = {
  * the attributes reach. A leaf builds the word of `DerivedKey`: `printed` stops at the first absent
  * part, each part prints its segments as a `Comp`, `boundary` marks a partial key, and the test of
  * `Good` refuses a segment that holds the separator. The host checks both halves of `Good` for a
- * full key: no segment holds the separator, and the list of segments is not empty. A key of one
- * attribute refuses an empty value. A list of components prints the name of each component, so a
- * full key of a list is not empty. A partial key is a call with `allowPartial`, or with a `depth`
+ * full key: no segment holds the separator, and the print is not the empty text. One test states the
+ * second half for a key of one attribute and for a list of components, because a transform can
+ * print the empty text at a component. A partial key is a call with `allowPartial`, or with a `depth`
  * below the count of components. A partial key is exempt from the second half, and may be the empty
  * string, because the public `key` serves a caller that uses the key as a `begins_with` prefix. The
  * empty string is that prefix at a depth of 0, and with `allowPartial` where the first part is
@@ -1665,6 +1665,13 @@ const key =
             attributes: Attributes,
             config?: Config,
         ): string | undefined => {
+            // a full key is not empty, whether the key is one attribute or a print of components. A
+            // partial key can be empty. The error names the key and holds no value.
+            const nonEmpty = (text: unknown, full: boolean, what: string) => {
+                if (full && text === '') {
+                    throw new RotoriseError(`Key ${key.toString()}: ${what}`)
+                }
+            }
             const case_ = schema[key]
 
             if (case_ === undefined) {
@@ -1697,13 +1704,11 @@ const key =
                               attributes as Record<string, unknown>,
                               true,
                           )
-                // an attribute has no part of a key, so its key is a full key, and a full key is not
-                // empty. The error names the key and the attribute, and holds no value.
-                if (stored === '') {
-                    throw new RotoriseError(
-                        `Key ${key.toString()}: the attribute '${arm.name}' is empty, so the key is empty. A full key is not empty. Give '${arm.name}' a value, or leave it out.`,
-                    )
-                }
+                nonEmpty(
+                    stored,
+                    true,
+                    `the attribute '${arm.name}' is empty, so the key is empty. Give '${arm.name}' a value, or leave it out.`,
+                )
                 return stored as never
             }
 
@@ -1784,9 +1789,8 @@ const key =
 
             /**
              * The separator half of `Good` of `DerivedKey`: no segment holds the separator, because a
-             * segment that holds it reads back as two. The half `segs ≠ []` is not tested here: a list
-             * of components prints the name of each component, so a full key of a list is not empty, and
-             * a partial key may be empty. The test runs over the
+             * segment that holds it reads back as two. The half that refuses an empty print is the
+             * test of `nonEmpty` below. The test runs over the
              * segments that the parts print, after
              * `printed` has stopped at the first absent part, so an absent part refuses before a
              * separator in a part that precedes it. The refusal names the component, and never the
@@ -1813,7 +1817,13 @@ const key =
                 composite.push('')
             }
 
-            return composite.join(separator) as never
+            const built = composite.join(separator)
+            nonEmpty(
+                built,
+                printed === fullLength,
+                'the print of the components is empty, so the key is empty. Give a component a value, or leave the key out.',
+            )
+            return built as never
         }
     }
 
@@ -4241,11 +4251,7 @@ export const tableEntry =
                 attributes as never,
                 { allowPartial: true, enforceBoundary: true } as never,
             )
-            if (
-                built === undefined ||
-                built === '' ||
-                printed[0] === undefined
-            ) {
+            if (built === undefined || printed[0] === undefined) {
                 throw new RotoriseError(
                     `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
                 )

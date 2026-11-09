@@ -20,6 +20,7 @@ import { RotoriseError, tableEntry } from '../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../attribute'
 import { decimal, number, object, optional, string } from '../codec'
 import {
+    type AttrText,
     type ConditionOutcome,
     type ConditionRow,
     type ItemKey,
@@ -231,6 +232,13 @@ const modelSegments = (row: KeyRow): string[] | undefined => {
     }
     const segments = printed.flatMap(segmentsOf)
     if (row.enforce && printed.length < arm.full) segments.push('')
+    // a full key whose print is the empty text is a refusal, as `DerivedKey.build` states it
+    if (
+        printed.length >= arm.full &&
+        segments.length === 1 &&
+        segments[0] === ''
+    )
+        return undefined
     return segments
 }
 
@@ -1097,6 +1105,7 @@ const itemDraws: readonly Record<string, unknown>[] = [
     { petId: 'p1', nick: 'rex', age: 3 },
     { petId: 'p1' },
     { petId: 'p1', nick: 'rex' },
+    { petId: 'p1', nick: '', age: 3 },
 ]
 
 /** The printed text of the attributes that the codec wrote: a string, a numeral, and each name below an object. */
@@ -1112,6 +1121,35 @@ const printedOf = (
         return []
     })
 
+/** The value of an item as the model reads it: a string, a numeral, or a map of attributes. */
+const attrTextOf = (
+    map: AttributeMap | Record<string, AttributeValue>,
+): AttrText => ({
+    kind: 'm',
+    entries: Object.entries(map).map(([name, attribute]) => {
+        if (attribute.S !== undefined)
+            return [name, { kind: 's', value: attribute.S }] as const
+        if (attribute.N !== undefined)
+            return [name, { kind: 'n', value: attribute.N }] as const
+        if (attribute.M !== undefined)
+            return [name, attrTextOf(attribute.M)] as const
+        throw new Error(
+            `the item holds a member at ${name} that the rows do not state`,
+        )
+    }),
+})
+
+/** The printed text at each name of a value, with a dot between the names below a map. */
+const printedAt = (value: AttrText, prefix = ''): [string, string][] =>
+    value.kind === 'm'
+        ? value.entries.flatMap(([name, below]) =>
+              printedAt(
+                  below,
+                  `${prefix}${name}${below.kind === 'm' ? '.' : ''}`,
+              ),
+          )
+        : [[prefix, value.value]]
+
 /** The attribute that `toItem` wrote at a key name: a member and a text, or none. */
 const writtenAt = (
     row: AttributeMap,
@@ -1125,6 +1163,9 @@ const writtenAt = (
         `the row writes a member of ${name} that the rows do not state`,
     )
 }
+
+/** The rows that a throw of `toItem` refuses: the separator, the empty value, a lacking component, the empty value of `sparse`. */
+const REFUSED_ITEM_ROWS = 4
 
 const itemRows = (): ItemRow[] => {
     const rows: ItemRow[] = []
@@ -1192,7 +1233,7 @@ const itemRows = (): ItemRow[] => {
             const row: ItemRow = {
                 name: `${one.name}_${rows.length}`,
                 keys,
-                item,
+                value: attrTextOf(encoded as AttributeMap),
                 separator,
                 outcome,
             }
@@ -1244,7 +1285,7 @@ describe('the item rows, against the model of the row of an item', () => {
         const refusedWith = (test: (row: ItemRow) => boolean) =>
             rows.some((row) => row.outcome.kind === 'refused' && test(row))
         const holds = (row: ItemRow, name: string, value: string) =>
-            row.item.some(([n, v]) => n === name && v === value)
+            printedAt(row.value).some(([n, v]) => n === name && v === value)
         // a component that holds the separator
         expect(refusedWith((row) => holds(row, 'petId', 'p#1'))).toBe(true)
         // a key of one attribute with the empty value
@@ -1254,10 +1295,25 @@ describe('the item rows, against the model of the row of an item', () => {
             refusedWith(
                 (row) =>
                     row.name.startsWith('composite_') &&
-                    !row.item.some(([name]) => name === 'nick'),
+                    !printedAt(row.value).some(([name]) => name === 'nick'),
             ),
         ).toBe(true)
         expect(rows.some((row) => row.outcome.kind === 'written')).toBe(true)
+    })
+
+    it('refuses a key of one attribute whose value is empty, apart from the other keys of the spec', () => {
+        const row = rows.find(
+            (one) =>
+                one.name.startsWith('sparse_') &&
+                printedAt(one.value).some(([n, v]) => n === 'nick' && v === ''),
+        )
+        expect(row?.outcome.kind).toBe('refused')
+    })
+
+    it('counts the rows that a throw refuses, because the model compares a throw as a refusal', () => {
+        expect(
+            rows.filter((row) => row.outcome.kind === 'refused').length,
+        ).toBe(REFUSED_ITEM_ROWS)
     })
 
     it('gives no key where an optional attribute is absent', () => {

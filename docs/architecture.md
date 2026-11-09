@@ -1116,8 +1116,9 @@ A leaf of a key spec holds its parts, and a part holds the name that the part re
 the value at that name. Two items that agree on the names that a spec reads give one key.
 
 The key of one attribute is the printed value of that attribute. A full key is not empty, so the
-model refuses an empty value, and a full key of a leaf has a segment. A partial key may be empty,
-because the host gives it as a prefix.
+model refuses a full key whose text is empty: the key of one attribute at the arm, and a key of a
+leaf where the builder joins the segments. A partial key may be empty, because the host gives it
+as a prefix.
 
 A condition on a sort key is the key of the parts that a query gives. It is the equality on the whole
 key where the query gives every part, and the prefix match of the leading parts with the boundary

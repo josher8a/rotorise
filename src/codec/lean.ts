@@ -4017,8 +4017,9 @@ export type ConditionOutcome =
     | { readonly kind: 'prefix'; readonly key: string }
 
 /**
- * **One row of the sort condition**: the length of the spec, the parts that the host evaluated for
- * the item, the separator, and what the host gave. A value that holds the separator is a throw of
+ * **One row of the sort condition**: the length of the spec, the parts that the emitter reads from
+ * the item (the upper case name and the value, with the empty text as an absent part), the
+ * separator, and what the host gave. A value that holds the separator is a throw of
  * the builder before the condition, so a row holds none.
  */
 export type ConditionRow = {
@@ -4051,15 +4052,24 @@ export type ItemKey = {
     readonly tree: KeyTree
 }
 
+/** An attribute of the value of an item: a string, a number as its numeral, or a map. */
+export type AttrText =
+    | { readonly kind: 's'; readonly value: string }
+    | { readonly kind: 'n'; readonly value: string }
+    | {
+          readonly kind: 'm'
+          readonly entries: readonly (readonly [string, AttrText])[]
+      }
+
 /**
- * **One row of an item with derived keys**: the keys of the entry, the printed text of the attributes
- * of the item that the keys read, the separator, and what `toItem` did. A key of the member `B` is
- * outside the rows, as it is outside the model.
+ * **One row of an item with derived keys**: the keys of the entry, the value of the item as a map of
+ * attributes, the separator, and what `toItem` did. A key of the member `B` is outside the rows, as it
+ * is outside the model.
  */
 export type ItemRow = {
     readonly name: string
     readonly keys: readonly ItemKey[]
-    readonly item: readonly (readonly [string, string])[]
+    readonly value: AttrText
     readonly separator: string
     readonly outcome: ItemOutcome
 }
@@ -4094,6 +4104,13 @@ const leanKeyTree = (tree: KeyTree): string =>
                         `(${leanString(literal)}, ${leanKeyTree(arm)})`,
                 )
                 .join(', ')}])`
+
+const leanAttr = (attr: AttrText): string =>
+    attr.kind === 's'
+        ? `Attr.s ${leanString(attr.value)}`
+        : attr.kind === 'n'
+          ? `Attr.n (WFNumeral.of ${leanString(attr.value)})`
+          : `mapValue [${attr.entries.map(([name, value]) => `(${leanString(name)}, ${leanAttr(value)})`).join(', ')}]`
 
 const leanItemOutcome = (outcome: ItemOutcome): string =>
     outcome.kind === 'refused'
@@ -4164,7 +4181,7 @@ export const leanKeyModule = (
                 `{ name := ${leanString(key.name)}, numeric := ${key.numeric}, spec := ${leanKeyTree(key.tree)} }`,
         )
         .join(', ')}],
-    item := [${row.item.map(([name, value]) => `(${leanString(name)}, ${leanString(value)})`).join(', ')}],
+    value := ${leanAttr(row.value)},
     sep := Char.ofNat ${(itemChars[i]?.[0] ?? '').codePointAt(0)},
     host := ${leanItemOutcome(row.outcome)} }`,
     )

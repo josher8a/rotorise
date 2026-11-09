@@ -23,9 +23,6 @@ namespace DerivedKey
 
 /-! ## The gap -/
 
-/-- The parts before the first absent part. -/
-def leading (ps : List (Option Comp)) : List Comp := (ps.takeWhile Option.isSome).filterMap id
-
 /-- **No part prints after an absent part.** The list ends with absent parts, or has none. -/
 def gapFree : List (Option Comp) → Bool
   | [] => true
@@ -39,11 +36,6 @@ theorem gapFree_iff_dropWhile : ∀ ps : List (Option Comp),
   | none :: r => by simp [gapFree, List.dropWhile]
   | some _ :: r => by simp [gapFree, List.dropWhile, gapFree_iff_dropWhile r]
 
-/-- **A print that stops at an absent part is the leading parts.** The strict and the partial
-    builders agree on a list with no absent part. -/
-theorem leading_printed (ps : List (Option Comp)) : printed true ps = some (leading ps) :=
-  printed_partial ps
-
 /-! ## The condition -/
 
 /-- What the condition of a sort key is: no condition where no part is given, a refusal, the whole
@@ -56,14 +48,16 @@ inductive Cond where
   deriving DecidableEq
 
 /-- **The condition.** No part given gives no condition. A part that prints after an absent part is
-    a refusal. Otherwise the leading parts give the whole key where they are every component of
-    the spec, and the prefix with the boundary where they are not. `full` is the length of the
+    a refusal. Otherwise the key is the key that `build` gives for the parts: the whole key where
+    the print holds every component of the spec, and the prefix with the boundary where it does not.
+    A whole key whose text is empty is a refusal, as `build` states it. `full` is the length of the
     spec. -/
 def condition (full : Nat) (parts : List (Option Comp)) : Cond :=
   if parts.all Option.isNone then .nothing
   else if gapFree parts then
-    if boundary full (leading parts) then .prefix ((leading parts).flatMap Comp.segs ++ [""])
-    else .equals ((leading parts).flatMap Comp.segs)
+    match printed true parts, build full true true parts with
+    | some cs, some ss => if boundary full cs then .prefix ss else .equals ss
+    | _, _ => .refused
   else .refused
 
 /-- **A query that gives no part has no condition.** -/
@@ -77,21 +71,19 @@ theorem condition_gap {full : Nat} {parts : List (Option Comp)}
     condition full parts = .refused := by
   simp [condition, hp, hg]
 
-/-- **A query with no gap has the key of its leading parts.** The condition is the key that
-    `build` gives for the parts, as the whole key or as the prefix. -/
+/-- **A query with no gap has the key that `build` gives.** The condition is that key, as the whole
+    key where the print holds every component and as the prefix where it does not. -/
 theorem condition_of_gapFree {full : Nat} {parts : List (Option Comp)}
-    (hp : parts.all Option.isNone = false) (hg : gapFree parts = true) :
-    ∃ ss, build full true true parts = some ss ∧
-      (condition full parts = .prefix ss ∨ condition full parts = .equals ss) := by
-  refine ⟨(leading parts).flatMap Comp.segs ++ (if boundary full (leading parts) then [""] else []),
-    ?_, ?_⟩
-  · simp only [build, leading_printed, Option.map_some]
-    split <;> simp_all
-  · by_cases hb : boundary full (leading parts) = true
-    · left; simp [condition, hp, hg, hb]
-    · right
-      have hb' : boundary full (leading parts) = false := by simpa using hb
-      simp [condition, hp, hg, hb']
+    (hp : parts.all Option.isNone = false) (hg : gapFree parts = true) {cs : List Comp}
+    {ss : List String} (hc : printed true parts = some cs) (hb : build full true true parts = some ss) :
+    condition full parts = if boundary full cs then .prefix ss else .equals ss := by
+  simp [condition, hp, hg, hc, hb]
+
+/-- **A whole key of a query that prints the empty text is a refusal.** `build` refuses it. -/
+theorem condition_refused_of_build {full : Nat} {parts : List (Option Comp)}
+    (hp : parts.all Option.isNone = false) (hg : gapFree parts = true)
+    (hb : build full true true parts = none) : condition full parts = .refused := by
+  simp [condition, hp, hg, hb]
 
 /-- **A gap leaves the later part free.** The prefix of the leading segments `p` has a prefix match
     with the segments of each item that begins with `p`, whatever follows. So two items that

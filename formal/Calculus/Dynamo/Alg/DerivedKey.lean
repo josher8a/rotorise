@@ -16,8 +16,9 @@ the collision.
 
 A partial key is the print of the first segments with a trailing separator. A prefix match on it
 selects exactly the items that agree on those segments. The same match without the trailing
-separator selects more. A full key has a segment (`build_full_ne_nil`), so it is not empty. A
-partial key may have none, because the host gives it as a prefix.
+separator selects more. A full key has a segment (`build_full_ne_nil`), and a full key whose text is
+empty is a refusal, because DynamoDB stores no empty key (`build`). A partial key may be empty,
+because the host gives it as a prefix.
 
 The builder of the host prints each component as a word of segments: a name and a value, a tag
 and a value, or a value alone. The model states the three shapes, the absent value, and the
@@ -326,12 +327,16 @@ def boundary (full : Nat) (cs : List Comp) : Bool := decide (cs.length < full)
 /-- The key of the host: the segments of the printed components, and the empty segment of the
     boundary where the option is on and the print stops before the last component of the spec.
     `full` is the length of the spec, and `parts` are the components that the host evaluates: the
-    spec cut to the depth. -/
+    spec cut to the depth. A print that holds each component of the spec is a full key, and a full
+    key whose segments are the one empty segment is the empty text, which DynamoDB stores as no key,
+    so it is a refusal. A partial key may be empty, because the host gives it as a prefix. -/
 def build (full : Nat) (allowPartial enforce : Bool) (parts : List (Option Comp)) :
     Option (List String) :=
-  (printed allowPartial parts).map fun cs =>
-    if enforce && boundary full cs then cs.flatMap Comp.segs ++ [""]
-    else cs.flatMap Comp.segs
+  (printed allowPartial parts).bind fun cs =>
+    if boundary full cs then
+      some (if enforce then cs.flatMap Comp.segs ++ [""] else cs.flatMap Comp.segs)
+    else if cs.flatMap Comp.segs = [""] then none
+    else some (cs.flatMap Comp.segs)
 
 /-- **The boundary is on exactly where the print stops before the last component of the spec.**
     The count of segments does not enter: a component with one segment counts as one component. -/
@@ -343,10 +348,10 @@ theorem boundary_iff (full : Nat) (cs : List Comp) :
     the key is the segments of the components, with the option on. -/
 theorem build_full_ends_without_boundary {full : Nat} {allowPartial : Bool}
     {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
-    (hfull : cs.length = full) :
+    (hfull : cs.length = full) (hne : cs.flatMap Comp.segs ≠ [""]) :
     build full allowPartial true parts = some (cs.flatMap Comp.segs) := by
   have hb : boundary full cs = false := by simp [boundary, hfull]
-  simp [build, h, hb]
+  simp [build, h, hb, hne]
 
 /-- **A partial key ends with the boundary.** Where the print stops before the last component of
     the spec, through an absent value or through a depth, the key is the segments of the components
@@ -359,14 +364,15 @@ theorem build_partial_ends_with_boundary {full : Nat} {allowPartial : Bool}
   simp [build, h, hb]
 
 /-- **A full key has a segment.** Where the print holds each of the `full` components of a spec
-    with a component, the key is the segments of those components, and the list is not empty. A
-    partial key is the print that stops before the last component, and it may be empty. -/
+    with a component, and the text is not empty, the key is the segments of those components, and
+    the list is not empty. A partial key is the print that stops before the last component, and it
+    may be empty. -/
 theorem build_full_ne_nil {full : Nat} {allowPartial enforce : Bool}
     {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
-    (hfull : cs.length = full) (hpos : 0 < full) :
+    (hfull : cs.length = full) (hpos : 0 < full) (hne : cs.flatMap Comp.segs ≠ [""]) :
     ∃ ss, build full allowPartial enforce parts = some ss ∧ ss ≠ [] := by
   have hb : boundary full cs = false := by simp [boundary, hfull]
-  refine ⟨cs.flatMap Comp.segs, by simp [build, h, hb], ?_⟩
+  refine ⟨cs.flatMap Comp.segs, by simp [build, h, hb, hne], ?_⟩
   cases cs with
   | nil => simp at hfull; omega
   | cons c r => simp [List.flatMap_cons, List.append_eq_nil_iff, Comp.segs_ne_nil c]

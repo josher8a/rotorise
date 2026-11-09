@@ -4,18 +4,20 @@ import Calculus.Dynamo.Alg.KeyItem
 /-!
 # The rows of an item with derived keys
 
-The emitter runs the item writer of `src/` on an entry of plain keys and an item. A row holds the keys of
-the entry, each with its name, its member (a string or a number) and its key spec as a tree with the
-parts that the host evaluated, the printed text of the attributes of the item that the keys read, the
-separator, and what the host did: it refused the key, or it wrote the attribute of each key name at
-a member, or wrote none where the key is absent. A throw of a key and a refusal as a value are both a
-refusal, because the channel of the refusal is no rule of the model.
+The emitter runs the item writer of `src/` on an entry of plain keys and an item. A row holds the
+keys of the entry, each with its name, its member (a string or a number) and its key spec as a tree,
+the value of the item as a map of attributes, the separator, and what the host did: it refused a key
+by a throw, or it wrote the attribute of each key name at a member, or wrote none where the key is
+absent. The emitter builds the parts of a leaf from the encoded row: it upper-cases the name and reads
+the empty text as an absent part. That is a second reading of the spec, and the host gives only the
+outcome. A refusal as a returned value is outside the rows: the emitter skips that row, and a test
+counts the rows that a throw refuses, so a move of the channel fails that test.
 
-The comparator gives each key to `DerivedItem.carrierOf` at the member of the row. The model refuses
-where one key is refused. Otherwise it gives, for each key name, no attribute where the key is absent,
-and the text at the member where the key is built. The row states that the host wrote the attribute
-of the same member and the same text at each key name. A member `B` is outside the rows, as it is
-outside the model.
+The comparator reads `DerivedItem.keyPartOf` over `DerivedItem.itemOf` of the value of the row, at
+the member of each key. The model refuses where one key is refused. Otherwise it gives, for each key
+name, no attribute where the key is absent, and the text at the member where the key is built. The row
+states that the host wrote the attribute of the same member and the same text at each key name. A
+member `B` is outside the rows, as it is outside the model.
 
 A row is read through a view of the strings, as the key codec is. The view of the library is
 `libraryView`, `String.toList` with `String.ofList`.
@@ -46,32 +48,62 @@ structure ItemKey where
   numeric : Bool
   spec : KeySpec String
 
-/-- A row of the item: the name, the keys, the printed text of the attributes that the keys read, the
+/-- A row of the item: the name, the keys, the value of the item as a map of attributes, the
     separator, and what the host did. -/
 structure ItemRow where
   name : String
   keys : List ItemKey
-  item : List (String × String)
+  value : Value
   sep : Char
   host : HostItem
 
-/-- The item of a row, as the keys read it. -/
-def ItemRow.itemOf (r : ItemRow) : Item String := fun n => r.item.lookup n
+/-- The names of a list, without a repeat. -/
+def nameSet (l : List String) : Finset String := ⟨(l.dedup : Multiset String), l.nodup_dedup⟩
 
-/-- **The text that a key writes at its member, or a refusal.** The carrier of the key at a string
-    member or at a number member, as text. -/
-def itemKeyText (V : StringView) (c : Char) (numeric : Bool) (out : Out) :
-    Option (Option (Bool × String)) :=
-  match numeric with
-  | true =>
-      (DerivedItem.carrierOf V c .n (by decide) out).map fun v => v.map fun w => (true, w.1)
-  | false =>
-      (DerivedItem.carrierOf V c .s (by decide) out).map fun v => v.map fun w => (false, w)
+/-- The map value of named attributes. -/
+def mapValue (pairs : List (String × Attr)) : Value :=
+  mA.into (MapOf.ofFun (nameSet (pairs.map Prod.fst)) fun nm => pairs.lookup nm)
 
-/-- What the model gives for a row: a refusal, or the attribute of each key name. -/
-def ItemRow.model (V : StringView) (r : ItemRow) : Option (List (String × Option (Bool × String))) :=
-  r.keys.mapM fun k =>
-    (itemKeyText V r.sep k.numeric (keyOf false false r.itemOf k.spec)).map fun v => (k.name, v)
+/-- The member of a key: a number, or a string. A member `B` is outside the rows. -/
+def memberOfNumeric : Bool → DerivedItem.Member
+  | true => .n
+  | false => .s
+
+/-- **A member of a row is no `B`.** -/
+theorem memberOfNumeric_ne_b (b : Bool) : memberOfNumeric b ≠ .b := by
+  cases b <;> simp [memberOfNumeric]
+
+/-- The key of a row at a name, or none. -/
+def ItemRow.keyAt (r : ItemRow) (name : String) : Option ItemKey :=
+  r.keys.find? fun k => k.name == name
+
+/-- The names of the keys of a row. -/
+def ItemRow.names (r : ItemRow) : Finset String := nameSet (r.keys.map ItemKey.name)
+
+/-- The member of a key name of a row: a number where the key says so. -/
+def ItemRow.mem (r : ItemRow) : {k // k ∈ r.names} → DerivedItem.Member :=
+  fun k => memberOfNumeric ((r.keyAt k.1).any ItemKey.numeric)
+
+/-- The key spec of a key name of a row. -/
+def ItemRow.specs (r : ItemRow) : {k // k ∈ r.names} → KeySpec String :=
+  fun k => ((r.keyAt k.1).map ItemKey.spec).getD (.arm .missing)
+
+/-- The text of a key part at its member: no key is none, a string is the text, and a number is the
+    numeral. -/
+def renderKey : (m : DerivedItem.Member) → Option m.Carrier → Option (Bool × String)
+  | .s, v => v.map fun w => (false, w)
+  | .n, v => v.map fun w => (true, w.1)
+  | .b, _ => none
+
+/-- **What the model gives for a row**: the key part that `DerivedItem.keyPartOf` builds over the
+    item that `DerivedItem.itemOf` reads from the value of the row, or a refusal. Each key name is
+    rendered at its member. -/
+def ItemRow.model (V : StringView) (r : ItemRow) :
+    Option (List (String × Option (Bool × String))) :=
+  (DerivedItem.keyPartOf V (mem := r.mem) (fun k => memberOfNumeric_ne_b _) r.sep r.specs
+      (DerivedItem.itemOf r.value)).map fun kp =>
+    r.keys.map fun k =>
+      (k.name, if h : k.name ∈ r.names then renderKey (r.mem ⟨k.name, h⟩) (kp ⟨k.name, h⟩) else none)
 
 /-- **The comparator of an item row.** The host refused where the model refuses, and wrote the
     attributes that the model gives. -/

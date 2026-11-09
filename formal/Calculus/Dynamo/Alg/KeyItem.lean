@@ -72,9 +72,21 @@ def printedAttr : Attr → Option String
   | .n v => some v.1
   | _ => none
 
-/-- **The item as the key spec reads it**: the printed text of each top-level attribute. -/
+/-- The attribute at a path of names, through the maps of an item. Each name is one lookup in the map
+    that the previous name gave. -/
+def readPath : Attr → List String → Option Attr
+  | v, [] => some v
+  | v, s :: r => (mA.out v).bind fun m => (m.at s).bind fun w => readPath w r
+
+/-- **The item as the key spec reads it**: the printed text at each name. A name that the item holds
+    as an attribute is that attribute, and any other name is a path of names that reads into the maps
+    of the item, as `valueAt` of the host reads it. The path is the name split at each `.`. -/
 def itemOf (t : Value) : DerivedKey.Item String :=
-  fun nm => (mA.out t).bind fun m => (m.at nm).bind printedAttr
+  fun nm =>
+    match (mA.out t).bind (·.at nm) with
+    | some a => printedAttr a
+    | none =>
+        (readPath t ((DerivedKey.split '.' nm.toList).map String.ofList)).bind printedAttr
 
 variable {KS} {mem}
 variable (V : DerivedKey.StringView) (hb : ∀ k, mem k ≠ .b) (c : Char) (specs : {k // k ∈ KS} → DerivedKey.KeySpec String)

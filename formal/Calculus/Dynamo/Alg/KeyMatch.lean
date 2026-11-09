@@ -194,7 +194,8 @@ def select {N : Type} (i : Item N) : KeySpec N → Arm N
       | some v => select i (arms v)
 
 /-- What the host gave: a throw, no key, the printed attribute as the key, or the segments. The
-    printed attribute is never the empty string, and the segments of a full key are never empty. -/
+    printed attribute is never the empty string, and the segments of a full key are never the empty
+    text: a full key that prints the empty text is a refusal. -/
 inductive Out where
   | refused
   | nothing
@@ -280,14 +281,14 @@ theorem Arm.key_attr_raw_ne_empty {n : N} {k : String}
   | some v =>
       by_cases hv : v = "" <;> simp [hi, hv] at h
 
-/-- **A full key of a leaf has a segment.** A leaf with a component, whose parts all print, gives
-    a key from a non-empty list of segments. A partial key is the print that stops before the
+/-- **A full key of a leaf has a segment.** A leaf with a component, whose parts all print text that
+    is not empty, gives a key from a non-empty list of segments. A partial key is the print that stops before the
     last component, and it may be empty. -/
 theorem Arm.key_leaf_full_ne_nil {l : Leaf N} {cs : List Comp}
     (h : printed allowPartial (l.parts i) = some cs) (hfull : cs.length = l.full)
-    (hpos : 0 < l.full) :
+    (hpos : 0 < l.full) (hne : cs.flatMap Comp.segs ≠ [""]) :
     ∃ ss, (Arm.leaf l).key allowPartial enforce i = .segs ss ∧ ss ≠ [] := by
-  obtain ⟨ss, hb, hne⟩ := build_full_ne_nil (enforce := enforce) h hfull hpos
+  obtain ⟨ss, hb, hne⟩ := build_full_ne_nil (enforce := enforce) h hfull hpos hne
   exact ⟨ss, by simp [Arm.key, hb], hne⟩
 
 /-! ## The support of a key -/

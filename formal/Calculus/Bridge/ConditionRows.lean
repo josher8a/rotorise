@@ -5,11 +5,11 @@ import Calculus.Dynamo.Alg.KeyCondition
 # The rows of a sort condition
 
 The emitter runs the condition builder of `src/` on a sort key of plain components and an
-item. A row holds the length of the spec, the parts that the host evaluated for
-the item, the separator, and what the host gave: no condition, a refusal, the equality on the whole
+item. A row holds the length of the spec, the parts that the emitter reads from the item (the upper
+case name and the value, with the empty text as an absent part), the separator, and what the host gave: no condition, a refusal, the equality on the whole
 key, or the prefix of the leading parts with the boundary. The comparator gives the row to
 `DerivedKey.condition`. The model gives no condition where no part is given, a refusal where a part
-prints after an absent part, the equality where every part is given, and the prefix otherwise. The
+prints after an absent part, the equality where every part is given and its text is not empty, and the prefix otherwise. The
 key text of an equality or a prefix is the join of the model's segments. A value that holds the
 separator is a throw of the host before the condition, so a row of a condition holds none.
 -/

@@ -482,7 +482,8 @@ before `'9'`.
 - `null` and `undefined` give no key in every method.
 - DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `toEntry`, `keys`, `toItem`
   and `keyUpdates` throw a `RotoriseError` for one. The message names the key and not the value.
-  `key` and `keyCondition` refuse an empty full key too. A partial key, which is a call with
+  `key` and `keyCondition` refuse an empty full key too, also where a transform prints the empty
+  string at a component. A partial key, which is a call with
   `allowPartial` or with a `depth` below the count of components, may be the empty string.
 - `toEntry` holds a key of `N` as the value that `marshall` of `@aws-sdk/util-dynamodb` writes: a
   `number` where the number is within the safe integer range and equals the numeral that `toItem`

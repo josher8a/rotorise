@@ -1,5 +1,6 @@
 import Calculus.Bridge.Verdicts
 import Calculus.Dynamo.Alg.KeyUpdate
+import Calculus.Bridge.ItemRows
 
 /-!
 # The rows of a key update
@@ -13,8 +14,9 @@ update of the model (`update`) gives the result of the host.
 
 A part of a row names the attribute that it reads, and prints the value as the plain component of
 the host does: the upper case name, then the value. A change writes a value or removes the attribute.
-A part with a transform, a tag or a path of names is outside the rows. The host reads a path by a
-prefix of names, and the model reads a name as one opaque symbol.
+A part with a transform or a tag is outside the rows. A name is a path of names joined by `.`, and
+the model reads it through `PathName`: a write to a path reaches the paths above it and the paths
+below it, as the host reads it.
 -/
 
 namespace Calculus
@@ -34,13 +36,8 @@ instance : PathName String where
 
 /-- The key of an item as the host gives it to a patch: a printed key, no key, or a throw. The host
     throws where a segment holds the separator, and where the spec selects nothing. -/
-def Out.written (c : Char) : Out → Option (Option String)
-  | .refused => none
-  | .nothing => some none
-  | .raw k => some (some k)
-  | .segs ss =>
-      if ss.any (fun s => s.toList.contains c) then none
-      else some (some (String.ofList (join c (charSegs ss))))
+def Out.written (c : Char) (o : Out) : Option (Option String) :=
+  DerivedItem.carrierOf libraryView c .s (by decide) o
 
 /-- A plain component of a leaf: the attribute that it reads, and the label that it prints. -/
 def Part.named (n label : String) : Part String := ⟨some n, fun v => v.map (Comp.named label)⟩

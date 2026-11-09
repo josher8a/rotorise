@@ -3,7 +3,8 @@
  *
  * DynamoDB stores no empty key, so a full key that prints the empty string addresses no item. A key
  * of one attribute has no part, so its key is full, and an empty value refuses on every route. A list
- * of components prints the name of each component, so a full key of a list is not empty. A partial
+ * of components prints the name of each component, so a full key of a list is empty only where
+ * a transform prints a value with no tag, and the value is empty. A partial
  * key is a call with `allowPartial`, or with a `depth` below the count of components, and the public
  * `key` returns it as a `begins_with` prefix, so the empty prefix is the answer where no part is
  * present.
@@ -20,12 +21,14 @@ const Pets = tableEntry<Pet>()(
         GSI1PK: ['shelterId'],
         GSI1SK: 'nick',
         GSI2SK: [['petId', (_id: string) => '']],
+        GSI3SK: [['nick', (text: string) => ({ value: text })]],
     },
     {
         key: { partition: 'PK', sort: 'SK' },
         indexes: {
             GSI1: { partition: 'GSI1PK', sort: 'GSI1SK' },
             GSI2: { partition: 'GSI1PK', sort: 'GSI2SK' },
+            GSI3: { partition: 'GSI1PK', sort: 'GSI3SK' },
         },
     },
 )
@@ -73,9 +76,22 @@ describe('a full key of one attribute refuses the empty string, on every route',
     })
 })
 
-describe('a full key of a list of components is never empty', () => {
+describe('a full key of a list of components prints the name of a tagged component', () => {
     it('prints the name of a component whose transform prints the empty string', () => {
         expect(Pets.key('GSI2SK', unnamed)).toBe('PETID#')
+    })
+})
+
+describe('a full key whose print is the empty text refuses, as a key of one attribute does', () => {
+    it('refuses where one component prints a value with no tag and the value is empty', () => {
+        expect(() => Pets.key('GSI3SK', unnamed)).toThrow(RotoriseError)
+        expect(() => Pets.key('GSI3SK', unnamed)).toThrow(
+            'Key GSI3SK: the print of the components is empty',
+        )
+    })
+
+    it('gives the empty prefix where the same print is a partial key', () => {
+        expect(Pets.key('GSI3SK', unnamed, { depth: 0 })).toBe('')
     })
 })
 
