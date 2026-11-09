@@ -11,6 +11,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
+import type { ChildAt } from '../../codec'
 import {
     boolean,
     decimal,
@@ -19,6 +20,7 @@ import {
     fill,
     held,
     item,
+    nullable,
     object,
     optional,
     ref,
@@ -237,6 +239,31 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
         expectTypeOf(key).toEqualTypeOf<string | undefined>()
     })
 
+    it('prints the stored text of a held leaf below a fill, as below an object', () => {
+        const Chipped = tableEntry<{ petId: string; chip: { code: number } }>()(
+            { PK: ['petId'], SK: ['chip.code'] },
+            {
+                codec: {
+                    petId: string,
+                    chip: fill(object({ code: Hexed }), { code: 0 }),
+                },
+            },
+        )
+        const key = Chipped.key('SK', { chip: { code: 255 } })
+        expect(key).toBe('CODE#ff')
+        expectTypeOf(key).toEqualTypeOf<`CODE#${string}`>()
+    })
+
+    it('types a key of one attribute below an optional object as the stored text', () => {
+        const Visits = tableEntry<{ id: string; meta?: { at: Date } }>()(
+            { PK: ['id'], GSI1SK: 'meta.at' },
+            { codec: { id: string, meta: optional(object({ at: isoAt })) } },
+        )
+        const key = Visits.key('GSI1SK', { meta: { at: new Date(0) } })
+        expect(key).toBe('1970-01-01T00:00:00.000Z')
+        expectTypeOf(key).toEqualTypeOf<string>()
+    })
+
     it('holds the DynamoNumber in a key of one attribute, as the run time does', () => {
         const Prices = tableEntry<{ id: string; price: DynamoNumber }>()(
             { PK: ['id'], SK: 'price' },
@@ -271,5 +298,21 @@ describe('a key of one attribute at a path can be sparse, as at the top level', 
         })
         expect(Notes.key('GSI1SK', { meta: { note: 'x' } })).toBe('x')
         expect(Notes.toEntry({ id: 'a' })).not.toHaveProperty('GSI1SK')
+    })
+})
+
+describe('the frontier below a codec that the type does not enter is one unknown', () => {
+    const Wrapped = object({
+        checked: refine(
+            object({ note: string }),
+            (v): v is { note: string } => v.note !== '',
+        ),
+        maybe: nullable(object({ note: string })),
+    })
+    type Front = { spec: typeof Wrapped.spec; rest: undefined; t: unknown }
+
+    it('gives unknown below refine and below nullable, so the type cannot tell a path that the run time refuses from one that it builds', () => {
+        expectTypeOf<ChildAt<Front, 'checked'>>().toEqualTypeOf<unknown>()
+        expectTypeOf<ChildAt<Front, 'maybe'>>().toEqualTypeOf<unknown>()
     })
 })

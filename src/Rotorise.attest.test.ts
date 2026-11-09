@@ -1,6 +1,6 @@
 import { attest } from '@ark/attest'
 import { describe, it } from 'vitest'
-import { never, object, opaque, string, union } from './codec/codec'
+import { never, nullable, object, opaque, string, union } from './codec/codec'
 import { tableEntry } from './Rotorise'
 
 describe('Rotorise Performance Baseline', () => {
@@ -90,5 +90,24 @@ describe('the union a caller declares at compile time', () => {
         attest(
             union([object({ a: string }), object({ a: string })]).def.kind,
         ).equals('union')
+    })
+})
+
+describe('a path that the type does not see', () => {
+    it('names the gap of the type, and not a member that the codec writes', () => {
+        attest(() =>
+            tableEntry<{ id: string; meta: { note: string } | null }>()(
+                // @ts-expect-error the type does not see below nullable
+                { PK: ['id'], GSI1SK: 'meta.note' },
+                {
+                    codec: {
+                        id: string,
+                        meta: nullable(object({ note: string })),
+                    },
+                },
+            ),
+        ).type.errors.snap(
+            "Type '\"meta.note\"' is not assignable to type 'never'.The intersection '\"meta.note\" & NoPathMember<\"GSI1SK\", \"meta.note\"> & ErrorMessage<\"[tableEntry] 'meta.note' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below n...' was reduced to 'never' because property '[errorMessage]' has conflicting types in some constituents.",
+        )
     })
 })

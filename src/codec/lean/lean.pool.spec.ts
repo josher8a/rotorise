@@ -2198,14 +2198,22 @@ describe('the generated pool, against the model', () => {
         const rowsOf = (group: string, verdict = 'accept') =>
             rows.filter((row) => row.id.startsWith(`${group}|${verdict}|`))
                 .length
+        // a foreign value at a path: the decoded type of the codec at the path refuses it
+        const pathForeign = rows.filter(
+            (row) =>
+                row.id.startsWith('decoded|refuse|') &&
+                row.id.includes(' foreign '),
+        ).length
         expect({
             resolvedPathRows: rowsOf('path'),
             decodedRows: rowsOf('decoded'),
-            foreignRows: rowsOf('decoded', 'refuse'),
+            foreignRows: rowsOf('decoded', 'refuse') - pathForeign,
+            pathForeignRows: pathForeign,
         }).toEqual({
             resolvedPathRows: 7359,
             decodedRows: 7210,
             foreignRows: 6,
+            pathForeignRows: 7210,
         })
         expect(files.map(([file]) => file)).toEqual([
             'codecs.ts',

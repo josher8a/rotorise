@@ -21,6 +21,7 @@ import type {
     itemMark,
     KeyText,
     KnownKeys,
+    Marks,
     ObjectOf,
     ObjectSlot,
     PathOf,
@@ -1023,10 +1024,11 @@ type RootFrontier<CodecSpec> = IsVariantSpec<CodecSpec> extends true
 /**
  * The codec that the frontier holds at a path. The walk is the frontier walk of `at`: `CodecAt` reads
  * the field, and `ChildAt` goes below it through each presence mark and each union. It enters an
- * `object`, a union of objects, and a field under `optional`, `undefinable` or `fill`. It cannot
- * enter `refine`, `legacy`, `held`, `nullable`, a leaf, or a `ref`. A `ref` resolves in the term
- * frames of `at`, and the frontier holds no frame, so the type refuses a path below a `ref` that
- * `at` walks at run time.
+ * `object`, a union of objects, and a field under `optional`, `undefinable` or `fill`. A frontier of
+ * `unknown` is a frontier that the type does not know, and the walk gives `unknown` below `refine`,
+ * `legacy`, `held`, `nullable`, a leaf, a `ref`, a union with a leaf option and the open rest of the
+ * item. `at` walks below `nullable`, a `ref`, a union with a leaf option and the open rest at run
+ * time, because a `ref` resolves in term frames that the frontier does not hold.
  */
 type CodecAtPath<
     F,
@@ -1119,7 +1121,9 @@ type ValidateLeaf<
     All,
 > = [MemberOfName<E, Enc, CodecSpec, Name>] extends [infer Own]
     ? [Own] extends [never]
-        ? NoKeyMember<KeyName, Name>
+        ? Name extends `${string}.${string}`
+            ? NoPathMember<KeyName, Name>
+            : NoKeyMember<KeyName, Name>
         : [Exclude<Own, KeyMember>] extends [never]
           ? IsUnion<Own> extends true
               ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as more than one type. A key attribute has one type`>
@@ -1134,6 +1138,16 @@ type NoKeyMember<
     KeyName extends string,
     Name extends string,
 > = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B`>
+
+/**
+ * The refusal of a path whose member the type cannot give. The codec has no field at the path, or the
+ * frontier of the type does not know the codec there. The type does not see below nullable, a ref,
+ * a union with a leaf option, or the open rest of the item, and `at` walks below each of them.
+ */
+type NoPathMember<
+    KeyName extends string,
+    Name extends string,
+> = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', and the type gives no member for that path: the codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself, or a path that the type enters`>
 
 /** A key spec against the members of its attributes. A list of components is `S` and joins the members of the arms. */
 type ValidateKeyCarrier<
@@ -2102,7 +2116,7 @@ type TextAt<
         > extends infer Field
       ? [Field] extends [never]
           ? Entity[K & keyof Entity]
-          : Field extends { readonly spec: infer Nested }
+          : Marks<Field> extends { readonly spec: infer Nested }
             ? Entity[K & keyof Entity] extends infer Value
                 ? Value extends object
                     ? TextView<Value, Nested, Whole>
@@ -3273,7 +3287,7 @@ type RefuseComponent<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
     ? RefuseObject<E, Name, 'an entry with no codec'>
     : Name extends `${string}.${string}`
       ? [CodecMemberAtPath<CodecSpec, Name>] extends [never]
-          ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill, and no other codec: refine, legacy, held, nullable, a ref and a leaf have no field below. Address the attribute itself`>
+          ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself`>
           : [Exclude<CodecMemberAtPath<CodecSpec, Name>, 'S' | 'N'>] extends [
                   never,
               ]

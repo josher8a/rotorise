@@ -966,6 +966,24 @@ const decodedSample = (codec: AnyCodec, root: string): string | undefined => {
     }
 }
 
+/**
+ * A value that the codec at a path refuses and that its decoded type does not admit, or nothing. The
+ * value is a number where the draw is no number and the numeral `'1'` where it is one, so the kind
+ * differs from the kind that the codec decodes. The run time confirms the refusal, because a union
+ * of the two kinds writes the value and is no row.
+ */
+const foreignAt = (codec: AnyCodec): number | string | undefined => {
+    let drawn: unknown
+    try {
+        drawn = arbitraryOf(codec, rngFrom(1), 2)
+    } catch (error) {
+        if (error instanceof CodecError) return undefined
+        throw error
+    }
+    const foreign = typeof drawn === 'number' ? '1' : 1
+    return failed(codec.encode(foreign as never)) ? foreign : undefined
+}
+
 /** One path root: the codec, the item that holds it at `r`, and each path. */
 const pathRoot = (
     vectors: PathVectors,
@@ -1023,6 +1041,23 @@ const pathRoot = (
                     after: id,
                 },
                 `{ const c = ${call}; const d: Decoded<typeof c> = ${sample}; void d }`,
+            )
+        // the decoded type of the codec at the path refuses a value of another kind, which `unknown` would admit
+        const foreign = foreignAt(host.codec)
+        if (foreign !== undefined)
+            assert(
+                b,
+                {
+                    id: rowId(
+                        'decoded',
+                        'refuse',
+                        root,
+                        `${text} foreign ${String(foreign)}`,
+                    ),
+                    expect: 'refuse',
+                    after: id,
+                },
+                `{ const c = ${call}; const d: Decoded<typeof c> = ${valueText(foreign, `${root} foreign`)}; void d }`,
             )
         // the type of `encode` at the path admits the key of each attribute that the run time writes
         for (const key of writtenKeys(host.codec))

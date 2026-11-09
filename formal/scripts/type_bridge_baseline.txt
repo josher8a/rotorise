@@ -19,6 +19,406 @@
 #                `refuse` where the run time gives none.
 #   meetvalue    one sample value of the codec that `meet` gives, assigned to `Decoded` of it.
 #   declaration  one constant of the generated codecs file: the run time built each one.
+decoded|refuse|03a2a1fc10|at(C.p11_w, ["r", "a", "v", "a"]) foreign 1
+decoded|refuse|03a2a1fc10|at(C.p11_w, ["r", "a", "v"]) foreign 1
+decoded|refuse|0677638637|at(C.p21_w, ["r", "y", 1, "k"]) foreign 1
+decoded|refuse|2ba0c354cf|at(C.p83_w, ["r", "c", 1, 0]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", "a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", "b"]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", "c"]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", "kids"]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", "v"]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", 0]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", 1]) foreign 1
+decoded|refuse|3b78a1ec61|at(C.p118_w, ["r", 1, "a", 2]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: binary(new Uint8Array([1, 2])) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: boolean(false) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: boolean(true) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: decimal("1") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: decimal("2.5") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: number(1) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: number(2.5) })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("A") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("a") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("a", "b") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("b") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("p") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("q") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("x") })), ["a"]) foreign 1
+decoded|refuse|3b78a1ec61|at(narrow(at(C.p118_w, ["r", 1]), object({ a: string("y") })), ["a"]) foreign 1
+decoded|refuse|3fd1ae921a|at(C.p131_w, ["r", "y", 1, "k"]) foreign 1
+decoded|refuse|3fd1ae921a|at(C.p131_w, ["r", "y", 1, 0]) foreign 1
+decoded|refuse|3fd1ae921a|at(C.p131_w, ["r", "y", 1]) foreign 1
+decoded|refuse|42bb27b722|at(C.p138_w, ["r", "m"]) foreign 1
+decoded|refuse|4cb22b0f4e|at(C.p165_w, ["r", "y", 1, "k"]) foreign 1
+decoded|refuse|4cb22b0f4e|at(C.p165_w, ["r", "y", 1, 0]) foreign 1
+decoded|refuse|4cb22b0f4e|at(C.p165_w, ["r", "y", 1]) foreign 1
+decoded|refuse|5eabdcd958|at(C.p205_w, ["r", "a", "v", "a"]) foreign 1
+decoded|refuse|5eabdcd958|at(C.p205_w, ["r", "a", "v"]) foreign 1
+decoded|refuse|63090b7b55|at(C.p213_w, ["r", 0]) foreign 1
+decoded|refuse|66287cc604|at(C.p219_w, ["r", "a", 0, "a"]) foreign 1
+decoded|refuse|66287cc604|at(C.p219_w, ["r", "a", 0, 0]) foreign 1
+decoded|refuse|66287cc604|at(C.p219_w, ["r", "a", 0]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c", "a", "a"]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c", "a", 0]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c", "a"]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c", 0, "a"]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c", 0, 0]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c", 0]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", "c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", 0, "c", "a"]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", 0, "c", 0]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", 0, "c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(C.p235_w, ["r", 0, 0, "c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ a: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ a: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ a: number(1) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ a: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ b: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: boolean(false) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: boolean(true) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: number(1) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("A") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("a") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("a", "b") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("b") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("p") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("q") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("x") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0, 0]), object({ c: string("y") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ a: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ a: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ a: number(1) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ a: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ b: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: boolean(false) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: boolean(true) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: number(1) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("A") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("a") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("a", "b") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("b") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("p") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("q") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("x") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r", 0]), object({ c: string("y") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ a: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ a: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ a: number(1) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ a: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ b: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: boolean(false) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: boolean(true) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: number(1) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("A") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("a") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("a", "b") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("b") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("p") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("q") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("x") })), ["c"]) foreign 1
+decoded|refuse|6aa2edafaa|at(narrow(at(C.p235_w, ["r"]), object({ c: string("y") })), ["c"]) foreign 1
+decoded|refuse|6e9e274497|at(C.p247_w, ["r", "x", "a"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "a", "v", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "a", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "b", "a", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "v", "a", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "v", "a"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "v", "b", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "v", "b"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "v", "v", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(C.p261_w, ["r", "v", "v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: binary(new Uint8Array([1, 2])) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: boolean(false) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: boolean(true) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: decimal("1") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: decimal("2.5") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: number(1) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: number(2.5) })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("A") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("a") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("a", "b") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("b") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("p") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("q") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("x") })), ["v"]) foreign 1
+decoded|refuse|7220e938b8|at(narrow(at(C.p261_w, ["r"]), object({ v: string("y") })), ["v"]) foreign 1
+decoded|refuse|732a7a57b0|at(C.p264_w, ["r", "a", "x", "a"]) foreign 1
+decoded|refuse|732a7a57b0|at(C.p264_w, ["r", "a", "x", "b"]) foreign 1
+decoded|refuse|732a7a57b0|at(C.p264_w, ["r", "a", "x", "k"]) foreign 1
+decoded|refuse|732a7a57b0|at(C.p264_w, ["r", "a", "x", "x"]) foreign 1
+decoded|refuse|732a7a57b0|at(C.p264_w, ["r", "a", "x", "y"]) foreign 1
+decoded|refuse|732a7a57b0|at(C.p264_w, ["r", "a", "x", 0]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ k: string("a") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: binary(new Uint8Array([1, 2])) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: boolean(false) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: boolean(true) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: decimal("1") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: decimal("2.5") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: number(1) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: number(2.5) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("A") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("a") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("a", "b") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("b") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("p") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("q") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("x") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", "a"]), object({ x: string("y") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ k: string("a") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: binary(new Uint8Array([1, 2])) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: boolean(false) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: boolean(true) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: decimal("1") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: decimal("2.5") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: number(1) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: number(2.5) })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("A") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("a") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("a", "b") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("b") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("p") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("q") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("x") })), ["x"]) foreign 1
+decoded|refuse|732a7a57b0|at(narrow(at(C.p264_w, ["r", 0, "a"]), object({ x: string("y") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ k: string("a") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: binary(new Uint8Array([1, 2])) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: boolean(false) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: boolean(true) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: decimal("1") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: decimal("2.5") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: number(1) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: number(2.5) })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("A") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("a") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("a", "b") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("b") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("p") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("q") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("x") })), ["x"]) foreign 1
+decoded|refuse|86fc70b7e1|at(narrow(at(C.p307_w, ["r", 0, "a"]), object({ x: string("y") })), ["x"]) foreign 1
+decoded|refuse|8a29967868|at(C.p312_w, ["r", "x", 0, "k"]) foreign 1
+decoded|refuse|8a29967868|at(C.p312_w, ["r", "x", 0, 0]) foreign 1
+decoded|refuse|8a29967868|at(C.p312_w, ["r", "x", 0]) foreign 1
+decoded|refuse|9ed6669c66|at(C.p365_w, ["r", "y", "b", "k"]) foreign 1
+decoded|refuse|9ed6669c66|at(C.p365_w, ["r", "y", "b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ a: string("a") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ a: string("a", "b") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: binary(new Uint8Array([1, 2])) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: boolean(false) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: boolean(true) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: decimal("1") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: decimal("2.5") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: number(1) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: number(2.5) })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("A") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("a") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("a", "b") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("b") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("p") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("q") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("x") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ b: string("y") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("A") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("a") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("a", "b") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("b") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("p") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("q") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("x") })), ["b"]) foreign 1
+decoded|refuse|9ed6669c66|at(narrow(at(C.p365_w, ["r", "y"]), object({ c: string("y") })), ["b"]) foreign 1
+decoded|refuse|a0bc3ea149|at(C.p370_w, ["r", "x", "k", "k"]) foreign 1
+decoded|refuse|a0bc3ea149|at(C.p370_w, ["r", "x", "k"]) foreign 1
+decoded|refuse|a0bc3ea149|at(C.p370_w, ["r", "x"]) foreign 1
+decoded|refuse|a3f59ca545|at(C.p373_w, ["r", "y", 1, "k"]) foreign 1
+decoded|refuse|a3f59ca545|at(C.p373_w, ["r", "y", 1, 0]) foreign 1
+decoded|refuse|a3f59ca545|at(C.p373_w, ["r", "y", 1]) foreign 1
+decoded|refuse|a7bd7ed15a|at(C.p381_w, ["r", 0, 0, 0]) foreign 1
+decoded|refuse|a7bd7ed15a|at(C.p381_w, ["r", 0, 0]) foreign 1
+decoded|refuse|a7bd7ed15a|at(C.p381_w, ["r", 0]) foreign 1
+decoded|refuse|a82218d7c9|at(C.p383_w, ["r", "b", "a", "v"]) foreign 1
+decoded|refuse|a82218d7c9|at(C.p383_w, ["r", "v", "v", "v"]) foreign 1
+decoded|refuse|a82218d7c9|at(C.p383_w, ["r", "v", "v"]) foreign 1
+decoded|refuse|a82218d7c9|at(C.p383_w, ["r", "v"]) foreign 1
+decoded|refuse|a996efba68|at(C.p386_w, ["r", "c", "a", "a"]) foreign 1
+decoded|refuse|a996efba68|at(C.p386_w, ["r", "c", "a"]) foreign 1
+decoded|refuse|a996efba68|at(C.p386_w, ["r", "c"]) foreign 1
+decoded|refuse|b529e2e6fa|at(C.p416_w, ["r", "a", "x", "a"]) foreign 1
+decoded|refuse|b529e2e6fa|at(C.p416_w, ["r", "a", "x", "b"]) foreign 1
+decoded|refuse|b529e2e6fa|at(C.p416_w, ["r", "a", "x", "k"]) foreign 1
+decoded|refuse|b529e2e6fa|at(C.p416_w, ["r", "a", "x", "x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(C.p416_w, ["r", "a", "x", "y"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ k: string("a") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: binary(new Uint8Array([1, 2])) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: boolean(false) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: boolean(true) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: decimal("1") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: decimal("2.5") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: number(1) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: number(2.5) })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("A") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("a") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("a", "b") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("b") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("p") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("q") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("x") })), ["x"]) foreign 1
+decoded|refuse|b529e2e6fa|at(narrow(at(C.p416_w, ["r", "a"]), object({ x: string("y") })), ["x"]) foreign 1
+decoded|refuse|bb55208ea5|at(C.p430_w, ["r", "y", 1, "k"]) foreign 1
+decoded|refuse|c2746fe7ce|at(C.p445_w, ["r", "v", 0, "v"]) foreign 1
+decoded|refuse|c2746fe7ce|at(C.p445_w, ["r", "v", 0, 0]) foreign 1
+decoded|refuse|c2746fe7ce|at(C.p445_w, ["r", "v", 0]) foreign 1
+decoded|refuse|c34ae776da|at(C.p446_w, ["r", 0, "c", "a"]) foreign 1
+decoded|refuse|c34ae776da|at(C.p446_w, ["r", 0, "c", 0]) foreign 1
+decoded|refuse|c34ae776da|at(C.p446_w, ["r", 0, "c"]) foreign 1
+decoded|refuse|c34ae776da|at(C.p446_w, ["r", 0, 0, "c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ a: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ a: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ a: number(1) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ a: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ b: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: boolean(false) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: boolean(true) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: number(1) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("A") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("a") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("a", "b") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("b") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("p") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("q") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("x") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0, 0]), object({ c: string("y") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ a: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ a: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ a: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ a: number(1) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ a: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ b: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: binary(new Uint8Array([1, 2])) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: boolean(false) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: boolean(true) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: decimal("1") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: decimal("2.5") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: number(1) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: number(2.5) })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("A") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("a") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("a", "b") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("b") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("p") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("q") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("x") })), ["c"]) foreign 1
+decoded|refuse|c34ae776da|at(narrow(at(C.p446_w, ["r", 0]), object({ c: string("y") })), ["c"]) foreign 1
+decoded|refuse|c50c45b9e9|at(C.p451_w, ["r", "b", "a", "v"]) foreign 1
+decoded|refuse|c50c45b9e9|at(C.p451_w, ["r", "v", "v", "v"]) foreign 1
+decoded|refuse|c50c45b9e9|at(C.p451_w, ["r", "v", "v"]) foreign 1
+decoded|refuse|c50c45b9e9|at(C.p451_w, ["r", "v"]) foreign 1
+decoded|refuse|cf2fd5676b|at(C.p475_w, ["r", "a", 0, "a"]) foreign 1
+decoded|refuse|cf2fd5676b|at(C.p475_w, ["r", "a", 0, 0]) foreign 1
+decoded|refuse|cf2fd5676b|at(C.p475_w, ["r", "a", 0]) foreign 1
+decoded|refuse|da5f4bd2f1|at(C.p505_w, ["r", "y", "b", "k"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(C.p505_w, ["r", "y", "b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ a: string("a") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ a: string("a", "b") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: binary(new Uint8Array([1, 2])) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: boolean(false) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: boolean(true) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: decimal("1") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: decimal("2.5") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: dynamoNumber(orThrow(DynamoNumber.from("1"))) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: dynamoNumber(orThrow(DynamoNumber.from("2.5"))) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: number(1) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: number(2.5) })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("A") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("a") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("a", "b") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("b") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("p") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("q") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("x") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ b: string("y") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("A") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("a") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("a", "b") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("b") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("p") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("q") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("x") })), ["b"]) foreign 1
+decoded|refuse|da5f4bd2f1|at(narrow(at(C.p505_w, ["r", "y"]), object({ c: string("y") })), ["b"]) foreign 1
+decoded|refuse|e44647aa66|at(C.p519_w, ["r", "a", "a", "a"]) foreign 1
+decoded|refuse|e44647aa66|at(C.p519_w, ["r", "a", "a"]) foreign 1
+decoded|refuse|e44647aa66|at(C.p519_w, ["r", "a"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "a", "v", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "a", "v", 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "a", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "b", "a", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "a", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "a", 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "a"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "b", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "b", 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "b"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "v", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "v", 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", 0, "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", 0, 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", 1, "v"]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", 1, 0]) foreign 1
+decoded|refuse|ed44a83df7|at(C.p541_w, ["r", "v", 1]) foreign 1
+decoded|refuse|f0b5a77771|at(C.p546_w, ["r", 0, 0, "v"]) foreign 1
+decoded|refuse|f0b5a77771|at(C.p546_w, ["r", 0, 0, 0]) foreign 1
+decoded|refuse|f0b5a77771|at(C.p546_w, ["r", 0, 0]) foreign 1
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|20f6d97843|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|22507207dc|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
