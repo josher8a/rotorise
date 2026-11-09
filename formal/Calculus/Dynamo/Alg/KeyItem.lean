@@ -80,7 +80,7 @@ def readPath : Attr → List String → Option Attr
 
 /-- **The item as the key spec reads it**: the printed text at each name. A name that the item holds
     as an attribute is that attribute, and any other name is a path of names that reads into the maps
-    of the item, as `valueAt` of the host reads it. The path is the name split at each `.`. -/
+    of the item, one own property for each segment. The path is the name split at each `.`. -/
 def itemOf (t : Value) : DerivedKey.Item String :=
   fun nm =>
     match (mA.out t).bind (·.at nm) with
