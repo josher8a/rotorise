@@ -94,7 +94,6 @@ import type {
     Order,
     RefSlot,
     Rng,
-    setMember,
     Term,
 } from './term'
 import {
@@ -142,7 +141,24 @@ export type {
 export type { SetSlot, Shape } from './value'
 
 import type { ErrorMessage, show } from '../utils'
-import type { AnySpread, Free, FreeOf, IsNeverSlot, ListTermOf } from './build'
+import type {
+    AnySpread,
+    AttributeOf,
+    Decoded,
+    EncodedBy,
+    EncodedPatch,
+    Free,
+    FreeOf,
+    IsNeverSlot,
+    ListTermOf,
+    Marks,
+    Nestable,
+    ObjectOf,
+    SetAttribute,
+    SetOf,
+    WritesPin,
+    WritesVariantsPin,
+} from './build'
 import type { Precondition } from './scoped'
 import type { StandardInput, StandardSchemaV1 } from './standard'
 import type {
@@ -194,7 +210,20 @@ import {
     thrownReason,
 } from './value'
 
-export type { AnySpread } from './build'
+export type {
+    AnySpread,
+    AttributeOf,
+    Attributes,
+    Decoded,
+    Encoded,
+    EncodedPatch,
+    EncodedVariants,
+    Marks,
+    Nestable,
+    ObjectOf,
+    SetOf,
+    Writes,
+} from './build'
 
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
@@ -266,18 +295,6 @@ type EveryButNumberT = [
 ]
 
 /**
- * Anything that can sit where an attribute codec is expected — which is every codec.
- *
- * There used to be a second thing: an item, tagged or untagged codec, which *was* one `M` attribute
- * but exposed it as `.attribute`, so specs had to accept both shapes and every combinator had to
- * convert. The distinction was never about attributes. It was about the top-level map, and the top
- * level is the one place a map is not written — so it belongs to the *view*, not to the codec.
- * {@link object} writes its `M` like anything else, and offers {@link item} for the one place that does
- * not: the top level.
- */
-export type Nestable<T> = AttributeCodec<T>
-
-/**
  * An attribute that may be absent from the item entirely.
  *
  * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A>` intersected with the
@@ -316,26 +333,6 @@ export type UndefinableCodec<
     readonly codec: C
     readonly def: Extract<Field, { readonly mark: 'undefinable' }>
 }
-
-/**
- * The codec a declaration marks, and the declaration itself where it is already one.
- *
- * A body hands out codecs and never fields. The mark is a statement about a name, the name is the
- * body's, and a caller that asked for the attribute at a name wants the thing that reads and writes
- * it — so this is what {@link ItemCodec.field} answers with.
- */
-export type Marks<C> = C extends { readonly codec: infer Marked } ? Marked : C
-
-export type Decoded<C> = C extends {
-    readonly attribute: AttributeCodec<infer T>
-}
-    ? T
-    : // a field marks a codec and has none of its own, so the value it carries is the marked one's
-      C extends { readonly codec: AttributeCodec<infer T> }
-      ? T
-      : C extends AttributeCodec<infer T, AttributeValue>
-        ? T
-        : never
 
 /* ── the readers ──────────────────────────────────────────────────────────────────────── */
 
@@ -714,9 +711,6 @@ const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
             partial ? 'someVariants' : 'ambiguous',
         ),
     )
-
-/** A map of attribute name to codec — what `item`, `map` and each `tagged` variant hold. */
-export type Attributes = Readonly<Record<string, AnyCodec>>
 
 // ── scalars ─────────────────────────────────────────────────────────
 
@@ -5759,211 +5753,6 @@ const methodAt = (
         default:
             return undefined
     }
-}
-
-/**
- * The shape a codec puts in the table, asked of the codec itself.
- *
- * ```ts
- * const Pet = item(spec) satisfies Writes<PetItem>
- * ```
- *
- * Kept off {@link ItemCodec} and intersected onto what a constructor returns instead. On `ItemCodec`
- * the phantom would be invariant there too, and `satisfies ItemCodec<Pet>` — which leaves `Spec` at
- * its default — would then refuse every real codec. The two questions are separate and ask
- * separately: `satisfies ItemCodec<Pet>` is the entity, `satisfies Writes<PetItem>` is the row, and
- * they chain.
- */
-export type Writes<Written> = {
-    readonly [writesMarker]?: (written: Written) => Written
-}
-
-/**
- * The pin as {@link ItemCodec} carries it: inert until something asks.
- *
- * `unknown` is what the phantom is when no shape is named, and every function is assignable to
- * `unknown` — so `satisfies ItemCodec<Pet>`, which leaves `Spec` at its default, is untouched by
- * this and stays a question about the entity alone.
- *
- * Carried on the codec rather than intersected onto what `item` returns, which is where this
- * started: `tableEntry` infers `CodecSpec` and `CodecRest` from the codec it is handed, and an
- * intersection is a source those inferences do not survive — `Rest` fell back to its default, and a
- * row that really does carry an open policy's attributes typed as though it did not.
- */
-type WritesPin<Spec, Rest> = unknown extends Spec
-    ? unknown
-    : (written: EncodedBy<Spec, Rest>) => EncodedBy<Spec, Rest>
-
-/**
- * The same pin for a union, whose row is one variant's attributes or another's.
- *
- * A union has no single encoded shape to name — `encode` returns "some attribute map", because which
- * attributes are written depends on which variant the value is. So the phantom is the only place the
- * shape appears at all, which makes it the only thing a pin can be asked of.
- */
-type WritesVariantsPin<Spec> = unknown extends Spec
-    ? unknown
-    : (written: EncodedVariants<Spec>) => EncodedVariants<Spec>
-
-/**
- * What a union of variants writes: one variant's attributes, or another's.
- *
- * A row of a tagged or untagged entity is exactly one variant, so the shape is the union rather than
- * the merge — which is what lets a pin catch a variant that has drifted while the others have not.
- * Handles a record of variants (`tagged`) and a list of them (`untagged`); the two differ only in
- * how they are keyed.
- */
-export type EncodedVariants<Variants> = Variants extends readonly unknown[]
-    ? { [V in keyof Variants]: Encoded<Variants[V]> }[number]
-    : { [V in keyof Variants]: Encoded<Variants[V]> }[keyof Variants]
-
-/**
- * Which set an element reaches, from what the element writes.
- *
- * The runtime asks `term.ts`'s `member`; this is the same question of the type, so a spec can pin `SS`
- * and be told when the element stops being a string. `L` and `SS` are the distinction a marshaller
- * that guesses gets wrong, so a shape that could not tell them apart would pin very little.
- */
-export type SetOf<C> = SetAttribute<AttributeOf<C>>
-
-/** The set that holds an element of the attribute `A`, or `never`. `A` is asked whole, not by member. */
-type SetAttribute<A> = {
-    [M in keyof typeof setMember]: [A] extends [Attribute<M>]
-        ? Attribute<(typeof setMember)[M]>
-        : never
-}[keyof typeof setMember]
-
-/**
- * The attribute a codec writes, as a type.
- *
- * The mirror of {@link Decoded}: that side says what the entity holds, this side says what the
- * *table* holds. A codec has carried both since the beginning — `AttributeCodec<T, A>` — so this
- * reads the half nobody was reading.
- */
-export type AttributeOf<C> = C extends {
-    readonly attribute: AttributeCodec<infer _Nested, infer Nesting>
-}
-    ? Nesting
-    : // the same for a field: the attribute is the one the codec it marks writes
-      C extends { readonly codec: AttributeCodec<infer _Marked, infer Marks> }
-      ? Marks
-      : C extends AttributeCodec<infer _Held, infer Written>
-        ? Written
-        : never
-
-/**
- * The attributes a patch writes, read off the patch rather than off the whole spec.
- *
- * `Partial<Encoded<Spec>>` is the weaker answer and it loses the thing a patch knows: which
- * attributes are being written. Naming them means an `UpdateItem` built from this is checked
- * against the attributes it actually sets, not against every attribute the entity could have.
- *
- * Optional exactly where the patch's own value admits `undefined`, because that is the value the
- * implementation skips — a key present with no value writes no attribute.
- *
- * Based on {@link Encoded} and *not* {@link EncodedBy}, so the type is a lower bound. The
- * implementation writes a name that the spec does not declare through the open entry, as `encode`
- * writes it, and refuses the name where the codec has no open entry. The type keeps the declared
- * names only, so a name of the open entry has no type in the result.
- */
-export type EncodedPatch<Spec, Patch> = Encoded<Spec> extends infer Full
-    ? show<
-          {
-              [K in keyof Patch as K extends keyof Full
-                  ? undefined extends Patch[K]
-                      ? never
-                      : K
-                  : never]: Written<Full, K>
-          } & {
-              [K in keyof Patch as K extends keyof Full
-                  ? undefined extends Patch[K]
-                      ? K
-                      : never
-                  : never]?: Written<Full, K>
-          }
-      >
-    : never
-
-/**
- * The attribute at `K`, without the `undefined` that optionality adds.
- *
- * Indexing an optional key of {@link Encoded} yields `Attribute<'S'> | undefined`, which is a fact
- * about whether the attribute is *there* rather than about what it carries — and a patch that names
- * it has settled that question. Carrying the `undefined` through would put it back, so every read
- * of a patched attribute would need a `?.` for a value the patch just supplied.
- */
-type Written<Full, K> = Exclude<Full[K & keyof Full], undefined>
-
-/**
- * What an item writes: the attributes the spec declares, plus whatever a rest policy adds.
- *
- * {@link Encoded} alone is a *lower bound* rather than the answer. With no rest nothing else
- * is written and the two agree; a rest codec emits attributes the spec never named, so
- * claiming `Encoded<Spec>` exactly would be a promise the compiler then enforces against the
- * caller — refusing to read an attribute the codec really did write.
- *
- * The closed state is matched rather than the codec: an {@link AttributeCodec} is
- * invariant in its value, so `Rest extends AttributeCodec<unknown, infer A>` fails for every codec
- * of a narrower value and quietly takes the wrong branch. {@link AttributeOf} infers both
- * parameters, so the open block's attribute is exact. The index also admits each declared
- * attribute, because an index signature intersects with every declared key. The index takes no
- * `undefined` from an optional key: an absent field writes no entry, so no entry holds `undefined`,
- * and the map stays an attribute that nests in another codec.
- */
-export type EncodedBy<Spec, Rest> = [Rest] extends [undefined]
-    ? Encoded<Spec>
-    : Encoded<Spec> & {
-          readonly [name: string]:
-              | AttributeOf<Rest>
-              | Written<Encoded<Spec>, keyof Encoded<Spec>>
-      }
-
-/**
- * The item a spec writes, as a shape you could have written by hand.
- *
- * The fixed point. `Encoded<typeof Pet>` is what the codec puts in the table; a `PetItem` written
- * out by hand is what the table is believed to hold; pinning one against the other is what makes a
- * migration checkable rather than hoped for. Optional attributes are optional keys, because an
- * attribute a codec may omit is one the item may not have.
- */
-export type Encoded<Spec> = show<
-    {
-        [K in keyof Spec as Spec[K] extends {
-            readonly [optionalMarker]: true
-        }
-            ? never
-            : K]: AttributeOf<Spec[K]>
-    } & {
-        // an optional name at `never` writes no attribute, so the item has no such key
-        [K in keyof Spec as Spec[K] extends {
-            readonly [optionalMarker]: true
-        }
-            ? [AttributeOf<Spec[K]>] extends [never]
-                ? never
-                : K
-            : never]?: AttributeOf<Spec[K]>
-    }
->
-
-export type ObjectOf<Spec> = {
-    // required key, and the attribute is always there
-    [K in keyof Spec as Spec[K] extends { readonly [undefinableMarker]: true }
-        ? never
-        : Spec[K] extends { readonly [optionalMarker]: true }
-          ? never
-          : K]: Decoded<Spec[K]>
-} & {
-    // required key, and the attribute may not be there — so `undefined` joins the value
-    [K in keyof Spec as Spec[K] extends { readonly [undefinableMarker]: true }
-        ? K
-        : never]: Decoded<Spec[K]> | undefined
-} & {
-    // the key itself may not be there
-    [K in keyof Spec as Spec[K] extends { readonly [undefinableMarker]: true }
-        ? never
-        : Spec[K] extends { readonly [optionalMarker]: true }
-          ? K
-          : never]?: Decoded<Spec[K]>
 }
 
 // ── unions ─────────────────────────────────────────────────────────
