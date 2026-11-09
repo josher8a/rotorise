@@ -606,6 +606,31 @@ describe('the port refuses what the SDK refuses, with the text of the SDK', () =
         )
     })
 
+    /**
+     * The read refuses too. A wide numeral with a fraction is finite and beyond the safe range, so
+     * the SDK reads it as a `bigint` and `BigInt` throws. The port returns the refusal with the
+     * same text, and decodes no value.
+     */
+    it.each(['90071992547409930.5', '-90071992547409930.5'])(
+        'refuses to read the N %s, and says what the SDK says',
+        (digits) => {
+            const stored = { N: digits } as never
+            const thrown = (() => {
+                try {
+                    sdk.convertToNative(stored)
+                } catch (error) {
+                    return (error as Error).message
+                }
+                throw new Error(
+                    'the SDK read a numeral that the row says it refuses',
+                )
+            })()
+            const refused = native.decode(stored)
+            expect(refused).toBeInstanceOf(CodecError)
+            expect((refused as CodecError).reason).toBe(thrown)
+        },
+    )
+
     /** The canonical write owns the rule of a stored set, so its text is the text of the refusal. */
     it('refuses a Set of booleans with the text of the canonical write', () => {
         const refused = native.encode(new Set([true]))

@@ -334,6 +334,19 @@ describe('a fill value that makes the codec throw', () => {
             /The fill value of `fill` must be a value the codec it fills can write, and this `refine` refuses the fill value: the predicate of this refinement threw: the predicate read the fill value/,
         )
     })
+
+    // a codec reads a member of the fill value through its own getter, which is the code of the caller
+    it('is refused at `fill` where the codec throws on a getter of the fill value, with the text of the throw', () => {
+        const Pet = object({ name: string })
+        const hostile = {
+            get name(): string {
+                throw new Error('the getter read the fill value')
+            },
+        }
+        expect(() => fill(Pet, hostile)).toThrow(
+            /this `object` refuses the fill value: the getter read the fill value\. A row missing the attribute/,
+        )
+    })
 })
 
 /**

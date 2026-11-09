@@ -43,6 +43,7 @@ import { accepts } from '../../denote'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
+    checkEncodePaths,
     checkEquivalent,
     checkIso,
     checkMembersStable,
@@ -980,6 +981,64 @@ describe('(C): what a codec reads, it can write', () => {
                 seed,
             }),
         ).toThrow(/\(C\) fails/)
+    })
+})
+
+/**
+ * **A law of the harness reports its own defect.**
+ *
+ * A check that no planted defect can fail is a check that never reports. Each test below plants the
+ * one defect that its law names, and expects the report of that law and no other.
+ */
+describe('a law of the harness fails on the defect that it names', () => {
+    it('checkStable reports a read that does not reach a fixed point', () => {
+        const shouted = held(string, string, {
+            encode: (s: string) => s,
+            decode: (s: string) => `${s}!`,
+        })
+        const Planted = item(object({ id: shouted }))
+        expect(() => checkStable(Planted, [{ id: { S: 'a' } }])).toThrow(
+            /unsafeDecode\(unsafeEncode\(unsafeDecode\(item\)\)\) !== unsafeDecode\(item\) at item 0/,
+        )
+    })
+
+    it('checkDecodesAreWritable reports a mutated attribute that decodes to a value that cannot be written', () => {
+        // the value that the arbitrary draws is writable, so only a mutated attribute reaches the re-encode:
+        // the mutation 'a denormalised N' turns 1 into 10, which the read keeps and the write refuses
+        const capped = held(number, number, {
+            encode: (n: number) => (n >= 10 ? new CodecError('too large') : n),
+            decode: (n: number) => n,
+            arbitrary: () => 1,
+        })
+        const Planted = item(object({ id: capped }))
+        expect(() =>
+            checkDecodesAreWritable(Planted, { count: 5, seed: 20260924 }),
+        ).toThrow(
+            /this attribute decodes and the value it yields cannot be encoded/,
+        )
+    })
+
+    it('checkEncodePaths reports a write that differs from the same write again', () => {
+        let writes = 0
+        const drifting = held(string, string, {
+            encode: (s: string) => `${s}${writes++}`,
+            decode: (s: string) => s,
+            arbitrary: () => 'a',
+        })
+        const Planted = item(object({ id: drifting }))
+        expect(() =>
+            checkEncodePaths(Planted, { count: 3, seed: 20260924 }),
+        ).toThrow(/unsafeEncode is not deterministic at case 0 with seed/)
+    })
+
+    it('checkMembersStable reports an attribute that a read-modify-write drops', () => {
+        const dropping = {
+            unsafeDecode: (_item: AttributeMap) => ({}),
+            unsafeEncode: (_value: object): AttributeMap => ({}),
+        }
+        expect(() =>
+            checkMembersStable(dropping, [{ id: { S: 'a' } }]),
+        ).toThrow("'id' is absent after a read-modify-write at item 0")
     })
 })
 

@@ -68,6 +68,16 @@ describe('index keys are still rebuilt', () => {
         expect(keys).not.toHaveProperty('SK')
     })
 
+    it('refuses a component that its codec refuses, because the key cannot print the value', () => {
+        // the codec of `status` admits three texts, so the literal 'LOST' is refused with no text to print
+        const untyped = Adoption.keyUpdates as (c: object) => unknown
+        expect(() =>
+            untyped({ status: 'LOST', updatedAt: '2026-08-26T00:00:00.000Z' }),
+        ).toThrow(
+            /'status' is a component of a key, and the codec writes no text or number for the value, so the key cannot print it/,
+        )
+    })
+
     it('refuses a write of one component of an index key, and names the other', () => {
         // @ts-expect-error GSI1SK is built from status and updatedAt, and the write holds status alone
         const _partial = () => Adoption.keyUpdates({ status: 'CANCELED' })

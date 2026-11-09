@@ -118,7 +118,15 @@ const pool: Record<string, Entry> = {
     },
 }
 
-const FOREIGN: readonly unknown[] = [42, 'bird', true, null, [1], { q: 1 }]
+const FOREIGN: readonly unknown[] = [
+    42,
+    'bird',
+    true,
+    null,
+    [1],
+    { q: 1 },
+    Object.create(null),
+]
 const UNDECLARED = 'undeclaredName'
 
 type Outcome =
@@ -289,5 +297,23 @@ describe('a name of Object.prototype is a name like any other', () => {
             }
         }
         expect(apart).toEqual([])
+    })
+})
+
+/**
+ * A required name that the item lacks is a refusal of the item. `encode` states it with the empty
+ * path and one text, as `decode` does, and the field codec of the name is never asked: it would
+ * refuse `undefined` with another text at the path of the name.
+ */
+describe('a missing required name is refused by the object that requires it', () => {
+    const Pet = routes(item(object({ name: string, age: number })))
+
+    it('names the item, not the field, and says that the name was not given', () => {
+        const refused = outcome(() => Pet.encode({ age: 3 }))
+        expect(refused).toEqual({
+            kind: 'refused',
+            path: [],
+            reason: "'name' is required and was not given",
+        })
     })
 })

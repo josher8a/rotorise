@@ -1048,7 +1048,7 @@ const storedTag = <V>(
     tag: unknown,
 ): Result<string> => {
     const asText = typeof tag === 'number' ? DynamoNumber.fromNumber(tag) : tag
-    const plain = failed(asText) ? asText : String(asText)
+    const plain = failed(asText) ? asText : rendered(asText)
     if (written) {
         const refused: CodecError[] = []
         for (const [, member, decoded] of members) {
@@ -1078,7 +1078,7 @@ const storedTag = <V>(
                 ? first
                 : restated(
                       first,
-                      `'${name}' = '${String(tag)}' is refused by each option that refuses it: ${refused.map((one) => one.reason).join('; ')}`,
+                      `'${name}' = '${rendered(tag)}' is refused by each option that refuses it: ${refused.map((one) => one.reason).join('; ')}`,
                   )
         }
     }
