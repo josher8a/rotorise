@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
 import { DynamoNumber, isNumeral } from '../../attribute'
-import type { AnyCodec, Itemable } from '../../codec'
+import type { AnyCodec } from '../../codec'
 import {
     array,
     boolean,
@@ -39,6 +39,7 @@ import {
     union,
 } from '../../codec'
 import { failed } from '../../result'
+import type { Itemable } from '../../term'
 import { RecursionRefused } from '../../term'
 
 type Erased = {

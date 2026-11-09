@@ -1659,3 +1659,173 @@ export const primsApart = (x: Term, y: Term): boolean => {
         x.kind === 'literal' && y.kind === 'literal' && !sameLiteral(x.v, y.v)
     )
 }
+
+/**
+ * Marks a codec whose attribute may be absent.
+ *
+ * Type-level only. Whether an attribute may be absent is read at runtime from the field's
+ * {@link Field} — `optional` is one of the two marks — so there is nothing for a symbol to carry
+ * and nothing for a wrapper to forget to copy. The declaration stays because the *type* needs a
+ * brand: {@link ItemSpec} and {@link ObjectOf} decide required from optional by it.
+ */
+export declare const optionalMarker: unique symbol
+
+/** Type-level only, for the same reason as {@link optionalMarker}: the term carries the fact. */
+export declare const fillMarker: unique symbol
+
+/** Type-level only, for the same reason as {@link optionalMarker}. */
+export declare const undefinableMarker: unique symbol
+
+/*
+ * **The model's term of a codec, in its type.** Optional, so no value carries it and no
+ * constructor body changes. A codec with no term in its type, as a thunk with an annotation, is an
+ * unbound `ref`.
+ */
+export declare const termMarker: unique symbol
+/**
+ * **The options of a dissection, in declared order**, which a product distributes over. The tag
+ * table of a dissection keys its members by tag and keeps no order. Optional and type-level only.
+ */
+export declare const optionsMarker: unique symbol
+export type OptionsMark<Os> = { readonly [optionsMarker]?: Os }
+/**
+ * **The element codecs of a list, in declared order**, which a pattern reaches by position. The term
+ * of a list keeps the terms of its elements, and a slice at a position rebuilds the codec there.
+ * Optional and type-level only.
+ */
+export declare const elementsMarker: unique symbol
+export type ElementsMark<Cs> = { readonly [elementsMarker]?: Cs }
+/**
+ * **The element codec of an `array` or a `spread`.** The term keeps the term of the element and the
+ * type drops the codec, so a scope that closes a `ref` below the element rebuilds the node from the
+ * codec that the mark keeps. Optional and type-level only.
+ */
+export declare const elementMarker: unique symbol
+export type ElementMark<C> = { readonly [elementMarker]?: C }
+export type TermMark<T> = { readonly [termMarker]?: T }
+export type FreeTerm = ['ref', '#free']
+/**
+ * The default of the term and of the decoded type of {@link ObjectCodec}, {@link ItemCodec} and
+ * {@link UnionCodec}: the type that the spec or the options give, computed where a member reads it.
+ */
+export declare const ofParts: unique symbol
+export type OfParts = typeof ofParts
+export type TermOf<C> = C extends { readonly [termMarker]?: infer T }
+    ? unknown extends T
+        ? FreeTerm
+        : T
+    : FreeTerm
+export type TermsOf<Cs> = { -readonly [I in keyof Cs]: TermOf<Cs[I]> }
+/*
+ * **What `item` returns for a union, in its type.** A union has no member for the reading: the
+ * reading sits at a slot at run time, and this tuple is the one place where the type names it.
+ * Required, so a codec that has no reading does not match, and wrapped in a tuple, so a reading
+ * that is a message stays a message.
+ */
+export declare const itemMarker: unique symbol
+export type Itemable<X> = { readonly [itemMarker]: [X] }
+/*
+ * **The union that a reading reads, in its type.** The reading of a union holds the options of the
+ * union as specs, and holds no term, so `at` cannot walk the reading. The marker carries the union,
+ * and the term and the members of the union are the term and the members of the reading. Optional,
+ * so no value carries it. The marker tells no item from a codec: {@link itemMark} tells that.
+ */
+export declare const itemOfMarker: unique symbol
+export type ReadingOf<C> = C extends Itemable<infer X>
+    ? X & { readonly [itemOfMarker]?: [C] }
+    : never
+export type BaseT<K extends string> = ['prim', ['base', K]]
+export type LitT<K extends string, V> = ['prim', ['literal', K, V]]
+/**
+ * The term of a `held`. `H` is the held type of a foreign schema, in a tuple: the schema is the top
+ * at run time, so only this marker carries its input, and `DecodeT` reads it from here.
+ */
+export type HeldT<I, O, G, H extends unknown[] = []> = [
+    'held',
+    false,
+    I,
+    O,
+    [G, false],
+    H,
+]
+export type NumText<N> = N extends DynamoNumber<infer S> ? S : string
+export type NumTexts<L extends readonly unknown[]> = {
+    -readonly [I in keyof L]: NumText<L[I]>
+}
+/**
+ * The stored text of a number literal: the text that {@link DynamoNumber.from} gives the print of
+ * the number. A print with an exponent is `string`, which the type reads as inexact.
+ */
+export type FloatText<N extends number> = NumText<
+    Extract<ReturnType<typeof DynamoNumber.from<`${N}`>>, DynamoNumber>
+>
+export type FloatTexts<L extends readonly unknown[]> = {
+    -readonly [I in keyof L]: FloatText<L[I] & number>
+}
+/** A field carries its slot as its term; a codec is a required slot. */
+export type SlotOf<F> = F extends { readonly codec: unknown }
+    ? TermOf<F>
+    : ['req', TermOf<F>]
+export type ObjectTermOf<Spec, Rest> = [
+    'object',
+    [
+        'mk',
+        { -readonly [K in keyof Spec]: SlotOf<Spec[K]> },
+        [Rest] extends [undefined] ? ['none'] : ['some', TermOf<Rest>],
+    ],
+]
+
+/**
+ * Marks the codec for a list's repeating positions.
+ *
+ * Type-level only, and read at runtime from the definition, for the same reason as
+ * {@link optionalMarker}. Like `optional`, it is a marker for a *position* rather than a codec in its
+ * own right — it says "and then any number of these" — so it is meaningful in exactly one place:
+ * among the elements of a {@link list}.
+ */
+export declare const spreadMarker: unique symbol
+export type ScopeTerms<Defs> = { -readonly [K in keyof Defs]: TermOf<Defs[K]> }
+/**
+ * **The definition that a codec names in a scope**: the codec, or the definition at the end of its
+ * chain of `ref`s. A chain that returns to a name it passed keeps the codec, and the guard refuses
+ * the scope.
+ */
+export type DefOf<Defs, C, Seen = never> = TermOf<C> extends [
+    'ref',
+    infer N extends keyof Defs,
+]
+    ? [N] extends [Seen]
+        ? C
+        : DefOf<Defs, Defs[N], Seen | N>
+    : C
+
+/**
+ * Type-level only, for the same reason as {@link optionalMarker}. Wrapped in a tuple, because a
+ * reader infers an optional `never` as `string`.
+ */
+export declare const itemTermMarker: unique symbol
+
+/** Type-level only, for the same reason as {@link optionalMarker}. */
+export declare const locatedFrom: unique symbol
+
+/** Type-level only: the rest of each member of a dissection, which a slice keeps with the member. */
+export declare const restsMarker: unique symbol
+
+/**
+ * Type-level only, and a function *pair* rather than a value, for one reason: invariance.
+ *
+ * A property whose type is `Written` is covariant, so a codec writing a subset of the pinned shape
+ * would be accepted — which is the whole thing the pin exists to refuse. Naming `Written` in both a
+ * parameter and a return position makes the comparison mutual, and mutual is what "the same shape"
+ * means. `in out` is not an alternative: it constrains instantiations of one generic against each
+ * other, and a `satisfies` compares two different types.
+ */
+export declare const writesMarker: unique symbol
+
+/**
+ * **Where a located codec sits, at run time only**: the root that {@link at} walked, the steps of
+ * the path, the path, and the frontier that the walk reached. No type names the slot, so no codec
+ * type carries the root. {@link at}, {@link narrow}, {@link path} and {@link preconditions} are the
+ * readers. The slot is a property, so a spread keeps it.
+ */
+export const locatedSlot = Symbol('located')

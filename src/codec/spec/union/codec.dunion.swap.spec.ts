@@ -11,7 +11,6 @@
  * the same `spec`, `discriminator` and patch, and the same *type* in both directions.
  */
 import { describe, expect, it } from 'vitest'
-import type { Itemable } from '../../codec'
 import {
     decimal,
     discriminatedUnion,
@@ -22,7 +21,7 @@ import {
     optional,
     string,
 } from '../../codec'
-import type { Term } from '../../term'
+import type { Itemable, Term } from '../../term'
 
 /** One declaration per shape the one-key specs use: strings, a numeral, and an optional field. */
 const cases = [

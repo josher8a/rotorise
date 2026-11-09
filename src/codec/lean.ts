@@ -63,7 +63,6 @@ import {
 import type {
     AnyCodec,
     ClausePattern,
-    Itemable,
     LiteralValue,
     ObjectSlot,
     Precondition,
@@ -97,6 +96,7 @@ import {
 import type {
     Alternatives,
     Body,
+    Itemable,
     Literal,
     Term,
     Field as TermField,

@@ -144,6 +144,44 @@ export type { SetSlot, Shape } from './value'
 import type { ErrorMessage, show } from '../utils'
 import type { Precondition } from './scoped'
 import type { StandardInput, StandardSchemaV1 } from './standard'
+import type {
+    BaseT,
+    DefOf,
+    ElementMark,
+    ElementsMark,
+    elementMarker,
+    elementsMarker,
+    FloatText,
+    FloatTexts,
+    FreeTerm,
+    fillMarker,
+    HeldT,
+    Itemable,
+    itemMarker,
+    itemOfMarker,
+    itemTermMarker,
+    LitT,
+    locatedFrom,
+    NumText,
+    NumTexts,
+    ObjectTermOf,
+    OfParts,
+    OptionsMark,
+    optionalMarker,
+    optionsMarker,
+    ReadingOf,
+    restsMarker,
+    ScopeTerms,
+    SlotOf,
+    spreadMarker,
+    TermMark,
+    TermOf,
+    TermsOf,
+    termMarker,
+    undefinableMarker,
+    writesMarker,
+} from './term'
+import { locatedSlot } from './term'
 import {
     describeShape,
     itemRefusal,
@@ -167,48 +205,6 @@ export {
     type Result,
 } from './result'
 
-/**
- * Marks a codec whose attribute may be absent.
- *
- * Type-level only. Whether an attribute may be absent is read at runtime from the field's
- * {@link Field} — `optional` is one of the two marks — so there is nothing for a symbol to carry
- * and nothing for a wrapper to forget to copy. The declaration stays because the *type* needs a
- * brand: {@link ItemSpec} and {@link ObjectOf} decide required from optional by it.
- */
-declare const optionalMarker: unique symbol
-
-/** Type-level only, for the same reason as {@link optionalMarker}: the term carries the fact. */
-declare const fillMarker: unique symbol
-
-/** Type-level only, for the same reason as {@link optionalMarker}. */
-declare const undefinableMarker: unique symbol
-
-/*
- * **The model's term of a codec, in its type.** Optional, so no value carries it and no
- * constructor body changes. A codec with no term in its type, as a thunk with an annotation, is an
- * unbound `ref`.
- */
-declare const termMarker: unique symbol
-/**
- * **The options of a dissection, in declared order**, which a product distributes over. The tag
- * table of a dissection keys its members by tag and keeps no order. Optional and type-level only.
- */
-declare const optionsMarker: unique symbol
-type OptionsMark<Os> = { readonly [optionsMarker]?: Os }
-/**
- * **The element codecs of a list, in declared order**, which a pattern reaches by position. The term
- * of a list keeps the terms of its elements, and a slice at a position rebuilds the codec there.
- * Optional and type-level only.
- */
-declare const elementsMarker: unique symbol
-type ElementsMark<Cs> = { readonly [elementsMarker]?: Cs }
-/**
- * **The element codec of an `array` or a `spread`.** The term keeps the term of the element and the
- * type drops the codec, so a scope that closes a `ref` below the element rebuilds the node from the
- * codec that the mark keeps. Optional and type-level only.
- */
-declare const elementMarker: unique symbol
-type ElementMark<C> = { readonly [elementMarker]?: C }
 /** The declared positions of a list with no spread, or `never`. */
 type FixedElements<C> = C extends {
     readonly [elementsMarker]?: infer Cs extends readonly unknown[]
@@ -239,40 +235,8 @@ type HasSpreadIn<Cs extends readonly unknown[]> = Cs[number] extends infer E
         ? true
         : false
     : false
-type TermMark<T> = { readonly [termMarker]?: T }
-type FreeTerm = ['ref', '#free']
-/**
- * The default of the term and of the decoded type of {@link ObjectCodec}, {@link ItemCodec} and
- * {@link UnionCodec}: the type that the spec or the options give, computed where a member reads it.
- */
-declare const ofParts: unique symbol
-type OfParts = typeof ofParts
-type TermOf<C> = C extends { readonly [termMarker]?: infer T }
-    ? unknown extends T
-        ? FreeTerm
-        : T
-    : FreeTerm
-type TermsOf<Cs> = { -readonly [I in keyof Cs]: TermOf<Cs[I]> }
 
 type Free<F extends string> = { readonly [freeMarker]?: [F] }
-/*
- * **What `item` returns for a union, in its type.** A union has no member for the reading: the
- * reading sits at a slot at run time, and this tuple is the one place where the type names it.
- * Required, so a codec that has no reading does not match, and wrapped in a tuple, so a reading
- * that is a message stays a message.
- */
-declare const itemMarker: unique symbol
-export type Itemable<X> = { readonly [itemMarker]: [X] }
-/*
- * **The union that a reading reads, in its type.** The reading of a union holds the options of the
- * union as specs, and holds no term, so `at` cannot walk the reading. The marker carries the union,
- * and the term and the members of the union are the term and the members of the reading. Optional,
- * so no value carries it. The marker tells no item from a codec: {@link itemMark} tells that.
- */
-declare const itemOfMarker: unique symbol
-type ReadingOf<C> = C extends Itemable<infer X>
-    ? X & { readonly [itemOfMarker]?: [C] }
-    : never
 export type FreeOf<C> = C extends {
     readonly [freeMarker]?: [infer F extends string]
 }
@@ -284,40 +248,12 @@ export type FreeOf<C> = C extends {
 type ObjectFree<Spec, Rest, Tm> = [Tm] extends [OfParts]
     ? FreeOf<Spec[keyof Spec]> | FreeOf<Rest>
     : never
-type BaseT<K extends string> = ['prim', ['base', K]]
-type LitT<K extends string, V> = ['prim', ['literal', K, V]]
 type LitsT<
     K extends string,
     L extends readonly unknown[],
 > = L extends readonly [infer One]
     ? LitT<K, One>
     : ['union', { -readonly [I in keyof L]: LitT<K, L[I]> }]
-/**
- * The term of a `held`. `H` is the held type of a foreign schema, in a tuple: the schema is the top
- * at run time, so only this marker carries its input, and `DecodeT` reads it from here.
- */
-type HeldT<I, O, G, H extends unknown[] = []> = [
-    'held',
-    false,
-    I,
-    O,
-    [G, false],
-    H,
-]
-type NumText<N> = N extends DynamoNumber<infer S> ? S : string
-type NumTexts<L extends readonly unknown[]> = {
-    -readonly [I in keyof L]: NumText<L[I]>
-}
-/**
- * The stored text of a number literal: the text that {@link DynamoNumber.from} gives the print of
- * the number. A print with an exponent is `string`, which the type reads as inexact.
- */
-type FloatText<N extends number> = NumText<
-    Extract<ReturnType<typeof DynamoNumber.from<`${N}`>>, DynamoNumber>
->
-type FloatTexts<L extends readonly unknown[]> = {
-    -readonly [I in keyof L]: FloatText<L[I] & number>
-}
 type DecimalT = HeldT<BaseT<'number'>, BaseT<'string'>, 'decimalText'>
 type FloatT<I> = HeldT<I, BaseT<'number'>, ['caller', 'asFloat']>
 type EveryButNumberT = [
@@ -334,18 +270,6 @@ type EveryButNumberT = [
         ['object', ['mk', Record<never, never>, ['some', ['opaq']]]],
     ],
 ]
-/** A field carries its slot as its term; a codec is a required slot. */
-type SlotOf<F> = F extends { readonly codec: unknown }
-    ? TermOf<F>
-    : ['req', TermOf<F>]
-type ObjectTermOf<Spec, Rest> = [
-    'object',
-    [
-        'mk',
-        { -readonly [K in keyof Spec]: SlotOf<Spec[K]> },
-        [Rest] extends [undefined] ? ['none'] : ['some', TermOf<Rest>],
-    ],
-]
 type ListTermOf<Items, Pre extends unknown[] = []> = Items extends readonly [
     infer H,
     ...infer R,
@@ -354,16 +278,6 @@ type ListTermOf<Items, Pre extends unknown[] = []> = Items extends readonly [
         ? ['list', Pre, ['some', TermOf<H>], TermsOf<R>]
         : ListTermOf<R, [...Pre, TermOf<H>]>
     : ['list', Pre, ['none'], []]
-
-/**
- * Marks the codec for a list's repeating positions.
- *
- * Type-level only, and read at runtime from the definition, for the same reason as
- * {@link optionalMarker}. Like `optional`, it is a marker for a *position* rather than a codec in its
- * own right — it says "and then any number of these" — so it is meaningful in exactly one place:
- * among the elements of a {@link list}.
- */
-declare const spreadMarker: unique symbol
 
 /**
  * Anything that can sit where an attribute codec is expected — which is every codec.
@@ -2401,7 +2315,6 @@ export const legacy = <const C extends AnyCodec>(options: {
 type Ref<N extends string> = AttributeCodec<unknown> &
     TermMark<['ref', N]> &
     Free<N>
-type ScopeTerms<Defs> = { -readonly [K in keyof Defs]: TermOf<Defs[K]> }
 type ScopeTerm<Defs, K> = ['scope', ScopeTerms<Defs>, K]
 type ScopeOf<Defs> = {
     readonly [K in keyof Defs]: EntryOf<
@@ -2410,19 +2323,6 @@ type ScopeOf<Defs> = {
         Defs
     >
 }
-/**
- * **The definition that a codec names in a scope**: the codec, or the definition at the end of its
- * chain of `ref`s. A chain that returns to a name it passed keeps the codec, and the guard refuses
- * the scope.
- */
-type DefOf<Defs, C, Seen = never> = TermOf<C> extends [
-    'ref',
-    infer N extends keyof Defs,
-]
-    ? [N] extends [Seen]
-        ? C
-        : DefOf<Defs, Defs[N], Seen | N>
-    : C
 /**
  * **A `ref` read in a scope**: the codec of the `ref` with the term of the entry that the name
  * binds. The decoded type reads the term, and the attribute reads the definition. The codec holds
@@ -3419,35 +3319,12 @@ type PathList<Element> = {
 declare const pathValue: unique symbol
 
 /**
- * Type-level only, for the same reason as {@link optionalMarker}. Wrapped in a tuple, because a
- * reader infers an optional `never` as `string`.
- */
-declare const itemTermMarker: unique symbol
-
-/** Type-level only, for the same reason as {@link optionalMarker}. */
-declare const locatedFrom: unique symbol
-
-/** Type-level only: the rest of each member of a dissection, which a slice keeps with the member. */
-declare const restsMarker: unique symbol
-
-/**
  * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the
  * marker, and no other codec carries it: an object codec has a `spec` too, so `spec` does not tell
  * a reading from a codec. Test a root with `itemMark in root`. The reading types state the same
  * fact as `readonly [itemMark]: true`, and the type of a root reads it from there.
  */
 export const itemMark = Symbol('item reading')
-
-/**
- * Type-level only, and a function *pair* rather than a value, for one reason: invariance.
- *
- * A property whose type is `Written` is covariant, so a codec writing a subset of the pinned shape
- * would be accepted — which is the whole thing the pin exists to refuse. Naming `Written` in both a
- * parameter and a return position makes the comparison mutual, and mutual is what "the same shape"
- * means. `in out` is not an alternative: it constrains instantiations of one generic against each
- * other, and a `satisfies` compares two different types.
- */
-declare const writesMarker: unique symbol
 
 /**
  * The end of a path, carrying what lives there as a phantom.
@@ -4397,14 +4274,6 @@ const locate = (
     const made: Located = { root, steps, path: located, reached }
     return { ...here, [locatedSlot]: made }
 }
-
-/**
- * **Where a located codec sits, at run time only**: the root that {@link at} walked, the steps of
- * the path, the path, and the frontier that the walk reached. No type names the slot, so no codec
- * type carries the root. {@link at}, {@link narrow}, {@link path} and {@link preconditions} are the
- * readers. The slot is a property, so a spread keeps it.
- */
-const locatedSlot = Symbol('located')
 type Located = {
     readonly root: AnyCodec
     readonly steps: readonly Step[]
