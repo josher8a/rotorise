@@ -982,7 +982,7 @@ export const byTagSem = <V>(
                     .join(', ')
                 return new CodecError(
                     `'${assignment[name]}' is not a variant of '${name}'; expected ${expected}`,
-                )
+                ).under(name)
             }
         }
         const wrote = ks
