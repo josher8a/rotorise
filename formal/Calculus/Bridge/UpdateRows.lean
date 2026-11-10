@@ -13,7 +13,9 @@ keys, where each written key is the attribute at a member with a text, and a rem
 value. The comparator reads the footprint of each key at the given item (`Tree.foot`), and states
 that the update of the model (`update`) gives the result of the host. The update prints each key at
 the member of the key, as `DerivedItem.keyPartOf` does, so a row with a number key holds the host
-to the member that the item writer of `src/` writes.
+to the member that the item writer of `src/` writes. The update and the item agree on the key
+part: where `update` gives a patch, each entry is the rendered component of the key part of the
+changed item (`update_keyPart`), at the member of the key name.
 
 A part of a row names the attribute that it reads, and prints the value as the plain component of
 the host does: the upper case name, then the value. A change writes a value or removes the attribute.
@@ -118,6 +120,86 @@ theorem updateRowOk_of_failing {rows : List UpdateRow} (h : failingUpdates rows 
     ((congrArg (r.name ∈ ·) h).mp
       (List.mem_map_of_mem (List.mem_filter.mpr ⟨hr, by rw [hq]; rfl⟩)))
     List.not_mem_nil
+
+section Connect
+
+variable {KS : Finset String} {mem : {k // k ∈ KS} → DerivedItem.Member}
+  (hb : ∀ k, mem k ≠ DerivedItem.Member.b) (c : Char) (specs : {k // k ∈ KS} → KeySpec String)
+
+/-- **A key of the schema is at a key name of the key part.** The name is a key name, the spec of
+    the name is the spec of the key, and the member of the name is the member of the key. -/
+def KeyDef.AtKeyName (k : KeyDef String Bool) : Prop :=
+  ∃ h : k.name ∈ KS, specs ⟨k.name, h⟩ = k.spec ∧ mem ⟨k.name, h⟩ = memberOfNumeric k.mem
+
+/-- **Two reads at one member are one read.** The printed key at the member `m`, and the component
+    of the key part at the member `m'`, agree where `m = m'`. -/
+theorem render_get_eq {m m' : DerivedItem.Member} (e : m = m') (hm : m ≠ DerivedItem.Member.b)
+    (hm' : m' ≠ DerivedItem.Member.b) (o : Out) {w : Option (Bool × String)}
+    (hh : (DerivedItem.carrierOf libraryView c m' hm' o).isSome = true)
+    (h : (DerivedItem.carrierOf libraryView c m hm o).map (renderKey m) = some w) :
+    renderKey m' ((DerivedItem.carrierOf libraryView c m' hm' o).get hh) = w := by
+  subst e
+  have e' : hm' = hm := rfl
+  subst e'
+  revert hh
+  cases hc : DerivedItem.carrierOf libraryView c m hm' o with
+  | none => rw [hc] at h; cases h
+  | some z =>
+      rw [hc] at h
+      intro hh
+      simpa [Option.map] using Option.some.inj h
+
+/-- **The patch is the key part of the changed item.** Where `update` gives the patch `P`, and the
+    key part of the changed item exists, each entry of `P` is the rendered component of the key part at
+    the name of its key. A key outside `P` has the component of the key part of the first item. The
+    premises are the three of `update_commute`, and that each key of the schema is at a key name of
+    the key part (`KeyDef.AtKeyName`). -/
+theorem update_keyPart {keys : List (KeyDef String Bool)} {dec : List (String × String)}
+    {ch : List (String × Option String)} {P : List (String × Option (Bool × String))}
+    (hnd : (keys.map KeyDef.name).Nodup) (hP : update (Out.written c) keys dec ch = .patch P)
+    {x : Item String} (hx : ∀ n v, dec.lookup n = some v → x n = some v)
+    (ht : ∀ k ∈ keys, KeyDef.AtKeyName (mem := mem) specs k)
+    {kp : DerivedItem.KeyPart KS mem}
+    (hk : DerivedItem.keyPartOf libraryView hb c specs
+      (applied (fun n => dec.lookup n) ⟨ch⟩ x) = some kp) :
+    ∀ k ∈ keys, ∀ h : k.name ∈ KS,
+      (∀ v, (k.name, v) ∈ P → v = renderKey (mem ⟨k.name, h⟩) (kp ⟨k.name, h⟩)) ∧
+      ((∀ v, (k.name, v) ∉ P) → ∀ kx, DerivedItem.keyPartOf libraryView hb c specs x = some kx →
+        kp ⟨k.name, h⟩ = kx ⟨k.name, h⟩) := by
+  intro k hkk h
+  obtain ⟨h', hsp, hmem⟩ := ht k hkk
+  have e0 : h' = h := rfl
+  subst e0
+  have hcom := update_commute hnd hP hx k hkk
+  unfold DerivedItem.keyPartOf at hk
+  split at hk
+  next hall =>
+    have hkp := congrFun (Option.some.inj hk) ⟨k.name, h'⟩
+    refine ⟨fun v hv => ?_, fun hnot kx hkx => ?_⟩
+    · have this := hcom.1 v hv
+      rw [← hsp] at this
+      unfold Out.written at this
+      rw [← hkp]
+      exact (render_get_eq c hmem.symm (memberOfNumeric_ne_b _) (hb _) _ (hall _) this).symm
+    · unfold DerivedItem.keyPartOf at hkx
+      split at hkx
+      next hall' =>
+        have hkx' := congrFun (Option.some.inj hkx) ⟨k.name, h'⟩
+        have e : keyOf false false (applied (fun n => dec.lookup n) ⟨ch⟩ x) (specs ⟨k.name, h'⟩) =
+            keyOf false false x (specs ⟨k.name, h'⟩) := by
+          rw [hsp]; exact hcom.2 hnot
+        rw [← hkp, ← hkx']
+        have key : ∀ o o' : Out, o = o' →
+            ∀ (h1 : (DerivedItem.carrierOf libraryView c (mem ⟨k.name, h'⟩) (hb _) o).isSome = true)
+              (h2 : (DerivedItem.carrierOf libraryView c (mem ⟨k.name, h'⟩) (hb _) o').isSome = true),
+            (DerivedItem.carrierOf libraryView c (mem ⟨k.name, h'⟩) (hb _) o).get h1 =
+              (DerivedItem.carrierOf libraryView c (mem ⟨k.name, h'⟩) (hb _) o').get h2 := by
+          intro o o' e'; subst e'; intros; rfl
+        exact key _ _ e _ _
+      next => cases hkx
+  next => cases hk
+
+end Connect
 
 end DerivedKey
 
