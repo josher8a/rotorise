@@ -520,6 +520,20 @@ describe('the meet distributes over a union', () => {
             }
         }
     })
+
+    /**
+     * **A union that wraps a union meets as the flat union does.** A part that is a union takes the
+     * distribution, so the nested union meets as the flat union does.
+     */
+    it('meets a union that wraps a union as the flat union meets', () => {
+        const nested = meet(
+            union([union([string, number])]),
+            union([union([number, boolean])]),
+        )
+        const flat = meet(union([string, number]), union([number, boolean]))
+        expect(defOf(nested)).toEqual(defOf(flat))
+        expect(orThrow(nested.encode(7))).toEqual({ N: '7' })
+    })
 })
 
 describe('a factor that lies below the other is the meet', () => {

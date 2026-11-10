@@ -181,6 +181,30 @@ describe('the meet is a lattice operation over the pool', () => {
         expect(compared).toBeGreaterThan(0)
     })
 
+    /**
+     * A union of one option holds the values of that option, so the meet reads the union as the
+     * option. A factor that lies below the other is the meet as written, so the terms compare with
+     * each union of one option replaced by its option.
+     */
+    it('reads a union of one option as the option', () => {
+        const bare = (t: Term): Term =>
+            t.kind === 'union' && t.options.length === 1 && t.options[0]
+                ? bare(t.options[0])
+                : t
+        let compared = 0
+        for (const [a, b] of pairs([...PATTERNS, ...LEAVES, ...TAGGED])) {
+            const left = run(() => meetOf(union([a]), b))
+            const right = run(() => meetOf(a, b))
+            expect(
+                left === 'refused' || right === 'refused'
+                    ? left === right
+                    : sameTerm(bare(left.codec.def), bare(right.codec.def)),
+            ).toBe(true)
+            if (left !== 'refused') compared++
+        }
+        expect(compared).toBeGreaterThan(0)
+    })
+
     /** The meet of two patterns keeps the options that each pattern keeps: extract twice is extract once. */
     it('makes extract by two patterns the extract by their meet', () => {
         let compared = 0

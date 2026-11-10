@@ -565,7 +565,8 @@ export const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
 
 /**
  * **The meet of two codecs that are neither a union nor `never`**, at the reading of each side: the
- * intersection of the two relations between stored rows and decoded values. Two sides that hold
+ * intersection of the two relations between stored rows and decoded values. {@link meetFactors} hands
+ * over two parts only where neither part is a union. Two sides that hold
  * one set of values at their readings meet at the left side. Two objects meet on their alignment,
  * and no order decides them, so {@link fits} is a consequence of the meet and no premise of it. Any
  * other pair meets by the order of the walk first: where one side lies below the other, the meet
@@ -877,7 +878,13 @@ export const meetFactors = (
     if (lefts.length === 1 && rights.length === 1) {
         const [left] = lefts
         const [right] = rights
-        if (left !== undefined && right !== undefined) {
+        // a union of one option around a union has one option that is a union, and no part is a union
+        if (
+            left !== undefined &&
+            right !== undefined &&
+            resolvedTerm(termOf(left))?.kind !== 'union' &&
+            resolvedTerm(termOf(right))?.kind !== 'union'
+        ) {
             return meetParts(left, right, walk)
         }
     }
