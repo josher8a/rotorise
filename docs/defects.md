@@ -266,3 +266,37 @@ TypeScript 7 and TS2589 on TypeScript 6.
 **Pin.** `src/codec/spec/union/codec.slice.cover.spec.ts` asserts the options of the fold of
 three patterns at run time only. `npm run check` and `npx tsc --noEmit` check the type of the
 other rows of the spec, which agree on both compilers.
+
+---
+
+## Suspected: a term that no former built is judged at its top node, at each option of a union and at the element of a set only
+
+**Observation.** The model states the obligation of each operation at each position of a term
+(`Obligations` in `Lang/ScopeSound.lean`). The compatibility of each two options of a union is one
+such obligation (`TOp.obl`). The run time judges one node at a time. A former judges the node that
+the former builds, so a term that the formers built is judged at each node. A slice, a meet or an
+opening builds a term directly. For such a term, the function in `src/codec/capabilities.ts` that
+gives the codec of a term judges the top node. In `src/codec/denote.ts`, the `union` row judges each
+option, and the `set` row judges the element. No row judges a field of an object, the open block,
+an element of a list, or the inner term of `held`, `refine` or `legacy`. Measured 2026-11-10 with
+`npx vitest --run`, where `u` is a union of two adapters over `string`, which the judgment refuses:
+
+    codecOfTerm(u)                                                                    throws, not shown compatible
+    codecOfTerm({ kind: 'union', options: [u] })                                      throws
+    codecOfTerm({ kind: 'set', elem: u })                                             throws
+    codecOfTerm({ kind: 'object', body: { fields: { a: { mark: 'req', t: u } } } })   builds
+    codecOfTerm({ kind: 'object', body: { fields: {}, rest: u } })                    builds
+    codecOfTerm({ kind: 'list', pre: [u], suf: [] })                                  builds
+    codecOfTerm({ kind: 'list', pre: [], spread: u, suf: [] })                        builds
+    codecOfTerm({ kind: 'held', inner: u, outer, f, g })                              builds
+    codecOfTerm({ kind: 'refine', inner: u, q })                                      builds
+    codecOfTerm({ kind: 'legacy', inner: u, r })                                      builds
+
+**Effect.** Not established. The seven terms that build are written by hand, and no call of `src/`
+is shown to build such a term. An opening reaches the `union` row: `lean.pool.spec.ts` opens a
+pattern and reads the refusal at an option. If a slice, a meet or an opening puts a refused union
+below a field, an element or an adapter, the term has a codec that the obligations of the model do
+not cover.
+
+**Pin.** `src/codec/spec/union/codec.judgechild.spec.ts` pins the two rows that judge a child. No
+test pins the seven terms that build.
