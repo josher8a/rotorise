@@ -8,9 +8,9 @@ The emitter runs the item writer of `src/` on an entry of plain keys and an item
 keys of the entry, each with its name, its member (a string or a number) and its key spec as a tree,
 the value of the item as a map of attributes, the separator, and what the host did: it refused a key
 by a throw, or it wrote the attribute of each key name at a member, or wrote none where the key is
-absent. The emitter builds the parts of a leaf from the encoded row: it upper-cases the name and reads
-the empty text as an absent part. That is a second reading of the spec, and the host gives only the
-outcome. A refusal as a returned value is outside the rows: the emitter skips that row, and a test
+absent. A plain component of a leaf is a `Part.named` with the name of the attribute and a label that
+the emitter gives as text. The model evaluates the part at the item, so the empty rule and the read of
+a path are in the model, and the host gives only the outcome. A refusal as a returned value is outside the rows: the emitter skips that row, and a test
 counts the rows that a throw refuses, so a move of the channel fails that test.
 
 The comparator reads `DerivedItem.keyPartOf` over `DerivedItem.itemOf` of the value of the row, at
@@ -35,6 +35,15 @@ def libraryView : StringView where
   str := String.ofList
   chars_str := fun _ => String.toList_ofList
   str_chars := fun _ => String.ofList_toList
+
+/-- **A plain component of a leaf**: the attribute that it reads, and the label that it prints. An
+    absent value and the empty text are an absent part, as the host gives no component
+    for either. Any other text is the component at the label. The label is an emitted text: the
+    model needs no case rule on a string. -/
+def Part.named (n label : String) : Part String :=
+  ⟨some n, fun v => match v with
+    | none => none
+    | some t => if t = "" then none else some (Comp.named label t)⟩
 
 /-- What the host did for an item: it refused a key, or it wrote, at each key name, no attribute or an
     attribute at a member (`false` for a string, `true` for a number) with a text. -/

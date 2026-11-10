@@ -47,9 +47,6 @@ def Out.written (c : Char) (numeric : Bool) (o : Out) : Option (Option (Bool × 
   (DerivedItem.carrierOf libraryView c (memberOfNumeric numeric) (memberOfNumeric_ne_b numeric) o).map
     (renderKey (memberOfNumeric numeric))
 
-/-- A plain component of a leaf: the attribute that it reads, and the label that it prints. -/
-def Part.named (n label : String) : Part String := ⟨some n, fun v => v.map (Comp.named label)⟩
-
 /-- A key of the schema, as the host read it: the name, whether the member is a number, the tree of
     the spec, whether the key addresses the table, and the footprint that the host read at the given
     item. -/

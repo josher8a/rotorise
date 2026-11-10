@@ -110,6 +110,8 @@ type Schema = {
     readonly decided: Pairs
     /** The entry has no codec, so a name with a `.` is a path into an object. */
     readonly plain?: boolean
+    /** The dotted names that the schema declares as attributes, so the host prints the whole name. */
+    readonly declared?: readonly string[]
 }
 
 type Host = {
@@ -250,6 +252,7 @@ const rowOf = (
         name,
         keys,
         decided: schema.decided,
+        declared: schema.declared ?? [],
         changed: changed.flatMap(([key, value]) => flatten(key, value)),
         separator,
         outcome: hostOutcome(entryOf(schema), schema, changed),
@@ -294,6 +297,18 @@ const owners: Schema = {
     name: 'owners',
     decided: [],
     plain: true,
+    keys: [
+        { name: 'PK', tree: parts('petId'), ofTable: true },
+        { name: 'GSI1PK', tree: parts('owner.name') },
+    ],
+}
+
+/** A pet whose entity holds the dotted name `owner.name` as one attribute, and the entry has no codec. */
+const dotted: Schema = {
+    name: 'dotted',
+    decided: [],
+    plain: true,
+    declared: ['owner.name'],
     keys: [
         { name: 'PK', tree: parts('petId'), ofTable: true },
         { name: 'GSI1PK', tree: parts('owner.name') },
@@ -400,6 +415,12 @@ const cases: readonly [string, Schema, Changes][] = [
     ],
     ['rebuilds_one_key', shipments, [['provider', 'p1']]],
     ['holds_the_separator', shipments, [['status', 'A#B']]],
+    ['writes_an_empty_component', shipments, [['status', '']]],
+    [
+        'writes_a_dotted_name_that_the_entity_holds',
+        dotted,
+        [['owner.name', 'ann']],
+    ],
     ['moves_the_item_by_a_component', shipments, [['shipmentId', 's2']]],
     ['removes_an_attribute_key', pets, [['nickname', null]]],
     ['removes_a_component_of_a_leaf', shipments, [['provider', null]]],
@@ -499,6 +520,25 @@ describe('the key updates of the pool', () => {
     })
 
     it('rebuilds the key of a component below a written object, and reads its value from the object', () => {
+        expect(row('owners_writes_a_parent_of_a_component').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI1PK', [false, 'NAME#ann']]],
+        })
+    })
+
+    it('gives no component for the empty text, and refuses the key as for an absent value', () => {
+        expect(row('shipments_writes_an_empty_component').outcome).toEqual({
+            kind: 'unbuilt',
+        })
+    })
+
+    it('prints the whole name of a dotted name that the entity holds, and the last name of a path', () => {
+        expect(
+            row('dotted_writes_a_dotted_name_that_the_entity_holds').outcome,
+        ).toEqual({
+            kind: 'patch',
+            entries: [['GSI1PK', [false, 'OWNER.NAME#ann']]],
+        })
         expect(row('owners_writes_a_parent_of_a_component').outcome).toEqual({
             kind: 'patch',
             entries: [['GSI1PK', [false, 'NAME#ann']]],

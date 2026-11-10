@@ -32,6 +32,7 @@ import {
     type KeyRow,
     type KeyTree,
     leanKeyModule,
+    plainLabel,
 } from '../lean'
 
 type Transform = (value: unknown) => unknown
@@ -1074,6 +1075,7 @@ const itemSpecs: readonly ItemSpec[] = [
             { name: 'GSI3SK', numeric: true, spec: 'owner.age' },
             { name: 'GSI4SK', numeric: false, spec: 'nick' },
             { name: 'GSI5SK', numeric: false, spec: ['petId', 'nick'] },
+            { name: 'GSI6SK', numeric: false, spec: ['petId', 'owner.age'] },
         ],
     },
     {
@@ -1107,19 +1109,6 @@ const itemDraws: readonly Record<string, unknown>[] = [
     { petId: 'p1', nick: 'rex' },
     { petId: 'p1', nick: '', age: 3 },
 ]
-
-/** The printed text of the attributes that the codec wrote: a string, a numeral, and each name below an object. */
-const printedOf = (
-    map: AttributeMap | Record<string, AttributeValue>,
-    prefix = '',
-): [string, string][] =>
-    Object.entries(map).flatMap(([name, attribute]): [string, string][] => {
-        const at = `${prefix}${name}`
-        if (attribute.S !== undefined) return [[at, attribute.S]]
-        if (attribute.N !== undefined) return [[at, attribute.N]]
-        if (attribute.M !== undefined) return printedOf(attribute.M, `${at}.`)
-        return []
-    })
 
 /** The value of an item as the model reads it: a string, a numeral, or a map of attributes. */
 const attrTextOf = (
@@ -1188,9 +1177,7 @@ const itemRows = (): ItemRow[] => {
         for (const draw of itemDraws) {
             const encoded = entry.codec.encode(draw)
             if (encoded instanceof Error) continue
-            const item = printedOf(encoded as AttributeMap)
-            const text = (path: string) =>
-                item.find(([name]) => name === path)?.[1]
+            const declared = new Set(Object.keys(one.codec))
             const keys: ItemKey[] = one.keys.map((key) => ({
                 name: key.name,
                 numeric: key.numeric,
@@ -1200,18 +1187,15 @@ const itemRows = (): ItemRow[] => {
                         typeof key.spec === 'string'
                             ? { kind: 'attr', name: key.spec }
                             : {
-                                  kind: 'leaf',
+                                  kind: 'plain',
                                   full: key.spec.length,
-                                  parts: key.spec.map((component) => {
-                                      const value = text(component)
-                                      return value === undefined || value === ''
-                                          ? undefined
-                                          : {
-                                                kind: 'named' as const,
-                                                name: component.toUpperCase(),
-                                                value,
-                                            }
-                                  }),
+                                  parts: key.spec.map(
+                                      (component) =>
+                                          [
+                                              component,
+                                              plainLabel(declared, component),
+                                          ] as const,
+                                  ),
                               },
                 },
             }))
