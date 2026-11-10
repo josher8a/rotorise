@@ -18,10 +18,10 @@ import type {
     WritesPin,
     WritesVariantsPin,
 } from './build'
+import { codecOfTerm, setOf, slotsOf } from './capabilities'
 import type { ItemTerm } from './denote'
 import {
     byTagSem,
-    codecOfTerm,
     guard,
     itemSem,
     judged,
@@ -30,11 +30,10 @@ import {
     termOf,
 } from './denote'
 import type { AnyObjectCodec, ItemOf, KnownKeys, SpecsOf } from './derivedItem'
-import { keySets, slotsOf } from './derivedItem'
+import { keySets } from './derivedItem'
 import type { DecodeTerm, ScopeWallCycle } from './pathModel'
 import { checkFill } from './prisms'
 import type { ArrayOver, ListCodec, SetCapable, SpreadOver } from './products'
-import { setOf } from './products'
 import type { Result } from './result'
 import { andThen, CodecError, failed, orThrow, setOwn } from './result'
 import type {

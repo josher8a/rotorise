@@ -75,6 +75,7 @@ HOST_ORDER = [
     ("codec/denote.ts", "Dynamo/Alg/*.lean and Dynamo/Lang/Equations.lean: the pair of each constructor"),
     ("codec/clause.ts", "Lang/ScopePath.lean: the clause `φ` of `narrowC`, a closed codec, and the opening of a pattern"),
     ("codec/frontier.ts", "Lang/CodecPath.lean and Lang/ScopePath.lean: the segment of a path, and the frontier along a path"),
+    ("codec/capabilities.ts", "none: the codec of a term, with the capabilities that the term decides: the literal call, `.set()`, `.spec` and `.rest`"),
     ("codec/adapters.ts", "Alg/Combinators.lean: `Codec.adapt` for `held` and `Codec.extendRead` for `legacy`, with the refusals of an adapter"),
     ("codec/derivedItem.ts", "Lang/Universe.lean: `HObject` and `HUnion`, the held set of an object and of a union, as a decoded type"),
     ("codec/products.ts", "Dynamo/Alg/Products.lean: the rules (set), (array) and (list) of the product codecs, with the spread"),

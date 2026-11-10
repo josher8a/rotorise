@@ -10,8 +10,9 @@ import type {
     Marks,
     ObjectSlot,
 } from './build'
+import { codecOfTerm } from './capabilities'
 import { opened } from './clause'
-import { codecOfTerm, termOf } from './denote'
+import { termOf } from './denote'
 import type { AnyObjectCodec, DerivedUnion } from './derivedItem'
 import { entryCodec, fieldOf } from './derivedItem'
 import type { AnyOpen, FactorOptions, Inexact, StoredMembers } from './objects'

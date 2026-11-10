@@ -60,6 +60,7 @@ import {
     isStoredNumeral,
     memberOf,
 } from './attribute'
+import { codecOfTerm } from './capabilities'
 import type { ClausePattern } from './clause'
 import { clauseOf } from './clause'
 import type {
@@ -81,7 +82,7 @@ import {
     type Segment,
     union,
 } from './codec'
-import { accepts, assignmentOf, codecOfTerm, readsBack } from './denote'
+import { accepts, assignmentOf, readsBack } from './denote'
 import { CodecError, failed, type Result } from './result'
 import {
     agrees,

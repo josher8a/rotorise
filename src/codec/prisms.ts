@@ -1,8 +1,14 @@
 import type { ErrorMessage } from '../utils'
 import type { MissingCodec, RefineOptions } from './adapters'
 import { fillRefusal } from './adapters'
-import type { Attribute, AttributeValue, BS, NS, SS } from './attribute'
-import { DynamoNumber, isStoredNumeral } from './attribute'
+import type {
+    Attribute,
+    AttributeValue,
+    BS,
+    DynamoNumber,
+    NS,
+    SS,
+} from './attribute'
 import type {
     AnyCodec,
     AttributeCodec,
@@ -12,18 +18,16 @@ import type {
     FreeOf,
 } from './build'
 import {
+    asFloat,
+    asJsNumber,
     codecOfTerm,
-    equipCodecs,
-    literalCodec,
-    literalTermOf,
-    termOf,
-} from './denote'
+    numericAdapter,
+    storedOnly,
+} from './capabilities'
+import { termOf } from './denote'
 import type { IsUnion } from './derivedItem'
-import { slotsOf } from './derivedItem'
 import type { SetCapable } from './products'
-import { setOf } from './products'
-import type { Result } from './result'
-import { CodecError, failed, orThrow } from './result'
+import { CodecError } from './result'
 import type {
     BaseT,
     FloatText,
@@ -31,17 +35,14 @@ import type {
     FreeTerm,
     HeldT,
     LiteralBase,
-    LiteralValue,
     LitT,
     NumText,
     NumTexts,
     Rng,
-    Term,
     TermMark,
     TermOf,
 } from './term'
 import { unboundRefs } from './term'
-import { describeShape, namedLiteral, sameLiteral } from './value'
 
 export type LitsT<
     K extends string,
@@ -78,48 +79,6 @@ export type EveryButNumberT = [
 export type SetBase = Exclude<LiteralBase, 'boolean'>
 
 /**
- * The rule `(literal)`'s `ℓ`, checked: non-empty and pairwise distinct.
- *
- * **The model gets three guarantees from a type and the host's type gives two.** `ls` is a
- * `NEFinset k.Carrier`, so the base indexes the alternatives, `n ≥ 1` holds, and no two are equal —
- * all three from `NEFinset`. `term.ts`'s {@link Literal} buys the first from a discriminated union
- * over the base and the second from a tuple head. **TypeScript cannot say the third**, so it is a
- * refusal at construction, and this is where it lives.
- *
- * Distinctness is not tidiness. `NEFinset` is a *set*, so `literal(k, {'A','A'})` and
- * `literal(k, {'A'})` are one term in the model and two definitions here — and the second names a
- * cardinality the first does not, which is what {@link constantOf} reads to answer whether a literal
- * has exactly one value. A repeated alternative makes a two-element `ls` that admits one value,
- * and the constant would go unrecognised.
- *
- * Compared with {@link sameLiteral}, which compares the way the base compares: bytes for `binary`,
- * `===` otherwise.
- */
-export const someAlternatives = <T extends LiteralValue>(
-    base: LiteralBase,
-    allowed: readonly T[],
-): readonly T[] => {
-    if (allowed.length === 0) {
-        throw new CodecError(
-            `a literal admits one of a non-empty set of values, and \`${base}()\` names none; pass the values, or use \`${base}\` itself if anything is admissible`,
-        )
-    }
-    // the values rather than the indices, so the pair is two `T`s and not two lookups the checker
-    // has to be told about; `at` recovers the position the message names
-    for (const [i, one] of allowed.entries()) {
-        for (const [after, other] of allowed.slice(i + 1).entries()) {
-            if (sameLiteral(one, other)) {
-                const at = i + 1 + after
-                throw new CodecError(
-                    `a literal's alternatives are a *set*, and \`${base}()\` names the same value at positions ${i} and ${at}; the model's \`NEFinset\` cannot hold it twice, and a repeat makes a two-value literal that admits one — which stops it reading as a constant`,
-                )
-            }
-        }
-    }
-    return allowed
-}
-
-/**
  * **The constant that the term of a codec decides**, the type of {@link constantOf}, row for row: a
  * literal of one value, and a `held` over a literal of one value, a caller's adapter included. The
  * answer is the pair of the text that the literal names and the value that the codec decodes to, or
@@ -143,86 +102,6 @@ export type ConstantOf<C> = TermOf<C> extends [
       ? ConstantPair<V, Decoded<C>>
       : never
 export type ConstantPair<V, D> = IsUnion<V> extends true ? never : [V, D]
-
-export const literalCapability =
-    (base: LiteralBase) =>
-    (...allowed: readonly LiteralValue[]) =>
-        literalCodec(base, someAlternatives(base, allowed))
-
-/**
- * **The capabilities that a term decides**, added to the codec that `codecOfTerm` denotes for it.
- *
- * - The literal call: the four bases at the term of the base (`string('A')`), the two numeric
- *   adapters at the term of the adapter (`decimal('1.5')`, `number(5)`).
- * - `.set()`: the bases that have a set (`boolean` has none), the two numeric adapters, and a
- *   refinement of any term. `set` refuses an element that names no member of `S`, `N` or `B`.
- * - `.spec` and `.rest`: the slots of an object term.
- *
- * The constants are the codecs that this gives for their own term, so a codec that a slice or a meet
- * builds from a term is the codec that the caller wrote. `opaque` is not here: its call chooses
- * among three codecs by a policy, and the canonical term holds no policy, so the policy would be a
- * fact outside the term.
- */
-export const equip = (codec: AnyCodec, term: Term): unknown => {
-    if (term.kind === 'object') {
-        // read at the first use: a scope binds its names after the terms that name them are built
-        let slots: ReturnType<typeof slotsOf> | undefined
-        const read = () => {
-            slots ??= slotsOf(term.body)
-            return slots
-        }
-        return Object.defineProperties(
-            { ...codec },
-            {
-                spec: { enumerable: true, get: () => read().spec },
-                rest: { enumerable: true, get: () => read().rest },
-            },
-        )
-    }
-    if (term.kind === 'refine') {
-        const capable: AnyCodec = {
-            ...codec,
-            set: setOf(() => capable),
-        } as AnyCodec
-        return capable
-    }
-    const call = literalCallOf(term)
-    if (call === undefined) return codec
-    const carrier = Object.assign(call, codec) as unknown as AnyCodec
-    return term.kind === 'boolean'
-        ? carrier
-        : Object.assign(carrier, { set: setOf(() => carrier, call) })
-}
-
-/**
- * The literal call that a term has, or nothing. Each call is a function of its own: the carrier
- * takes the properties of the codec, so one function shared by two terms would carry the `def` of
- * the last.
- */
-export const literalCallOf = (
-    term: Term,
-): ((...allowed: never[]) => AnyCodec) | undefined => {
-    switch (term.kind) {
-        case 'string':
-        case 'number':
-        case 'boolean':
-        case 'binary':
-            return literalCapability(term.kind) as (
-                ...allowed: never[]
-            ) => AnyCodec
-        case 'held':
-            if (term.inner.kind !== 'number') return undefined
-            if (term.via === 'decimalText' && term.outer.kind === 'string')
-                return (...allowed) => decimalCall(...(allowed as string[]))
-            return term.via === 'float'
-                ? (...allowed) => numberCall(...(allowed as number[]))
-                : undefined
-        default:
-            return undefined
-    }
-}
-
-equipCodecs(equip)
 
 /**
  * A string, as `S`. Exact in both directions: DynamoDB does not normalise strings.
@@ -309,66 +188,6 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
     } = codecOfTerm({ kind: 'number' }) as never
 
 /**
- * An adapter over {@link dynamoNumber}, one conversion wide, on both halves. `held` is defined
- * further down this file, so the term is built directly; the two are the same construction.
- *
- * `outer` is the base the adapter hands to the caller, as a write occupancy. The conversion
- * checks the held side itself: `storedOnly` refuses a value that is not a string, and the carrier
- * refuses a value that is not a number. The term of `number` holds a `DynamoNumber`, so the term
- * cannot be the membership test for a JS float.
- */
-export const numericAdapter = <T>(
-    inner: Term,
-    outer: Term,
-    into: (value: T) => Result<DynamoNumber>,
-    outOf: (held: DynamoNumber) => Result<T>,
-    via?: 'decimalText' | 'float',
-): AttributeCodec<T, Attribute<'N'>> =>
-    codecOfTerm<T, Attribute<'N'>>({
-        kind: 'held',
-        inner,
-        outer,
-        f: into as (value: never) => unknown,
-        g: outOf as (held: never) => unknown,
-        ...(via ? { via } : {}),
-    })
-
-/**
- * The digits a caller wrote, refused rather than re-spelled.
- *
- * **The type is checked here and not by `isStoredNumeral`.** That predicate tests a pattern, and a
- * pattern coerces: `['1']` and any object whose `toString` spells a numeral both match it, so
- * `decimal` admitted values its own type excludes and wrote them as `N`. The predicate is right to
- * stay a predicate on `string` — the emitter recognises it by reference — so the boundary is here.
- */
-export const storedOnly = (value: string): Result<DynamoNumber> =>
-    typeof value !== 'string'
-        ? new CodecError(
-              `${describeShape(value)} is not a string, and \`decimal\` holds the digits as text — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-          )
-        : isStoredNumeral(value)
-          ? DynamoNumber.from(value)
-          : new CodecError(
-                `'${value}' is not a numeral DynamoDB stores unchanged; it accepts at most 38 significant digits, magnitude 1e-130 to 9.9e125, and returns the normalised form (no leading or trailing zeros, no exponent, no '+')`,
-            )
-
-/** The literal call of {@link decimal}: the digits are refused unless they are the stored spelling. */
-export const decimalCall = (...allowed: readonly string[]) => {
-    const stored = allowed.map((one) => orThrow(storedOnly(one)))
-    return numericAdapter<string>(
-        termOf(literalCapability('number')(...stored) as AnyCodec),
-        // the held side is the texts the adapter hands the caller, so the view is exact
-        literalTermOf(
-            'string',
-            stored.map((held) => held.toString()),
-        ),
-        storedOnly,
-        (held) => held.toString(),
-        'decimalText',
-    )
-}
-
-/**
  * The refusal in the type of a decimal literal that is not the stored spelling: the run time of
  * {@link decimal} refuses the text that {@link DynamoNumber.from} gives another print. A text that
  * is no literal reads as the stored spelling, so a spread of `string[]` stays legal.
@@ -439,83 +258,6 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> &
     (held) => held.toString(),
     'decimalText',
 ) as never
-
-/** A JS number, as the carrier refuses it. */
-export const asFloat = (value: number): Result<DynamoNumber> =>
-    DynamoNumber.fromNumber(value)
-
-/**
- * The alternatives a numeric literal names, refused at the caller's level first.
- *
- * **Two refusals, and the adapter owes both.** A value that is not a number at all is
- * `literalTerm`'s sentence one base down, and it is about the caller's type. A number outside what
- * `N` holds is the carrier's. The conversion runs before the native literal is built, so without
- * this the carrier would answer for the type and `number(0, 'A')` would report a `NaN` rule.
- *
- * **Every value outside the range is named, not the first.** A caller who writes three bad
- * alternatives fixes three. One bad alternative keeps the carrier's own sentence, which already
- * says which rule it broke.
- */
-export const numericAlternatives = (
-    allowed: readonly number[],
-): readonly DynamoNumber[] => {
-    const held: DynamoNumber[] = []
-    const outside: number[] = []
-    let firstRefusal: CodecError | undefined
-    for (const one of allowed) {
-        if (typeof one !== 'number') {
-            throw new CodecError(
-                `\`number(...)\` admits number values, and ${namedLiteral(one)} is not one`,
-            )
-        }
-        const carried = asFloat(one)
-        if (failed(carried)) {
-            outside.push(one)
-            firstRefusal ??= carried
-        } else {
-            held.push(carried)
-        }
-    }
-    if (outside.length === 1 && firstRefusal) throw firstRefusal
-    if (outside.length > 1) {
-        throw new CodecError(
-            `${outside.map(namedLiteral).join(', ')} are not numbers DynamoDB stores: it takes at most 38 significant digits and magnitude 1e-130 to 9.9e125, and has no NaN and no Infinity`,
-        )
-    }
-    return held
-}
-
-/**
- * …and back, refused where the rounding leaves the range `N` holds.
- *
- * `N` carries 38 significant digits and a JS `number` about 15, so reading rounds. Rounding is this
- * codec's declared cost and not a failure. Rounding *out of the range DynamoDB stores* is a
- * different fact: the value read back is one this same codec would refuse to write, so the round
- * trip breaks on a numeral the service genuinely returns. The write half already refuses it, and
- * this half says the same thing rather than hand back a number that cannot go home.
- */
-export const asJsNumber = (held: DynamoNumber): Result<number> => {
-    const value = held.toNumber()
-    return failed(DynamoNumber.fromNumber(value))
-        ? new CodecError(
-              `'${held.toString()}' rounds to ${String(value)}, which is outside what DynamoDB stores, so \`number\` cannot write it back; read this attribute with \`dynamoNumber\` or \`decimal\`, which do not round`,
-          )
-        : value
-}
-
-/** The literal call of {@link number}: each alternative is refused at the caller's level first. */
-export const numberCall = (...allowed: readonly number[]) =>
-    numericAdapter<number>(
-        termOf(
-            literalCapability('number')(
-                ...numericAlternatives(allowed),
-            ) as AnyCodec,
-        ),
-        { kind: 'number' },
-        asFloat,
-        asJsNumber,
-        'float',
-    )
 
 /**
  * A JS number, stored as `N`. Lossy by construction — `N` carries 38 digits, `number` about 15.

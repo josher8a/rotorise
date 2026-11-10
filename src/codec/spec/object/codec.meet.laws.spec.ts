@@ -13,6 +13,7 @@
  * skips a pair.
  */
 import { describe, expect, it } from 'vitest'
+import { codecOfTerm } from '../../capabilities'
 import type { AnyCodec } from '../../codec'
 import {
     array,
@@ -28,7 +29,6 @@ import {
     string,
     union,
 } from '../../codec'
-import { codecOfTerm } from '../../denote'
 import { disjoint } from '../../scoped'
 import { fits } from '../../separation'
 import type { Term } from '../../term'

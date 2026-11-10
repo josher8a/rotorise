@@ -22,13 +22,12 @@ export type {
     Writes,
 } from './build'
 /**
- * Forwarded for the consumers that still name them here.
- *
- * They are `denote.ts`'s now — each answers about a term's *pair* — and this keeps the move to one
- * pass. Six of the eight go in the pass that deletes the readers; `codecOfTerm` and `termOf` stay,
- * and their callers move to the module that owns them there.
+ * Forwarded for the consumers that still name them here. `codecOfTerm` is `capabilities.ts`'s, and
+ * `termOf` and `valueKinds` are `denote.ts`'s: each answers about a term, and their callers move to
+ * the module that owns them.
  */
-export { codecOfTerm, termOf, valueKinds } from './denote'
+export { codecOfTerm } from './capabilities'
+export { termOf, valueKinds } from './denote'
 export type {
     AnyObjectCodec,
     DerivedUnion,

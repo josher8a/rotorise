@@ -1,7 +1,3 @@
-// This module builds a codec at load (`absent`), and `codecOfTerm` refuses until prisms.ts has
-// registered the capabilities of a term. The import below makes prisms.ts load first, in any order of
-// the importers.
-import './prisms'
 import type { ErrorMessage } from '../utils'
 import type {
     AttributeMap,
@@ -17,9 +13,10 @@ import type {
     Decoded,
     Marks,
 } from './build'
+import { codecOfTerm } from './capabilities'
 import type { Clause, ClausePattern } from './clause'
 import { clauseOf } from './clause'
-import { codecAtLevel, codecOfTerm, termOf } from './denote'
+import { codecAtLevel, termOf } from './denote'
 import type { DecodedTags, IsUnion, VariantOf } from './derivedItem'
 import type {
     ClauseTerms,

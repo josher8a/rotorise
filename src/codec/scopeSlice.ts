@@ -1,7 +1,8 @@
 import type { ErrorMessage, show } from '../utils'
 import type { AnyCodec, Closed, Marks, ObjectOf, ObjectSlot } from './build'
+import { codecOfTerm } from './capabilities'
 import { opened } from './clause'
-import { codecOfTerm, termOf } from './denote'
+import { termOf } from './denote'
 import type {
     Declares,
     DecodedTags,

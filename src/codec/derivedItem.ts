@@ -7,25 +7,9 @@ import type {
     ObjectOf,
     ObjectSlot,
 } from './build'
-import { codecOfTerm, defOf } from './denote'
+import { defOf } from './denote'
 import type { Norm } from './pathModel'
-import type { Body, Field, Itemable, OfParts, Term } from './term'
-
-/**
- * The slots of an object term, as a caller reads them: the codec of each field term, and the
- * field itself, `{ codec, def }`, where the mark is not `req`. The rest is the codec of the open
- * term. Each codec is the one that `codecOfTerm` gives the term, so a slot is the codec that the
- * caller wrote, from one source.
- */
-export const slotsOf = (body: Body) => ({
-    spec: Object.fromEntries(
-        Object.entries(body.fields).map(([name, f]) => {
-            const codec = codecOfTerm(f.t)
-            return [name, f.mark === 'req' ? codec : { codec, def: f }]
-        }),
-    ),
-    rest: body.rest && codecOfTerm(body.rest),
-})
+import type { Field, Itemable, OfParts, Term } from './term'
 
 // ── items ───────────────────────────────────────────────────────────
 

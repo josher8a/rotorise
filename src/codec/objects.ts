@@ -9,7 +9,8 @@ import type {
     Marks,
     ObjectSlot,
 } from './build'
-import { codecOfTerm, defOf, termOf } from './denote'
+import { codecOfTerm } from './capabilities'
+import { defOf, termOf } from './denote'
 import type {
     AnyObjectEntry,
     DerivedItem,

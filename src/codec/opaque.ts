@@ -1,7 +1,3 @@
-// This module builds a codec at load (`canonicalOpaque`), and `codecOfTerm` refuses until prisms.ts has
-// registered the capabilities of a term. The import below makes prisms.ts load first, in any order of
-// the importers. `EveryButNumberT` is a type, so no other import of prisms.ts remains at run time.
-import './prisms'
 import type { ErrorMessage, show } from '../utils'
 import type {
     AttributeValue,
@@ -18,8 +14,9 @@ import type {
     SS,
 } from './attribute'
 import type { AttributeCodec } from './build'
+import { codecOfTerm } from './capabilities'
 import type { OpaqueNumbers } from './denote'
-import { codecOfTerm, opaqueTerms } from './denote'
+import { opaqueTerms } from './denote'
 import type { EveryButNumberT } from './prisms'
 import type { HeldT, TermMark } from './term'
 

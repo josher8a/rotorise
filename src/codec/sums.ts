@@ -16,14 +16,9 @@ import type {
     ObjectSlot,
     WritesVariantsPin,
 } from './build'
+import { codecOfTerm } from './capabilities'
 import type { Option } from './denote'
-import {
-    altSem,
-    codecOfTerm,
-    membersTooDeeply,
-    optionOfTerm,
-    termOf,
-} from './denote'
+import { altSem, membersTooDeeply, optionOfTerm, termOf } from './denote'
 import type {
     AnyObjectCodec,
     DecodedTags,

@@ -8,7 +8,8 @@ import type {
     Free,
     FreeOf,
 } from './build'
-import { codecOfTerm, termOf } from './denote'
+import { codecOfTerm } from './capabilities'
+import { termOf } from './denote'
 import type { CycleEntryOf } from './pathModel'
 import type { Result } from './result'
 import { CodecError, failed, HeldSideRefusal } from './result'

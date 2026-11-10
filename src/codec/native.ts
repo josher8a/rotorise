@@ -69,9 +69,10 @@ import {
     memberOf,
     tooDeeplyNested,
 } from './attribute'
+import { codecOfTerm } from './capabilities'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
-import { codecOfTerm, mapNumberLeaves, opaqueTerms } from './denote'
+import { mapNumberLeaves, opaqueTerms } from './denote'
 import { rendered } from './value'
 
 /**

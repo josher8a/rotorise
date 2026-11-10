@@ -16,8 +16,9 @@
  * alternatives.
  *
  * Three helpers that look like these are **not** here — `literalCodec`, `encodeUnknown` and
- * `decodeUnknown`. Each builds a pair: the first reaches `codecOfTerm`, and the other two are
- * `opaque`'s two halves. They live in `denote.ts`, with the other pair builders.
+ * `decodeUnknown`. Each builds a pair: the first reaches `codecOfTerm` and lives in
+ * `capabilities.ts`, and the other two are `opaque`'s two halves and live in `denote.ts`, with the
+ * other pair builders.
  */
 
 import type {

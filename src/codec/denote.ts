@@ -1,13 +1,13 @@
 /**
  * What a term means: every constructor's pair, and the memo that keeps one per term.
  *
- * the combinator modules' combinators, one for one, plus the two devices the host has and the model
+ * the combinator modules' combinators, one for one, plus the device the host has and the model
  * does not — the **item view**, which is a pair over a map's contents rather than over an
- * attribute, and the codec cache that makes a term's codec unique.
+ * attribute.
  *
- * **One import direction.** `codec.ts`'s constructors take their pair from here, and nothing here
- * reaches back for a value in `codec.ts` — a value that did would close the direction into a
- * cycle, which is why `value.ts` exists. A type closes the cycle too, so each type that these
+ * **One import direction.** The constructor files and `capabilities.ts` take their pair from here,
+ * and nothing here reaches back for a value in one of them — a value that did would close the
+ * direction into a cycle, which is why `value.ts` exists. A type closes the cycle too, so each type that these
  * signatures name lives in this file or in a lower file.
  *
  * **One item pair per term.** An object term builds its body pair once; `denote`'s map-writing row
@@ -90,36 +90,6 @@ import {
     shapeOf,
     thrownReason,
 } from './value'
-
-/**
- * A literal at a named base — the one builder every literal in this library goes through.
- *
- * The premises of the rule `(literal)`, checked where the rule states them:
- *
- * - **`ℓ` is non-empty.** Checked by each caller, because the message wants to name the
- *   constructor the caller actually wrote.
- * - **`ℓ` is homogeneous at the base.** Free in the model — `NEFinset k.Carrier` — and not free
- *   here, because a spread of a plain array defeats the type. So it is a construction-time refusal.
- * - **`ℓ ⊆ D`** at `number`. The carrier `DynamoNumber` discharges it where the value is made.
- *
- * Each premise is decided when the codec is built, because `ℓ` is data this library owns.
- */
-export const literalCodec = <T extends LiteralValue>(
-    base: LiteralBase,
-    allowed: readonly T[],
-): AttributeCodec<T, AttributeValue> => {
-    /**
-     * **`ℓ ⊆ D`** — the premise on the numeric base, and the defect that made it more than
-     * bookkeeping. `literal(NaN)` produced `{ N: 'NaN' }` and `literal(1e400)` produced
-     * `{ N: 'Infinity' }`, both reachable with no cast and both rejected by the service.
-     *
-     * **The carrier discharges it, and there is nothing left to check here.** A numeric
-     * alternative is a `DynamoNumber`, which cannot be built from a value the service refuses, so
-     * the refusal happens where the value is made. The `decimal` premise went the same way, and it
-     * was narrower still: a stored spelling is what the carrier normalises to.
-     */
-    return codecOfTerm<T, AttributeValue>(literalTermOf(base, allowed))
-}
 
 /**
  * **One literal, or a union of them.** A literal carries one value, so several alternatives are a
@@ -301,7 +271,7 @@ export const sameAssignment = (
  * The two halves a term denotes, with neither half's type known.
  *
  * A term does not carry the TypeScript type its codec has — `{ kind: 'string' }` says `S` and says
- * nothing about `string` — so {@link denote} answers in the erased pair and {@link codecOfTerm}
+ * nothing about `string` — so {@link denote} answers in the erased pair and `codecOfTerm` of `capabilities.ts`
  * puts the type back on, once, where the constructor knows it.
  */
 export type Pair = {
@@ -1237,7 +1207,7 @@ export type ItemPair = {
 export type ItemTerm = Extract<Term, { readonly kind: 'object' }>
 
 /**
- * **One item pair per term, for the life of the term** — {@link codecOfTerm}'s counterpart.
+ * **One item pair per term, for the life of the term** — the counterpart of `codecOfTerm` of `capabilities.ts`.
  *
  * Every `object(...)` used to build **two** body pairs and keep both: one in the constructor for
  * `item`, and a second inside `denote` when the codec was first used. They were separate objects,
@@ -1267,8 +1237,10 @@ export const itemSem = (def: ItemTerm): ItemPair => {
  * `denote` is this function and the rows below answer to its combinators one for one.
  *
  * **A definition's children are terms, and no row here reaches into a child codec's pair.** Where a
- * row needs one it calls `pairOf` or `codecOfTerm`, which memoise on the frozen term and answer
- * what was already built, so recovering a child costs a lookup rather than a construction. A
+ * row needs one it calls `pairOf`, which memoises on the frozen term and answers what was already
+ * built, so recovering a child costs a lookup rather than a construction. A row that needs the
+ * codec of a child judges the child with `judged`, and then calls `codecAtLevel` at the level `0`,
+ * which reads that memoised pair. A term that no former built has no other judgment of its child. A
  * container writes a child through `pairOf`, because the pair takes the level of the child. The
  * checker holds this rather than a reader: every child position of a `Term` is a `Term`, so
  * `def.elem.encode` is a type error and not a habit to avoid.
@@ -1374,7 +1346,7 @@ export const denote = (def: Term): Pair => {
          *
          * The set is the lift of its element's codec: each member is written and read through the
          * element, so a restriction, a literal and an adapter at the element run on every member.
-         * Which wire set follows from the element's member, which {@link set} checked is `S`, `N`
+         * Which wire set follows from the element's member, which `judge` checked is `S`, `N`
          * or `B`, the DynamoDB set obligation.
          *
          * **Empty is refused in both directions, and the read side is the one that matters.**
@@ -1387,7 +1359,10 @@ export const denote = (def: Term): Pair => {
          * `{ SS: ['a','b','c'] }` for `'abc'`. The `set` row asks `instanceof Set` first.
          */
         case 'set': {
-            const inner = codecOfTerm(def.elem)
+            // a slice, a meet or an opening builds a term whose children no former built, so this
+            // row is where the judgment of such an element runs
+            judged(def.elem)
+            const inner = codecAtLevel(def.elem, 0)
             const one = elementMember(def.elem)
             if (one !== 'S' && one !== 'N' && one !== 'B') {
                 // `judge` refuses a set of any other member first, so this narrows `one` for `setMember`
@@ -1703,15 +1678,6 @@ export const denote = (def: Term): Pair => {
  * @anchored
  */
 /**
- * **One codec per term, for the life of the term.**
- *
- * A term is immutable by design and frozen at construction, so a codec built from one is a function
- * of it and can be built once. The freeze is what the cache rests on: a mutation fails loudly
- * instead of poisoning it.
- */
-const codecs = new WeakMap<Term, AttributeCodec<never, AttributeValue>>()
-
-/**
  * What a declaration holds: a term, or a field that marks one.
  *
  * **The one refusal of a value that is no codec.** A bare spec, `null`, `undefined` and a number
@@ -1790,7 +1756,7 @@ const guardReason = (subject: string, use: 2 | 3): string =>
  * target get one verdict. A rule that reads a `ref` that no scope binds passes, and the scope
  * judges the closed copy. `declaring` is false where a scope judges a copy.
  *
- * Each former builds its codec through {@link codecOfTerm}, so the judgment runs at each
+ * Each former builds its codec through `codecOfTerm` of `capabilities.ts`, so the judgment runs at each
  * declaration. A scope runs the guard on each entry, then the judgment of each copy. Each case
  * states its reason.
  */
@@ -1915,40 +1881,9 @@ export const judged = (t: Term, declaring = true): void => {
 }
 
 /**
- * The capabilities that a term decides, added to the codec that the term denotes. `codec.ts`
- * registers the function before it builds the first codec, because the capabilities are the
- * constructors of `codec.ts`: the literal call and the `.set()`.
- */
-let equipped:
-    | ((codec: AttributeCodec<never, AttributeValue>, def: Term) => unknown)
-    | undefined
-
-export const equipCodecs = (equip: NonNullable<typeof equipped>): void => {
-    equipped = equip
-}
-
-export const codecOfTerm = <T, A extends AttributeValue>(
-    def: Term,
-): AttributeCodec<T, A> => {
-    const built = codecs.get(def)
-    if (built) return built as unknown as AttributeCodec<T, A>
-    judged(def)
-    if (!equipped)
-        throw new Error(
-            'codecOfTerm ran before prisms.ts registered the capabilities of a term',
-        )
-    const made = equipped(
-        codecAtLevel<never, AttributeValue>(Object.freeze(def), 0),
-        def,
-    ) as AttributeCodec<never, AttributeValue>
-    codecs.set(def, made)
-    return made as unknown as AttributeCodec<T, A>
-}
-
-/**
  * **One pair per term**, which a container reads to pass its level to a child. A public `encode`
  * starts the count again at `0`, so a container writes a child through this and not through
- * {@link codecOfTerm}.
+ * `codecOfTerm` of `capabilities.ts`.
  */
 const pairs = new WeakMap<Term, Pair>()
 
@@ -2634,7 +2569,10 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  * option.
  */
 export const optionOfTerm = (def: Term): Option<never> => {
-    const codec = codecOfTerm(def)
+    // a slice, a meet or an opening builds a term whose options no former built, so this is where
+    // the judgment of such an option runs
+    judged(def)
+    const codec = codecAtLevel(def, 0)
     const pair = pairOf(def)
     /**
      * **A union of objects is an object option too**, and its names are its members' taken

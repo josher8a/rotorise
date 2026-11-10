@@ -52,9 +52,9 @@
  */
 import { createHash } from 'node:crypto'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
+import { codecOfTerm } from './capabilities'
 import type { AnyCodec } from './codec'
 import { boolean, legacy, meet, object, string, union } from './codec'
-import { codecOfTerm } from './denote'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
 import { CodecError, failed } from './result'

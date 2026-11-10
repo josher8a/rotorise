@@ -31,6 +31,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
+import { codecOfTerm } from '../capabilities'
 import type { AnyCodec } from '../codec'
 import {
     array,
@@ -61,7 +62,7 @@ import {
     undefinable,
     union,
 } from '../codec'
-import { accepts, codecOfTerm } from '../denote'
+import { accepts } from '../denote'
 import type {
     DisjointPair,
     Dissection,

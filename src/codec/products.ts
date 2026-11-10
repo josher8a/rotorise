@@ -11,9 +11,9 @@ import type {
     IsNeverSlot,
     ListTermOf,
     SetAttribute,
-    SetOf,
 } from './build'
-import { codecOfTerm, termOf } from './denote'
+import { codecOfTerm } from './capabilities'
+import { termOf } from './denote'
 import type { WidensRead } from './pathModel'
 import { CodecError } from './result'
 import type {
@@ -22,7 +22,6 @@ import type {
     elementsMarker,
     FreeTerm,
     spreadMarker,
-    Term,
     TermMark,
     TermOf,
 } from './term'
@@ -55,57 +54,7 @@ export type Leading<Cs extends readonly unknown[]> = Cs extends readonly [
 export type HasSpreadIn<Cs extends readonly unknown[]> =
     Cs[number] extends infer E ? (E extends AnySpread ? true : false) : false
 
-/**
- * **The `.set()` of a codec**: the set of the codec that carries it, or, where the codec has a
- * literal call, the set of the literal at the alternatives that the call names. One function for
- * each codec that has a `.set()`: the bases, the two numeric adapters, a refinement and an entry of
- * a scope. A repeated value refuses here as it refuses at `string('dog', 'dog')`.
- *
- * The thunk reads the codec that carries the `.set()`, and not the one that was handed in:
- * `.set()` records its element in `def`, so two copies of one codec would give two definitions
- * that differ by a property nobody can see.
- */
-export const setOf =
-    (carrier: () => AnyCodec, literal?: (...allowed: never[]) => AnyCodec) =>
-    (...allowed: readonly unknown[]) =>
-        set(
-            allowed.length > 0 && literal !== undefined
-                ? literal(...(allowed as never[]))
-                : carrier(),
-        )
-
 // ── collections ─────────────────────────────────────────────────────
-
-/**
- * A non-empty set, stored as the native set its members belong to.
- *
- * **The one set builder, and it is internal.** Every set in the surface comes through here:
- * `string.set()` and the other bases via {@link setOf}, and everything that reduces to a base via
- * {@link equip} — `amount.set()` where `amount = refine(decimal, isAmount)`.
- * It was exported as `set(element)` and is not any more: the capability propagates, so a
- * free-standing form said nothing `.set()` cannot, and having two spellings of one combinator on
- * the surface meant two things to keep in step. It stays a function rather than being inlined
- * because it is where both halves of the rule `(set)`'s premise are checked, and they are checked once.
- *
- * Which set follows from the element's member: `SS`, `NS` or `BS`. Taking a codec rather than being
- * fixed to strings is what makes `price.set()` decode back as prices.
- *
- * **Order is not preserved.** A DynamoDB set comes back in an order the service chooses, so both
- * directions sort. `decode ∘ encode = id` therefore holds only for canonical values; for the rest
- * the law is {@link checkStable}. If order carries meaning use `array(...)`.
- *
- * **Empty is not representable** — encode throws rather than writing what the service refuses.
- */
-export const set = <const C extends AnyCodec>(
-    element: C,
-): AttributeCodec<ReadonlySet<Decoded<C>>, SetOf<C>> => {
-    type T = Decoded<C>
-    const inner = element as unknown as AttributeCodec<T>
-    // the element is the element's own term, so a restriction, a literal and an adapter each ride
-    // at the element, and the set is its finite-powerset lift
-    const term: Term = { kind: 'set', elem: inner.def }
-    return codecOfTerm<ReadonlySet<T>, SetOf<C>>(term)
-}
 
 /**
  * A homogeneous positional container, as `L`.
