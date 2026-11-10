@@ -113,13 +113,3 @@ export type {
     Rng,
 } from './term'
 export type { SetSlot, Shape } from './value'
-
-/**
- * How a union of objects is declared: with a tag, or by the attributes each variant has.
- *
- * One parameter and one signature. Overloads would read the same at the call and cost the
- * diagnostic — `No overload matches this call` at the call site instead of a message on the
- * argument, which is what two signatures on `tableEntry` were measured to do. A union in one
- * inference slot would cost worse: a string and an array sharing a slot is how `tableEntry` came to
- * infer a codec from a separator.
- */
