@@ -20,7 +20,6 @@ import {
     legacy,
     list,
     meet,
-    meetOrdered,
     never,
     nullable,
     number,
@@ -36,6 +35,7 @@ import {
     undefinable,
     union,
 } from '../../codec'
+import { meetOrdered } from '../../meet'
 import { dynamoNumber } from '../../prisms'
 import { failed, orThrow } from '../../result'
 import { fits } from '../../separation'

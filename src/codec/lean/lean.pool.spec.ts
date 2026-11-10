@@ -38,7 +38,6 @@ import {
     list,
     mdunion,
     meet,
-    meetOrdered,
     narrow,
     never,
     nullable,
@@ -93,6 +92,7 @@ import {
     sliceableOf,
     unionAt,
 } from '../lean'
+import { meetOrdered } from '../meet'
 import { dynamoNumber } from '../prisms'
 import { Disagreement, failed, orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
