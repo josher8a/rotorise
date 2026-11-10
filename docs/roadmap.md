@@ -403,6 +403,7 @@ passes the value that a consumer without the flag passes. `opaque(...)` refuses 
 so the input of `opaque(...)` stays exact.
 
 **What decides it.** The cost of an input parameter across the codec family in
-`src/codec/codec.ts`, where every concrete codec sets the input equal to the output today. The pass
+`src/codec/prisms.ts`, `src/codec/products.ts`, `src/codec/objects.ts` and `src/codec/sums.ts`,
+where every concrete codec sets the input equal to the output today. The pass
 lands where the parameter deletes the widened encode in
 `src/codec/spec/object/codec.undefinable.spec.ts` and the attest snapshots show no growth.
