@@ -83,6 +83,7 @@ HOST_ORDER = [
     ("codec/opaque.ts", "Dynamo/Alg/Opaque.lean: `opaque` as the identity codec of the carrier"),
     ("codec/sums.ts", "Alg/Combinators.lean and Dynamo/Alg/Sums.lean: `altCodec`, the first option that acts, for `union`, `discriminatedUnion` and `mdunion`"),
     ("codec/objects.ts", "Dynamo/Alg/Objects.lean: `objectCodec` over a field table, with the open block of the rule (record)"),
+    ("codec/scopePath.ts", "Lang/ScopePath.lean: `Rooted.at`, the frames at a path into a closed codec, and `narrowC`, the narrowing by a clause"),
     ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),

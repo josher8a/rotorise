@@ -11,8 +11,6 @@ import type { Closed, EncodedBy } from './codec/build'
 import type {
     AnyCodec,
     AttributeOf,
-    ChildAt,
-    CodecAt,
     ConstantOf,
     EncodedVariants,
     IsUnion,
@@ -37,6 +35,7 @@ import type { KnownKeys } from './codec/derivedItem'
 import { native } from './codec/native'
 import { constantOf } from './codec/objects'
 import type { itemMark } from './codec/scope'
+import type { ChildAt, CodecAt } from './codec/scopePath'
 import type { KeyText } from './codec/sums'
 import type { Field, Term } from './codec/term'
 import { isCallerPin, member, sameTerm, storedPin } from './codec/term'

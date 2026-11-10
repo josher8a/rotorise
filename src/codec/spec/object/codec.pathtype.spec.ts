@@ -11,7 +11,6 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
-import type { ChildAt } from '../../codec'
 import {
     boolean,
     decimal,
@@ -31,6 +30,7 @@ import {
 } from '../../codec'
 import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
+import type { ChildAt } from '../../scopePath'
 import type { StandardSchemaV1 } from '../../standard'
 
 const schemaOf = <T>(
