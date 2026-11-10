@@ -2189,8 +2189,13 @@ type TableEntryDefinition<
     /**
      * Converts a raw entity into a complete table entry with all keys computed.
      * Use this when preparing items for insertion into DynamoDB.
+     *
+     * The type refuses an item whose value has a type that the entity does not hold, and an item
+     * that lacks a name of the entity. `toEntry` prints each key from the attributes of the item,
+     * so a wrong value prints a key that `toItem` of the same entity never writes. `Exact` compares
+     * the names at the top level only: a name in excess below an object compiles.
      */
-    toEntry: <const ExactEntity>(
+    toEntry: <const ExactEntity extends Entity>(
         item: Exact<Entity, ExactEntity>,
     ) => HeldEntry<ExactEntity, Schema, Separator, CodecSpec, CodecRest>
 
@@ -2264,9 +2269,15 @@ type TableEntryDefinition<
      * an `UpdateExpression`. `set` holds the keys the item writes after the change. `remove` holds
      * the keys the item omits after the change, which only a key with a `null` arm or an attribute can name. A key
      * is in one of the two and never in both. The two agree with {@link toEntry} on the merged item.
+     *
+     * The type refuses a name that the entity does not hold. A dotted name such as `owner.name` is
+     * no attribute of an entity that holds `owner`. `touchedBy` reads the name as a written path
+     * and `printedName` reads the name as an attribute, so the change would rebuild a key from a
+     * value that `toItem` of the changed entity prints under another name. Write the change by the
+     * names of the entity.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
-        changed: Changed &
+        changed: Exact<Partial<Entity>, Changed> &
             KeyUpdateRefusal<Schema, Roles, Changed, DecidedValues<CodecSpec>>,
     ) => KeyUpdate<AbsentKeyNames<Schema>>
 
