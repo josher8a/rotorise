@@ -20,7 +20,6 @@ import {
     boolean,
     exclude,
     extract,
-    fits,
     list,
     meet,
     never,
@@ -31,6 +30,7 @@ import {
 } from '../../codec'
 import { codecOfTerm } from '../../denote'
 import { disjoint } from '../../scoped'
+import { fits } from '../../separation'
 import type { Term } from '../../term'
 import { sameTerm } from '../../term'
 

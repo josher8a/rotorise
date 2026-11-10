@@ -35,16 +35,9 @@ import type {
     SS,
 } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
-import {
-    CodecError,
-    fits,
-    item,
-    object,
-    opaque,
-    orThrow,
-    termOf,
-} from '../../codec'
+import { CodecError, item, object, opaque, orThrow, termOf } from '../../codec'
 import { native } from '../../native'
+import { fits } from '../../separation'
 import { arbitraryOf, rngFrom } from '../../testing'
 
 /**

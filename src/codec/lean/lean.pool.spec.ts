@@ -32,7 +32,6 @@ import {
     exclude,
     extract,
     fill,
-    fits,
     held,
     item,
     legacy,
@@ -97,6 +96,7 @@ import {
 import { dynamoNumber } from '../prisms'
 import { Disagreement, failed, orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
+import { fits } from '../separation'
 import type { Term } from '../term'
 import {
     holdsNoValue,

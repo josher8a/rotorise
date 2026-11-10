@@ -15,7 +15,6 @@ import {
     exclude,
     extract,
     fill,
-    fits,
     held,
     item,
     legacy,
@@ -39,6 +38,7 @@ import {
 } from '../../codec'
 import { dynamoNumber } from '../../prisms'
 import { failed, orThrow } from '../../result'
+import { fits } from '../../separation'
 import type { StandardSchemaV1 } from '../../standard'
 import {
     arbitraryOf,

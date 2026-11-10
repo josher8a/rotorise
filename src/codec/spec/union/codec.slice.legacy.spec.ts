@@ -11,7 +11,6 @@ import type { AnyCodec, Decoded } from '../../codec'
 import {
     exclude,
     extract,
-    fits,
     legacy,
     number,
     object,
@@ -19,6 +18,7 @@ import {
     termOf,
     union,
 } from '../../codec'
+import { fits } from '../../separation'
 import { sameTerm } from '../../term'
 
 const older = { decode: () => ({ kind: 'dog' as const }) }

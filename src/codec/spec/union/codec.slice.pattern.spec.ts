@@ -19,7 +19,6 @@ import {
     discriminatedUnion,
     exclude,
     extract,
-    fits,
     held,
     list,
     meet,
@@ -36,6 +35,7 @@ import {
 } from '../../codec'
 import { failed } from '../../result'
 import { disjoint } from '../../scoped'
+import { fits } from '../../separation'
 import type { Term } from '../../term'
 import { clauseForm } from '../../term'
 
