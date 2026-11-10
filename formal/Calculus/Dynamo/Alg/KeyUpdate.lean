@@ -366,7 +366,7 @@ theorem KeyDef.step_untouched {print : M → Out → Option (Option A)} {d x : I
 /-- **The update commutes with encode.** Where the update gives a patch `P`, and `x` is an item that
     agrees with the decided values, the key part of `x` with the change applied is the key part of
     `x` with `P` written over it: a key of `P` has the written key at the changed item, and a key
-    outside `P` has the same key at `x` and at the changed item. The premises are the three of the
+    outside `P` has the same key at `x` and at the changed item. The law rests on these facts of the
     host: the change agrees with the decided values (the host checks it first), the item agrees
     with the decided values (the codec decides them), and the names of the keys differ (the keys
     of an object). -/

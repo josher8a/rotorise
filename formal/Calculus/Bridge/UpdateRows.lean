@@ -149,7 +149,7 @@ theorem render_get_eq {m m' : DerivedItem.Member} (e : m = m') (hm : m ≠ Deriv
 /-- **The patch is the key part of the changed item.** Where `update` gives the patch `P`, and the
     key part of the changed item exists, each entry of `P` is the rendered component of the key part at
     the name of its key. A key outside `P` has the component of the key part of the first item. The
-    premises are the three of `update_commute`, and that each key of the schema is at a key name of
+    premises are those of `update_commute`, and that each key of the schema is at a key name of
     the key part (`KeyDef.AtKeyName`). -/
 theorem update_keyPart {keys : List (KeyDef String Bool)} {dec : List (String × String)}
     {ch : List (String × Option String)} {P : List (String × Option (Bool × String))}

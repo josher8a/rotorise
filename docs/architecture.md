@@ -1158,8 +1158,8 @@ of its path with no value, and the entries of its names below it.
 
 The update commutes with encode. Let `x` be an item that agrees with the decided values. Let `y` be
 `x` with the change applied. A key of the patch is the key of `y`. A key outside the patch has one
-key at `x` and at `y`. The law has four premises. The change agrees with the decided values, and the
-update checks this first. The item agrees with the decided values, and the codec supplies this,
+key at `x` and at `y`. The law rests on these facts. The change agrees with the decided values, and
+the update checks this first. The item agrees with the decided values, and the codec supplies this,
 because the update never reads the item. The names of the keys differ, and the keys of an object
 give this. The footprint that the update computes is the footprint of the spec, and the vector rows
 check this.
