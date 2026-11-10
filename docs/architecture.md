@@ -1139,10 +1139,10 @@ name, each path above it, and each path below it. A key is touched where its foo
 that the change reaches and the codec does not decide. A touched key of the table is a refusal. A
 touched key that lacks a component at that item is a refusal, where a component lacks when the change
 does not reach the name and the codec does not decide it. Any other touched key gives its key at that
-item, or no key at a `null` arm. The result is a refusal, or a patch. The patch maps each touched key to
-the text that the key prints, or to no text. The member of a key is static, so the patch holds no
-member. The SET clause of an update writes the text as the attribute of the member of the key: a
-string at an `S` key, and a numeral at an `N` key. No text goes to the REMOVE clause.
+item, or no key at a `null` arm. The result is a refusal, or a patch. The member of a key is static:
+a key of the schema carries the member. The patch maps each touched key to the attribute that the
+key prints at the member of the key, or to no attribute: a string at an `S` key, and a numeral at an
+`N` key. The SET clause of an update writes the attribute. No attribute goes to the REMOVE clause.
 
 A change writes a value at a name, or removes the attribute. A removal is a write, and the item that
 the update reads has no value at the removed name. A removed name is held by the change, so the key

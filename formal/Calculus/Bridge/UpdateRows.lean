@@ -6,11 +6,14 @@ import Calculus.Bridge.ItemRows
 # The rows of a key update
 
 The emitter runs keyUpdates and keyComponents of `src/` on the keys of a schema, the values that
-the codec decides, and a change. A row holds the keys as trees with the footprint that the host read
-at the given item, the decided values, the change, the separator, and what the host gave: a refusal
-of one of three kinds, or a patch of the touched keys, where a removed key has no value. The
-comparator reads the footprint of each key at the given item (`Tree.foot`), and states that the
-update of the model (`update`) gives the result of the host.
+the codec decides, and a change. A row holds the keys as trees with the member of each key (a string
+or a number) and the footprint that the host read at the given item, the decided values, the change,
+the separator, and what the host gave: a refusal of one of three kinds, or a patch of the touched
+keys, where each written key is the attribute at a member with a text, and a removed key has no
+value. The comparator reads the footprint of each key at the given item (`Tree.foot`), and states
+that the update of the model (`update`) gives the result of the host. The update prints each key at
+the member of the key, as `DerivedItem.keyPartOf` does, so a row with a number key holds the host
+to the member that the item writer of `src/` writes.
 
 A part of a row names the attribute that it reads, and prints the value as the plain component of
 the host does: the upper case name, then the value. A change writes a value or removes the attribute.
@@ -34,30 +37,36 @@ instance : PathName String where
     rw [show decide (n.toList = n.toList) = true from decide_eq_true rfl]
     rfl
 
-/-- The key of an item as the host gives it to a patch: a printed key, no key, or a throw. The host
-    throws where a segment holds the separator, and where the spec selects nothing. -/
-def Out.written (c : Char) (o : Out) : Option (Option String) :=
-  DerivedItem.carrierOf libraryView c .s (by decide) o
+/-- The key of an item as the host gives it to a patch: a printed key at the member of the key
+    (`false` for a string, `true` for a number), no key, or a throw. The host throws where a segment
+    holds the separator, where the spec selects nothing, and where the text of a number key is no
+    numeral. -/
+def Out.written (c : Char) (numeric : Bool) (o : Out) : Option (Option (Bool × String)) :=
+  (DerivedItem.carrierOf libraryView c (memberOfNumeric numeric) (memberOfNumeric_ne_b numeric) o).map
+    (renderKey (memberOfNumeric numeric))
 
 /-- A plain component of a leaf: the attribute that it reads, and the label that it prints. -/
 def Part.named (n label : String) : Part String := ⟨some n, fun v => v.map (Comp.named label)⟩
 
-/-- A key of the schema, as the host read it: the name, the tree of the spec, whether the key
-    addresses the table, and the footprint that the host read at the given item. -/
+/-- A key of the schema, as the host read it: the name, whether the member is a number, the tree of
+    the spec, whether the key addresses the table, and the footprint that the host read at the given
+    item. -/
 structure UpdateKey where
   name : String
+  numeric : Bool
   tree : Tree String
   ofTable : Bool
   footprint : List String
 
 /-- What the host did with an update. A refusal is of one kind: the change writes a decided
     attribute at another value, the change touches a key that it cannot rewrite, or the build of a
-    key throws. -/
+    key throws. A patch holds, for a key that it writes, the attribute at a member (`false` for a
+    string, `true` for a number) with a text, or none where the key is removed. -/
 inductive HostUpdate where
   | decided
   | rewrite
   | unbuilt
-  | patch (entries : List (String × Option String))
+  | patch (entries : List (String × Option (Bool × String)))
   deriving DecidableEq
 
 /-- A row of the key update. -/
@@ -70,8 +79,8 @@ structure UpdateRow where
   host : HostUpdate
 
 /-- The keys of a row, as the model reads them. -/
-def UpdateRow.keyDefs (r : UpdateRow) : List (KeyDef String) :=
-  r.keys.map fun k => KeyDef.ofTree k.name k.tree k.ofTable
+def UpdateRow.keyDefs (r : UpdateRow) : List (KeyDef String Bool) :=
+  r.keys.map fun k => KeyDef.ofTree k.name k.numeric k.tree k.ofTable
 
 /-- What the model gives for a row. -/
 def UpdateRow.model (r : UpdateRow) : HostUpdate :=

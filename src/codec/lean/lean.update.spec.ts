@@ -4,8 +4,11 @@
  * `keyUpdates` of `src/Rotorise.ts` runs on the keys of a PetStore schema and on a change. A row
  * holds the keys as trees, the components that `keyComponents` read at the item that the update
  * reads, the values that the codec decides, the change, and what `keyUpdates` gave: a refusal of
- * one of three kinds, or a patch where a removed key has no value. The gate checks each row in the
- * kernel against `update` and `Tree.foot`.
+ * one of three kinds, or a patch where each written key is the attribute at a member with a text, and
+ * a removed key has no value. The member of a key comes from the declaration of the schema, and the
+ * member of a written attribute comes from what the host wrote, so the comparator holds the host to
+ * the member that `toItem` writes. The gate checks each row in the kernel against `update` and
+ * `Tree.foot`.
  *
  * The host spec of each key comes from the tree of the row, so the host and the row cannot read two
  * specs. The rows draw a change into a `null` arm, a change out of it, a nested match, a change
@@ -15,7 +18,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { keyComponents, RotoriseError, tableEntry } from '../../Rotorise'
-import { string } from '../codec'
+import { number, string } from '../codec'
 import {
     leanUpdateModule,
     type UpdateKey,
@@ -25,8 +28,8 @@ import {
 } from '../lean'
 
 type Pairs = readonly (readonly [string, string])[]
-/** The value of a change at a name: a string, `null` where the change removes the attribute, or an object. */
-type Value = string | null | { readonly [key: string]: Value }
+/** The value of a change at a name: a string, a number, `null` where the change removes the attribute, or an object. */
+type Value = string | number | null | { readonly [key: string]: Value }
 /** A change: a value at each written name. */
 type Changes = readonly (readonly [string, Value])[]
 
@@ -41,12 +44,14 @@ const flatten = (
 ): (readonly [string, string | null])[] =>
     value === null || typeof value === 'string'
         ? [[name, value]]
-        : [
-              [name, null],
-              ...Object.entries(value).flatMap(([key, below]) =>
-                  flatten(`${name}.${key}`, below),
-              ),
-          ]
+        : typeof value === 'number'
+          ? [[name, String(value)]]
+          : [
+                [name, null],
+                ...Object.entries(value).flatMap(([key, below]) =>
+                    flatten(`${name}.${key}`, below),
+                ),
+            ]
 
 /** The change as the object that `keyUpdates` reads: a removal is an own property `undefined`. */
 const changeObject = (changed: Changes): Record<string, unknown> =>
@@ -95,6 +100,8 @@ type KeyDefinition = {
     readonly name: string
     readonly tree: UpdateTree
     readonly ofTable?: boolean
+    /** The member of the key is a number: the key reads one number attribute. */
+    readonly numeric?: boolean
 }
 
 type Schema = {
@@ -107,7 +114,7 @@ type Schema = {
 
 type Host = {
     readonly keyUpdates: (changed: object) => {
-        set: Record<string, { S: string }>
+        set: Record<string, { S: string } | { N: string }>
         remove: readonly string[]
     }
 }
@@ -131,10 +138,26 @@ const entryOf = (schema: Schema): Host => {
     }
     for (const key of schema.keys) visit(key.tree)
     const decided = new Map(schema.decided)
+    const numbers = new Set(
+        schema.keys.flatMap((key) =>
+            key.numeric &&
+            key.tree.kind === 'arm' &&
+            key.tree.arm.kind === 'attr'
+                ? [key.tree.arm.name]
+                : [],
+        ),
+    )
     const codec = Object.fromEntries(
         [...names].map((name) => {
             const constant = decided.get(name)
-            return [name, constant === undefined ? string : string(constant)]
+            return [
+                name,
+                numbers.has(name)
+                    ? number
+                    : constant === undefined
+                      ? string
+                      : string(constant),
+            ]
         }),
     )
     const keys = Object.fromEntries(
@@ -150,6 +173,25 @@ const entryOf = (schema: Schema): Host => {
     })
 }
 
+/**
+ * The member and the text that the host wrote at a key. An attribute that is not exactly one of
+ * `{ S }` and `{ N }` fails with the name of the key, and so does a key of the SET part with no
+ * attribute. No default hides a member that the model does not state.
+ */
+const writtenAt = (
+    name: string,
+    attribute: { S: string } | { N: string } | undefined,
+): readonly [boolean, string] => {
+    const members = attribute === undefined ? [] : Object.keys(attribute)
+    if (attribute !== undefined && members.length === 1) {
+        if ('S' in attribute) return [false, attribute.S]
+        if ('N' in attribute) return [true, attribute.N]
+    }
+    throw new Error(
+        `${name} is written as [${members.join(', ')}], not as S or N`,
+    )
+}
+
 /** What `keyUpdates` gave, with the keys of the patch in the order of the schema. */
 const hostOutcome = (
     host: Host,
@@ -158,12 +200,15 @@ const hostOutcome = (
 ): UpdateOutcome => {
     try {
         const { set, remove } = host.keyUpdates(changeObject(changed))
-        const entries: (readonly [string, string | null])[] = []
+        const entries: (readonly [
+            string,
+            readonly [boolean, string] | null,
+        ])[] = []
         for (const { name } of schema.keys) {
             const inSet = Object.hasOwn(set, name)
             const inRemove = remove.includes(name)
             expect(inSet && inRemove, `${name} is in both parts`).toBe(false)
-            if (inSet) entries.push([name, set[name]?.S ?? ''])
+            if (inSet) entries.push([name, writtenAt(name, set[name])])
             if (inRemove) entries.push([name, null])
         }
         return { kind: 'patch', entries }
@@ -196,6 +241,7 @@ const rowOf = (
 ): UpdateRow => {
     const keys: UpdateKey[] = schema.keys.map((key) => ({
         name: key.name,
+        numeric: key.numeric ?? false,
         tree: key.tree,
         ofTable: key.ofTable ?? false,
         footprint: footprintOf(key, schema.decided, changed),
@@ -273,6 +319,17 @@ const shipments: Schema = {
         { name: 'SK', tree: parts('TAG', 'shipmentId'), ofTable: true },
         { name: 'GSI1PK', tree: parts('TAG', 'status') },
         { name: 'GSI2PK', tree: parts('provider') },
+    ],
+}
+
+/** A pet with an age: the sort key of the age is one number attribute, so its member is a number. */
+const aged: Schema = {
+    name: 'aged',
+    decided: [],
+    keys: [
+        { name: 'PK', tree: parts('petId'), ofTable: true },
+        { name: 'GSI1PK', tree: parts('shelter') },
+        { name: 'GSI1SK', tree: attr('age'), numeric: true },
     ],
 }
 
@@ -363,6 +420,10 @@ const cases: readonly [string, Schema, Changes][] = [
     ['writes_a_child_of_a_component', wholes, [['owner.name', 'ann']]],
     ['writes_a_sibling_of_a_component', owners, [['owner.age', '3']]],
     ['writes_a_child_of_a_path', owners, [['owner.name.first', 'ann']]],
+    ['writes_a_number', aged, [['age', 3]]],
+    ['writes_a_fraction', aged, [['age', 1.5]]],
+    ['removes_a_number', aged, [['age', null]]],
+    ['writes_a_key_beside_a_number', aged, [['shelter', 's1']]],
 ]
 
 const rows: readonly UpdateRow[] = cases.map(([name, schema, changed]) =>
@@ -381,7 +442,7 @@ describe('the key updates of the pool', () => {
             kind: 'patch',
             entries: [
                 ['GSI1PK', null],
-                ['GSI2PK', 'OWNER#ann'],
+                ['GSI2PK', [false, 'OWNER#ann']],
             ],
         })
     })
@@ -390,8 +451,8 @@ describe('the key updates of the pool', () => {
         expect(row('pets_out_of_a_null_arm').outcome).toEqual({
             kind: 'patch',
             entries: [
-                ['GSI1PK', 'SHELTER#s1'],
-                ['GSI2PK', 'SHELTER#s1'],
+                ['GSI1PK', [false, 'SHELTER#s1']],
+                ['GSI2PK', [false, 'SHELTER#s1']],
             ],
         })
     })
@@ -400,7 +461,7 @@ describe('the key updates of the pool', () => {
         expect(row('pets_into_a_nested_null_arm').outcome).toEqual({
             kind: 'patch',
             entries: [
-                ['GSI1PK', 'SHELTER#s1'],
+                ['GSI1PK', [false, 'SHELTER#s1']],
                 ['GSI2PK', null],
             ],
         })
@@ -440,7 +501,7 @@ describe('the key updates of the pool', () => {
     it('rebuilds the key of a component below a written object, and reads its value from the object', () => {
         expect(row('owners_writes_a_parent_of_a_component').outcome).toEqual({
             kind: 'patch',
-            entries: [['GSI1PK', 'NAME#ann']],
+            entries: [['GSI1PK', [false, 'NAME#ann']]],
         })
     })
 
@@ -472,6 +533,28 @@ describe('the key updates of the pool', () => {
     it('refuses the removal of a name that the codec decides', () => {
         expect(row('shipments_removes_a_decided_name').outcome).toEqual({
             kind: 'decided',
+        })
+    })
+
+    it('writes the member of a number key as N, the member that toItem writes', () => {
+        expect(row('aged_writes_a_number').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI1SK', [true, '3']]],
+        })
+        expect(row('aged_writes_a_fraction').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI1SK', [true, '1.5']]],
+        })
+    })
+
+    it('removes the key of a number that the change removes, and leaves the number key alone beside it', () => {
+        expect(row('aged_removes_a_number').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI1SK', null]],
+        })
+        expect(row('aged_writes_a_key_beside_a_number').outcome).toEqual({
+            kind: 'patch',
+            entries: [['GSI1PK', [false, 'SHELTER#s1']]],
         })
     })
 

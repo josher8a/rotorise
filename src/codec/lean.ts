@@ -4278,11 +4278,13 @@ export type UpdateTree =
       }
 
 /**
- * **One key of an update row**: the name, the spec as a tree, whether the key addresses the table,
- * and the components that `keyComponents` read at the item that the update reads.
+ * **One key of an update row**: the name, whether its member is a number, the spec as a tree,
+ * whether the key addresses the table, and the components that `keyComponents` read at the item
+ * that the update reads.
  */
 export type UpdateKey = {
     readonly name: string
+    readonly numeric: boolean
     readonly tree: UpdateTree
     readonly ofTable: boolean
     readonly footprint: readonly string[]
@@ -4290,7 +4292,9 @@ export type UpdateKey = {
 
 /**
  * What `keyUpdates` did: a refusal of one of three kinds, or a patch. An entry of the patch holds the
- * name of a touched key and its key, or `null` where the key is removed.
+ * name of a touched key and the attribute that the host wrote, or `null` where the key is removed.
+ * The attribute is a member with a text: `true` for a number and `false` for a string, as in an
+ * item outcome.
  */
 export type UpdateOutcome =
     | { readonly kind: 'decided' }
@@ -4298,7 +4302,10 @@ export type UpdateOutcome =
     | { readonly kind: 'unbuilt' }
     | {
           readonly kind: 'patch'
-          readonly entries: readonly (readonly [string, string | null])[]
+          readonly entries: readonly (readonly [
+              string,
+              readonly [boolean, string] | null,
+          ])[]
       }
 
 /**
@@ -4355,7 +4362,7 @@ const leanUpdateOutcome = (outcome: UpdateOutcome): string =>
         ? `.patch [${outcome.entries
               .map(
                   ([name, key]) =>
-                      `(${leanString(name)}, ${key === null ? 'none' : `some ${leanString(key)}`})`,
+                      `(${leanString(name)}, ${key === null ? 'none' : `some (${key[0]}, ${leanString(key[1])})`})`,
               )
               .join(', ')}]`
         : `.${outcome.kind}`
@@ -4382,7 +4389,7 @@ export const leanUpdateModule = (rows: readonly UpdateRow[]): string => {
     keys := [${row.keys
         .map(
             (key) =>
-                `{ name := ${leanString(key.name)}, tree := ${leanUpdateTree(key.tree)}, ofTable := ${key.ofTable}, footprint := [${key.footprint.map(leanString).join(', ')}] }`,
+                `{ name := ${leanString(key.name)}, numeric := ${key.numeric}, tree := ${leanUpdateTree(key.tree)}, ofTable := ${key.ofTable}, footprint := [${key.footprint.map(leanString).join(', ')}] }`,
         )
         .join(',\n      ')}],
     decided := ${leanPairs(row.decided)}, changed := ${leanChanges(row.changed)},
@@ -4397,8 +4404,9 @@ export const leanUpdateModule = (rows: readonly UpdateRow[]): string => {
 that \`keyComponents\` read at the item that the update reads, the values that the codec decides, the
 change, and what \`keyUpdates\` of \`src/\` gave. The checker of the list states that the footprint of
 each key at that item is the set that the host read, and that \`update\` of the model gives the result
-of the host: a refusal of the same kind, or the same patch, where a removed key has no value. A row
-reads one change, so the row states a witness and not the law.
+of the host: a refusal of the same kind, or the same patch, where each written key is the attribute
+at the member of the key, and a removed key has no value. A row reads one change, so the row states
+a witness and not the law.
 -/
 
 namespace Calculus

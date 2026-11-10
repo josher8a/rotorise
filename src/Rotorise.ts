@@ -4121,7 +4121,9 @@ export const tableEntry =
          * The keys that a change rebuilds: `update` of `KeyUpdate`, as the model states it. Each key
          * takes one `step` of `KeyDef`. A key that the change does not touch gives no entry. A key
          * that the change touches either builds its value, or refuses with the key that refused,
-         * which is the `Refusal` of the step.
+         * which is the `Refusal` of the step. A built key is carried at the member of the key, so the
+         * patch holds the attribute that `toItem` writes: the model prints each key at `KeyDef.mem`,
+         * as `keyPartOf` reads `mem`.
          */
         const keyUpdates = (
             changed: Record<string, unknown>,
