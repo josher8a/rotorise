@@ -310,8 +310,9 @@ export const preconditionsOf = (
             )
         }
         const side = sideOf(step, 'raw')
-        // a clause has no scoped form only where its flat scope is refused, and `scope` refuses an
-        // unguarded cycle of refs (RecursionRefused) before any path records the clause
+        // a clause has no scoped form only where its flat scope is refused, and `scope` refuses that
+        // scope, for an unguarded cycle of refs or for a wall (RecursionRefused), before any path
+        // records the clause
         if (side === undefined && fields.length > 0) {
             return new CodecError(
                 `the clause at '${asPath(prefix)}' has no scoped form, so no precondition reads it`,

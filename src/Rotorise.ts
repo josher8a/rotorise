@@ -974,8 +974,8 @@ type MemberOf<A> = A extends unknown
 type KeyMember = 'S' | 'N' | 'B'
 
 /**
- * The member that `native` writes for a value: a string is `S`, a number is `N`, and a `Uint8Array`
- * is `B`. A value of two of these types gives two members, and a value of any other type gives none.
+ * The member that `native` writes for a value: a string is `S`, a number or a `bigint` is `N`, and a
+ * `Uint8Array` is `B`. A value of two of these types gives two members, and a value of any other type gives none.
  */
 type NativeMember<V> = [NonNullable<V>] extends [never]
     ? never
@@ -1372,9 +1372,9 @@ export class RotoriseError extends Error {
 }
 
 // Runtime implementation uses `as never` casts because the generic types are
-// too complex for TS to verify at the value level. Type correctness is enforced
-// by the type-level types (CompositeKeyStringBuilder, TableEntryImpl, etc.) and
-// validated by the attest-based test suite.
+// too complex for TS to verify at the value level. The type-level types
+// (CompositeKeyStringBuilder, TableEntryImpl, etc.) state what the call accepts, and a call that
+// casts around them is outside the contract.
 
 /**
  * Answers every property with itself, so `infer` can be walked at the type level.
@@ -3204,7 +3204,7 @@ const componentsOf = (
 
 type PlainComponent = string | number | bigint | boolean | null | undefined
 
-/** The names that a key spec uses as a component: each list, at any depth of a match. */
+/** The names that a key spec uses as a component: each name of a list, and a bare path, at any depth of a match. */
 type ComponentsOf<Spec> = Spec extends readonly unknown[]
     ? Extract<Spec[number], string>
     : Spec extends AnyPath
@@ -4459,13 +4459,15 @@ export * from './codec/attribute'
  * `member`, `occV`, `agrees` and `constantOf`
  * read a **term**, and `accepts` and `readsBack` ask the **pair**. Both kinds exist
  * so this library's own resolver, declaration guard and emitter can ask what a codec is; a caller
- * has the codec's behaviour instead, which is the thing they are derived from. A re-export written
- * as `export * from './codec/codec'` would publish each of them, so each export here is a decision.
+ * has the codec's behaviour instead, which is the thing they are derived from. A lower file
+ * declares each of them, and `codec.ts` exports none of them. `codecOfTerm`, `termOf` and
+ * `valueKinds` are the values of `codec.ts` that are not API. A re-export written as
+ * `export * from './codec/codec'` would publish those three, so each export here is a decision.
  * `Rotorise.spec.ts` holds the list, and holds it at the live names for the reason written there.
  *
- * Six of the listed values reach here *through* `codec.ts` from `result.ts`, which is where the
- * pair's error and its combinators live — `CodecError`, `andThen`, `every`, `everyEntry`,
- * `failed`, `orThrow`. They are listed like the rest.
+ * `CodecError`, `andThen`, `every`, `everyEntry`, `failed` and `orThrow` reach here *through*
+ * `codec.ts` from `result.ts`, which is where the pair's error and its combinators live. They are
+ * listed like the rest.
  *
  * So the values are listed and the types are starred. **Adding a codec means adding a line here**,
  * which is the cost of the list and the point of it: an export becomes a decision rather than a
@@ -4581,7 +4583,6 @@ export {
 } from './codec/codec'
 export { pin } from './codec/pin'
 export type { Field, Term } from './codec/term'
-// `shapeOf` classifies a *value* and reaches no term, so it moved to `value.ts` with the twelve
-// others `denote.ts` needs. The name on the surface is unchanged; only the module that declares
-// it moved, which is why this is a second `export` rather than an entry in the list above.
+// `shapeOf` classifies a *value* and reaches no term, so `value.ts` declares it. This is a second
+// `export` and no entry in the list above, because `codec.ts` does not carry `shapeOf`.
 export { shapeOf } from './codec/value'

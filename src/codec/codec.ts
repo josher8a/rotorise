@@ -1,8 +1,8 @@
 export type { Reader } from './adapters'
 export { held, legacy } from './adapters'
 /**
- * The types that the entries publish and that a lower file owns now. A lower file owns a type
- * where its readers need the type, and this file names the type again for the entries.
+ * The types that the entries publish. A lower file declares a type where its readers need the
+ * type, and this file names the type again for the entries.
  */
 export type {
     AnyCodec,
@@ -22,9 +22,8 @@ export type {
     Writes,
 } from './build'
 /**
- * Forwarded for the consumers that still name them here. `codecOfTerm` is `capabilities.ts`'s, and
- * `termOf` and `valueKinds` are `denote.ts`'s: each answers about a term, and their callers move to
- * the module that owns them.
+ * The values that read a term. `capabilities.ts` declares `codecOfTerm`, and `denote.ts` declares
+ * `termOf` and `valueKinds`.
  */
 export { codecOfTerm } from './capabilities'
 export { termOf, valueKinds } from './denote'

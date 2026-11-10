@@ -4032,8 +4032,8 @@ export type ConditionRow = {
 }
 
 /**
- * What the host did for an item: it refused a key (a throw and a refusal as a value are one
- * outcome, because the channel is no rule of the model), or it wrote, at each key name, no attribute
+ * What the host did for an item: it refused a key by a throw (a refusal as a returned
+ * value gives no row), or it wrote, at each key name, no attribute
  * or an attribute at a member with a text. The member is `true` for a number and `false` for a string.
  */
 export type ItemOutcome =

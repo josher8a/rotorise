@@ -75,14 +75,6 @@ import { andThen, CodecError, every, everyEntry } from './codec'
 import { mapNumberLeaves, opaqueTerms } from './denote'
 import { rendered } from './value'
 
-/**
- * The options `@aws-sdk/util-dynamodb` takes, as far as this reproduces them.
- *
- * `wrapNumbers` and `convertWithoutMapWrapper` are not reproduced: the first returns a
- * `NumberValue` from `@aws-sdk/lib-dynamodb`, which this package cannot construct without taking
- * the dependency it exists to avoid, and the second only moves where the map wrapper goes.
- */
-
 const BINARY = new Set([
     'ArrayBuffer',
     'Blob',
@@ -501,9 +493,7 @@ const configured = (
  *
  * One entry point with every parameter optional, rather than three. `native` *is* the marshaller
  * with the SDK's own defaults, so `native.encode(value)` needs no call; calling it returns one
- * configured differently. The two used to be `nativeWith` and `nativeLike`, which is a distinction
- * between "some options" and "some options and some deviations" that nobody making the call cares
- * about — and it left `native` unable to be either.
+ * configured differently, with some options or with some options and some deviations.
  *
  * ```ts
  * native.encode(value)                                  // the SDK's defaults

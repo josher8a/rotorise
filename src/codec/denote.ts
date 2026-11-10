@@ -11,9 +11,8 @@
  * signatures name lives in this file or in a lower file.
  *
  * **One item pair per term.** An object term builds its body pair once; `denote`'s map-writing row
- * wraps that pair, and `item` of the codec hands out the same one. They were two objects before
- * `579ed89`, `item.encode === codec.encode` answered `false`, and nothing said which of the two a
- * caller was running. The memo is keyed on the frozen term for the reason `codecOfTerm`'s is: the
+ * wraps that pair, and `item` of the codec hands out the same one, so `item.encode ===
+ * codec.encode`. The memo is keyed on the frozen term for the reason `codecOfTerm`'s is: the
  * term is the datum, a pair built from it is a function of it, and the freeze is what makes the
  * key stable rather than probable.
  */
@@ -1669,15 +1668,6 @@ export const denote = (def: Term): Pair => {
 }
 
 /**
- * A term, as the codec it denotes — the one place the erased pair gets its type back.
- *
- * `denote` answers about the term, and a term does not carry the type its codec has, so exactly one
- * cast stands between the two. It is here rather than at each constructor because twenty-one casts
- * with one reason between them is one reason nobody reads. `build.ts`'s `codec` is still the single
- * construction site: this hands it a pair instead of two hand-written halves.
- * @anchored
- */
-/**
  * What a declaration holds: a term, or a field that marks one.
  *
  * **The one refusal of a value that is no codec.** A bare spec, `null`, `undefined` and a number
@@ -1848,8 +1838,9 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
                         )
             return undefined
         }
-        // **A `ref` is guarded where a scope binds it.** A `ref` builds its codec before the scope
-        // that binds it runs the guard, so the guard below would read a free name
+        // **A `ref` is guarded where a scope binds it.** An unbound `ref` closes no cycle, so the
+        // guard reads nothing of it here, and the scope that binds the name runs the walk with every
+        // name bound
         case 'ref':
             return undefined
         // a kind with no construction rule of its own reaches the guard only
@@ -2411,14 +2402,9 @@ export const opaqueTerms: {
  * family at all**. So the two alphabets stay two, and this is the one-way map between them — from
  * the term's to the value's, which is the only direction that is total.
  *
- * **This replaced a second walk of the term.** `carries` answered the same question by recursing
- * over the definition itself, and the two were kept in agreement by hand. Measured at 35
- * constructors before the swap, they agreed at 34. The row that differed was `opaque`: the reader
- * answered `undefined` — *unknown* — where `occV` gives the model's closed form, every constructor
- * at `lossy` and every one but the numeric at `refuse`. `occV` is right, and the difference is now
- * the desired behaviour rather than a divergence: a lone `opaque` that refuses numbers is filtered
- * out on a number instead of attempted and failed, and `f083188` refused the unions where that
- * filtering would have decided anything else.
+ * **`occV` is the one reader of the term.** For `opaque` it gives the model's closed form, every
+ * constructor at `lossy` and every one but the numeric at `refuse`, so a lone `opaque` that refuses
+ * numbers is filtered out on a number instead of attempted and failed.
  */
 export const valueKinds = (t: Term): readonly Shape[] => {
     const slots = occV(t)
@@ -2556,7 +2542,7 @@ const heldBase = (t: Term): LiteralBase | undefined =>
  * Everything about an option but `item`, from the **term**. `optionOf` in `sums.ts` adds `item`, which is a
  * function of the term too.
  *
- * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the
+ * `denote`'s `union` row builds its options from the definition and asks {@link altSem} for the
  * attribute pair, and that pair reads `codec`, `member` and `carries` — it never reads
  * `item`. So the resolution is a function of the terms, and this is it.
  *

@@ -2,10 +2,8 @@
  * The one place a codec is constructed.
  *
  * Its own module for one reason: it must be reachable from `native.ts`, which builds the SDK's
- * marshaller, and it must *not* be reachable from the package's public surface, which re-exports
- * `./codec` wholesale. A separate module is the only thing that gives both — an explicit export list
- * on the barrel would give it too, at the cost of naming all eighty-odd exports twice and silently
- * dropping whichever one is forgotten next.
+ * marshaller, and it must *not* be reachable from the package's public surface, which lists each
+ * published value of `./codec` by name in `src/Rotorise.ts`.
  *
  * The types of a codec are here too: {@link AttributeCodec}, {@link AnyCodec} and {@link ObjectSlot}.
  * Each file that reads one imports it from this file, and `./codec` names the published ones again.
@@ -132,9 +130,9 @@ export type Codec<T, A extends AttributeValue> = {
 /**
  * A codec from the two directions that can fail, with the throwing pair derived.
  *
- * The one construction site. Every codec in this file is this shape, so the {@link orThrow} pairing
- * is written once and no constructor can end up with `unsafeEncode` disagreeing with `encode` —
- * which is a divergence nothing else would catch, since both round-trip perfectly on their own.
+ * The one construction site. The {@link orThrow} pairing is written once here, so no constructor can
+ * end up with `unsafeEncode` disagreeing with `encode` — a divergence nothing else would catch, since
+ * both round-trip perfectly on their own.
  */
 export const codec = <T, A extends AttributeValue>({
     encode,

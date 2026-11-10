@@ -1,10 +1,8 @@
 /**
  * A literal is a capability of the primitive that names its base — not a constructor that guesses.
  *
- * `literal(...)` — now removed — inferred its carrier from the JS type of its arguments, and
- * `src/codec/codec.ts` said so in its own words: *"A literal is the one ground term whose member follows
- * from its **values** rather than from its name."* That was the single exception to how every other
- * term in this library works, and it is retired here. `string('A')`, `number(1)`, `decimal('1')`, `boolean(true)` and
+ * A literal does not infer its carrier from the JS type of its arguments, so no term in this
+ * library takes its member from its values. `string('A')`, `number(1)`, `decimal('1')`, `boolean(true)` and
  * `binary(bytes)` each name the ground term they narrow, so the base is data and not an inference.
  *
  * **What the guess could not reach, and this can.** Three things, and one of them is the reason:

@@ -732,11 +732,9 @@ export const ownsNullOf = (t: Term): boolean | undefined => {
 /**
  * **The form a clause is written at**, which the base alone stopped naming.
  *
- * `extract` asks a clause and a member to agree on *which literal codec* pins a key, and until
- * `8a2eed9` that was the base: `decimal` was a base of its own, so `LiteralBase` had a member per
- * form. `decimal` is an adapter over `number` now, so `decimal('1')` and `number(1)` share a base
- * and share an inner value, and the base can no longer tell a clause at one from a member at the
- * other.
+ * `extract` asks a clause and a member to agree on *which literal codec* pins a key. `decimal` is an
+ * adapter over `number`, so `decimal('1')` and `number(1)` share a base and share an inner value,
+ * and the base cannot tell a clause at one from a member at the other.
  *
  * The held side of the adapter is what parts them: `decimal` takes text and `number` takes a float
  * over one carrier. So the form is the base everywhere but `number`, and there it is read off the

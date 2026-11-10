@@ -1,5 +1,5 @@
 import type { ErrorMessage, show } from '../utils'
-import type { AnyCodec, Closed, Marks, ObjectOf, ObjectSlot } from './build'
+import type { AnyCodec, Closed, Marks, ObjectSlot } from './build'
 import { codecOfTerm } from './capabilities'
 import { opened } from './clause'
 import { termOf } from './denote'
@@ -998,11 +998,6 @@ export type KeptByTag<Spec, P, Keep extends boolean = true> = {
         ? K
         : never]: Spec[K]
 }
-
-/** The entity a tag table describes, which is what its members describe. */
-export type VariantsOf<Spec> = {
-    [K in keyof Spec]: show<ObjectOf<Spec[K]>>
-}[keyof Spec]
 
 /**
  * A key of a pattern that holds a refinement, at any depth: no function decides whether a member

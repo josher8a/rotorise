@@ -16,8 +16,8 @@
  * reading the names an item carries, pulling a member out of an attribute, comparing two
  * alternatives.
  *
- * Three helpers that look like these are **not** here — `literalCodec`, `encodeUnknown` and
- * `decodeUnknown`. Each builds a pair: the first reaches `codecOfTerm` and lives in
+ * `literalCodec`, `encodeUnknown` and `decodeUnknown` look like these and are **not** here. Each
+ * builds a pair: the first reaches `codecOfTerm` and lives in
  * `capabilities.ts`, and the other two are `opaque`'s two halves and live in `denote.ts`, with the
  * other pair builders.
  */
@@ -40,8 +40,7 @@ import { DynamoNumber, memberOf } from './attribute'
  *
  * {@link SetSlot} is the finer alphabet and is not a replacement. A term knows its base, so `occV`
  * can answer `strSet`; a value does not carry one, so no total function takes a value to a `SetSlot`.
- * The two are the codomains of two different functions rather than two spellings of one, which is
- * the answer to the question `1060c01` left open.
+ * The two are the codomains of two different functions rather than two spellings of one.
  */
 export type Shape =
     | 'string'
@@ -319,11 +318,11 @@ export const copied = (value: unknown): unknown => {
  *
  * And a value `structuredClone` **refuses**. Ordinarily there is none: a fill value is a value the
  * inner codec accepts, so it comes from the value language — arrays, plain objects, `Set`,
- * `Uint8Array` — and all of those clone. A `custom` term is the exception, because its admission
- * asks the caller's own pair, so a hand-written codec can legitimately admit a class instance with
+ * `Uint8Array` — and all of those clone. A `held` term is the exception, because its admission
+ * asks the caller's own schema, so a caller can legitimately admit a class instance with
  * methods or anything else holding a function. Rather than throw a `DataCloneError` out of a
  * `decode` months later, the clone is attempted once at the declaration; where it fails the value
- * is shared, which is the old behaviour confined to the one case that forces it.
+ * is shared, in the one case that forces it.
  */
 export const copiedPerRead = (value: unknown): boolean => {
     if (typeof value !== 'object' || value === null) return false

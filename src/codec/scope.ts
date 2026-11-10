@@ -76,11 +76,9 @@ export type ObjectFree<Spec, Rest, Tm> = [Tm] extends [OfParts]
 /**
  * An attribute that may be absent from the item entirely.
  *
- * **Not a codec, and it used to say it was.** This was `AttributeCodec<T, A>` intersected with the
- * marker, so it claimed a field has an `encode` and a `decode` — true only because {@link optional}
- * built its answer by spreading the codec it marks. The field stratum refuses it: a field is a statement about a
- * *name*, the name belongs to the object, and the pair a member is read and written through is the
- * one the field marks. `rest` stopped making the same claim at `931c29c`.
+ * **Not a codec.** A field claims no `encode` and no `decode`. The field stratum refuses a codec
+ * here: a field is a statement about a *name*, the name belongs to the object, and the pair a
+ * member is read and written through is the one the field marks.
  *
  * The definition is carried because {@link fieldOf} reads the mark off `def.kind` at run time, and a
  * type that did not name it would be a type that does not say what the value holds.
@@ -573,8 +571,7 @@ export const objectItem = (itemDef: ItemTerm): ObjectItem => {
      * the same pair, one level in.
      *
      * So the pair is not built here. `denote.ts` builds one item pair per term and this hands out
-     * that one, which is what makes `item.encode === codec.encode`'s body the same function. They
-     * were two objects before `579ed89`, and nothing said which of them a caller was running.
+     * that one, which makes the body of `item.encode` and of `codec.encode` the same function.
      */
     const body = itemSem(itemDef)
     const { spec, rest } = slotsOf(itemDef.body)

@@ -867,7 +867,7 @@ describe('a whole vector', () => {
     /**
      * The attribute is not an argument: it is read out of the library by running the encode the
      * theorem is about. That is what makes this a differential test rather than a restatement — a
-     * change to `codec.ts` that changes what it writes makes the Lean file stop compiling, and no
+     * change to a codec that changes what it writes makes the Lean file stop compiling, and no
      * human has to remember to update an expected value.
      */
     it('takes its right-hand side from the library, not from the caller', () => {
