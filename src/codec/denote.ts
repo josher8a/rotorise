@@ -1935,7 +1935,7 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     judged(def)
     if (!equipped)
         throw new Error(
-            'codecOfTerm ran before codec.ts registered the capabilities of a term',
+            'codecOfTerm ran before prisms.ts registered the capabilities of a term',
         )
     const made = equipped(
         codecAtLevel<never, AttributeValue>(Object.freeze(def), 0),

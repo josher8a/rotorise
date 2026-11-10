@@ -81,6 +81,7 @@ HOST_ORDER = [
     ("codec/prisms.ts", "Dynamo/Alg/Prisms.lean: the prism and the ground codec (`literalCodec`) of each scalar term, with `refine` and `fill` over them"),
     ("codec/scope.ts", "Lang/Scope.lean: a closed codec as one scope, with `ref`, the entries of a scope, and the object and union terms"),
     ("codec/opaque.ts", "Dynamo/Alg/Opaque.lean: `opaque` as the identity codec of the carrier"),
+    ("codec/sums.ts", "Alg/Combinators.lean and Dynamo/Alg/Sums.lean: `altCodec`, the first option that acts, for `union`, `discriminatedUnion` and `mdunion`"),
     ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),

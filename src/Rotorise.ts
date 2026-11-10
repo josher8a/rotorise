@@ -17,7 +17,6 @@ import type {
     EncodedVariants,
     IsUnion,
     ItemCodec,
-    KeyText,
     Marks,
     ObjectOf,
     ObjectSlot,
@@ -38,6 +37,7 @@ import {
 import type { KnownKeys } from './codec/derivedItem'
 import { native } from './codec/native'
 import type { itemMark } from './codec/scope'
+import type { KeyText } from './codec/sums'
 import type { Field, Term } from './codec/term'
 import { isCallerPin, member, sameTerm, storedPin } from './codec/term'
 import { own } from './codec/value'
