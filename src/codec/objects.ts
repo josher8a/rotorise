@@ -38,9 +38,9 @@ import { pinnedValue, resolvedTerm, storedPin } from './term'
 
 /*
  * A reader here answers from the **term** and nothing else, which is what makes the term determine
- * the codec rather than describe it. `constantOf` is the one left in this file; `member`, `occV`
- * and `agrees` are `term.ts`'s, and
- * `carries`, `accepts` and `readsBack` ask the pair in `denote.ts`.
+ * the codec rather than describe it. `constantOf` is the one left in this file; `member` and
+ * `occV` are `term.ts`'s, `agrees` is `scoped.ts`'s, and
+ * `accepts` and `readsBack` ask the pair in `denote.ts`.
  *
  * They take a *codec* and read its term rather than taking the term, and that is the decision
  * rather than a leftover. A child position holds a term, so a reader recursing into one calls

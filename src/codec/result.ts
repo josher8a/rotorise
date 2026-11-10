@@ -2,8 +2,8 @@
  * Failure, as a value.
  *
  * Its own module because it is not a codec concept: it is the algebra every codec's two directions
- * are written in, and keeping it here is what lets the one construction site live outside `codec.ts`
- * — which is what keeps that site out of the package's public surface. See {@link build}.
+ * are written in, and keeping it here is what lets the one construction site live outside the constructor
+ * files — which is what keeps that site out of the package's public surface. See {@link build}.
  */
 
 type CodecErrorKind = 'refused' | 'vacant' | 'someVariants' | 'ambiguous'

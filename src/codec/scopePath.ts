@@ -243,7 +243,7 @@ export const acrossVariants = (
 }
 
 /**
- * **The frontier after a clause**, the model's `narrow`. A union gives each option whose stored
+ * **The frontier after a clause**, the model's `narrowC`. A union gives each option whose stored
  * view {@link storedApart} does not separate from the stored view of the clause. Any other member
  * stays where the clause does not separate the member. A clause that separates every member is a
  * refusal that names the keys of the clause. A `ref` resolves as {@link childrenOf} resolves it.

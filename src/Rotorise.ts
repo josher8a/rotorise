@@ -4454,7 +4454,7 @@ export * from './codec/attribute'
  * The codec surface, **enumerated rather than starred**, because not everything `codec.ts` exports
  * is API.
  *
- * `carries`, `member`, `occV`, `agrees` and `constantOf`
+ * `member`, `occV`, `agrees` and `constantOf`
  * read a **term**, and `accepts` and `readsBack` ask the **pair**. Both kinds exist
  * so this library's own resolver, declaration guard and emitter can ask what a codec is; a caller
  * has the codec's behaviour instead, which is the thing they are derived from. A re-export written

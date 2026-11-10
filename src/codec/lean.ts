@@ -3,7 +3,7 @@
  *
  * `formal/` is a mechanization of the codec calculus; this library is what it is supposed to
  * certify. The correspondence between the two is a *paper* obligation — somebody reads `Closed.meaning`
- * and reads `src/codec/codec.ts` and believes they agree — and no instrument closes it, which is
+ * and reads the constructor files in `src/codec/` and believes they agree — and no instrument closes it, which is
  * the third of the three warranties `docs/architecture.md` keeps apart. This module is the
  * machine-checkable half of that belief.
  *
@@ -454,7 +454,7 @@ export const leanAttrOf = (
  *
  * The inventory is small, and the smallness is the finding rather than an omission: `src/` builds
  * **no** `refine`, `held` or `legacy` internally — every one of the three is a combinator
- * a caller reaches for, and `codec.ts` never reaches for them itself. The only functions this
+ * a caller reaches for, and the constructor files never reach for them themselves. The only functions this
  * package exports that can stand in a predicate position at all are {@link isNumeral} and
  * {@link isStoredNumeral} (`src/codec/attribute.ts`), which are properties of the `N` carrier rather
  * than of any codec. So the boundary this registry moves is exactly two predicates wide.
@@ -1215,7 +1215,7 @@ const leanIdent = (name: string): string => {
  *
  * The attribute is not supplied — it is *taken from the library*, by running the encode this
  * theorem is about. That is the whole design: what gets checked is what this library actually
- * writes on this input, today, and a change to `codec.ts` that changes it makes the Lean file stop
+ * writes on this input, today, and a change to a constructor file that changes it makes the Lean file stop
  * compiling. Supplying the attribute by hand would check the vector's author instead.
  *
  * `unsafeEncode` throwing is left to propagate: a value this library refuses is not a vector about

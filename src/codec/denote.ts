@@ -2553,7 +2553,7 @@ const heldBase = (t: Term): LiteralBase | undefined =>
             : undefined
 
 /**
- * Everything about an option but `item`, from the **term**. `codec.ts` adds `item`, which is a
+ * Everything about an option but `item`, from the **term**. `optionOf` in `sums.ts` adds `item`, which is a
  * function of the term too.
  *
  * `denote`'s `untagged` row builds its options from the definition and asks {@link altSem} for the

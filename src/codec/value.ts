@@ -1,14 +1,15 @@
 /**
  * The value side, under the pair.
  *
- * The helpers that `codec.ts`, `denote.ts` and `native.ts` need, in the one module that can hold them.
+ * The helpers that the constructor files, `denote.ts` and `native.ts` need, in the one module that can
+ * hold them.
  *
  * **They are here for a structural reason, and the reason is worth stating because the grouping is
- * not thematic.** `denote.ts` builds every constructor's pair and `codec.ts`'s constructors take
- * their pair from it, which is one import direction. A *value* `denote.ts` reached back for in
- * `codec.ts` would close that direction into a cycle. A **type** closes it too, so each type that
- * these signatures name lives in this file or in a lower file, and `codec.ts` names the published
- * ones again.
+ * not thematic.** `denote.ts` builds every constructor's pair and the constructor files take
+ * their pair from it, which is one import direction. A *value* `denote.ts` reached back for in a
+ * constructor file would close that direction into a cycle, and `layer_order.py` refuses the
+ * import. A **type** closes it too, so each type that these signatures name lives in this file or
+ * in a lower file, and `codec.ts` names the published ones again.
  *
  * What they have in common is the level: each answers a question about a **value** or an
  * **attribute**, never about a term. Classifying a value, naming the shape a refusal reports,

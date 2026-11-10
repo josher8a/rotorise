@@ -6,7 +6,7 @@
  * variant per model constructor, under the model's own names, so a reader holding the two files
  * side by side is reading one language twice rather than two languages that agree.
  *
- * **Why the term is its own module.** Every constructor in `codec.ts` writes one of these as its
+ * **Why the term is its own module.** Every constructor in the constructor files writes one of these as its
  * `def`, and `denote.ts` reads one to build the pair. The type is the model's, so a state the model
  * cannot represent — a `set` indexed by an element term, a literal whose alternatives are not
  * indexed by their base, a field where a term is wanted — is unreachable rather than checked for.
