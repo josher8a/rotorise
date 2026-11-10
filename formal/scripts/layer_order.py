@@ -42,7 +42,7 @@ The check sees the direct import only. A declaration that a module cites through
 transitive import is invisible here. Remove the direct import and build to find that
 citation.
 
-On the host side the check reads the `import` and `export ... from` statements of each file,
+On the host side the check reads the `import`, the bare `import './x'` and the `export ... from` statements of each file,
 after it removes the comments. It sees a relative specifier only. It does not read the
 spec files, and it does not read a type that a file names through `import('...')`.
 
@@ -80,6 +80,7 @@ HOST_ORDER = [
     ("codec/products.ts", "Dynamo/Alg/Products.lean: the rules (set), (array) and (list) of the product codecs, with the spread"),
     ("codec/prisms.ts", "Dynamo/Alg/Prisms.lean: the prism and the ground codec (`literalCodec`) of each scalar term, with `refine` and `fill` over them"),
     ("codec/scope.ts", "Lang/Scope.lean: a closed codec as one scope, with `ref`, the entries of a scope, and the object and union terms"),
+    ("codec/opaque.ts", "Dynamo/Alg/Opaque.lean: `opaque` as the identity codec of the carrier"),
     ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),
@@ -154,7 +155,7 @@ def host_files(src):
 
 
 EDGE = re.compile(
-    r"(?:^|\n)[ \t]*(import|export)[ \t]+(type[ \t]+)?(?:\{[^}]*\}|\*[^;\n]*?|[\w$]+)[ \t\n]+from[ \t]+'(\.[^']*)'"
+    r"(?:^|\n)[ \t]*(?:(?:import|export)[ \t]+(type[ \t]+)?(?:\{[^}]*\}|\*[^;\n]*?|[\w$]+)[ \t\n]+from|import)[ \t]+'(\.[^']*)'"
 )
 
 
@@ -164,7 +165,7 @@ def host_imports(path):
         text = f.read()
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"(?m)^[ \t]*//.*$", "", text)
-    return [(m.group(3), bool(m.group(2))) for m in EDGE.finditer(text)]
+    return [(m.group(2), bool(m.group(1))) for m in EDGE.finditer(text)]
 
 
 def host_failures(src):
