@@ -1732,7 +1732,7 @@ export const checkAgainst = <T>(
         'count' | 'seed' | 'size' | 'refine' | 'filter'
     > = {},
 ): void => {
-    const { count, seed, next } = resolved(options)
+    const { count, seed, discard, next } = resolved(options)
     for (let i = 0; i < count; i++) {
         const { value: entity, throughRead } = next(
             subject as unknown as AnyCodec,
@@ -1756,6 +1756,9 @@ export const checkAgainst = <T>(
             if (throughRead) {
                 throw unwritable('the codec', entity, seed, ours.why)
             }
+            // a value that both sides refuse compares nothing, so the case is discarded
+            discard('the codec and the reference both refused the value')
+            i--
             continue
         }
 
@@ -1853,7 +1856,7 @@ export const checkEquivalent = <T>(
     b: AttributeCodec<T>,
     options: Pick<CheckOptions<T>, 'count' | 'seed' | 'size' | 'equals'> = {},
 ): void => {
-    const { count, seed, equals, next } = resolved<T>(options)
+    const { count, seed, equals, discard, next } = resolved<T>(options)
     for (let i = 0; i < count; i++) {
         const { value, throughRead } = next(a as unknown as AnyCodec)
 
@@ -1871,6 +1874,9 @@ export const checkEquivalent = <T>(
             if (throughRead) {
                 throw unwritable('the first codec', value, seed, written)
             }
+            // a value that both codecs refuse compares nothing, so the case is discarded
+            discard('both codecs refused the value')
+            i--
             continue
         }
         if (!equals(written, alsoWritten)) {

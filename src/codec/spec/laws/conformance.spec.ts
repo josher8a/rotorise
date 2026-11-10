@@ -156,12 +156,15 @@ describe('refusals are compared, not fatal', () => {
                 return agreeing.marshall(pet)
             },
         }
+        let drawn = 0
         expect(() =>
             checkAgainst(Pet, refusesToo, {
                 count: 50,
                 seed: 1,
-                // both sides refuse this price, so the run must reach the end rather than die on it
-                refine: (pet) => ({ ...pet, price: 'not-a-number' }),
+                // both sides refuse this price, so the run must reach the end rather than die on it.
+                // Each second entity keeps its price, so the run also has entities to compare
+                refine: (pet) =>
+                    drawn++ % 2 === 0 ? { ...pet, price: 'not-a-number' } : pet,
             }),
         ).not.toThrow()
     })
@@ -568,5 +571,40 @@ describe('the checks draw through one draw, and say (C) in one form', () => {
         expect(() => checkEquivalent(refusing, refusing, { seed: 3 })).toThrow(
             /\(C\) fails: the first codec cannot write .*, a value its own read produced, with seed 3/,
         )
+    })
+
+    /**
+     * A value that no read produced, and that both sides refuse, gives the check nothing to
+     * compare. The check discards the case, and a run where every case is discarded is reported,
+     * so a green run has compared a value.
+     */
+    const mute = held(string, string, {
+        encode: () => new CodecError('no write'),
+        decode: (text: string) => text,
+        arbitrary: () => 'rex',
+    })
+
+    it('checkEquivalent reports a run where both codecs refuse every value', () => {
+        expect(() =>
+            checkEquivalent(mute, mute, { count: 20, seed: 3 }),
+        ).toThrow(CodecError)
+        expect(() =>
+            checkEquivalent(mute, mute, { count: 20, seed: 3 }),
+        ).toThrow(/with seed 3, so the check has nothing to test/)
+    })
+
+    it('checkAgainst reports a run where the codec and the reference refuse every value', () => {
+        const reference: Reference<unknown> = {
+            marshall: () => {
+                throw new Error('no write')
+            },
+        }
+        const Mute = itemOf(object({ name: mute }))
+        expect(() =>
+            checkAgainst(Mute, reference, { count: 20, seed: 3 }),
+        ).toThrow(CodecError)
+        expect(() =>
+            checkAgainst(Mute, reference, { count: 20, seed: 3 }),
+        ).toThrow(/with seed 3, so the check has nothing to test/)
     })
 })
