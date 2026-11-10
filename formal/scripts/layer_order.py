@@ -79,6 +79,7 @@ HOST_ORDER = [
     ("codec/derivedItem.ts", "Lang/Universe.lean: `HObject` and `HUnion`, the held set of an object and of a union, as a decoded type"),
     ("codec/products.ts", "Dynamo/Alg/Products.lean: the rules (set), (array) and (list) of the product codecs, with the spread"),
     ("codec/prisms.ts", "Dynamo/Alg/Prisms.lean: the prism and the ground codec (`literalCodec`) of each scalar term, with `refine` and `fill` over them"),
+    ("codec/scope.ts", "Lang/Scope.lean: a closed codec as one scope, with `ref`, the entries of a scope, and the object and union terms"),
     ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),

@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest'
 import {
     discriminatedUnion,
     item,
-    itemMark,
     mdunion,
     number,
     object,
@@ -15,6 +14,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { itemMark } from '../../scope'
 
 const cat = object({ kind: string('cat'), lives: number })
 const dog = object({ kind: string('dog'), good: number })
