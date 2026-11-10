@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DynamoNumber } from '../../attribute'
-import { decimal, dynamoNumber, held, number, string } from '../../codec'
+import { decimal, held, number, string } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { clauseForm } from '../../term'
 
 /**

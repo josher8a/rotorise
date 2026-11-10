@@ -17,7 +17,6 @@ import {
     CodecError,
     constantOf,
     decimal,
-    dynamoNumber,
     held,
     item,
     legacy,
@@ -32,6 +31,7 @@ import {
     union,
 } from '../../codec'
 import { native } from '../../native'
+import { dynamoNumber } from '../../prisms'
 
 /** A caller's adapter over a string: each call builds its own pair of functions. */
 const adoptedOn = () =>

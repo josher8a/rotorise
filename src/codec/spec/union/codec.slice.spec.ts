@@ -19,7 +19,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     exclude,
     extract,
     fill,
@@ -37,6 +36,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { failed, orThrow } from '../../result'
 import type { Term } from '../../term'
 

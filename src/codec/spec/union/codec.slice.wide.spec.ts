@@ -15,7 +15,6 @@ import type { Decoded } from '../../codec'
 import {
     binary,
     boolean,
-    dynamoNumber,
     exclude,
     extract,
     meet,
@@ -25,6 +24,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
 
 const dog = object({ kind: string('DOG') })

@@ -12,7 +12,6 @@ import {
     CodecError,
     constantOf,
     discriminatedUnion,
-    dynamoNumber,
     held,
     item,
     mdunion,
@@ -24,6 +23,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
 
 const DogTag = held(string('D'), string('dog'), {

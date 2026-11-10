@@ -18,7 +18,6 @@ import {
     binary,
     CodecError,
     decimal,
-    dynamoNumber,
     item,
     nullable,
     number,
@@ -27,6 +26,7 @@ import {
     refine,
     string,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { checkRoundTrip } from '../../testing'
 
 declare const brand: unique symbol

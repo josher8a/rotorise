@@ -15,7 +15,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     exclude,
     extract,
     held,
@@ -33,6 +32,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import type { StandardSchemaV1 } from '../../standard'
 
 /** A Standard Schema v1 written by hand: a foreign held side that admits a `Date`. */

@@ -19,7 +19,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     fill,
     held,
     item as itemOf,
@@ -39,6 +38,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 
 /** The codec that `at` answers where the path cannot continue: it refuses on use, and never throws. */
 type Refusing = { readonly encode: (value: never) => unknown }

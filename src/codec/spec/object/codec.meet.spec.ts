@@ -12,7 +12,6 @@ import {
     boolean,
     CodecError,
     decimal,
-    dynamoNumber,
     exclude,
     extract,
     fill,
@@ -38,6 +37,7 @@ import {
     undefinable,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { failed, orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
 import {

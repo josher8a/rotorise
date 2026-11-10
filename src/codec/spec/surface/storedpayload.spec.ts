@@ -12,7 +12,6 @@ import {
     array,
     binary,
     boolean,
-    dynamoNumber,
     nullValue,
     number,
     object,
@@ -20,6 +19,7 @@ import {
     string,
 } from '../../codec'
 import { native } from '../../native'
+import { dynamoNumber } from '../../prisms'
 import { failed } from '../../result'
 
 /** Each member with a payload of another type, and the codec that reads the member. */

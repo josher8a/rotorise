@@ -7,14 +7,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
-import {
-    type AnyCodec,
-    decimal,
-    dynamoNumber,
-    number,
-    opaque,
-} from '../../codec'
+import { type AnyCodec, decimal, number, opaque } from '../../codec'
 import { native } from '../../native'
+import { dynamoNumber } from '../../prisms'
 import { failed } from '../../result'
 
 const refused = ['1.0', '01', '1e0']

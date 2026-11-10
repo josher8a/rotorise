@@ -11,13 +11,13 @@ import { tableEntry } from '../../../Rotorise'
 import { DynamoNumber } from '../../attribute'
 import {
     discriminatedUnion,
-    dynamoNumber,
     held,
     item,
     object,
     refine,
     string,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
 

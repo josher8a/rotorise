@@ -16,7 +16,6 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     fill,
     held,
     item,
@@ -30,6 +29,7 @@ import {
     undefinable,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
 

@@ -31,7 +31,6 @@ import {
     boolean,
     CodecError,
     decimal,
-    dynamoNumber,
     held,
     item,
     legacy,
@@ -41,6 +40,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { failed, orThrow } from '../../result'
 import { checkRoundTrip } from '../../testing'
 

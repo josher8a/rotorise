@@ -1273,7 +1273,8 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, dynamoNumber, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { dynamoNumber } from '${library}/prisms'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { native } from '${library}/native'`,
     `import { orThrow } from '${library}/result'`,
@@ -1282,7 +1283,8 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { array, at, binary, boolean, decimal, dynamoNumber, exclude, extract, fill, legacy, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { array, at, binary, boolean, decimal, exclude, extract, fill, legacy, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { dynamoNumber } from '${library}/prisms'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { native } from '${library}/native'`,
     `import { orThrow } from '${library}/result'`,

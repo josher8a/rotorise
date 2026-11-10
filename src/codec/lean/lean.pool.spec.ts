@@ -29,7 +29,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     exclude,
     extract,
     fill,
@@ -95,6 +94,7 @@ import {
     sliceableOf,
     unionAt,
 } from '../lean'
+import { dynamoNumber } from '../prisms'
 import { Disagreement, failed, orThrow } from '../result'
 import { agrees, disjoint, viewsDisjoint } from '../scoped'
 import type { Term } from '../term'

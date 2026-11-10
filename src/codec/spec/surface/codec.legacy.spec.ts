@@ -15,7 +15,6 @@ import {
     binary,
     CodecError,
     decimal,
-    dynamoNumber,
     fill,
     held,
     item,
@@ -28,6 +27,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
 import { checkMembersStable, checkRoundTrip } from '../../testing'

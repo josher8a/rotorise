@@ -17,7 +17,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     fill,
     held,
     item,
@@ -38,6 +37,7 @@ import {
     extract as typedExtract,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import { failed } from '../../result'
 import type { Itemable } from '../../term'
 import { RecursionRefused } from '../../term'

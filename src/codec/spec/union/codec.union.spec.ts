@@ -12,7 +12,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     fill,
     held,
     item,
@@ -30,6 +29,7 @@ import {
     union,
 } from '../../codec'
 import { accepts } from '../../denote'
+import { dynamoNumber } from '../../prisms'
 import { failed } from '../../result'
 import { checkRoundTrip, roundTrip } from '../../testing'
 

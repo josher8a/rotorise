@@ -38,7 +38,6 @@ import {
     boolean,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     extract,
     fill,
     held,
@@ -111,6 +110,7 @@ import {
     sliceableOf,
     vectorRows,
 } from '../lean'
+import { dynamoNumber } from '../prisms'
 import { CodecError, failed, orThrow } from '../result'
 import type { RefSlot, Term } from '../term'
 import { cycleEntryOf, fillEquals, RecursionRefused } from '../term'

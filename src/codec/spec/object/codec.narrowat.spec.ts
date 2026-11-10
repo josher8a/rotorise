@@ -15,7 +15,6 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
-    dynamoNumber,
     held,
     item as itemOf,
     narrow,
@@ -29,6 +28,7 @@ import {
     union,
     valueKinds,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 
 const OpCodec = discriminatedUnion('type', [
     object({ type: string('SHIPMENT'), amount: decimal, note: string }),

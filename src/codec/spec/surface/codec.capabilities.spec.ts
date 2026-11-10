@@ -13,7 +13,6 @@ import {
     boolean,
     codecOfTerm,
     decimal,
-    dynamoNumber,
     extract,
     item,
     meet,
@@ -24,6 +23,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { dynamoNumber } from '../../prisms'
 import type { Term } from '../../term'
 import { sameTerm } from '../../term'
 
