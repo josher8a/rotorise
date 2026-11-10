@@ -300,3 +300,25 @@ not cover.
 
 **Pin.** `src/codec/spec/union/codec.judgechild.spec.ts` pins the two rows that judge a child. No
 test pins the seven terms that build.
+
+---
+
+## Suspected: the model proves no law for a term that holds an alternate reader below its top
+
+**Observation.** `TOp.rule` in `Lang/ScopeSound.lean` answers `none` at `legacy`, so a term that
+holds a `legacy` at a position is not typed. `Scoped.Closed.sound` takes a typed closed codec, so
+the theorem states nothing of such a term. `Closed.extendRead_lawfulCore` in
+`Dynamo/Lang/ScopeSound.lean` proves `LawfulCore` for an alternate reader over a typed closed
+codec, so the reader of that theorem is at the top. `tuple_retract` and `list_retract` in
+`Alg/Positions.lean` give the retraction of a list from `LawfulCore` of each element. `zip_canon`
+gives the definedness clause of `canon` over a row of codecs. No theorem gives `canon` or `writes`
+of a list, or a law of an object or a union, from `LawfulCore` of a child. The run time builds the
+reader below a field:
+
+    object({ rate: legacy({ current: decimal, older: string }) })
+
+**Effect.** Not established. The three core laws of the codec of such a term rest on no theorem.
+No term that breaks a core law is known.
+
+**Pin.** `legacyClosed_untyped` in `Lang/ScopeSound.lean` pins that a term with a `legacy` is not
+typed. No test and no theorem pins the laws of a term with a `legacy` below a field.
