@@ -15,7 +15,6 @@ import {
     at,
     binary,
     CodecError,
-    constantOf,
     decimal,
     held,
     item,
@@ -31,6 +30,7 @@ import {
     union,
 } from '../../codec'
 import { native } from '../../native'
+import { constantOf } from '../../objects'
 import { dynamoNumber } from '../../prisms'
 
 /** A caller's adapter over a string: each call builds its own pair of functions. */

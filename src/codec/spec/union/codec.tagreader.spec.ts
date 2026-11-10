@@ -10,7 +10,6 @@ import { RotoriseError, tableEntry } from '../../../Rotorise'
 import { DynamoNumber } from '../../attribute'
 import {
     CodecError,
-    constantOf,
     discriminatedUnion,
     held,
     item,
@@ -23,6 +22,7 @@ import {
     string,
     union,
 } from '../../codec'
+import { constantOf } from '../../objects'
 import { dynamoNumber } from '../../prisms'
 import { orThrow } from '../../result'
 

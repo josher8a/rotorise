@@ -1534,6 +1534,7 @@ describe('the published surface', () => {
         const modules = await Promise.all([
             import('./codec/codec'),
             import('./codec/denote'),
+            import('./codec/objects'),
             import('./codec/scoped'),
             import('./codec/term'),
         ])

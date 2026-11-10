@@ -22,7 +22,6 @@ import type { ObjectSlot } from '../../codec'
 import {
     boolean,
     CodecError,
-    constantOf,
     decimal,
     discriminatedUnion,
     fill,
@@ -34,6 +33,7 @@ import {
     refine,
     string,
 } from '../../codec'
+import { constantOf } from '../../objects'
 
 /**
  * What the shipped walk answers, for the runtime half of each pairing.

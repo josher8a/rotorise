@@ -28,7 +28,6 @@ import {
     andThen,
     at,
     CodecError,
-    constantOf,
     item as itemOf,
     object,
     orThrow,
@@ -36,6 +35,7 @@ import {
 } from './codec/codec'
 import type { KnownKeys } from './codec/derivedItem'
 import { native } from './codec/native'
+import { constantOf } from './codec/objects'
 import type { itemMark } from './codec/scope'
 import type { KeyText } from './codec/sums'
 import type { Field, Term } from './codec/term'
