@@ -235,14 +235,14 @@ HOST = {
                    "the `AdmA` port was rejected and this is what landed instead",
     "discriminatedUnion": "`src/`'s combinator; the calculus has no such codec — it is the sum "
                           "over tag-admission, which is why `(dunion)` is a rule and not a row",
-    "nullable": "`src/codec/codec.ts`'s builder, and the model has no such term. It reads whether "
+    "nullable": "`src/codec/sums.ts`'s builder, and the model has no such term. It reads whether "
                 "its subterm already holds the null point and joins the null term with a union, "
                 "which is what §3's sugar paragraph says it always was",
-    "EveryOptionTagged": "`src/codec/codec.ts`'s type-level check, cited by the arity-one row",
-    "decimal": "`src/codec/codec.ts`'s adapter: `number` under the text adapter, which the model "
+    "EveryOptionTagged": "`src/codec/sums.ts`'s type-level check, cited by the arity-one row",
+    "decimal": "`src/codec/prisms.ts`'s adapter: `number` under the text adapter, which the model "
                "states as `held` over `Term.number`. The model has no decimal base, so the name "
                "is the host's alone. `decimalCodec` is the model's codec for the stored numerals",
-    "meet": "`src/codec/codec.ts`'s combinator, as TypeScript reads `A & B`. `Term.product` is its "
+    "meet": "`src/codec/meet.ts`'s combinator, as TypeScript reads `A & B`. `Term.product` is its "
             "form at disjoint names, and the model has no term for the meet at a shared name",
 }
 

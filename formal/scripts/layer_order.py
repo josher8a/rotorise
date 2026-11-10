@@ -87,7 +87,7 @@ HOST_ORDER = [
     ("codec/separation.ts", "Alg/Relations.lean: `Sub`, the graph inclusion, and `VSub`, the value order, as `below` decides them on terms"),
     ("codec/scopeSlice.ts", "Dynamo/Analysis/ScopeSlice.lean: `AltClause.extractC`, the options that a clause describes, and `AltClause.excludeC`, the complement, which partition the options"),
     ("codec/meet.ts", "Alg/Relations.lean: `Codec.meet`, the meet of two codecs, as the codec of the term that the host `meet` builds. The model has no meet of terms"),
-    ("codec/codec.ts", "Dynamo/Alg/Codec.lean: a codec and its laws, with the constructors"),
+    ("codec/codec.ts", "none: the names that the entries read from `./codec`, re-exported, with no declaration"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),
     ("codec/lean.ts", "Bridge/*.lean: the emitter of the vectors"),
