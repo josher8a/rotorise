@@ -30,7 +30,9 @@ that is higher in the list. An `import type` counts, because a type that a lower
 a higher file is a coupling that the erased import hides. The list also names the layer of the
 model that each file projects, so a reader sees which fact each file owns. The order is the
 order of the run-time imports, which have no cycle. A file of `src/` that the list does not
-name fails. Give a new file its place in the list before the file holds code.
+name fails. Give a new file its place in the list before the file holds code. A line names each
+module of the model by its path under `Calculus/`. A path that is no file fails, so a line holds
+no pattern, and a line that names a renamed module fails.
 
 WHAT THIS CHECKS, AND WHAT IT CANNOT
 
@@ -70,31 +72,31 @@ HOST_ORDER = [
     ("codec/value.ts", "Dynamo/Domain.lean and Dynamo/AttrEq.lean: the value side, under the pair"),
     ("codec/term.ts", "Dynamo/Lang/Term.lean and Dynamo/Lang/Scope.lean: the term language"),
     ("codec/pathModel.ts", "none: the type-level read of a term, for `at`"),
-    ("codec/scoped.ts", "Dynamo/Analysis/Scope*.lean: the decisions over the graph of a closed codec"),
+    ("codec/scoped.ts", "Lang/ScopeDisjoint.lean, Lang/ScopeCompat.lean, Dynamo/Analysis/ScopeDisjoint.lean, Dynamo/Analysis/ScopeCompat.lean and Dynamo/Analysis/ScopePrecondition.lean: the decisions over the graph of a closed codec, and the precondition of a closed clause"),
     ("codec/build.ts", "none: the one place that constructs a codec"),
-    ("codec/denote.ts", "Dynamo/Alg/*.lean and Dynamo/Lang/Equations.lean: the pair of each constructor"),
-    ("codec/clause.ts", "Lang/ScopePath.lean: the clause `φ` of `narrowC`, a closed codec, and the opening of a pattern"),
-    ("codec/frontier.ts", "Lang/CodecPath.lean and Lang/ScopePath.lean: the segment of a path, and the frontier along a path"),
+    ("codec/denote.ts", "Dynamo/Alg/Prisms.lean, Dynamo/Alg/Products.lean, Dynamo/Alg/Objects.lean, Dynamo/Alg/Sums.lean, Dynamo/Alg/Opaque.lean and Dynamo/Lang/Equations.lean: the pair of each constructor, at run time. The model proves the compatibility of the options of a union above the pairs. The host refuses at construction a union that `agrees` does not show compatible, so this file imports `scoped.ts`"),
+    ("codec/clause.ts", "Lang/ScopePath.lean and Dynamo/Analysis/ScopePath.lean: the clause `φ` of `narrowC`, a closed codec, and the opening of a pattern"),
+    ("codec/frontier.ts", "Lang/CodecPath.lean, Lang/ScopePath.lean and Dynamo/Analysis/ScopePath.lean: the segment of a path, and the frontier along a path"),
     ("codec/capabilities.ts", "none: the codec of a term, with the capabilities that the term decides: the literal call, `.set()`, `.spec` and `.rest`"),
-    ("codec/adapters.ts", "Alg/Combinators.lean: `Codec.adapt` for `held` and `Codec.extendRead` for `legacy`, with the refusals of an adapter"),
-    ("codec/derivedItem.ts", "Lang/Universe.lean: `HObject` and `HUnion`, the held set of an object and of a union, as a decoded type"),
-    ("codec/products.ts", "Dynamo/Alg/Products.lean: the rules (set), (array) and (list) of the product codecs, with the spread"),
-    ("codec/prisms.ts", "Dynamo/Alg/Prisms.lean: the prism and the ground codec (`literalCodec`) of each scalar term, with `refine` and `fill` over them"),
-    ("codec/scope.ts", "Lang/Scope.lean: a closed codec as one scope, with `ref`, the entries of a scope, and the object and union terms"),
-    ("codec/opaque.ts", "Dynamo/Alg/Opaque.lean: `opaque` as the identity codec of the carrier"),
-    ("codec/sums.ts", "Alg/Combinators.lean and Dynamo/Alg/Sums.lean: `altCodec`, the first option that acts, for `union`, `discriminatedUnion` and `mdunion`"),
-    ("codec/objects.ts", "Dynamo/Alg/Objects.lean: `objectCodec` over a field table, with the open block of the rule (record)"),
-    ("codec/scopePath.ts", "Lang/ScopePath.lean: `Rooted.at`, the frames at a path into a closed codec, and `narrowC`, the narrowing by a clause"),
-    ("codec/separation.ts", "Alg/Relations.lean: `Sub`, the graph inclusion, and `VSub`, the value order, as `below` decides them on terms"),
+    ("codec/adapters.ts", "Alg/Combinators.lean and Dynamo/Lang/Scope.lean: `Codec.adapt` for `held` and `Codec.extendRead` for `legacy`, with the refusals of an adapter, as the term `Term.held`"),
+    ("codec/derivedItem.ts", "Lang/Universe.lean and Dynamo/Lang/ScopeHeldSet.lean: `HObject` and `HUnion`, the held set of an object and of a union, as a decoded type"),
+    ("codec/products.ts", "Dynamo/Alg/Products.lean and Dynamo/Lang/Scope.lean: the rules (set), (array) and (list) of the product codecs, with the spread, as the terms `Term.list`, `Term.array` and `Term.tuple`"),
+    ("codec/prisms.ts", "Dynamo/Alg/Prisms.lean and Dynamo/Lang/Term.lean: the prism and the ground codec (`literalCodec`) of each scalar term, with `refine` and `fill` over them, as the primitives `Ground` and the predicate `Pred`"),
+    ("codec/scope.ts", "Lang/Scope.lean and Dynamo/Lang/Scope.lean: a closed codec as one scope, with `ref`, the entries of a scope, and the object and union terms"),
+    ("codec/opaque.ts", "Dynamo/Alg/Opaque.lean and Dynamo/Lang/Term.lean: `opaque` as the identity codec of the carrier, as an operation of `dynSig`"),
+    ("codec/sums.ts", "Alg/Combinators.lean, Dynamo/Alg/Sums.lean and Dynamo/Lang/Scope.lean: `altCodec`, the first option that acts, for `union`, `discriminatedUnion` and `mdunion`, as the term `Term.union`"),
+    ("codec/objects.ts", "Dynamo/Alg/Objects.lean and Dynamo/Lang/Scope.lean: `objectCodec` over a field table, with the open block of the rule (record), as the terms `Term.object` and `Term.record`"),
+    ("codec/scopePath.ts", "Lang/ScopePath.lean and Dynamo/Analysis/ScopePath.lean: `Rooted.at`, the frames at a path into a closed codec, and `narrowC`, the narrowing by a clause"),
+    ("codec/separation.ts", "Alg/Relations.lean and Dynamo/Lang/Clause.lean: `Sub`, the graph inclusion, and `VSub`, the value order, as `below` decides them on terms, with `altsSub` for the literals. The model has no decision of the order on terms"),
     ("codec/scopeSlice.ts", "Dynamo/Analysis/ScopeSlice.lean: `AltClause.extractC`, the options that a clause describes, and `AltClause.excludeC`, the complement, which partition the options"),
     ("codec/meet.ts", "Alg/Relations.lean: `Codec.meet`, the meet of two codecs, as the codec of the term that the host `meet` builds. The model has no meet of terms"),
     ("codec/codec.ts", "none: the names that the entries read from `./codec`, re-exported, with no declaration"),
     ("codec/pin.ts", "none: the key paths of a type"),
     ("codec/native.ts", "none: the marshaller of the SDK, a migration aid outside the model"),
-    ("codec/lean.ts", "Bridge/*.lean: the emitter of the vectors"),
-    ("codec/testing.ts", "Dynamo/Alg/Codec.lean: the laws, run as checks"),
-    ("codec/typeVectors.ts", "Bridge/*.lean: the type bridge, through `type_bridge.py`"),
-    ("Rotorise.ts", "Dynamo/Alg/Key*.lean and Bridge/KeyRows.lean: the key layer, over the codecs"),
+    ("codec/lean.ts", "Bridge/Vectors.lean, Bridge/Rows.lean, Bridge/ScopePaths.lean, Bridge/KeyRows.lean, Bridge/ConditionRows.lean, Bridge/ItemRows.lean and Bridge/UpdateRows.lean: the emitter of the vectors. Each emitted module imports one of these"),
+    ("codec/testing.ts", "Dynamo/Alg/Codec.lean and Dynamo/Lang/ScopeSound.lean: the laws, run as checks on a codec that a term gives, where `Closed.sound` proves them"),
+    ("codec/typeVectors.ts", "none: the type bridge. The file states each decision of the run time to the type checker, and `type_bridge.py` compares the two"),
+    ("Rotorise.ts", "Dynamo/Alg/DerivedKey.lean, Dynamo/Alg/DerivedItem.lean, Dynamo/Alg/KeyMatch.lean, Dynamo/Alg/KeyItem.lean, Dynamo/Alg/KeyUpdate.lean and Dynamo/Alg/KeyCondition.lean: the key layer, over the codecs"),
 ]
 
 DYNAMO_ORDER = ["", "Alg", "Lang", "Analysis", "Witness"]
@@ -175,8 +177,11 @@ def host_imports(path):
     return [(m.group(2), bool(m.group(1))) for m in EDGE.finditer(text)]
 
 
-def host_failures(src):
-    """The imports of `src/` that go against `HOST_ORDER`, and the files that the order omits."""
+MODEL_PATH = re.compile(r"[\w/*]+\.lean")
+
+
+def host_failures(src, root):
+    """The imports of `src/` that go against `HOST_ORDER`, the files that the order omits, and the paths of the order that name no file."""
     rank = {name: i for i, (name, _) in enumerate(HOST_ORDER)}
     failures = []
     for rel in sorted(host_files(src)):
@@ -191,9 +196,12 @@ def host_failures(src):
             elif rank[target] > rank[rel]:
                 kind = "import type" if is_type else "import"
                 failures.append(f"src/{rel}: {kind} {spec}: src/{target} is higher in the host order")
-    for name in rank:
+    for name, projects in HOST_ORDER:
         if not os.path.exists(os.path.join(src, name)):
             failures.append(f"src/{name}: the host order names a file that does not exist")
+        for path in MODEL_PATH.findall(projects):
+            if not os.path.isfile(os.path.join(root, path)):
+                failures.append(f"src/{name}: the host order names Calculus/{path}, which is no file")
     return failures
 
 
@@ -207,7 +215,7 @@ def main(argv):
     if not os.path.isdir(src):
         print(f"layer_order.py: no folder {src}", file=sys.stderr)
         return 2
-    failures = host_failures(src)
+    failures = host_failures(src, root)
     for dirpath, _, files in os.walk(root):
         for name in sorted(files):
             if not name.endswith(".lean"):
