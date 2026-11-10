@@ -182,6 +182,21 @@ describe('selection reads every key', () => {
             /no variant carries kind='food', size='large'/,
         )
     })
+
+    /**
+     * The combination is a fact about the whole object, so the refusal sits at the object. A path
+     * that ends at one key would blame one member of an assignment that no member carries.
+     */
+    it('refuses a combination of tags at the object, and names no single key, on encode and on decode', () => {
+        const read = pair.decode({
+            kind: { S: 'food' },
+            size: { S: 'large' },
+            gram: { BOOL: true },
+        })
+        expect(failed(read) && read.path).toEqual([])
+        const written = pair.encode({ kind: 'food', size: 'large', gram: true })
+        expect(failed(written) && written.path).toEqual([])
+    })
 })
 
 describe('neither the keys nor the members carry an order', () => {

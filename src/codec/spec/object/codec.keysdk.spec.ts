@@ -78,4 +78,18 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
             /Read the key from toItem/,
         )
     })
+
+    /**
+     * The range test and the numeral test are two rules. A fraction inside the safe range can still
+     * round: the number that holds it prints another numeral than `toItem` writes.
+     */
+    it('refuses a fraction inside the safe range that no number holds exactly', () => {
+        const numeral = '0.12345678901234567890123'
+        expect(
+            written(Weights.toItem({ id: 'w1', weight: numeral })).SK,
+        ).toEqual({ N: numeral })
+        expect(() => Weights.toEntry({ id: 'w1', weight: numeral })).toThrow(
+            RotoriseError,
+        )
+    })
 })

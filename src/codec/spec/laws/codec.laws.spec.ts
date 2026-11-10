@@ -1031,6 +1031,63 @@ describe('a law of the harness fails on the defect that it names', () => {
         ).toThrow(/unsafeEncode is not deterministic at case 0 with seed/)
     })
 
+    /**
+     * Each planted codec breaks one law of `checkEncodePaths` and keeps the others. The planted
+     * writes agree with each other, so only the law under test sees a difference.
+     */
+    describe('checkEncodePaths reports the one law that a planted codec breaks', () => {
+        type Pet = { id: string; name: string }
+        const Pet = item(object({ id: string, name: string }))
+        const planted = (change: {
+            readonly unsafeEncode?: (value: Pet) => unknown
+            readonly unsafeEncodePartial?: (value: Partial<Pet>) => unknown
+        }) =>
+            new Proxy(Pet, {
+                get: (target, key, self) =>
+                    Reflect.get(change, key) ?? Reflect.get(target, key, self),
+            })
+        const planting = (write: object) =>
+            Object.fromEntries(
+                Object.keys(write).map((name) => [name, { S: 'planted' }]),
+            )
+
+        it('reports a patch of a complete entity that differs from the write', () => {
+            const Planted = planted({ unsafeEncodePartial: () => ({}) })
+            expect(() =>
+                checkEncodePaths(Planted, { count: 3, seed: 20260924 }),
+            ).toThrow(
+                /unsafeEncodePartial of a complete entity differs from unsafeEncode at case 0/,
+            )
+        })
+
+        it('reports a patch of one name that differs from the attribute of the write', () => {
+            const Planted = planted({
+                unsafeEncodePartial: (value) =>
+                    Object.keys(value).length === 1
+                        ? planting(value)
+                        : Pet.unsafeEncodePartial(value),
+            })
+            expect(() =>
+                checkEncodePaths(Planted, { count: 3, seed: 20260924 }),
+            ).toThrow(
+                /unsafeEncodePartial of '(id|name)' alone differs from unsafeEncode at case 0/,
+            )
+        })
+
+        it('reports a write at a path that differs from the attribute of the write', () => {
+            const Planted = planted({
+                unsafeEncode: (value) => planting(Pet.unsafeEncode(value)),
+                unsafeEncodePartial: (value) =>
+                    planting(Pet.unsafeEncodePartial(value)),
+            })
+            expect(() =>
+                checkEncodePaths(Planted, { count: 3, seed: 20260924 }),
+            ).toThrow(
+                /at\(item, \['(id|name)'\]\)\.unsafeEncode differs from unsafeEncode at case 0/,
+            )
+        })
+    })
+
     it('checkMembersStable reports an attribute that a read-modify-write drops', () => {
         const dropping = {
             unsafeDecode: (_item: AttributeMap) => ({}),
