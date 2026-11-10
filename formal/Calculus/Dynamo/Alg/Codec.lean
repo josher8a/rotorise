@@ -41,7 +41,7 @@ export Alg (Can IsoCancels ReadsCoherently Carrier SurvivesStore Ctor partialId
   carrier_altCodec funImage funImage_some funImage_isSome funImage_isSome_iff
   funImage_eq Sub sub_restrict_self optBot selectF ConfluentAt
   Compat
-  Canon lawful_altCodec compat_of_exclusive compat_of_common_bound'
+  Canon lawful_altCodec compat_of_common_bound'
   equiv_restrict_meet equiv_restrict_full)
 
 namespace Codec

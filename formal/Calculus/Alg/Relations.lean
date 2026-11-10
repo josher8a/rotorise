@@ -348,26 +348,6 @@ theorem lawful_altCodec {os : List (Codec V M)} {μA : Option M}
     altCodec_of_mem h hC hc _ ((h c hc).inv hcy)
   writes hμ _ _ he := let ⟨c, hc, _, hce⟩ := altCodec_admits he; hW _ hμ c hc _ _ hce
 
-/-- **Exclusive admission gives compatibility.** Where the option that admits an input is the
-    only one, the other option never acts where the first reads. -/
-theorem compat_of_exclusive {os : List (Codec V M)}
-    (hl : ∀ o ∈ os, LawfulCore member o)
-    (hxV : ∀ o ∈ os, ∀ v, (o.e v).isSome = true → os.filter (fun c => (c.e v).isSome) = [o])
-    (hxA : ∀ o ∈ os, ∀ a, (o.p a).isSome = true → os.filter (fun c => (c.p a).isSome) = [o]) :
-    ∀ o ∈ os, ∀ o' ∈ os, Compat o o' := by
-  intro o ho o' ho' a t hp hact
-  have hsame : o' = o := by
-    rcases hact with hq | he
-    · have hoA : (o.p a).isSome = true := by simp [hp]
-      have ho'A : (o'.p a).isSome = true := hq
-      have := (List.mem_filter (p := (fun c => (c.p a).isSome))).mpr ⟨ho', ho'A⟩
-      rw [hxA o ho a hoA] at this; exact List.mem_singleton.mp this
-    · have hoV : (o.e t).isSome = true := (hl o ho).canon hp
-      have ho'V : (o'.e t).isSome = true := he
-      have := (List.mem_filter (p := (fun c => (c.e t).isSome))).mpr ⟨ho', ho'V⟩
-      rw [hxV o ho t hoV] at this; exact List.mem_singleton.mp this
-  subst hsame; exact hp
-
 /-- **The cross half**: `d` reads back from the attribute of `c` a value that both write. -/
 theorem Compat.cross {c d : Codec V M} (hc : Lawful member c) (h : Compat c d) {v a}
     (he : c.e v = some a) (hd : (d.e v).isSome = true) : d.p a = some v :=
