@@ -270,6 +270,7 @@ Name the command, and quote the output. A report without both is a claim.
 | --- | --- |
 | type checker clean | `npm run check`, which runs `tsc --noEmit` on TypeScript 7. The `typescript` package is TypeScript 6, because the build and attest load the compiler API, which TypeScript 7 lacks. TypeScript 7 is the `typescript-7` alias. `npx tsc` runs TypeScript 6 |
 | the published package clean for a consumer | `bash scripts/tsc-matrix.sh --build`, which compiles the project in `scripts/consumer` against `dist/` on TypeScript 5.4.5, 5.9.3, 6.0.3 and 7.1.0-beta. The list is the supported range: the minimum, then the latest of each major. A consumer compiles the published declaration files with the compiler of the consumer. The root `tsconfig.json` sets `skipLibCheck`, so only this check reads those files. The script also runs the published entries under node, in ESM and in CJS, and checks that a class has one identity across the entries |
+| the declaration emit of a consumer | `bash scripts/emit-check.sh --build`, which copies `dist/` outside the package, and compiles the constants of `scripts/emit-check` with `declaration: true` on the versions of `scripts/tsc-matrix.sh`. The declaration emitter names only a type that the entry publishes. A project inside the package resolves `rotorise` by self reference, which hides a type that the entry does not publish |
 | suite green in the real environment | `npx vitest --run`. `npm test` opens watch mode. A stubbed runner reports a false green |
 | formatter, import order and linter clean | `npm run format:ci`, which runs `biome ci --error-on-warnings ./src`. A lint warning fails the check. The spec and test files are not linted |
 | published name set | `bash scripts/surface-names.sh --build`, which compares the export set of the three entries against `scripts/surface/*.txt`. Name each move in the commit message |
@@ -309,7 +310,7 @@ These are the rulings of the owner, in the terms of this repository.
   nobody migrated, and the next reader deletes the gate.
 - **A codec writes the attributes of that codec, and no other attribute.** The top-level map
   belongs to the view, not to the codec. `object` writes the members of `object` like any
-  other codec, and offers `.item` for the one place that writes no map.
+  other codec, and `item(...)` reads the same codec for the one place that writes no map.
 - **One side owns the fact. The other side declares an expectancy.** A marker such as
   `optional`, or the marker for the trailing elements of a tuple, exists at the type level
   only. The runtime reads the fact from the term that the codec carries, so no wrapper can

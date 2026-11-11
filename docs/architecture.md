@@ -583,8 +583,9 @@ place of the admission.
 Rotorise states the precondition as data and builds no expression string. An expression library
 renders the condition expression.
 
-**The host's path API follows the model.** `at((p) => ...)` on an item codec gives the codec at a
-path, with the path as `path()` and as a list of segments. The walk of `at` gives the three answers of
+**The host's path API follows the model.** `at(codec, path)` gives the codec at a path. The path is a
+list of segments or a string. `path(located)` gives the path back: a string from an item, and the segments from any
+other root. The walk of `at` gives the three answers of
 `Rooted.at` at each segment: the frames, no frame where the store refuses the segment, and `never`.
 The walk reads a `ref` node as the model reads an entry. The walk compares two terms by structure, so two
 declarations of one term are one frame. A path resolves where the frontier holds one term, so the
