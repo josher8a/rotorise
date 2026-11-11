@@ -36,7 +36,6 @@ import { checkFill } from './prisms'
 import type { ArrayOver, ListCodec, SetCapable, SpreadOver } from './products'
 import type { Result } from './result'
 import { andThen, CodecError, failed, orThrow, setOwn } from './result'
-import type { sliceKey } from './scopeSlice'
 import type {
     DefOf,
     ElementMark,
@@ -51,6 +50,7 @@ import type {
     OptionsMark,
     optionalMarker,
     ScopeTerms,
+    sliceKey,
     Term,
     TermMark,
     TermOf,

@@ -48,7 +48,7 @@ import {
 } from './separation'
 import type { DiscriminatedCodec, DissectedCodec, LiteralOptions } from './sums'
 import { dissect, union } from './sums'
-import type { Field, OfParts, Term, TermOf, TermsOf } from './term'
+import type { Field, OfParts, sliceKey, Term, TermOf, TermsOf } from './term'
 import { absentBelow, openRefusal, resolvedTerm } from './term'
 import { own } from './value'
 
@@ -61,12 +61,6 @@ export type UnionSlice<Tm, Kept extends readonly unknown[]> = [Tm] extends [
 ]
     ? UnionCodec<DecodeTerm<SliceTerm<D, Kept>>, Kept, SliceTerm<D, Kept>>
     : UnionCodec<DerivedUnion<Kept>, Kept>
-/**
- * The key of the slice in the scope that its term holds. A declaration prints a string key in
- * place and cannot print a symbol key, so the key is a string with a leading space, as the other
- * markers are. A string is a name that a caller can give, so `scope` refuses an entry at this name.
- */
-export declare const sliceKey: ' sliceKey'
 export type SliceTerm<D, Kept extends readonly unknown[]> = [
     'scope',
     {

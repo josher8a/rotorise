@@ -1819,6 +1819,13 @@ export declare const itemTermMarker: unique symbol
  */
 export declare const locatedFrom: ' locatedFrom'
 
+/**
+ * The key of the slice in the scope that its term holds. A declaration prints a string key in
+ * place and cannot print a symbol key, so the key is a string with a leading space, as the other
+ * markers are. A string is a name that a caller can give, so `scope` refuses an entry at this name.
+ */
+export declare const sliceKey: ' sliceKey'
+
 /** Type-level only: the rest of each member of a dissection, which a slice keeps with the member. */
 export declare const restsMarker: unique symbol
 
