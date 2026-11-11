@@ -11,34 +11,62 @@ import {
 } from './codec/codec'
 import { tableEntry } from './Rotorise'
 
-describe('Rotorise Performance Baseline', () => {
-    type User = {
-        id: string
-        orgId: string
-        role: 'admin' | 'user' | 'guest'
-        metadata: {
-            lastLogin: number
-            tags: string[]
-        }
+/**
+ * The pins of `attest.instantiations` measure the block of one `it` apart from the file: attest
+ * type-checks the file with each `it` call removed, then adds the block at the top level of that
+ * file, and reports the difference. A name that the block reads from the scope of `describe` is
+ * unbound at the top level, so the block measures an error. The type and the entry that the blocks
+ * read are declared at the top level for that reason.
+ *
+ * A pin fails where the count rises above the threshold of attest. Where the count falls, attest
+ * prints a line and the pin passes, so a block that measures an error passes.
+ */
+type User = {
+    id: string
+    orgId: string
+    role: 'admin' | 'user' | 'guest'
+    metadata: {
+        lastLogin: number
+        tags: string[]
     }
+}
 
-    const userSchema = tableEntry<User>()({
-        PK: [
-            ['orgId', (id: string) => `ORG:${id}`],
-            ['id', (id: string) => `USER:${id}`],
-        ],
-        SK: ['role'],
-        GSI1PK: [['role', (role: string) => `ROLE:${role}`]],
-    })
+const userSchema = tableEntry<User>()({
+    PK: [
+        ['orgId', (id: string) => `ORG:${id}`],
+        ['id', (id: string) => `USER:${id}`],
+    ],
+    SK: ['role'],
+    GSI1PK: [['role', (role: string) => `ROLE:${role}`]],
+})
 
+describe('Rotorise Performance Baseline', () => {
     it('measures instantiation count for tableEntry', () => {
-        // Measure performance of the tableEntry definition
-        attest.instantiations([16, 'instantiations'])
+        // the block declares its own entity: an entry outside the block over the same type pays
+        // for a part of the count, and the pin reads the rest only
+        type Member = {
+            id: string
+            orgId: string
+            role: 'admin' | 'user' | 'guest'
+            metadata: {
+                lastLogin: number
+                tags: string[]
+            }
+        }
+        tableEntry<Member>()({
+            PK: [
+                ['orgId', (id: string) => `ORG:${id}`],
+                ['id', (id: string) => `USER:${id}`],
+            ],
+            SK: ['role'],
+            GSI1PK: [['role', (role: string) => `ROLE:${role}`]],
+        })
+        attest.instantiations([2091, 'instantiations'])
     })
 
     it('measures instantiation count for key generation', () => {
         userSchema.key('PK', { orgId: '123', id: '456' })
-        attest.instantiations([16, 'instantiations'])
+        attest.instantiations([3751, 'instantiations'])
     })
 
     it('verifies type outputs with snapshots', () => {
