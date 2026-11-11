@@ -120,6 +120,30 @@ describe('a scope', () => {
  * `ref` resolves only where its scope binds it. So the scope decides the union on its closed copy,
  * with every name bound.
  */
+describe('the name that a slice of a union entry holds in the type', () => {
+    /**
+     * **The slice of a union entry is one more entry of its scope, at a name that no entry holds.**
+     * An entry at that name would be replaced in the type of the slice, and a `ref` to the entry
+     * would read the slice. A string key prints in a declaration, so the key is a name that a
+     * caller can write, and `scope` refuses the entry in the type and at run time.
+     */
+    it('is refused as the name of an entry of a scope, in the type and at run time', () => {
+        expect(() =>
+            scope({
+                // @ts-expect-error the name ' sliceKey' is reserved for the slice of a union entry
+                ' sliceKey': string,
+            }),
+        ).toThrow(
+            "[scope] the name ' sliceKey' is reserved for the slice of a union entry",
+        )
+    })
+
+    it('leaves each other name free, so a scope holds an entry at a name with a leading space', () => {
+        const Shelter = scope({ ' Pet': string })
+        expect(Shelter[' Pet'].def.kind).toBe('string')
+    })
+})
+
 describe('a ref as a union option', () => {
     /**
      * The answers of a codec: the attribute that it writes for each value, and what it reads from

@@ -689,9 +689,9 @@ type ReqNames<Fd> = {
 type OptNames<Fd> = {
     [K in keyof Fd]: Opt<Fd[K]> extends true ? K : never
 }[keyof Fd]
-type DecodeObject<Fd, W, Env extends unknown[]> = ([ReqNames<Fd>] extends [
-    never,
-]
+export type DecodeObject<Fd, W, Env extends unknown[]> = ([
+    ReqNames<Fd>,
+] extends [never]
     ? [OptNames<Fd>] extends [never]
         ? Record<never, never>
         : unknown

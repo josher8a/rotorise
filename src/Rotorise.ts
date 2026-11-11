@@ -2178,7 +2178,7 @@ type SingleText<Entity, Spec extends keyof Entity, CodecSpec> = [
           >
       >
 
-type TableEntryDefinition<
+export type TableEntryDefinition<
     Entity,
     Schema,
     Separator extends string,
@@ -4509,6 +4509,7 @@ export type {
     ConstantOf,
     DecimalCodec,
     Decoded,
+    DecodeObject,
     DerivedUnion,
     DerivedVariants,
     DiscriminatedCodec,
@@ -4519,6 +4520,9 @@ export type {
     Encoded,
     EncodedPatch,
     EncodedVariants,
+    EntryOptionSpecs,
+    EntrySpec,
+    EveryButNumberT,
     FloatT,
     Free,
     HeldT,

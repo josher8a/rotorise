@@ -36,6 +36,7 @@ import { checkFill } from './prisms'
 import type { ArrayOver, ListCodec, SetCapable, SpreadOver } from './products'
 import type { Result } from './result'
 import { andThen, CodecError, failed, orThrow, setOwn } from './result'
+import type { sliceKey } from './scopeSlice'
 import type {
     DefOf,
     ElementMark,
@@ -149,10 +150,18 @@ export type SpecOfEntry<Defs, C> = C extends ObjectCodec<
     infer Spec extends Record<string, ObjectSlot>,
     AnyCodec | undefined
 >
-    ? { readonly spec: SpecInScope<Spec, Defs> }
+    ? EntrySpec<Spec, Defs>
     : C extends UnionCodec<infer _T, infer Os extends readonly unknown[]>
-      ? { readonly spec: OptionSpecs<Defs, Os> }
+      ? EntryOptionSpecs<Defs, Os>
       : unknown
+/** The `spec` of an object entry. An interface, so that a declaration prints the name and not the cycle. */
+export interface EntrySpec<Spec extends Record<string, ObjectSlot>, Defs> {
+    readonly spec: SpecInScope<Spec, Defs>
+}
+/** The `spec` of a union entry. An interface, for the reason of {@link EntrySpec}. */
+export interface EntryOptionSpecs<Defs, Os extends readonly unknown[]> {
+    readonly spec: OptionSpecs<Defs, Os>
+}
 /**
  * The specs of the options of a union entry, one for each object, or `false` where an option is no
  * object. An option that names a union entry reads as the options of that entry.
@@ -287,11 +296,11 @@ export type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
                 : unknown)
 /** A refusal on each definition that reads a name the scope does not declare. */
 export type ScopeNamed<Defs> = {
-    readonly [K in keyof Defs]: [Exclude<FreeOf<Defs[K]>, keyof Defs>] extends [
-        never,
-    ]
-        ? unknown
-        : ErrorMessage<`[scope] a ref names '${Exclude<FreeOf<Defs[K]>, keyof Defs> & string}', which this scope does not declare`>
+    readonly [K in keyof Defs]: K extends typeof sliceKey
+        ? ErrorMessage<`[scope] the name '${typeof sliceKey}' is reserved for the slice of a union entry`>
+        : [Exclude<FreeOf<Defs[K]>, keyof Defs>] extends [never]
+          ? unknown
+          : ErrorMessage<`[scope] a ref names '${Exclude<FreeOf<Defs[K]>, keyof Defs> & string}', which this scope does not declare`>
 }
 
 /** A refusal on each definition that holds a wall over an entry on a cycle of this scope. */
@@ -342,6 +351,12 @@ export function scope<const Defs extends Readonly<Record<string, AnyCodec>>>(
     defs: Defs & ScopeNamed<Defs> & ScopeWalls<Defs>,
 ): ScopeOf<Defs>
 export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
+    // the slice of a union entry is one more entry of the scope at this name, in the type
+    const reserved: typeof sliceKey = ' sliceKey'
+    if (Object.hasOwn(defs, reserved))
+        throw new CodecError(
+            `[scope] the name '${reserved}' is reserved for the slice of a union entry`,
+        )
     const terms = Object.fromEntries(
         Object.entries(defs).map(([name, def]) => [name, termOf(def)]),
     )

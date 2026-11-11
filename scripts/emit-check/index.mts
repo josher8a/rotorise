@@ -23,8 +23,10 @@ import {
     optional,
     ref,
     refine,
+    scope,
     spread,
     string,
+    tableEntry,
     undefinable,
     union,
     item,
@@ -35,13 +37,28 @@ import {
     preconditions,
 } from 'rotorise'
 import * as R from 'rotorise'
-import { arbitraryOf, firstDifference, rngFrom, checkRoundTrip } from 'rotorise/testing'
+import {
+    arbitraryOf,
+    checkAgainst,
+    checkDecodesAreWritable,
+    checkEncodePaths,
+    checkEquivalent,
+    checkIso,
+    checkMembersStable,
+    checkRoundTrip,
+    checkStable,
+    firstDifference,
+    rngFrom,
+    shrinkOf,
+    structuralEquals,
+} from 'rotorise/testing'
 import { native } from 'rotorise/native'
 
 // A consumer exports the result of each call below with `declaration: true`. The declaration
 // emitter names each type that the declaration prints, and the entry publishes each such name.
 // A constant that the emitter cannot name is a type that the entry must publish. A marker key that
 // the declaration prints in place is a string literal, because the emitter cannot write a symbol key.
+// A type that contains itself has a name, because the emitter writes `any` for a cycle with no name.
 
 const Dog = object({ kind: string('DOG'), name: string, age: optional(number) })
 const Cat = object({ kind: string('CAT'), name: string, lives: number })
@@ -55,6 +72,13 @@ export const DogName = at(item(Dog), ['name'])
 export const DogItem = item(Dog)
 export const PetItem = item(Pet)
 export const OnlyDogRow = narrow(at(item(Pet), []), object({ kind: string('DOG') }))
+type PetRow = { petId: string; kind: 'DOG'; ownerId: string } | { petId: string; kind: 'CAT' }
+export const PetRows = tableEntry<PetRow>()({
+    PK: ['petId'],
+    SK: { discriminator: 'kind', spec: { DOG: ['ownerId'], CAT: null } },
+})
+export const Families = scope({ Family: object({ name: string, children: optional(array(ref('Family'))) }) })
+export const { Family } = Families
 export const Chip = binary
 export const Vaccinated = boolean
 export const Carry = R.carrying
@@ -108,3 +132,22 @@ export const sample = arbitraryOf(object({ name: string }), rng, 3)
 export const roundTrip = checkRoundTrip
 export const difference = firstDifference
 export const Marshal = native({ removeUndefinedValues: true })
+const Shelter = scope({ Pet: union([object({ kind: string('DOG'), name: string }), object({ kind: string('CAT'), lives: number })]) })
+export const ScopedDogs = extract(Shelter.Pet, object({ kind: string('DOG') }))
+export const ScopedNotDogs = exclude(Shelter.Pet, object({ kind: string('DOG') }))
+export const MaxNesting = R.MAX_DOCUMENT_NESTING
+export const Refusal = R.RotoriseError
+export const Then = R.andThen
+export const StoredNumeral = R.isStoredNumeral
+export const against = checkAgainst
+export const writable = checkDecodesAreWritable
+export const encodePaths = checkEncodePaths
+export const equivalent = checkEquivalent
+export const iso = checkIso
+export const membersStable = checkMembersStable
+export const stable = checkStable
+export const shrink = shrinkOf
+export const structural = structuralEquals
+// Not in this project: a cycle that goes through a list and a union only has no name for the decoded
+// type of the union, so the declaration holds `any` and TypeScript 7 refuses it (TS5088):
+//   scope({ Nest: array(ref('Tags')), Tags: union([string('PUPPY'), ref('Nest')]) })

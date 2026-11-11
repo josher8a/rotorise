@@ -26,6 +26,7 @@ CompositeKeyParamsImpl
 ConstantAttributes
 ConstantOf
 DecimalCodec
+DecodeObject
 Decoded
 DerivedUnion
 DerivedVariants
@@ -38,6 +39,9 @@ ElementMark
 Encoded
 EncodedPatch
 EncodedVariants
+EntryOptionSpecs
+EntrySpec
+EveryButNumberT
 ExactlyOne
 Field
 FloatT
@@ -100,6 +104,7 @@ SpreadOnce
 StoredItem
 StringCodec
 TableEntry
+TableEntryDefinition
 TableKeys
 Tagged
 TaggedCodec

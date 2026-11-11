@@ -8,8 +8,12 @@
 #
 # The package is copied to `node_modules/rotorise` of a temporary directory, so no path of this
 # repository helps the emitter to name a type. A type that the entry does not publish is an error
-# there (TS2742, TS2883, TS4023 or TS2527). Every version runs and prints one line. Exit 1 on any
-# failure. The constants that still fail are not in the project: see `scripts/emit-check/index.mts`.
+# there (TS2742, TS2883, TS4023 or TS2527). A type that contains itself and has no name prints as
+# `any` with no error: TypeScript 5.9 and 6 write `/*elided*/ any`, and TypeScript 5.4 writes `any`
+# with no mark. A clean declaration holds no `any`, so the script counts each word `any` as a
+# failure. A cycle that goes through a union and a list only is such a hole: see the comment at
+# the end of `scripts/emit-check/index.mts`. Every version runs and prints one line. Exit 1 on any
+# failure.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,7 +29,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --build) DO_BUILD=1 ;;
     --dist) shift; DIST="$(cd "${1:?--dist needs a directory}" && pwd)"; PKG="$DIST/../package.json" ;;
-    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "emit-check.sh: unknown argument: $1" >&2
        echo "usage: emit-check.sh [--build] [--dist <dir>]" >&2
        exit 2 ;;
@@ -54,7 +58,13 @@ failed=0
 for version in "${VERSIONS[@]}"; do
   rm -rf "$WORK/out"
   if out=$(cd "$WORK" && npx --yes --package "typescript@$version" -- tsc -p . --pretty false 2>&1); then
-    printf 'PASS  typescript@%s\n' "$version"
+    if holes=$(grep -cw 'any' "$WORK/out/index.d.mts"); then
+      printf 'FAIL  typescript@%s\n' "$version"
+      printf '      | the declaration holds %s lines with the type `any`\n' "$holes"
+      failed=1
+    else
+      printf 'PASS  typescript@%s\n' "$version"
+    fi
   else
     printf 'FAIL  typescript@%s\n' "$version"
     printf '%s\n' "$out" | sed 's/^/      | /' | head -20

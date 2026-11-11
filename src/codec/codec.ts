@@ -42,11 +42,13 @@ export type { PathTerminal, Segment } from './frontier'
 export { meet } from './meet'
 export { object, optional, undefinable } from './objects'
 export { opaque } from './opaque'
+export type { DecodeObject } from './pathModel'
 export type {
     BinaryCodec,
     BooleanCodec,
     ConstantOf,
     DecimalCodec,
+    EveryButNumberT,
     FloatT,
     NumberCodec,
     Refined,
@@ -87,6 +89,8 @@ export {
 } from './result'
 export type {
     AllObjects,
+    EntryOptionSpecs,
+    EntrySpec,
     ItemCodec,
     ItemSpec,
     ObjectCodec,
