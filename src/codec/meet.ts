@@ -484,14 +484,30 @@ export type HeldTag<N> = N extends [
     ? [G]
     : never
 
-/** The options of a factor: each option of the union node it names, or the factor itself. */
+/** The first `ref` that no scope binds yet, in a term or at any depth of the unions that it holds. */
+const freeRef = (term: Term): Extract<Term, { kind: 'ref' }> | undefined => {
+    const node = resolvedTerm(term)
+    if (node?.kind === 'ref') return node
+    if (node?.kind !== 'union') return undefined
+    for (const option of node.options) {
+        const found = freeRef(option)
+        if (found !== undefined) return found
+    }
+    return undefined
+}
+
+/**
+ * The options of a factor: each option of the union node it names, or the factor itself. A factor
+ * that names a free name at any depth of its unions is refused here, the one place that reads it.
+ */
 export const meetOptions = (factor: AnyCodec): readonly AnyCodec[] => {
-    const node = resolvedTerm(termOf(factor))
-    if (node?.kind === 'ref') {
+    const free = freeRef(termOf(factor))
+    if (free !== undefined) {
         throw new CodecError(
-            `a factor of a meet names ref('${node.slot.name}'), which no scope binds yet — a meet reads the declared names at its declaration, so take the meet where the scope binds the name`,
+            `a factor of a meet names ref('${free.slot.name}'), which no scope binds yet — a meet reads the declared names at its declaration, so take the meet where the scope binds the name`,
         )
     }
+    const node = resolvedTerm(termOf(factor))
     if (node?.kind !== 'union') return [factor]
     return node.options.map((option) =>
         codecOfTerm<never, AttributeValue>(option),

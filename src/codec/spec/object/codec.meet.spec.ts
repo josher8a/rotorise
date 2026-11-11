@@ -534,6 +534,79 @@ describe('the meet distributes over a union', () => {
         expect(defOf(nested)).toEqual(defOf(flat))
         expect(orThrow(nested.encode(7))).toEqual({ N: '7' })
     })
+
+    /**
+     * **A union that wraps a union on the right only meets as the flat union does.** The shortcut of
+     * `meetFactors` tests each side. A side that is a union takes the distribution, whatever the
+     * other side is.
+     */
+    it('meets an object against a union that wraps a union as the flat union meets', () => {
+        const Dog = object({ kind: string('DOG'), name: string })
+        const Cat = object({ kind: string('CAT'), lives: number })
+        const Dogs = object({ kind: string('DOG') })
+        expect(defOf(meet(Dogs, union([union([Dog, Cat])])))).toEqual(
+            defOf(meet(Dogs, union([Dog, Cat]))),
+        )
+    })
+
+    it('meets a union that wraps a union against an object as the flat union meets', () => {
+        const Dog = object({ kind: string('DOG'), name: string })
+        const Cat = object({ kind: string('CAT'), lives: number })
+        const Dogs = object({ kind: string('DOG') })
+        expect(defOf(meet(union([union([Dog, Cat])]), Dogs))).toEqual(
+            defOf(meet(union([Dog, Cat]), Dogs)),
+        )
+    })
+
+    /**
+     * **A factor names a free name at any depth of the union, and the meet refuses the name.** A
+     * union of one option around a `ref` took the shortcut and gave `never`, where the `ref` as a
+     * factor, and a `ref` in a wide union, threw. The refusal names the free name in each form.
+     */
+    describe.each([
+        ['a ref', () => meet(ref('Pet'), string)],
+        [
+            'a ref in a wide union',
+            () => meet(union([ref('Pet'), number]), string),
+        ],
+        [
+            'a ref in a union of one option, on the left',
+            () => meet(union([ref('Pet')]), string),
+        ],
+        [
+            'a ref in a union of one option, on the right',
+            () => meet(string, union([ref('Pet')])),
+        ],
+        [
+            'a ref under two unions of one option',
+            () => meet(union([union([ref('Pet')])]), string),
+        ],
+        [
+            'a ref in a wide union, against a part that lies below the union',
+            () => meet(number, union([ref('Pet'), number])),
+        ],
+        [
+            'a ref under two unions, against a part that lies below the union',
+            () => meet(union([union([ref('Pet'), number])]), number),
+        ],
+        [
+            'a ref in a union of one option against another ref',
+            () => meet(union([ref('Pet')]), union([ref('Owner')])),
+        ],
+    ] as const)('the meet of %s', (_name, run) => {
+        it('refuses the free name', () => {
+            expect(run).toThrow("names ref('")
+        })
+    })
+
+    it('refuses an entry of a scope that meets a free name in a union of one option', () => {
+        expect(() =>
+            scope({
+                Pet: string,
+                Tag: meet(union([ref('Pet')]), string),
+            }),
+        ).toThrow("names ref('Pet')")
+    })
 })
 
 describe('a factor that lies below the other is the meet', () => {
