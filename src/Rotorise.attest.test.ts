@@ -1,6 +1,14 @@
 import { attest } from '@ark/attest'
 import { describe, it } from 'vitest'
-import { never, nullable, object, opaque, string, union } from './codec/codec'
+import {
+    array,
+    never,
+    nullable,
+    object,
+    opaque,
+    string,
+    union,
+} from './codec/codec'
 import { tableEntry } from './Rotorise'
 
 describe('Rotorise Performance Baseline', () => {
@@ -107,7 +115,7 @@ describe('a path that the type does not see', () => {
                 },
             ),
         ).type.errors.snap(
-            'Type \'"meta.note"\' is not assignable to type \'"meta.note" & NoPathMember<"GSI1SK", "meta.note">\'.Type \'string\' is not assignable to type \'NoPathMember<"GSI1SK", "meta.note">\'.',
+            "Type '\"meta.note\"' is not assignable to type '\"meta.note\" & ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'meta.note', and the type gives no member for that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'meta.note', and the type gives no member for that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item\">'.",
         )
     })
 
@@ -119,7 +127,22 @@ describe('a path that the type does not see', () => {
                 GSI1SK: 'meta.note',
             }),
         ).type.errors.snap(
-            'Type \'"meta.note"\' is not assignable to type \'"meta.note" & NoKeyMember<"GSI1SK", "meta.note">\'.Type \'string\' is not assignable to type \'NoKeyMember<"GSI1SK", "meta.note">\'.',
+            "Type '\"meta.note\"' is not assignable to type '\"meta.note\" & ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'meta.note', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'meta.note', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.",
+        )
+    })
+
+    it('names the member rule for a list at a plain name, because a key attribute of DynamoDB is S, N or B', () => {
+        attest(() =>
+            tableEntry<{ id: string; tags: string[] }>()(
+                {
+                    PK: ['id'],
+                    // @ts-expect-error a list is none of S, N and B
+                    GSI1SK: 'tags',
+                },
+                { codec: { id: string, tags: array(string) } },
+            ),
+        ).type.errors.snap(
+            "Type '\"tags\"' is not assignable to type '\"tags\" & ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'tags', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'tags', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.",
         )
     })
 })

@@ -1127,34 +1127,35 @@ type ValidateLeaf<
     ? [Own] extends [never]
         ? // an entry with no codec has no frontier of the type: the value itself is none of the three
           [Enc] extends [never]
-            ? NoKeyMember<KeyName, Name>
+            ? ErrorMessage<NoKeyMember<KeyName, Name>>
             : Name extends `${string}.${string}`
-              ? NoPathMember<KeyName, Name>
-              : NoKeyMember<KeyName, Name>
+              ? ErrorMessage<NoPathMember<KeyName, Name>>
+              : ErrorMessage<NoKeyMember<KeyName, Name>>
         : [Exclude<Own, KeyMember>] extends [never]
           ? IsUnion<Own> extends true
               ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as more than one type. A key attribute has one type`>
               : IsUnion<All> extends true
                 ? ErrorMessage<`[tableEntry] '${KeyName}' takes '${Name}' as ${Own & string}, and another arm of '${KeyName}' takes another type. A key attribute has one type, so the arms of a key give one member`>
                 : Name
-          : NoKeyMember<KeyName, Name>
+          : ErrorMessage<NoKeyMember<KeyName, Name>>
     : never
 
-/** The refusal of an attribute that is stored as none of `S`, `N` and `B`. */
+/** The text of the refusal of an attribute that is stored as none of `S`, `N` and `B`. */
 type NoKeyMember<
     KeyName extends string,
     Name extends string,
-> = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B`>
+> = `[tableEntry] '${KeyName}' is built from '${Name}', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B`
 
 /**
- * The refusal of a path whose member the type cannot give. The codec has no field at the path, or the
+ * The text of the refusal of a path whose member the type cannot give. The codec has no field at the path, or the
  * frontier of the type does not know the codec there. The type does not see below nullable, a ref,
  * a union with a leaf option, or the open rest of the item, and `at` walks below each of them.
+ * The instruction comes before the causes, because the compiler cuts the print of a long type.
  */
 type NoPathMember<
     KeyName extends string,
     Name extends string,
-> = ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', and the type gives no member for that path: the codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself, or a path that the type enters`>
+> = `[tableEntry] '${KeyName}' is built from '${Name}', and the type gives no member for that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item`
 
 /** A key spec against the members of its attributes. A list of components is `S` and joins the members of the arms. */
 type ValidateKeyCarrier<
