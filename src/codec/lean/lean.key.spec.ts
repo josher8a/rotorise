@@ -1087,6 +1087,19 @@ const itemSpecs: readonly ItemSpec[] = [
         ],
     },
     {
+        name: 'owners',
+        codec: {
+            petId: string,
+            'owner.name': string,
+            owner: object({ name: string }),
+        },
+        keys: [
+            { name: 'PK', numeric: false, spec: ['petId'] },
+            { name: 'GSI1SK', numeric: false, spec: ['petId', 'owner.name'] },
+            { name: 'GSI2SK', numeric: false, spec: 'owner.name' },
+        ],
+    },
+    {
         name: 'sparse',
         codec: { petId: string, nick: optional(string), age: number },
         keys: [
@@ -1109,6 +1122,7 @@ const itemDraws: readonly Record<string, unknown>[] = [
     { petId: 'p1', nick: 'rex' },
     { petId: 'p1', nick: '', age: 3 },
     { petId: 'p1', nick: '' },
+    { petId: 'p1', 'owner.name': 'FLAT', owner: { name: 'NAME' } },
 ]
 
 /** The value of an item as the model reads it: a string, a numeral, or a map of attributes. */
@@ -1181,7 +1195,6 @@ const itemRows = (): ItemRow[] => {
         for (const draw of itemDraws) {
             const encoded = entry.codec.encode(draw)
             if (encoded instanceof Error) continue
-            const declared = new Set(Object.keys(one.codec))
             const keys: ItemKey[] = one.keys.map((key) => ({
                 name: key.name,
                 numeric: key.numeric,
@@ -1197,7 +1210,7 @@ const itemRows = (): ItemRow[] => {
                                       (component) =>
                                           [
                                               component,
-                                              plainLabel(declared, component),
+                                              plainLabel(component),
                                           ] as const,
                                   ),
                               },
@@ -1305,6 +1318,15 @@ describe('the item rows, against the model of the row of an item', () => {
                 printedAt(one.value).some(([n, v]) => n === 'nick' && v === ''),
         )
         expect(row?.outcome.kind).toBe('refused')
+    })
+
+    it('reads a key name as a path, never as the attribute of the whole name', () => {
+        const row = rows.find((one) => one.name.startsWith('owners_'))
+        expect(attributesOf(row as ItemRow)).toMatchObject({
+            PK: [false, 'PETID#p1'],
+            GSI1SK: [false, 'PETID#p1#NAME#NAME'],
+            GSI2SK: [false, 'NAME'],
+        })
     })
 
     it('counts the rows that a throw refuses, because the model compares a throw as a refusal', () => {

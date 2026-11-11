@@ -210,11 +210,11 @@ describe('a key component that reads a path', () => {
         expect(run).not.toThrow(new RegExp(secret))
     })
 
-    it('reads a top-level name that holds a `.` as that attribute, and not as a path', () => {
+    it('reads a name with a `.` as a path, and never as the attribute whose own name holds the `.`', () => {
         type Odd = { 'a.b': string; a: { b: string } }
         const Odds = tableEntry<Odd>()({ PK: ['a.b'] })
         expect(untyped(Odds)('PK', { 'a.b': 'flat', a: { b: 'nested' } })).toBe(
-            'A.B#flat',
+            'B#nested',
         )
     })
 })

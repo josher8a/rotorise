@@ -78,15 +78,13 @@ def readPath : Attr → List String → Option Attr
   | v, [] => some v
   | v, s :: r => (mA.out v).bind fun m => (m.at s).bind fun w => readPath w r
 
-/-- **The item as the key spec reads it**: the printed text at each name. A name that the item holds
-    as an attribute is that attribute, and any other name is a path of names that reads into the maps
-    of the item, one own property for each segment. The path is the name split at each `.`. -/
+/-- **The item as the key spec reads it**: the printed text at each name. A name is a path of names
+    that reads into the maps of the item, one own property for each segment. The path is the name split
+    at each `.`, so a name with no `.` is the one name of the attribute. The item never gives an attribute
+    whose own name holds a `.`, as DynamoDB reads a `.` in a name of an expression as a path separator. -/
 def itemOf (t : Value) : DerivedKey.Item String :=
   fun nm =>
-    match (mA.out t).bind (·.at nm) with
-    | some a => printedAttr a
-    | none =>
-        (readPath t ((DerivedKey.split '.' nm.toList).map String.ofList)).bind printedAttr
+    (readPath t ((DerivedKey.split '.' nm.toList).map String.ofList)).bind printedAttr
 
 variable {KS} {mem}
 variable (V : DerivedKey.StringView) (hb : ∀ k, mem k ≠ .b) (c : Char) (specs : {k // k ∈ KS} → DerivedKey.KeySpec String)

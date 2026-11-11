@@ -4089,18 +4089,13 @@ const leanKeyPart = (part: KeyPart): string =>
           : `some (.shaped ${part.tag === undefined ? 'none' : `(some ${leanString(part.tag)})`} ${leanString(part.value)})`
 
 /**
- * **The label of a plain component**: the upper case of the whole name where `declared` holds
- * the name, and of the last name of the path otherwise. The host prints the whole name where the
- * item owns the name (`printedName`). A row emitter passes the names that the schema declares.
- * Those names are the own names of the item where the item holds each dotted name that the schema
- * declares, and no other dotted name. Both row emitters call this function, so the label has one
- * statement. The model prints the label as emitted text and holds no case rule.
+ * **The label of a plain component**: the upper case of the last name of the path. A name with a
+ * `.` is a path, so the host prints the last name (`printedName`). Both row emitters call this
+ * function, so the label has one statement. The model prints the label as emitted text and holds
+ * no case rule.
  */
-export const plainLabel = (
-    declared: ReadonlySet<string>,
-    name: string,
-): string =>
-    (declared.has(name) ? name : (name.split('.').pop() ?? name)).toUpperCase()
+export const plainLabel = (name: string): string =>
+    (name.split('.').pop() ?? name).toUpperCase()
 
 const leanPlainParts = (
     parts: readonly (readonly [string, string])[],
@@ -4345,36 +4340,28 @@ export type UpdateRow = {
     readonly name: string
     readonly keys: readonly UpdateKey[]
     readonly decided: readonly (readonly [string, string])[]
-    /** The attribute names that the schema declares: a dotted name here is one attribute, and not a path. */
-    readonly declared: readonly string[]
     /** A written value, or `null` where the change removes the attribute. */
     readonly changed: readonly (readonly [string, string | null])[]
     readonly separator: string
     readonly outcome: UpdateOutcome
 }
 
-const leanUpdateArm = (
-    arm: UpdateArm,
-    declared: ReadonlySet<string>,
-): string =>
+const leanUpdateArm = (arm: UpdateArm): string =>
     arm.kind === 'components'
         ? `.leaf ⟨${arm.names.length}, [${leanPlainParts(
-              arm.names.map((n) => [n, plainLabel(declared, n)]),
+              arm.names.map((n) => [n, plainLabel(n)]),
           )}]⟩`
         : arm.kind === 'attr'
           ? `.attr ${leanString(arm.name)}`
           : `.${arm.kind}`
 
-const leanUpdateTree = (
-    tree: UpdateTree,
-    declared: ReadonlySet<string>,
-): string =>
+const leanUpdateTree = (tree: UpdateTree): string =>
     tree.kind === 'arm'
-        ? `Tree.arm (${leanUpdateArm(tree.arm, declared)})`
+        ? `Tree.arm (${leanUpdateArm(tree.arm)})`
         : `Tree.match_ ${leanString(tree.discriminator)} [${tree.arms
               .map(
                   ([literal, arm]) =>
-                      `(${leanString(literal)}, ${leanUpdateTree(arm, declared)})`,
+                      `(${leanString(literal)}, ${leanUpdateTree(arm)})`,
               )
               .join(', ')}]`
 
@@ -4423,7 +4410,7 @@ export const leanUpdateModule = (rows: readonly UpdateRow[]): string => {
     keys := [${row.keys
         .map(
             (key) =>
-                `{ name := ${leanString(key.name)}, numeric := ${key.numeric}, tree := ${leanUpdateTree(key.tree, new Set(row.declared))}, ofTable := ${key.ofTable}, footprint := [${key.footprint.map(leanString).join(', ')}] }`,
+                `{ name := ${leanString(key.name)}, numeric := ${key.numeric}, tree := ${leanUpdateTree(key.tree)}, ofTable := ${key.ofTable}, footprint := [${key.footprint.map(leanString).join(', ')}] }`,
         )
         .join(',\n      ')}],
     decided := ${leanPairs(row.decided)}, changed := ${leanChanges(row.changed)},

@@ -333,8 +333,8 @@ type CompositeKeyStringBuilder<
                 : Acc)
 
 /**
- * The pair of a component that reads a path: a name that the item holds as an attribute prints
- * whole, and a path prints its last name. A tag in an options object prints in place of the name.
+ * The pair of a component that reads a path: a path prints its last name, and an attribute prints its
+ * name. A tag in an options object prints in place of the name.
  */
 type ExtractPathPair<
     Entity,
@@ -346,17 +346,14 @@ type ExtractPathPair<
     (...key: any[]) => infer Value,
     ...unknown[],
 ]
-    ? ExtractHelper<NameOf<Entity, Key>, Value>
+    ? ExtractHelper<NameOf<Key>, Value>
     : Spec extends [
             infer Key extends string,
             { readonly tag: infer Tag extends string },
         ]
       ? [Tag, Printed<ValueOfKey<Entity, Key> & joinable, Partial>]
       : Spec extends string
-        ? [
-              NameOf<Entity, Spec>,
-              Printed<ValueOfKey<Entity, Spec> & joinable, Partial>,
-          ]
+        ? [NameOf<Spec>, Printed<ValueOfKey<Entity, Spec> & joinable, Partial>]
         : never
 
 /** Whether a spec holds a component that reads a path. */
@@ -578,42 +575,41 @@ type DefaultOf<T> = T extends Record<string, unknown> ? Partial<T> : T
 type TagOptions = { readonly tag: string }
 
 /**
- * The value at a path, through objects and unions of objects. An option that lacks a name adds
- * nothing. An optional name above the value adds `undefined`.
+ * The value at a name or at a path, through objects and unions of objects. A name with a `.` is a
+ * path: the type never reads an attribute whose own name holds a `.`. An option that lacks a name
+ * adds nothing. An optional name above the value adds `undefined`.
  */
 type ValueAt<E, P extends string> = E extends unknown
-    ? P extends keyof E
-        ? E[P]
-        : P extends `${infer Head}.${infer Tail}`
-          ? Head extends keyof E
-              ?
-                    | ValueAt<NonNullable<E[Head]>, Tail>
-                    | (null extends E[Head]
+    ? P extends `${infer Head}.${infer Tail}`
+        ? Head extends keyof E
+            ?
+                  | ValueAt<NonNullable<E[Head]>, Tail>
+                  | (null extends E[Head]
+                        ? undefined
+                        : undefined extends E[Head]
                           ? undefined
-                          : undefined extends E[Head]
-                            ? undefined
-                            : never)
-              : never
+                          : never)
+            : never
+        : P extends keyof E
+          ? E[P]
           : never
     : never
 
-/** The value of a name that the item holds as an attribute, or at a path. */
-type ValueOfKey<E, P> = [ValueOf<E, P>] extends [never]
-    ? P extends string
-        ? ValueAt<E, P>
-        : never
-    : ValueOf<E, P>
+/** The value of a key name: an attribute, or the value at the path of a name with a `.`. */
+type ValueOfKey<E, P> = P extends `${string}.${string}`
+    ? ValueAt<E, P>
+    : [ValueOf<E, P>] extends [never]
+      ? P extends string
+          ? ValueAt<E, P>
+          : never
+      : ValueOf<E, P>
 
 type LastName<P extends string> = P extends `${string}.${infer Tail}`
     ? LastName<Tail>
     : P
 
-/** The name that a component prints: the whole name of an attribute, or the last name of a path. */
-type NameOf<E, P extends string> = P extends `${string}.${string}`
-    ? [P] extends [keyof E]
-        ? Uppercase<P>
-        : Uppercase<LastName<P>>
-    : Uppercase<P>
+/** The name that a component prints: the name of an attribute, or the last name of a path. */
+type NameOf<P extends string> = Uppercase<LastName<P>>
 
 /** The text that a key of one attribute at a path prints: the value at the path of the view of the entity. */
 type PathText<Entity, Spec extends string, CodecSpec> = Replace<
@@ -767,9 +763,22 @@ type NeedsExactCheck<S, Depth extends unknown[] = []> = S extends string
 
 type DefaultSlot<V> = [DefaultOf<Exclude<V, undefined>>]
 
+/** The reason that a key cannot read an attribute whose own name holds a `.`. One text for the type and the run time. */
+type DotIsPath = typeof dotIsPath
+
+/**
+ * A name that no option holds as a name or a path. An option that declares the whole name of a path
+ * gets the reason: a key reads a name with a `.` as a path.
+ */
+type NoSuchName<E, N> = N extends string
+    ? N extends (E extends unknown ? keyof E : never)
+        ? ErrorMessage<`'${N}' is an attribute of the entity, and ${DotIsPath}`>
+        : ErrorMessage<`'${N}' is no name or path of the entity`>
+    : never
+
 /** What a name can be where the value is `V`: an optional value needs a transform with a default. */
-type NameOfValue<N, V> = [V] extends [never]
-    ? ErrorMessage<`'${N & string}' is no name or path of the entity`>
+type NameOfValue<E, N, V> = [V] extends [never]
+    ? NoSuchName<E, N>
     : undefined extends V
       ? ErrorMessage<`'${N & string}' can be absent: give a transform with a default`>
       : null extends V
@@ -778,10 +787,10 @@ type NameOfValue<N, V> = [V] extends [never]
 
 /** One component of a spec, against the options of the entity that its arm reads. */
 type ValidateComponent<E, C> = C extends string
-    ? NameOfValue<C, ValueOfKey<E, C>>
+    ? NameOfValue<E, C, ValueOfKey<E, C>>
     : C extends readonly [infer P extends string, infer Second, ...infer Rest]
       ? [ValueOfKey<E, P>] extends [never]
-          ? ErrorMessage<`'${P}' is no name or path of the entity`>
+          ? NoSuchName<E, P>
           : Second extends (...args: never[]) => unknown
             ? [
                   P,
@@ -800,7 +809,7 @@ type ValidateComponent<E, C> = C extends string
  */
 type ValidateSpec<E, S> = S extends string
     ? [ValueOfKey<E, S>] extends [never]
-        ? ErrorMessage<`'${S}' is no name or path of the entity`>
+        ? NoSuchName<E, S>
         : S
     : S extends readonly unknown[]
       ? { [I in keyof S]: ValidateComponent<E, S[I]> }
@@ -1061,7 +1070,7 @@ type MemberOfName<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
 ]
     ? NativeMember<ValueOfKey<E, Name>>
     : Name extends `${string}.${string}`
-      ? CodecMember<Enc, Name> | CodecMemberAtPath<CodecSpec, Name>
+      ? CodecMemberAtPath<CodecSpec, Name>
       : [CodecMember<Enc, Name>] extends [never]
         ? NativeMember<ValueOfKey<E, Name>>
         : CodecMember<Enc, Name>
@@ -1389,6 +1398,14 @@ const chainableNoOpProxy: unknown = new Proxy(() => chainableNoOpProxy, {
 })
 
 /**
+ * The reason that a key cannot read an attribute whose own name holds a `.`. DynamoDB reads a `.` in
+ * a name of an expression as a path separator, so a name with a `.` in a key is a path. The type and
+ * the refusal at construction state this one text.
+ */
+const dotIsPath =
+    'a `.` in a key name is a path separator, as in DynamoDB, so a key cannot read an attribute whose own name holds a `.`' as const
+
+/**
  * The segments of a key path: names joined by `.`, which read into objects only. A position in
  * brackets and an empty name are refused, because a key does not read into a list.
  */
@@ -1402,18 +1419,18 @@ const pathSegments = (path: string): string[] => {
     return segments
 }
 
+/** How a key name reads a value at a carrier: an item reads one way, and the given item of an update reads another. */
+type Reader = (attributes: object, path: string) => unknown
+
 /**
- * The value of an attribute name or of a path. A name that holds no `.` is an attribute of the
- * item, as it was before paths. An item that holds the whole name as an attribute gives that
- * attribute. Otherwise the path reads into objects, one own property for each segment, and a
- * missing segment gives `undefined`.
+ * The value of a key name at an item. An item is a document. A name that holds no `.` is an
+ * attribute of the item. A name with a `.` is a path, as DynamoDB reads a `.` in a name of an
+ * expression: the path reads into objects, one own property for each name, and a missing name gives
+ * `undefined`. The item never gives an attribute whose own name holds a `.`.
  */
-const valueAt = (attributes: object, path: string): unknown => {
-    const record = attributes as Record<string, unknown>
-    if (Object.hasOwn(record, path)) return record[path]
-    if (!path.includes('.')) return undefined
+const valueAt: Reader = (attributes, path) => {
     let current: unknown = attributes
-    for (const segment of pathSegments(path)) {
+    for (const segment of path.includes('.') ? pathSegments(path) : [path]) {
         if (
             typeof current !== 'object' ||
             current === null ||
@@ -1425,6 +1442,16 @@ const valueAt = (attributes: object, path: string): unknown => {
     }
     return current
 }
+
+/**
+ * The value of a key name at the given item of an update. The given item is `{ ...decided, ...changed }`,
+ * and a change is a map from a written path to a value: the entry of the change at the flat name
+ * comes first, then the walk into a written object. A name above a written path reads no value.
+ */
+const givenAt: Reader = (attributes, path) =>
+    Object.hasOwn(attributes, path)
+        ? (attributes as Record<string, unknown>)[path]
+        : valueAt(attributes, path)
 
 /**
  * What a component of a list prints for the attributes: the model's `Option Comp`. A component with
@@ -1443,13 +1470,14 @@ type Part = {
 const partOf = (
     component: unknown,
     attributes: Record<string, unknown>,
+    read: Reader,
 ): Part | undefined => {
     const [name, transform, Default] = Array.isArray(component)
         ? component
         : [component]
     const path = String(name)
-    const read = valueAt(attributes, path)
-    const value = read === undefined ? Default : read
+    const found = read(attributes, path)
+    const value = found === undefined ? Default : found
     const shape = typeof transform === 'function' ? transform : undefined
     const prints =
         shape === undefined
@@ -1468,8 +1496,9 @@ const partOf = (
 const parts = (
     components: readonly unknown[],
     attributes: Record<string, unknown>,
+    read: Reader,
 ): (Part | undefined)[] =>
-    components.map((component) => partOf(component, attributes))
+    components.map((component) => partOf(component, attributes, read))
 
 const componentName = (component: unknown): string =>
     String(Array.isArray(component) ? component[0] : component)
@@ -1495,11 +1524,15 @@ type Arm =
 const isValue = (value: unknown): boolean =>
     value !== undefined && value !== null
 
-const select = (spec: unknown, attributes: Record<string, unknown>): Arm => {
+const select = (
+    spec: unknown,
+    attributes: Record<string, unknown>,
+    read: Reader,
+): Arm => {
     let arm = spec
     while (isMatch(arm)) {
         const discriminator = String(arm.discriminator)
-        const literal = valueAt(attributes, discriminator)
+        const literal = read(attributes, discriminator)
         // a `null` value is no value: it selects no arm
         if (!isValue(literal))
             return { kind: 'missing', discriminator, named: false }
@@ -1514,11 +1547,9 @@ const select = (spec: unknown, attributes: Record<string, unknown>): Arm => {
     return { kind: 'attr', name: String(arm) }
 }
 
-/** The name that a component prints: the whole name of an attribute, or the last name of a path. */
-const printedName = (attributes: object, path: string): string =>
-    (Object.hasOwn(attributes, path) ? path : (path.split('.').pop() ?? path))
-        .toString()
-        .toUpperCase()
+/** The name that a component prints: the name of an attribute, or the last name of a path. */
+const printedName = (path: string): string =>
+    (path.split('.').pop() ?? path).toString().toUpperCase()
 
 /**
  * Two key paths are related when one is the other, or one is a prefix of the other at a name. A
@@ -1540,10 +1571,15 @@ const relatedToAny = (path: string, names: Iterable<string>): boolean => {
     return false
 }
 
+/** The attribute that a component enters: the first name of its path. A decided attribute is an attribute. */
+const decidedName = (component: string): string =>
+    component.split('.')[0] ?? component
+
 /** Refuses each name or path of a schema that is no key path, once, where the schema is read. */
 const checkPaths = (schema: Record<string, unknown>): void => {
     for (const spec of Object.values(schema))
-        for (const path of componentsOf(spec, {}).components) pathSegments(path)
+        for (const path of componentsOf(spec, {}, valueAt).components)
+            pathSegments(path)
 }
 
 /** A match that groups literals: a discriminator and a list of cases. */
@@ -1663,6 +1699,8 @@ const key =
             attributes: Record<string, unknown>,
             alone?: boolean,
         ) => unknown,
+        /** How a key name reads a value at the carrier of the call: an item, or the given item of an update. */
+        read: Reader = valueAt,
     ) => {
         checkPaths(schema)
         return <
@@ -1692,7 +1730,11 @@ const key =
                     `Key ${key.toString()} not found in schema`,
                 )
             }
-            const arm = select(case_, attributes as Record<string, unknown>)
+            const arm = select(
+                case_,
+                attributes as Record<string, unknown>,
+                read,
+            )
             if (arm.kind === 'missing') {
                 // an error names the discriminator and holds no value
                 throw new RotoriseError(
@@ -1704,7 +1746,7 @@ const key =
             // a `null` arm gives no key, as an attribute key gives none
             if (arm.kind === 'null') return undefined
             if (arm.kind === 'attr') {
-                const value = valueAt(attributes, arm.name)
+                const value = read(attributes, arm.name)
                 if (value === null) return undefined as never
                 // a key of one attribute holds the stored payload of an attribute under the adapter
                 // of a caller, as the row holds it
@@ -1755,6 +1797,7 @@ const key =
             for (const [at, part] of parts(
                 structure,
                 attributes as Record<string, unknown>,
+                read,
             ).entries()) {
                 if (part === undefined) {
                     if (config?.allowPartial) break
@@ -1763,7 +1806,7 @@ const key =
                     )
                 }
                 const { path, tag, shape, value } = part
-                const name = printedName(attributes, path)
+                const name = printedName(path)
                 if (shape) {
                     const transformed = shape(value as never) as
                         | joinable
@@ -2271,11 +2314,13 @@ export type TableEntryDefinition<
      * the keys the item omits after the change, which only a key with a `null` arm or an attribute can name. A key
      * is in one of the two and never in both. The two agree with {@link toEntry} on the merged item.
      *
-     * The type refuses a name that the entity does not hold. A dotted name such as `owner.name` is
-     * no attribute of an entity that holds `owner`. `touchedBy` reads the name as a written path
-     * and `printedName` reads the name as an attribute, so the change would rebuild a key from a
-     * value that `toItem` of the changed entity prints under another name. Write the change by the
-     * names of the entity.
+     * A change is a map from a written path to a value, and an item is a document. The two carriers
+     * read a name with a `.` in two ways. The item that `toEntry` and `toItem` read gives the value
+     * at the path only, one own property for each name: it never gives an attribute whose own name
+     * holds a `.`. The given item of this update, `{ ...decided, ...changed }`, gives the entry of the
+     * change at the written name first, and then the walk into a written object: a component above a
+     * written path reads no value. A written path meets each component at the path, above it and
+     * below it. The type refuses a name that the entity does not hold.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
         changed: Exact<Partial<Entity>, Changed> &
@@ -2693,6 +2738,14 @@ export type KeyComponents<Spec, Given = unknown> = Spec extends string
           : never
 
 /**
+ * The value of a name at the given item of an update, as `givenAt` reads it at run time: the entry of
+ * the change at the written name comes first, then the walk into a written object.
+ */
+type GivenAt<Given, P extends string> = P extends keyof Given
+    ? Given[P]
+    : ValueAt<Given, P>
+
+/**
  * The components of the variants that the given discriminant selects, or of every variant.
  *
  * The type half of the narrowing in {@link componentsOf}. The discriminator can name a path below
@@ -2700,10 +2753,10 @@ export type KeyComponents<Spec, Given = unknown> = Spec extends string
  * that is not a literal of a variant selects nothing, so every variant is read.
  */
 type VariantComponents<Variants, Discriminator extends string, Given> = [
-    ValueAt<Given, Discriminator>,
+    GivenAt<Given, Discriminator>,
 ] extends [never]
     ? KeyComponents<Variants[keyof Variants], Given>
-    : ValueAt<Given, Discriminator> extends infer Chosen extends keyof Variants
+    : GivenAt<Given, Discriminator> extends infer Chosen extends keyof Variants
       ? KeyComponents<Variants[Chosen], Given>
       : KeyComponents<Variants[keyof Variants], Given>
 
@@ -3156,7 +3209,7 @@ const agreedConstant = (codec: TaggedRuntime, component: string): unknown => {
 export const keyComponents = (
     spec: unknown,
     given: Record<string, unknown> = {},
-): ReadonlySet<string> => componentsOf(spec, given).components
+): ReadonlySet<string> => componentsOf(spec, given, valueAt).components
 
 /**
  * The one walk, which also says whether a discriminant chose anything along the way.
@@ -3172,6 +3225,7 @@ export const keyComponents = (
 const componentsOf = (
     spec: unknown,
     given: Record<string, unknown>,
+    read: Reader,
 ): { components: ReadonlySet<string>; narrows: boolean } => {
     const components = new Set<string>()
     let narrows = false
@@ -3201,7 +3255,7 @@ const componentsOf = (
 
         // the discriminant chooses which list applies, so when its value is known only that
         // variant's components are needed — the others describe an item this is not
-        const chosen = valueAt(given, discriminator)
+        const chosen = read(given, discriminator)
         if (!isValue(chosen)) {
             for (const variant of Object.values(variants ?? {})) walk(variant)
             return
@@ -3297,9 +3351,8 @@ type RefuseComponent<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
 ]
     ? RefuseObject<E, Name, 'an entry with no codec'>
     : Name extends `${string}.${string}`
-      ? // the item holds the whole name, or reads the path, so the codec writes either member
-            | CodecMember<Enc, Name>
-            | CodecMemberAtPath<CodecSpec, Name> extends infer M
+      ? // a name with a `.` is a path, so the codec writes the member at the path
+        CodecMemberAtPath<CodecSpec, Name> extends infer M
           ? [M] extends [never]
               ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself`>
               : [Exclude<M, 'S' | 'N'>] extends [never]
@@ -3603,6 +3656,15 @@ export const tableEntry =
                 storedText(path, value, given, alone),
         ) as (name: never, attributes: never, config?: never) => unknown
 
+        /** The builder of an update: it reads the given item by the written name first, as `given` of the model does. */
+        const buildGiven = key()(
+            expanded as never,
+            sep,
+            (path, value, given, alone) =>
+                storedText(path, value, given, alone),
+            givenAt,
+        ) as (name: never, attributes: never, config?: never) => unknown
+
         /**
          * A built codec carries its own options; a spec takes the defaults.
          *
@@ -3636,11 +3698,16 @@ export const tableEntry =
             attributes === undefined
                 ? undefined
                 : isTagged(attributes)
-                  ? (component: string) => agreedConstant(attributes, component)
+                  ? (component: string) =>
+                        agreedConstant(attributes, decidedName(component))
                   : (component: string) => {
                         // the spec and not the codec that a member marks:
-                        // the two marks are the answer here, so the declaration is what is read
-                        const found = own(attributes.spec, component)
+                        // the two marks are the answer here, so the declaration is what is read.
+                        // A component meets a decided attribute through its first name
+                        const found = own(
+                            attributes.spec,
+                            decidedName(component),
+                        )
                         return found && decidedBy(component, found)
                     }
 
@@ -3661,11 +3728,12 @@ export const tableEntry =
          */
         const keys = Object.keys(expanded).map((name) => {
             const spec = expanded[name]
-            const { components, narrows } = componentsOf(spec, {})
+            const { components, narrows } = componentsOf(spec, {}, valueAt)
             if (constantAt) {
                 for (const component of components) {
                     const value = constantAt(component)
-                    if (value !== undefined) decided[component] = value
+                    if (value !== undefined)
+                        decided[decidedName(component)] = value
                 }
             }
             return {
@@ -3679,6 +3747,10 @@ export const tableEntry =
         const quoted = (names: Iterable<string>) =>
             [...names].map((x) => `'${x}'`).join(', ')
 
+        /** Whether the codec decides a component: a component meets a decided attribute through its first name. */
+        const isDecided = (component: string): boolean =>
+            Object.hasOwn(decided, decidedName(component))
+
         /**
          * `touched` of `KeyDef`, as the model states it in `KeyUpdate`: the component that this change
          * carries, which is what rewrites a key. A component that the codec decides is never carried.
@@ -3688,7 +3760,7 @@ export const tableEntry =
         const touchedBy =
             (changed: Record<string, unknown>) => (component: string) =>
                 relatedToAny(component, Object.keys(changed)) &&
-                !Object.hasOwn(decided, component)
+                !isDecided(component)
 
         /**
          * The attributes that the keys tie to the change, the change included.
@@ -3709,14 +3781,12 @@ export const tableEntry =
                 grew = false
                 for (const key of keys) {
                     const components =
-                        key.fixed ?? componentsOf(key.spec, given).components
+                        key.fixed ??
+                        componentsOf(key.spec, given, givenAt).components
                     if (![...components].some((c) => relatedToAny(c, block)))
                         continue
                     for (const component of components) {
-                        if (
-                            Object.hasOwn(decided, component) ||
-                            block.has(component)
-                        )
+                        if (isDecided(component) || block.has(component))
                             continue
                         block.add(component)
                         grew = true
@@ -3754,7 +3824,8 @@ export const tableEntry =
             for (const key of keys) {
                 if (!key.ofTable) continue
                 const components =
-                    key.fixed ?? componentsOf(key.spec, given).components
+                    key.fixed ??
+                    componentsOf(key.spec, given, givenAt).components
                 const held = [...components].filter((c) =>
                     relatedToAny(c, block),
                 )
@@ -3814,7 +3885,7 @@ export const tableEntry =
         /** The refusal of a path that the codec cannot address, with the reason of `at`. */
         const pathRefusal = (path: string, error: CodecError): RotoriseError =>
             new RotoriseError(
-                `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
+                `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}${slotsAt(path).length > 0 ? ` The codec declares an attribute of that name, but ${dotIsPath}.` : ''}`,
             )
         /**
          * The codec that the entry writes at a path below the top level, or the refusal of a path
@@ -3863,7 +3934,6 @@ export const tableEntry =
         const fieldSlots = (
             field: string,
             item?: Record<string, unknown>,
-            open = true,
         ): ObjectSlot[] => {
             if (attributes === undefined) return []
             if (isTagged(attributes)) {
@@ -3882,13 +3952,11 @@ export const tableEntry =
                 return variants.flatMap((variant) => {
                     const declared = own(variant.spec, field)
                     if (declared !== undefined) return [declared]
-                    return variant.rest === undefined || !open
-                        ? []
-                        : [variant.rest]
+                    return variant.rest === undefined ? [] : [variant.rest]
                 })
             }
             const declared = slotsAt(field)
-            if (declared.length > 0 || !open) return declared
+            if (declared.length > 0) return declared
             // the erased item codec types its rest as `undefined`, and the run time holds a codec there
             const rest = (
                 attributes as unknown as { readonly rest?: ObjectSlot }
@@ -3897,38 +3965,17 @@ export const tableEntry =
         }
 
         /**
-         * The slots that write a component of a key, at an item. The item decides the slot as it decides
-         * the value: a name with a `.` that the item holds as an attribute takes the slots of that
-         * attribute, and any other name with a `.` is a path, and takes the one slot of the codec at
-         * the path.
+         * The slots that write a component of a key. A name with a `.` is a path, and takes the one
+         * slot of the codec at the path. Any other name is an attribute, and takes the slots of the
+         * field, or of the rest.
          */
         const componentSlots = (
             name: string,
-            item: Record<string, unknown>,
+            item?: Record<string, unknown>,
         ): ObjectSlot[] => {
-            if (!name.includes('.') || Object.hasOwn(item, name))
-                return fieldSlots(name, item)
+            if (!name.includes('.')) return fieldSlots(name, item)
             const slot = pathSlot(name)
             return slot === undefined ? [] : [slot]
-        }
-
-        /**
-         * The readings of a component, where no item is given. A name with a `.` can read the attribute
-         * that the codec declares under the whole name, or the path, so the check reads each reading. The
-         * rest does not declare a name with a `.`. A name that the codec declares under no whole name is
-         * a path, and a path that the codec cannot address is refused.
-         */
-        const componentReadings = (name: string): ObjectSlot[][] => {
-            if (!name.includes('.')) return [fieldSlots(name)]
-            const declared = fieldSlots(name, undefined, false)
-            const slot = pathAt(name)
-            if (declared.length === 0) {
-                if (slot instanceof RotoriseError) throw slot
-                return [slot === undefined ? [] : [slot]]
-            }
-            return slot === undefined || slot instanceof RotoriseError
-                ? [declared]
-                : [declared, [slot]]
         }
 
         /**
@@ -4041,42 +4088,40 @@ export const tableEntry =
                             typeof transform === 'function'
                         )
                             continue
-                        for (const slots of componentReadings(field)) {
-                            oneCodec(name, field, slots)
-                            for (const slot of slots) {
-                                const stored = storedAt(slot)
-                                if (
-                                    ![...stored].every(
-                                        (m) => m === 'S' || m === 'N',
-                                    )
+                        const slots = componentSlots(field)
+                        oneCodec(name, field, slots)
+                        for (const slot of slots) {
+                            const stored = storedAt(slot)
+                            if (
+                                ![...stored].every(
+                                    (m) => m === 'S' || m === 'N',
                                 )
-                                    throw new RotoriseError(
-                                        `'${name}' prints '${field}' as a component, and the codec writes it as ${[...stored].join(' and ')}. A component is text or a number: write the attribute as S or N.`,
-                                    )
-                            }
+                            )
+                                throw new RotoriseError(
+                                    `'${name}' prints '${field}' as a component, and the codec writes it as ${[...stored].join(' and ')}. A component is text or a number: write the attribute as S or N.`,
+                                )
                         }
                     }
                 } else if (typeof value === 'string') {
                     // a slot of two members is one field stored as two types. A second slot of the
                     // field is another variant. A path has the one slot of the codec at the path
-                    for (const written of componentReadings(value)) {
-                        oneCodec(name, value, written)
-                        for (const [at, slot] of written.entries()) {
-                            const stored = storedAt(slot)
-                            if (stored.size > 1) {
-                                throw new RotoriseError(
-                                    `'${name}' is built from '${value}', which is stored as more than one type (${[...stored].join(' and ')}). A key attribute has one type.`,
-                                )
-                            }
-                            for (const member of stored)
-                                if (!found.has(member))
-                                    found.set(
-                                        member,
-                                        at === 0
-                                            ? `'${value}'`
-                                            : `'${value}' in another variant`,
-                                    )
+                    const written = componentSlots(value)
+                    oneCodec(name, value, written)
+                    for (const [at, slot] of written.entries()) {
+                        const stored = storedAt(slot)
+                        if (stored.size > 1) {
+                            throw new RotoriseError(
+                                `'${name}' is built from '${value}', which is stored as more than one type (${[...stored].join(' and ')}). A key attribute has one type.`,
+                            )
                         }
+                        for (const member of stored)
+                            if (!found.has(member))
+                                found.set(
+                                    member,
+                                    at === 0
+                                        ? `'${value}'`
+                                        : `'${value}' in another variant`,
+                                )
                     }
                 }
             }
@@ -4122,15 +4167,17 @@ export const tableEntry =
             item: Record<string, unknown>,
             value: unknown,
             written?: AttributeMap,
+            read: Reader = valueAt,
         ): Carrying<KeyMember> => {
-            const selected = select(expanded[name], item)
+            const selected = select(expanded[name], item, read)
             // a list of components and a `null` arm read no attribute of the codec
             if (attributes === undefined || selected.kind !== 'attr')
                 return asKey(name, value)
             const field = selected.name
+            // a name with a `.` is a path, so the attribute that the codec wrote under the name is no reading
             const encoded: AttributeValue | CodecError | undefined =
-                written?.[field] ??
-                keyAttribute(componentSlots(field, item), valueAt(item, field))
+                (field.includes('.') ? undefined : written?.[field]) ??
+                keyAttribute(componentSlots(field, item), read(item, field))
             if (encoded === undefined) return asKey(name, value)
             const stored = keyMembers.get(name)
             // the member is decided at construction, so a write at another member is no key
@@ -4184,7 +4231,8 @@ export const tableEntry =
 
             for (const key of keys) {
                 const components =
-                    key.fixed ?? componentsOf(key.spec, given).components
+                    key.fixed ??
+                    componentsOf(key.spec, given, givenAt).components
 
                 /**
                  * Two questions of the components, as two flags.
@@ -4201,7 +4249,7 @@ export const tableEntry =
                 let lacks = false
                 for (const component of components) {
                     if (touched(component)) touches = true
-                    else if (!Object.hasOwn(decided, component)) lacks = true
+                    else if (!isDecided(component)) lacks = true
                 }
                 if (!touches) continue
 
@@ -4215,13 +4263,22 @@ export const tableEntry =
 
                 const step = ((): [string, AttributeValue] | undefined => {
                     try {
-                        const built = buildKey(
+                        const built = buildGiven(
                             key.name as never,
                             given as never,
                         )
                         return built === undefined
                             ? undefined
-                            : [key.name, carried(key.name, given, built)]
+                            : [
+                                  key.name,
+                                  carried(
+                                      key.name,
+                                      given,
+                                      built,
+                                      undefined,
+                                      givenAt,
+                                  ),
+                              ]
                     } catch (error) {
                         // the step names the key that refused, and keeps the kind of the refusal,
                         // whether the builder or the carrier refused
@@ -4289,19 +4346,19 @@ export const tableEntry =
             name: string,
             attributes: Record<string, unknown>,
         ): SortCondition | undefined => {
-            const arm = select(expanded[name], attributes)
+            const arm = select(expanded[name], attributes, valueAt)
             const components =
                 arm.kind === 'leaf'
                     ? arm.components
                     : arm.kind === 'attr'
                       ? [arm.name]
                       : []
-            const printed = parts(components, attributes)
+            const printed = parts(components, attributes, valueAt)
             // a `null` arm and a missing arm have no part, so the names of the spec stand for the parts
             const given =
                 arm.kind === 'null' || arm.kind === 'missing'
                     ? [
-                          ...componentsOf(expanded[name], attributes)
+                          ...componentsOf(expanded[name], attributes, valueAt)
                               .components,
                       ].some((c) => isValue(valueAt(attributes, c)))
                     : arm.kind === 'attr'

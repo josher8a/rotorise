@@ -289,129 +289,283 @@ describe('a key component with a codec', () => {
     })
 })
 
-describe('a name of a key that holds a dot and that the codec declares as an attribute', () => {
+/**
+ * **A name with a `.` in a key is a path, always.** DynamoDB reads a `.` in a name of an expression as
+ * a path separator. An item is a document, so a key reads the path at an item and never the attribute
+ * whose own name holds a `.`. A change is a map from a written path to a value, so the given item of
+ * an update reads the written name first, and then the walk into a written object.
+ */
+describe('a name of a key that holds a dot is a path', () => {
     type Kennel = {
         petId: string
-        'owner.name'?: number
+        'owner.name': number
         owner: { name: string }
     }
-    type Plain = { petId: string; 'owner.name': string }
-    const codec = {
+    const kennel: Kennel = {
+        petId: 'p1',
+        'owner.name': 7,
+        owner: { name: 'bob' },
+    }
+    const codecOf = {
         petId: string,
-        'owner.name': optional(number),
+        'owner.name': number,
         owner: object({ name: string }),
     }
-    // the type refuses an optional component with no default, so the schema is cast, as in the
-    // tests of the optional components
-    const Pets = tableEntry<Kennel>()(
-        { PK: ['petId'], SK: ['petId', 'owner.name'] } as never,
-        { codec },
-    ) as unknown as {
-        unsafeToItem: (item: Kennel) => Record<string, unknown>
-        keyUpdates: (change: Kennel) => unknown
-    }
 
-    /**
-     * **The item reads the whole name first, and the codec writes the slot that the item reads.** An
-     * item that holds the attribute `'owner.name'` gives that attribute, and the path `owner` then
-     * `name` is read only where the item holds no such name. The slot follows the value, in the
-     * list of components, and in a change.
-     */
-    it('prints the attribute that the item holds under the whole name, not the object at the path', () => {
-        const kennel: Kennel = {
-            petId: 'p1',
-            'owner.name': 7,
-            owner: { name: 'bob' },
+    it('prints the object at the path and not the attribute of the whole name, with a codec and with none', () => {
+        const None = tableEntry<Kennel>()({
+            PK: ['petId'],
+            GSI1SK: ['owner.name'],
+        })
+        const Coded = tableEntry<Kennel>()(
+            { PK: ['petId'], GSI1SK: ['owner.name'] },
+            { codec: codecOf },
+        )
+        expect(None.toEntry(kennel).GSI1SK).toBe('NAME#bob')
+        expect(Coded.unsafeToItem(kennel).GSI1SK).toEqual({ S: 'NAME#bob' })
+    })
+
+    it('rebuilds a key of a path for a change of the object, and for a write to the path', () => {
+        const None = tableEntry<Kennel>()({
+            PK: ['petId'],
+            GSI1SK: ['owner.name'],
+        })
+        const Coded = tableEntry<Kennel>()(
+            { PK: ['petId'], GSI1SK: ['owner.name'] },
+            { codec: codecOf },
+        )
+        const bea = {
+            set: { GSI1SK: { S: 'NAME#bea' } },
+            remove: [],
         }
-        expect(Pets.unsafeToItem(kennel).SK).toEqual({
-            S: 'PETID#p1#OWNER.NAME#7',
-        })
-        expect(Pets.keyUpdates({ ...kennel, petId: 'p2' })).toEqual({
-            set: {
-                PK: { S: 'PETID#p2' },
-                SK: { S: 'PETID#p2#OWNER.NAME#7' },
-            },
+        expect(None.keyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
+        // a write to the path is a change of the key: the given item reads the written name first
+        expect(None.keyUpdates({ 'owner.name': 8 })).toEqual({
+            set: { GSI1SK: { S: 'NAME#8' } },
             remove: [],
         })
-    })
-
-    it('reads the path where the item holds no attribute of the whole name', () => {
-        const kennel: Kennel = { petId: 'p1', owner: { name: 'bob' } }
-        expect(Pets.unsafeToItem(kennel).SK).toEqual({
-            S: 'PETID#p1#NAME#bob',
-        })
-        expect(Pets.keyUpdates({ ...kennel, petId: 'p2' })).toEqual({
-            set: {
-                PK: { S: 'PETID#p2' },
-                SK: { S: 'PETID#p2#NAME#bob' },
-            },
-            remove: [],
-        })
-    })
-
-    it('prints a name that the codec declares alone, with no object at the path', () => {
-        const Alone = tableEntry<Plain>()(
-            {
-                PK: ['petId'],
-                SK: ['petId', 'owner.name'],
-                GSI1PK: 'owner.name',
-            },
-            { codec: { petId: string, 'owner.name': string } },
+        expect(Coded.keyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
+        // the codec writes the path as text, so a number written to the path is refused
+        expect(() => Coded.keyUpdates({ 'owner.name': 8 })).toThrow(
+            /codec writes no text or number/,
         )
-        const written = Alone.unsafeToItem({ petId: 'p1', 'owner.name': 'ann' })
-        expect(written.SK).toEqual({ S: 'PETID#p1#OWNER.NAME#ann' })
-        expect(written.GSI1PK).toEqual({ S: 'ann' })
-        expect(Alone.keyUpdates({ petId: 'p2', 'owner.name': 'bea' })).toEqual({
-            set: {
-                PK: { S: 'PETID#p2' },
-                SK: { S: 'PETID#p2#OWNER.NAME#bea' },
-                GSI1PK: { S: 'bea' },
-            },
-            remove: [],
+    })
+
+    it('refuses a change of a path above the path that a key reads, because the change writes a part of what the key reads', () => {
+        type Deep = {
+            petId: string
+            'owner.name': number
+            owner: { name: { first: string } }
+        }
+        const Pets = tableEntry<Deep>()({
+            PK: ['petId'],
+            GSI1PK: ['owner.name.first'],
+        })
+        expect(() =>
+            // the type reads a write to 'owner.name' as a hold of the path below it, and the run time reads no value there
+            Pets.keyUpdates({ 'owner.name': 8 }),
+        ).toThrow(/cannot be rebuilt/)
+    })
+
+    it('gives the transform of a component the value at the path, and types its parameter as the type at the path', () => {
+        type Optional = {
+            petId: string
+            'owner.name'?: number
+            owner: { name: string }
+        }
+        const Pets = tableEntry<Optional>()({
+            PK: ['petId'],
+            SK: [['owner.name', (name: string) => name.toUpperCase(), '']],
+        })
+        expect(Pets.toEntry({ petId: 'p1', owner: { name: 'bob' } }).SK).toBe(
+            'NAME#BOB',
+        )
+        tableEntry<Optional>()({
+            PK: ['petId'],
+            // @ts-expect-error the parameter is the string at the path, and not the number of the attribute
+            SK: [['owner.name', (name: number) => name + 1, 0]],
         })
     })
 
-    it('writes no key of one attribute for a pet that lacks an optional name that the codec declares alone', () => {
-        const Alone = tableEntry<{ petId: string; 'owner.name'?: string }>()(
-            { PK: ['petId'], GSI1PK: 'owner.name' },
-            { codec: { petId: string, 'owner.name': optional(string) } },
+    it('prints the object at the path where the attribute of the whole name is absent or undefined', () => {
+        type Undefinable = {
+            petId: string
+            'owner.name'?: number | undefined
+            owner: { name: string }
+        }
+        const Pets = tableEntry<Undefinable>()({
+            PK: ['petId'],
+            SK: ['owner.name'],
+        })
+        expect(Pets.toEntry({ petId: 'p1', owner: { name: 'bob' } }).SK).toBe(
+            'NAME#bob',
         )
-        expect(Alone.unsafeToItem({ petId: 'p1' }).GSI1PK).toBeUndefined()
+        expect(
+            Pets.toEntry({
+                petId: 'p1',
+                'owner.name': undefined,
+                owner: { name: 'bob' },
+            }).SK,
+        ).toBe('NAME#bob')
     })
 
-    it('refuses a component that the codec writes as BOOL under the whole name, where the path holds text', () => {
+    it('refuses a path below a refinement, in the type and at construction, for a name that the codec also declares whole', () => {
+        const Owner = refine(
+            object({ name: string }),
+            (o: { readonly name: string }): o is { readonly name: string } =>
+                o.name !== '',
+        )
         expect(() =>
             tableEntry<{
                 petId: string
-                'owner.name': boolean
+                'owner.name'?: string
                 owner: { name: string }
             }>()(
                 {
                     PK: ['petId'],
-                    // @ts-expect-error the codec writes the whole name as BOOL
-                    SK: ['petId', 'owner.name'],
+                    // @ts-expect-error the path enters a refinement, and the attribute of the whole name is no reading
+                    GSI1PK: 'owner.name',
                 },
                 {
                     codec: {
                         petId: string,
-                        'owner.name': boolean,
-                        owner: object({ name: string }),
+                        'owner.name': optional(string),
+                        owner: Owner,
+                    },
+                },
+            ),
+        ).toThrow(/cannot address that path/)
+    })
+
+    const Open = item(
+        object({ petId: string, owner: object({ name: string }) }, [
+            string,
+            optional(string),
+        ]),
+    )
+    type OpenPet = ReturnType<typeof Open.unsafeDecode>
+    type OpenKeys = { petId: string; owner: { name: string } }
+
+    it('reads the path over an open codec, where the rest holds no attribute of the whole name', () => {
+        const Pets = tableEntry<OpenPet, never, OpenKeys>()(
+            { PK: ['petId'], GSI1PK: 'owner.name' },
+            { codec: Open },
+        )
+        expect(
+            Pets.unsafeToItem({ petId: 'p1', owner: { name: 'bob' } }).GSI1PK,
+        ).toEqual({ S: 'bob' })
+    })
+
+    it('prints the object at the path on each route, for a pet that holds the name of the path in the rest', () => {
+        const Pets = tableEntry<OpenPet, never, OpenKeys>()(
+            { PK: ['petId'], GSI1SK: ['owner.name'] },
+            { codec: Open },
+        )
+        const pet: OpenPet = {
+            petId: 'p1',
+            'owner.name': 'ann',
+            owner: { name: 'bob' },
+        }
+        expect(Pets.unsafeToItem(pet).GSI1SK).toEqual({ S: 'NAME#bob' })
+        expect(Pets.toEntry(pet).GSI1SK).toBe('NAME#bob')
+        expect(Pets.keys(['GSI1SK'], pet)).toEqual({
+            GSI1SK: { S: 'NAME#bob' },
+        })
+        expect(Pets.keyUpdates({ owner: { name: 'bea' } })).toEqual({
+            set: { GSI1SK: { S: 'NAME#bea' } },
+            remove: [],
+        })
+        // a write to the path is a change of the key, and the rest of the open codec holds no reading
+        expect(Pets.keyUpdates({ 'owner.name': 'cat' })).toEqual({
+            set: { GSI1SK: { S: 'NAME#cat' } },
+            remove: [],
+        })
+    })
+
+    it('refuses a write to a path below a key that reads the name above, because the change lacks the value that the key reads', () => {
+        type Housed = { petId: string; owner: string; 'owner.name': number }
+        const None = tableEntry<Housed>()({
+            PK: ['petId'],
+            GSI1SK: ['owner'],
+        })
+        const Coded = tableEntry<Housed>()(
+            { PK: ['petId'], GSI1SK: ['owner'] },
+            { codec: { petId: string, owner: string, 'owner.name': number } },
+        )
+        // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
+        expect(() => None.keyUpdates({ 'owner.name': 8 })).toThrow(
+            /cannot be rebuilt/,
+        )
+        // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
+        expect(() => Coded.keyUpdates({ 'owner.name': 8 })).toThrow(
+            /cannot be rebuilt/,
+        )
+    })
+
+    it('refuses an entity whose attribute holds the dot, in the type and at construction, and gives the reason', () => {
+        type Flat = { petId: string; 'owner.name': string }
+        // an entry with no codec holds no declaration at run time, so the type is the one refusal
+        tableEntry<Flat>()({
+            PK: ['petId'],
+            // @ts-expect-error a `.` in a key name is a path separator, as in DynamoDB
+            GSI1SK: ['owner.name'],
+        })
+        expect(() =>
+            tableEntry<Flat>()(
+                {
+                    PK: ['petId'],
+                    // @ts-expect-error a `.` in a key name is a path separator, as in DynamoDB
+                    GSI1SK: ['owner.name'],
+                },
+                { codec: { petId: string, 'owner.name': string } },
+            ),
+        ).toThrow(/a `\.` in a key name is a path separator, as in DynamoDB/)
+    })
+
+    it('reads a component through the first name when the codec decides an attribute of a dotted name', () => {
+        type Decided = {
+            petId: string
+            'owner.name': 'x'
+            owner: { name: string }
+        }
+        const Pets = tableEntry<Decided>()(
+            { PK: ['petId'], GSI1SK: ['owner.name'] },
+            {
+                codec: {
+                    petId: string,
+                    'owner.name': string('x'),
+                    owner: object({ name: string }),
+                },
+            },
+        )
+        expect(
+            Pets.unsafeToItem({
+                petId: 'p1',
+                'owner.name': 'x',
+                owner: { name: 'bob' },
+            }).GSI1SK,
+        ).toEqual({ S: 'NAME#bob' })
+        expect(Pets.keyUpdates({ owner: { name: 'bea' } })).toEqual({
+            set: { GSI1SK: { S: 'NAME#bea' } },
+            remove: [],
+        })
+    })
+
+    it('refuses a component that the codec writes as BOOL at the path', () => {
+        expect(() =>
+            tableEntry<{ petId: string; owner: { flag: boolean } }>()(
+                {
+                    PK: ['petId'],
+                    // @ts-expect-error the codec writes the path as BOOL
+                    SK: ['petId', 'owner.flag'],
+                },
+                {
+                    codec: {
+                        petId: string,
+                        owner: object({ flag: boolean }),
                     },
                 },
             ),
         ).toThrow(/writes it as BOOL/)
-    })
-
-    it('refuses a key of one attribute whose two readings write two members, because a key attribute has one type', () => {
-        expect(() =>
-            tableEntry<Kennel>()(
-                {
-                    PK: ['petId'],
-                    // @ts-expect-error the type refuses a key of one attribute with two members too
-                    GSI1PK: 'owner.name',
-                },
-                { codec },
-            ),
-        ).toThrow(/stores 'owner.name' as N and 'owner.name' as S/)
     })
 })
