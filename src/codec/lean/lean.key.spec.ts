@@ -1108,6 +1108,7 @@ const itemDraws: readonly Record<string, unknown>[] = [
     { petId: 'p1' },
     { petId: 'p1', nick: 'rex' },
     { petId: 'p1', nick: '', age: 3 },
+    { petId: 'p1', nick: '' },
 ]
 
 /** The value of an item as the model reads it: a string, a numeral, or a map of attributes. */
@@ -1153,8 +1154,11 @@ const writtenAt = (
     )
 }
 
-/** The rows that a throw of `toItem` refuses: the separator, the empty value, a lacking component, the empty value of `sparse`. */
-const REFUSED_ITEM_ROWS = 4
+/**
+ * The rows that a throw of `toItem` refuses: the separator, the empty value, a lacking component, the
+ * empty value of `sparse`, and the empty component of the composite key of `composite`.
+ */
+const REFUSED_ITEM_ROWS = 5
 
 const itemRows = (): ItemRow[] => {
     const rows: ItemRow[] = []
@@ -1289,6 +1293,15 @@ describe('the item rows, against the model of the row of an item', () => {
         const row = rows.find(
             (one) =>
                 one.name.startsWith('sparse_') &&
+                printedAt(one.value).some(([n, v]) => n === 'nick' && v === ''),
+        )
+        expect(row?.outcome.kind).toBe('refused')
+    })
+
+    it('refuses a composite key whose plain component is the empty text, as it refuses a component that the pet lacks', () => {
+        const row = rows.find(
+            (one) =>
+                one.name.startsWith('composite_') &&
                 printedAt(one.value).some(([n, v]) => n === 'nick' && v === ''),
         )
         expect(row?.outcome.kind).toBe('refused')
