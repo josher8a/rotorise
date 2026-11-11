@@ -11,6 +11,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
 import {
     array,
+    binary,
     boolean,
     discriminatedUnion,
     held,
@@ -114,6 +115,20 @@ describe('a key component with a codec', () => {
                 { codec: { id: string, tags: array(string) } },
             ),
         ).toThrow(/as a component/)
+    })
+
+    it('refuses a component that the codec writes as B at a path, where a key of one attribute takes B', () => {
+        type Chipped = { id: string; tag: { chip: Uint8Array } }
+        expect(() =>
+            tableEntry<Chipped>()(
+                {
+                    PK: ['id'],
+                    // @ts-expect-error a component is text or a number, and the codec writes B at the path
+                    SK: ['tag.chip'],
+                },
+                { codec: { id: string, tag: object({ chip: binary }) } },
+            ),
+        ).toThrow(/writes it as B/)
     })
 
     it('accepts a component that the codec writes as S or N', () => {

@@ -1128,9 +1128,12 @@ type ValidateLeaf<
     All,
 > = [MemberOfName<E, Enc, CodecSpec, Name>] extends [infer Own]
     ? [Own] extends [never]
-        ? Name extends `${string}.${string}`
-            ? NoPathMember<KeyName, Name>
-            : NoKeyMember<KeyName, Name>
+        ? // an entry with no codec has no frontier of the type: the value itself is none of the three
+          [Enc] extends [never]
+            ? NoKeyMember<KeyName, Name>
+            : Name extends `${string}.${string}`
+              ? NoPathMember<KeyName, Name>
+              : NoKeyMember<KeyName, Name>
         : [Exclude<Own, KeyMember>] extends [never]
           ? IsUnion<Own> extends true
               ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as more than one type. A key attribute has one type`>
@@ -3271,16 +3274,17 @@ const componentsOf = (
 
 type PlainComponent = string | number | bigint | boolean | null | undefined
 
-/** The names that a key spec uses as a component: each name of a list, and a bare path, at any depth of a match. */
+/**
+ * The names that a key spec uses as a component: each name of a list, at any depth of a match. A
+ * name that stands alone is a key of one attribute, and `ValidateLeaf` owns that name.
+ */
 type ComponentsOf<Spec> = Spec extends readonly unknown[]
     ? Extract<Spec[number], string>
-    : Spec extends AnyPath
-      ? Spec
-      : Spec extends { readonly spec: infer Arms }
-        ? ComponentsOf<Arms[keyof Arms]>
-        : Spec extends { readonly cases: infer C }
-          ? ComponentsOf<ArmOfCases<C>>
-          : never
+    : Spec extends { readonly spec: infer Arms }
+      ? ComponentsOf<Arms[keyof Arms]>
+      : Spec extends { readonly cases: infer C }
+        ? ComponentsOf<ArmOfCases<C>>
+        : never
 
 /** The names that the specs of `Schema` use as a component. One test of the union is the cheap path. */
 type ComponentNames<Schema> = {
@@ -3314,31 +3318,24 @@ type RefuseComponents<E, Enc, CodecSpec, Spec> = Spec extends readonly unknown[]
               ? RefuseComponent<E, Enc, CodecSpec, Spec[I]>
               : unknown
       }
-    : Spec extends AnyPath
-      ? RefuseComponent<E, Enc, CodecSpec, Spec>
-      : Spec extends { readonly spec: infer Arms }
+    : Spec extends { readonly spec: infer Arms }
+      ? {
+            spec: {
+                [L in keyof Arms]: RefuseComponents<E, Enc, CodecSpec, Arms[L]>
+            }
+        }
+      : Spec extends { readonly cases: infer C }
         ? {
-              spec: {
-                  [L in keyof Arms]: RefuseComponents<
-                      E,
-                      Enc,
-                      CodecSpec,
-                      Arms[L]
-                  >
+              cases: {
+                  [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
+                      ? readonly [
+                            unknown,
+                            RefuseComponents<E, Enc, CodecSpec, Arm>,
+                        ]
+                      : unknown
               }
           }
-        : Spec extends { readonly cases: infer C }
-          ? {
-                cases: {
-                    [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
-                        ? readonly [
-                              unknown,
-                              RefuseComponents<E, Enc, CodecSpec, Arm>,
-                          ]
-                        : unknown
-                }
-            }
-          : unknown
+        : unknown
 
 /**
  * One component. An entry with no codec prints the value, so an object is refused. An entry with a

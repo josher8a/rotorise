@@ -182,6 +182,39 @@ describe('a key of one Uint8Array attribute is B in every path that writes a row
     })
 })
 
+describe('a key attribute of DynamoDB is S, N or B, at a path as at a name', () => {
+    type Chipped = { petId: string; tag: { chip: Uint8Array } }
+    const chip = new Uint8Array([1, 2])
+    const pet = { petId: 'p1', tag: { chip } }
+    const Plain = tableEntry<Chipped>()({
+        PK: ['petId'],
+        GSI1PK: 'tag.chip',
+    })
+    const Coded = tableEntry<Chipped>()(
+        { PK: ['petId'], GSI1PK: 'tag.chip' },
+        { codec: { petId: string, tag: object({ chip: binary }) } },
+    )
+
+    it('writes B in keys, with a codec and with none', () => {
+        expect(Plain.keys(['GSI1PK'], pet)).toEqual({ GSI1PK: { B: chip } })
+        expect(Coded.keys(['GSI1PK'], pet)).toEqual({ GSI1PK: { B: chip } })
+    })
+
+    it('writes B in toItem with a codec, and keeps the bytes in toEntry with none', () => {
+        expect(Plain.toEntry(pet).GSI1PK).toBe(chip)
+        expect(Coded.unsafeToItem(pet).GSI1PK).toEqual({ B: chip })
+    })
+
+    it('writes B in keyUpdates, with a codec and with none', () => {
+        expect(Plain.keyUpdates({ tag: { chip } }).set).toEqual({
+            GSI1PK: { B: chip },
+        })
+        expect(Coded.keyUpdates({ tag: { chip } }).set).toEqual({
+            GSI1PK: { B: chip },
+        })
+    })
+})
+
 describe('DynamoDB refuses an empty key value, so the run time refuses it', () => {
     it('refuses an empty string key, and names the key and not the value', () => {
         expect(() => Tags.keys(['SK'], { nick: '' })).toThrow(

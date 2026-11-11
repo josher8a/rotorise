@@ -107,7 +107,19 @@ describe('a path that the type does not see', () => {
                 },
             ),
         ).type.errors.snap(
-            "Type '\"meta.note\"' is not assignable to type 'never'.The intersection '\"meta.note\" & NoPathMember<\"GSI1SK\", \"meta.note\"> & ErrorMessage<\"[tableEntry] 'meta.note' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below n...' was reduced to 'never' because property '[errorMessage]' has conflicting types in some constituents.",
+            'Type \'"meta.note"\' is not assignable to type \'"meta.note" & NoPathMember<"GSI1SK", "meta.note">\'.Type \'string\' is not assignable to type \'NoPathMember<"GSI1SK", "meta.note">\'.',
+        )
+    })
+
+    it('names the member rule for an object at a path of an entry with no codec, because no codec has a gap', () => {
+        attest(() =>
+            tableEntry<{ id: string; meta: { note: { text: string } } }>()({
+                PK: ['id'],
+                // @ts-expect-error an object is none of S, N and B
+                GSI1SK: 'meta.note',
+            }),
+        ).type.errors.snap(
+            'Type \'"meta.note"\' is not assignable to type \'"meta.note" & NoKeyMember<"GSI1SK", "meta.note">\'.Type \'string\' is not assignable to type \'NoKeyMember<"GSI1SK", "meta.note">\'.',
         )
     })
 })
