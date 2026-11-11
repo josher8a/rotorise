@@ -595,14 +595,11 @@ type ValueAt<E, P extends string> = E extends unknown
           : never
     : never
 
-/** The value of a key name: an attribute, or the value at the path of a name with a `.`. */
-type ValueOfKey<E, P> = P extends `${string}.${string}`
-    ? ValueAt<E, P>
-    : [ValueOf<E, P>] extends [never]
-      ? P extends string
-          ? ValueAt<E, P>
-          : never
-      : ValueOf<E, P>
+/**
+ * The value of a key name. `ValueAt` reads a name that is a string: an attribute, or the value at
+ * the path of a name with a `.`. A name that is no string is a key of the entity, and no path.
+ */
+type ValueOfKey<E, P> = P extends string ? ValueAt<E, P> : ValueOf<E, P>
 
 type LastName<P extends string> = P extends `${string}.${infer Tail}`
     ? LastName<Tail>
