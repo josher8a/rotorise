@@ -73,6 +73,7 @@ import { codecOfTerm } from './capabilities'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every, everyEntry } from './codec'
 import { mapNumberLeaves, opaqueTerms } from './denote'
+import type { HeldT, TermMark } from './term'
 import { rendered } from './value'
 
 const BINARY = new Set([
@@ -442,6 +443,13 @@ const toHeld = (
     )
 
 /**
+ * The term of `native`, in the type: a `held` over the universal sum, whose adapter is the port.
+ * The adapter is a function that the term cannot read, so no term decides the null point, and the
+ * type of `nullable` refuses `native` as the run time does.
+ */
+type NativeTerm = HeldT<['opaq'], ['opaq'], ['caller', 'native']>
+
+/**
  * The AWS SDK's marshaller, as a codec.
  *
  * A port of `@aws-sdk/util-dynamodb`'s `convertToAttr` / `convertToNative`, so a table written by
@@ -460,7 +468,7 @@ const toHeld = (
 const configured = (
     options: native.Options = {},
     deviations: native.Deviations = {},
-): AttributeCodec<unknown> => {
+): AttributeCodec<unknown> & TermMark<NativeTerm> => {
     // the caller's writer receives the number alone, and `ranged` reaches the port's own writer only
     const writeAttribute = (value: number | bigint, ranged?: boolean) =>
         deviations.writeNumber
@@ -505,10 +513,11 @@ const configured = (
  * same name — the same shape `opaque` takes for its own policies.
  */
 export const native: AttributeCodec<unknown> &
+    TermMark<NativeTerm> &
     ((
         options?: native.Options,
         deviations?: native.Deviations,
-    ) => AttributeCodec<unknown>) = Object.assign(
+    ) => AttributeCodec<unknown> & TermMark<NativeTerm>) = Object.assign(
     (options: native.Options = {}, deviations: native.Deviations = {}) =>
         configured(options, deviations),
     configured(),

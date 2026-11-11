@@ -40,6 +40,7 @@ import {
     union,
 } from '../../codec'
 import { accepts } from '../../denote'
+import { native } from '../../native'
 import {
     arbitraryOf,
     checkDecodesAreWritable,
@@ -559,6 +560,23 @@ describe('nullable', () => {
         expect(() => nullable(held(nullable(string), string, adapter))).toThrow(
             /held\(nullable\(inner\), outer, adapter\)/,
         )
+    })
+
+    /**
+     * **The port of the AWS SDK decides the null point by running a function, so `nullable` refuses
+     * it as it refuses any adapter.** `native` is a `held` whose adapter is the port. The type
+     * reads that term and refuses on the argument, as the run time refuses at construction.
+     */
+    const withOptions = { convertEmptyValues: true }
+    it.each([
+        // @ts-expect-error the type refuses native, because no term decides the null point
+        ['native', () => nullable(native)],
+        // @ts-expect-error the type refuses a configured native, for the same reason
+        ['native()', () => nullable(native())],
+        // @ts-expect-error the type refuses a native with options, for the same reason
+        ['native with options', () => nullable(native(withOptions))],
+    ])('refuses %s and names the spelling', (_name, build) => {
+        expect(build).toThrow(/held\(nullable\(inner\), outer, adapter\)/)
     })
 
     /**
