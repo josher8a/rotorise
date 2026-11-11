@@ -16,9 +16,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
-# The minimum supported version (`NoInfer` in the published types needs 5.4), then the latest of
-# each major.
-VERSIONS=(5.4.5 5.9.3 6.0.3 7.1.0-beta)
+# The versions, which `scripts/emit-check.sh` reads too.
+. scripts/ts-versions.sh || exit 2
 
 DO_BUILD=0
 for arg in "$@"; do

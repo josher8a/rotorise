@@ -19,8 +19,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
-# The versions of `scripts/tsc-matrix.sh`.
-VERSIONS=(5.4.5 5.9.3 6.0.3 7.1.0-beta)
+# The versions, which `scripts/tsc-matrix.sh` reads too.
+. scripts/ts-versions.sh || exit 2
 
 DO_BUILD=0
 DIST="$ROOT/dist"
