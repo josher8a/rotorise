@@ -4089,11 +4089,12 @@ const leanKeyPart = (part: KeyPart): string =>
           : `some (.shaped ${part.tag === undefined ? 'none' : `(some ${leanString(part.tag)})`} ${leanString(part.value)})`
 
 /**
- * **The label of a plain component**: the upper case of the whole name where the schema declares
+ * **The label of a plain component**: the upper case of the whole name where `declared` holds
  * the name, and of the last name of the path otherwise. The host prints the whole name where the
- * item owns the name, and the item owns each name that the schema declares. Both row emitters call
- * this function, so the label has one statement. The model prints the label as emitted text and
- * holds no case rule.
+ * item owns the name (`printedName`). A row emitter passes the names that the schema declares.
+ * Those names are the own names of the item where the item holds each dotted name that the schema
+ * declares, and no other dotted name. Both row emitters call this function, so the label has one
+ * statement. The model prints the label as emitted text and holds no case rule.
  */
 export const plainLabel = (
     declared: ReadonlySet<string>,
