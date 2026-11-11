@@ -1410,7 +1410,8 @@ const pathSegments = (path: string): string[] => {
  */
 const valueAt = (attributes: object, path: string): unknown => {
     const record = attributes as Record<string, unknown>
-    if (!path.includes('.') || Object.hasOwn(record, path)) return record[path]
+    if (Object.hasOwn(record, path)) return record[path]
+    if (!path.includes('.')) return undefined
     let current: unknown = attributes
     for (const segment of pathSegments(path)) {
         if (

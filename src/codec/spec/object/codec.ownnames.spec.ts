@@ -87,6 +87,55 @@ describe('an attribute named like a member of Object.prototype is data like any 
         })
     })
 
+    describe.each(inherited)(
+        'a key of the pet that reads the name %s',
+        (name) => {
+            // the type refuses a schema that names an attribute the entity lacks, so the schema is cast
+            const entity = (keys: Record<string, unknown>) =>
+                tableEntry<{ petId: string }>()({
+                    PK: ['petId'],
+                    ...keys,
+                } as never) as unknown as {
+                    key: (
+                        name: string,
+                        item: Record<string, unknown>,
+                    ) => unknown
+                    toEntry: (item: Record<string, unknown>) => unknown
+                }
+
+            it('refuses a composite key when the pet lacks a component, as for any other name', () => {
+                const Pets = entity({ GSI1SK: ['petId', name] })
+                expect(() => Pets.key('GSI1SK', { petId: 'p1' })).toThrow(
+                    `Attribute ${name} not found`,
+                )
+            })
+
+            it('writes no key of one attribute when the pet lacks the attribute', () => {
+                const Pets = entity({ GSI1PK: name })
+                expect(Pets.key('GSI1PK', { petId: 'p1' })).toBeUndefined()
+                expect(Pets.toEntry({ petId: 'p1' })).toEqual({
+                    petId: 'p1',
+                    PK: 'PETID#p1',
+                })
+            })
+
+            it('refuses to rewrite a key when the pet lacks the attribute that tells the match', () => {
+                const Pets = tableEntry<{ petId: string }>()({
+                    PK: ['petId'],
+                    GSI1PK: {
+                        discriminator: name,
+                        spec: { ADOPTED: ['owner'], AVAILABLE: ['shelter'] },
+                    },
+                } as never) as unknown as {
+                    keyUpdates: (change: Record<string, unknown>) => unknown
+                }
+                expect(() => Pets.keyUpdates({ shelter: 's1' })).toThrow(
+                    'has to be rebuilt',
+                )
+            })
+        },
+    )
+
     it('names no variant for an item that holds no tag, whatever the tag is called', () => {
         const Pet = discriminatedUnion('valueOf', [
             object({ valueOf: string('dog'), age: number }),
