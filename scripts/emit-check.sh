@@ -12,8 +12,8 @@
 # `any` with no error: TypeScript 5.9 and 6 write `/*elided*/ any`, and TypeScript 5.4 writes `any`
 # with no mark. A clean declaration holds no `any`, so the script counts each word `any` as a
 # failure. A cycle that goes through a union and a list only is such a hole: see the comment at
-# the end of `scripts/emit-check/index.mts`. Every version runs and prints one line. Exit 1 on any
-# failure.
+# the end of `scripts/emit-check/index.mts`. Every version runs, and prints one line for each
+# project. Exit 1 on any failure.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -52,27 +52,36 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/node_modules/rotorise"
 cp -R "$DIST" "$WORK/node_modules/rotorise/dist"
 cp "$PKG" "$WORK/node_modules/rotorise/package.json"
-cp scripts/emit-check/index.mts scripts/emit-check/tsconfig.json "$WORK/"
+cp scripts/emit-check/index.mts scripts/emit-check/native.mts scripts/emit-check/tsconfig.json scripts/emit-check/tsconfig.native.json "$WORK/"
 
 failed=0
+# A project is a tsconfig, the declaration file that it writes, and the name of the project. The
+# second project holds one file that imports `rotorise/native` only: no import of another entry
+# helps the emitter to name a type there.
+PROJECTS=("tsconfig.json index.d.mts index" "tsconfig.native.json native.d.mts native")
 for version in "${VERSIONS[@]}"; do
-  rm -rf "$WORK/out"
-  if out=$(cd "$WORK" && npx --yes --package "typescript@$version" -- tsc -p . --pretty false 2>&1); then
-    # `grep -c` exits 0 for a hole, 1 for none, and 2 where the file is absent or unreadable.
-    holes=$(grep -cw 'any' "$WORK/out/index.d.mts" 2>/dev/null)
-    case $? in
-      0) printf 'FAIL  typescript@%s\n' "$version"
-         printf '      | the declaration holds %s lines with the type `any`\n' "$holes"
-         failed=1 ;;
-      1) printf 'PASS  typescript@%s\n' "$version" ;;
-      *) printf 'FAIL  typescript@%s\n' "$version"
-         printf '      | the compiler wrote no declaration file at out/index.d.mts\n'
-         failed=1 ;;
-    esac
-  else
-    printf 'FAIL  typescript@%s\n' "$version"
-    printf '%s\n' "$out" | sed 's/^/      | /' | head -20
-    failed=1
-  fi
+  for project in "${PROJECTS[@]}"; do
+    read -r config decl name <<<"$project"
+    tag="typescript@$version"
+    [ "$name" = index ] || tag="$tag ($name)"
+    rm -rf "$WORK/out"
+    if out=$(cd "$WORK" && npx --yes --package "typescript@$version" -- tsc -p "$config" --pretty false 2>&1); then
+      # `grep -c` exits 0 for a hole, 1 for none, and 2 where the file is absent or unreadable.
+      holes=$(grep -cw 'any' "$WORK/out/$decl" 2>/dev/null)
+      case $? in
+        0) printf 'FAIL  %s\n' "$tag"
+           printf '      | the declaration holds %s lines with the type `any`\n' "$holes"
+           failed=1 ;;
+        1) printf 'PASS  %s\n' "$tag" ;;
+        *) printf 'FAIL  %s\n' "$tag"
+           printf '      | the compiler wrote no declaration file at out/%s\n' "$decl"
+           failed=1 ;;
+      esac
+    else
+      printf 'FAIL  %s\n' "$tag"
+      printf '%s\n' "$out" | sed 's/^/      | /' | head -20
+      failed=1
+    fi
+  done
 done
 exit "$failed"

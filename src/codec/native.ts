@@ -512,12 +512,11 @@ const configured = (
  * Callable *and* a codec, which is what lets `native.encode` and {@link native.Encode} keep the
  * same name — the same shape `opaque` takes for its own policies.
  */
-export const native: AttributeCodec<unknown> &
-    TermMark<NativeTerm> &
+export const native: native.Codec &
     ((
         options?: native.Options,
         deviations?: native.Deviations,
-    ) => AttributeCodec<unknown> & TermMark<NativeTerm>) = Object.assign(
+    ) => native.Codec) = Object.assign(
     (options: native.Options = {}, deviations: native.Deviations = {}) =>
         configured(options, deviations),
     configured(),
@@ -560,6 +559,11 @@ export const native: AttributeCodec<unknown> &
  * absent, and absent is the common case — so the permissive reading is the useful one.
  */
 export namespace native {
+    /** The codec that `native` is, and that a call of `native` gives. */
+    export interface Codec
+        extends AttributeCodec<unknown>,
+            TermMark<NativeTerm> {}
+
     export type Options = {
         /** Empty strings, sets and binary become `NULL` instead of failing or storing empty. */
         readonly convertEmptyValues?: boolean

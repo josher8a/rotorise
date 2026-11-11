@@ -1321,3 +1321,14 @@ describe('the port writes what the SDK writes, or both refuse', () => {
         })
     })
 })
+
+describe('a consumer names the codec that native is, and that a call of native gives', () => {
+    it('gives native.Codec for each call, so a declaration of a consumer prints one published name', () => {
+        expectTypeOf(native()).toEqualTypeOf<native.Codec>()
+        expectTypeOf(
+            native({ removeUndefinedValues: true }),
+        ).toEqualTypeOf<native.Codec>()
+        expectTypeOf(native).toMatchTypeOf<native.Codec>()
+        expect(native({}).encode('Rex')).toEqual({ S: 'Rex' })
+    })
+})
