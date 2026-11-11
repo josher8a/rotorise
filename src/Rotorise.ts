@@ -106,6 +106,19 @@ type DeepPick<
     ? Joined
     : never
 
+/**
+ * The components of a spec that a call must give: the components inside the depth that hold no
+ * default. A depth that is `never` states no depth, so the list is whole. A component with a third
+ * slot holds a default, and the builder prints the default for an absent value.
+ */
+type RequiredComponents<
+    InputSpec extends InputSpecShape,
+    skip extends number,
+    Inside = [skip] extends [never]
+        ? InputSpec[number]
+        : SliceFromStart<InputSpec, number extends skip ? 1 : skip>[number],
+> = Exclude<Inside, readonly [unknown, unknown, unknown, ...unknown[]]>
+
 type PlainKeyParams<
     Entity,
     InputSpec extends InputSpecShape,
@@ -113,12 +126,7 @@ type PlainKeyParams<
 > = Entity extends unknown
     ? show<
           {
-              [K in extractHeadOrPass<
-                  SliceFromStart<
-                      InputSpec,
-                      number extends skip ? 1 : skip
-                  >[number]
-              > &
+              [K in extractHeadOrPass<RequiredComponents<InputSpec, skip>> &
                   keyof Entity]: TransformOverride<InputSpec, K, Entity[K]>
           } & {
               [K in extractHeadOrPass<InputSpec[number]> & keyof Entity]?:
@@ -132,9 +140,7 @@ type PathKeyParams<
     Entity,
     InputSpec extends InputSpecShape,
     skip extends number = 1,
-    Required_ = extractHeadOrPass<
-        SliceFromStart<InputSpec, number extends skip ? 1 : skip>[number]
-    >,
+    Required_ = extractHeadOrPass<RequiredComponents<InputSpec, skip>>,
     All = extractHeadOrPass<InputSpec[number]>,
 > = Entity extends unknown
     ? show<

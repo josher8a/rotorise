@@ -201,3 +201,113 @@ it('keeps the type of a key with no component that can be absent', () => {
     const key = E.key('SK', { species: 'CAT', age: 3 }, partial)
     expectTypeOf(key).toEqualTypeOf<'SPECIES#CAT' | 'SPECIES#CAT#AGE#3'>()
 })
+
+describe('the components that a call of key must give', () => {
+    const full = { species: 'CAT', breed: 'PUG', age: 3 } as const
+    const shallow = { species: 'CAT', breed: 'PUG' } as const
+
+    it('refuses a call that lacks a component with no default, in the type and at run time', () => {
+        expect(() =>
+            // @ts-expect-error the component `age` has no default, so a full key needs it
+            Pets.key('GSI1SK', { species: 'CAT', breed: 'PUG' }),
+        ).toThrow(/Attribute age not found/)
+        expect(() =>
+            // @ts-expect-error a depth of three keeps the component `age`, which has no default
+            Pets.key('GSI1SK', { species: 'CAT', breed: 'PUG' }, { depth: 3 }),
+        ).toThrow(/Attribute age not found/)
+        expect(Pets.key('GSI1SK', full)).toBe('SPECIES#CAT#BREED#PUG#AGE#3')
+    })
+
+    it('keeps the requirement of a full key with `enforceBoundary` alone', () => {
+        expect(() =>
+            // @ts-expect-error `enforceBoundary` does not remove the component `age`
+            Pets.key('GSI1SK', shallow, { enforceBoundary: true }),
+        ).toThrow(/Attribute age not found/)
+        expect(Pets.key('GSI1SK', full, { enforceBoundary: true })).toBe(
+            'SPECIES#CAT#BREED#PUG#AGE#3',
+        )
+    })
+
+    type Stay = {
+        petId: string
+        species: Species
+        nickname?: string
+        age: number
+    }
+    const Stays = tableEntry<Stay>()({
+        SK: [
+            'species',
+            [
+                'nickname',
+                (x: string | undefined) => (x ?? '').toUpperCase(),
+                'NONE',
+            ],
+            'age',
+        ],
+    })
+
+    it('makes a component with a default optional, with no depth and inside a depth, and the key prints the default', () => {
+        expect(Stays.key('SK', { species: 'CAT', age: 3 })).toBe(
+            'SPECIES#CAT#NICKNAME#NONE#AGE#3',
+        )
+        expect(Stays.key('SK', { species: 'CAT', age: 3 }, { depth: 3 })).toBe(
+            'SPECIES#CAT#NICKNAME#NONE#AGE#3',
+        )
+        expect(() =>
+            // @ts-expect-error the component `age` has no default, even beside a component with one
+            Stays.key('SK', { species: 'CAT' }),
+        ).toThrow(/Attribute age not found/)
+    })
+
+    type Shelter =
+        | { kind: 'KENNEL'; age: number; nickname?: string }
+        | { kind: 'CATTERY'; id: string }
+    const Shelters = tableEntry<Shelter>()({
+        SK: {
+            discriminator: 'kind',
+            spec: {
+                KENNEL: [
+                    'age',
+                    [
+                        'nickname',
+                        (x: string | undefined) => (x ?? '').toUpperCase(),
+                        'NONE',
+                    ],
+                ],
+                CATTERY: ['id'],
+            },
+        },
+    })
+
+    it('gives an arm of a match the same two facts: a component with no default is required, and a component with a default is optional', () => {
+        expect(Shelters.key('SK', { kind: 'KENNEL', age: 3 })).toBe(
+            'AGE#3#NICKNAME#NONE',
+        )
+        expect(() =>
+            // @ts-expect-error the component `age` of the arm KENNEL has no default
+            Shelters.key('SK', { kind: 'KENNEL' }),
+        ).toThrow(/Attribute age not found/)
+    })
+
+    type Visit = {
+        species: Species
+        vaccine: { vet: 'ALICE' | 'BOB'; dose?: number }
+    }
+    const Visits = tableEntry<Visit>()({
+        SK: [
+            'species',
+            'vaccine.vet',
+            ['vaccine.dose', (x: number | undefined) => String(x ?? 0), 0],
+        ],
+    })
+
+    it('gives a component at a path the same two facts', () => {
+        expect(
+            Visits.key('SK', { species: 'CAT', vaccine: { vet: 'ALICE' } }),
+        ).toBe('SPECIES#CAT#VET#ALICE#DOSE#0')
+        expect(() =>
+            // @ts-expect-error the component `vaccine.vet` has no default
+            Visits.key('SK', { species: 'CAT' }),
+        ).toThrow(/Attribute vaccine\.vet not found/)
+    })
+})
