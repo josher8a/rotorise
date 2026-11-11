@@ -1061,7 +1061,7 @@ type MemberOfName<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
 ]
     ? NativeMember<ValueOfKey<E, Name>>
     : Name extends `${string}.${string}`
-      ? CodecMemberAtPath<CodecSpec, Name>
+      ? CodecMember<Enc, Name> | CodecMemberAtPath<CodecSpec, Name>
       : [CodecMember<Enc, Name>] extends [never]
         ? NativeMember<ValueOfKey<E, Name>>
         : CodecMember<Enc, Name>
@@ -3297,13 +3297,15 @@ type RefuseComponent<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
 ]
     ? RefuseObject<E, Name, 'an entry with no codec'>
     : Name extends `${string}.${string}`
-      ? [CodecMemberAtPath<CodecSpec, Name>] extends [never]
-          ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself`>
-          : [Exclude<CodecMemberAtPath<CodecSpec, Name>, 'S' | 'N'>] extends [
-                  never,
-              ]
-            ? unknown
-            : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<CodecMemberAtPath<CodecSpec, Name>, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>
+      ? // the item holds the whole name, or reads the path, so the codec writes either member
+            | CodecMember<Enc, Name>
+            | CodecMemberAtPath<CodecSpec, Name> extends infer M
+          ? [M] extends [never]
+              ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself`>
+              : [Exclude<M, 'S' | 'N'>] extends [never]
+                ? unknown
+                : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<M, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>
+          : never
       : [Exclude<CodecMember<Enc, Name>, 'S' | 'N'>] extends [never]
         ? unknown
         : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<CodecMember<Enc, Name>, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>
@@ -3815,11 +3817,13 @@ export const tableEntry =
                 `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}`,
             )
         /**
-         * The codec that the entry writes at a path below the top level. The located codec of `at`
-         * is that codec. A path that the codec cannot address is refused with the reason of `at`,
-         * because the key could not print the stored text there.
+         * The codec that the entry writes at a path below the top level, or the refusal of a path
+         * that the codec cannot address, with the reason of `at`. The located codec of `at` is that
+         * codec.
          */
-        const pathSlot = (path: string): ObjectSlot | undefined => {
+        const pathAt = (
+            path: string,
+        ): ObjectSlot | RotoriseError | undefined => {
             // an entry without a codec states no slot
             if (attributes === undefined) return undefined
             if (pathSlots.has(path)) return pathSlots.get(path)
@@ -3829,7 +3833,7 @@ export const tableEntry =
                 found = at(attributes as never, path as never) as never
             } catch (error) {
                 if (!(error instanceof CodecError)) throw error
-                throw refused(error)
+                return refused(error)
             }
             // a path that the codec cannot address is a codec of the term `never`, and the one
             // refusal sits in its closures, so `encode` gives it back for any value. The kinds that
@@ -3840,8 +3844,14 @@ export const tableEntry =
                     ? found.encode(undefined as never)
                     : undefined
             if (address instanceof CodecError && address.kind === 'refused')
-                throw refused(address)
+                return refused(address)
             pathSlots.set(path, found)
+            return found
+        }
+        /** The codec at a path. A key cannot print the stored text at a path that is refused. */
+        const pathSlot = (path: string): ObjectSlot | undefined => {
+            const found = pathAt(path)
+            if (found instanceof RotoriseError) throw found
             return found
         }
 
@@ -3853,6 +3863,7 @@ export const tableEntry =
         const fieldSlots = (
             field: string,
             item?: Record<string, unknown>,
+            open = true,
         ): ObjectSlot[] => {
             if (attributes === undefined) return []
             if (isTagged(attributes)) {
@@ -3871,16 +3882,53 @@ export const tableEntry =
                 return variants.flatMap((variant) => {
                     const declared = own(variant.spec, field)
                     if (declared !== undefined) return [declared]
-                    return variant.rest === undefined ? [] : [variant.rest]
+                    return variant.rest === undefined || !open
+                        ? []
+                        : [variant.rest]
                 })
             }
             const declared = slotsAt(field)
-            if (declared.length > 0) return declared
+            if (declared.length > 0 || !open) return declared
             // the erased item codec types its rest as `undefined`, and the run time holds a codec there
             const rest = (
                 attributes as unknown as { readonly rest?: ObjectSlot }
             ).rest
             return rest === undefined ? [] : [rest]
+        }
+
+        /**
+         * The slots that write a component of a key, at an item. The item decides the slot as it decides
+         * the value: a name with a `.` that the item holds as an attribute takes the slots of that
+         * attribute, and any other name with a `.` is a path, and takes the one slot of the codec at
+         * the path.
+         */
+        const componentSlots = (
+            name: string,
+            item: Record<string, unknown>,
+        ): ObjectSlot[] => {
+            if (!name.includes('.') || Object.hasOwn(item, name))
+                return fieldSlots(name, item)
+            const slot = pathSlot(name)
+            return slot === undefined ? [] : [slot]
+        }
+
+        /**
+         * The readings of a component, where no item is given. A name with a `.` can read the attribute
+         * that the codec declares under the whole name, or the path, so the check reads each reading. The
+         * rest does not declare a name with a `.`. A name that the codec declares under no whole name is
+         * a path, and a path that the codec cannot address is refused.
+         */
+        const componentReadings = (name: string): ObjectSlot[][] => {
+            if (!name.includes('.')) return [fieldSlots(name)]
+            const declared = fieldSlots(name, undefined, false)
+            const slot = pathAt(name)
+            if (declared.length === 0) {
+                if (slot instanceof RotoriseError) throw slot
+                return [slot === undefined ? [] : [slot]]
+            }
+            return slot === undefined || slot instanceof RotoriseError
+                ? [declared]
+                : [declared, [slot]]
         }
 
         /**
@@ -3895,9 +3943,7 @@ export const tableEntry =
             alone = false,
         ): unknown => {
             if (attributes === undefined) return value
-            const slots = path.includes('.')
-                ? [pathSlot(path)].filter((slot) => slot !== undefined)
-                : fieldSlots(path, item)
+            const slots = componentSlots(path, item)
             if (slots.length === 0) return value
             const written = keyAttribute(slots, value)
             // a path that variants declare differently, or only some of them, refuses on use with the
@@ -3995,46 +4041,42 @@ export const tableEntry =
                             typeof transform === 'function'
                         )
                             continue
-                        const slots = field.includes('.')
-                            ? [pathSlot(field)].filter(
-                                  (slot) => slot !== undefined,
-                              )
-                            : fieldSlots(field)
-                        oneCodec(name, field, slots)
-                        for (const slot of slots) {
-                            const stored = storedAt(slot)
-                            if (
-                                ![...stored].every(
-                                    (m) => m === 'S' || m === 'N',
+                        for (const slots of componentReadings(field)) {
+                            oneCodec(name, field, slots)
+                            for (const slot of slots) {
+                                const stored = storedAt(slot)
+                                if (
+                                    ![...stored].every(
+                                        (m) => m === 'S' || m === 'N',
+                                    )
                                 )
-                            )
-                                throw new RotoriseError(
-                                    `'${name}' prints '${field}' as a component, and the codec writes it as ${[...stored].join(' and ')}. A component is text or a number: write the attribute as S or N.`,
-                                )
+                                    throw new RotoriseError(
+                                        `'${name}' prints '${field}' as a component, and the codec writes it as ${[...stored].join(' and ')}. A component is text or a number: write the attribute as S or N.`,
+                                    )
+                            }
                         }
                     }
                 } else if (typeof value === 'string') {
                     // a slot of two members is one field stored as two types. A second slot of the
                     // field is another variant. A path has the one slot of the codec at the path
-                    const written = value.includes('.')
-                        ? [pathSlot(value)].filter((slot) => slot !== undefined)
-                        : fieldSlots(value)
-                    oneCodec(name, value, written)
-                    for (const [at, slot] of written.entries()) {
-                        const stored = storedAt(slot)
-                        if (stored.size > 1) {
-                            throw new RotoriseError(
-                                `'${name}' is built from '${value}', which is stored as more than one type (${[...stored].join(' and ')}). A key attribute has one type.`,
-                            )
-                        }
-                        for (const member of stored)
-                            if (!found.has(member))
-                                found.set(
-                                    member,
-                                    at === 0
-                                        ? `'${value}'`
-                                        : `'${value}' in another variant`,
+                    for (const written of componentReadings(value)) {
+                        oneCodec(name, value, written)
+                        for (const [at, slot] of written.entries()) {
+                            const stored = storedAt(slot)
+                            if (stored.size > 1) {
+                                throw new RotoriseError(
+                                    `'${name}' is built from '${value}', which is stored as more than one type (${[...stored].join(' and ')}). A key attribute has one type.`,
                                 )
+                            }
+                            for (const member of stored)
+                                if (!found.has(member))
+                                    found.set(
+                                        member,
+                                        at === 0
+                                            ? `'${value}'`
+                                            : `'${value}' in another variant`,
+                                    )
+                        }
                     }
                 }
             }
@@ -4086,16 +4128,9 @@ export const tableEntry =
             if (attributes === undefined || selected.kind !== 'attr')
                 return asKey(name, value)
             const field = selected.name
-            let encoded: AttributeValue | CodecError | undefined
-            if (field.includes('.')) {
-                const slot = pathSlot(field)
-                if (slot === undefined) return asKey(name, value)
-                encoded = keyAttribute([slot], valueAt(item, field))
-            } else {
-                encoded =
-                    written?.[field] ??
-                    keyAttribute(fieldSlots(field, item), item[field])
-            }
+            const encoded: AttributeValue | CodecError | undefined =
+                written?.[field] ??
+                keyAttribute(componentSlots(field, item), valueAt(item, field))
             if (encoded === undefined) return asKey(name, value)
             const stored = keyMembers.get(name)
             // the member is decided at construction, so a write at another member is no key

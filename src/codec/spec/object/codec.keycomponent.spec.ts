@@ -11,11 +11,13 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
 import {
     array,
+    boolean,
     discriminatedUnion,
     held,
     item,
     number,
     object,
+    optional,
     refine,
     string,
 } from '../../codec'
@@ -284,5 +286,132 @@ describe('a key component with a codec', () => {
                 },
             ),
         ).toThrow(/as a component/)
+    })
+})
+
+describe('a name of a key that holds a dot and that the codec declares as an attribute', () => {
+    type Kennel = {
+        petId: string
+        'owner.name'?: number
+        owner: { name: string }
+    }
+    type Plain = { petId: string; 'owner.name': string }
+    const codec = {
+        petId: string,
+        'owner.name': optional(number),
+        owner: object({ name: string }),
+    }
+    // the type refuses an optional component with no default, so the schema is cast, as in the
+    // tests of the optional components
+    const Pets = tableEntry<Kennel>()(
+        { PK: ['petId'], SK: ['petId', 'owner.name'] } as never,
+        { codec },
+    ) as unknown as {
+        unsafeToItem: (item: Kennel) => Record<string, unknown>
+        keyUpdates: (change: Kennel) => unknown
+    }
+
+    /**
+     * **The item reads the whole name first, and the codec writes the slot that the item reads.** An
+     * item that holds the attribute `'owner.name'` gives that attribute, and the path `owner` then
+     * `name` is read only where the item holds no such name. The slot follows the value, in the
+     * list of components, and in a change.
+     */
+    it('prints the attribute that the item holds under the whole name, not the object at the path', () => {
+        const kennel: Kennel = {
+            petId: 'p1',
+            'owner.name': 7,
+            owner: { name: 'bob' },
+        }
+        expect(Pets.unsafeToItem(kennel).SK).toEqual({
+            S: 'PETID#p1#OWNER.NAME#7',
+        })
+        expect(Pets.keyUpdates({ ...kennel, petId: 'p2' })).toEqual({
+            set: {
+                PK: { S: 'PETID#p2' },
+                SK: { S: 'PETID#p2#OWNER.NAME#7' },
+            },
+            remove: [],
+        })
+    })
+
+    it('reads the path where the item holds no attribute of the whole name', () => {
+        const kennel: Kennel = { petId: 'p1', owner: { name: 'bob' } }
+        expect(Pets.unsafeToItem(kennel).SK).toEqual({
+            S: 'PETID#p1#NAME#bob',
+        })
+        expect(Pets.keyUpdates({ ...kennel, petId: 'p2' })).toEqual({
+            set: {
+                PK: { S: 'PETID#p2' },
+                SK: { S: 'PETID#p2#NAME#bob' },
+            },
+            remove: [],
+        })
+    })
+
+    it('prints a name that the codec declares alone, with no object at the path', () => {
+        const Alone = tableEntry<Plain>()(
+            {
+                PK: ['petId'],
+                SK: ['petId', 'owner.name'],
+                GSI1PK: 'owner.name',
+            },
+            { codec: { petId: string, 'owner.name': string } },
+        )
+        const written = Alone.unsafeToItem({ petId: 'p1', 'owner.name': 'ann' })
+        expect(written.SK).toEqual({ S: 'PETID#p1#OWNER.NAME#ann' })
+        expect(written.GSI1PK).toEqual({ S: 'ann' })
+        expect(Alone.keyUpdates({ petId: 'p2', 'owner.name': 'bea' })).toEqual({
+            set: {
+                PK: { S: 'PETID#p2' },
+                SK: { S: 'PETID#p2#OWNER.NAME#bea' },
+                GSI1PK: { S: 'bea' },
+            },
+            remove: [],
+        })
+    })
+
+    it('writes no key of one attribute for a pet that lacks an optional name that the codec declares alone', () => {
+        const Alone = tableEntry<{ petId: string; 'owner.name'?: string }>()(
+            { PK: ['petId'], GSI1PK: 'owner.name' },
+            { codec: { petId: string, 'owner.name': optional(string) } },
+        )
+        expect(Alone.unsafeToItem({ petId: 'p1' }).GSI1PK).toBeUndefined()
+    })
+
+    it('refuses a component that the codec writes as BOOL under the whole name, where the path holds text', () => {
+        expect(() =>
+            tableEntry<{
+                petId: string
+                'owner.name': boolean
+                owner: { name: string }
+            }>()(
+                {
+                    PK: ['petId'],
+                    // @ts-expect-error the codec writes the whole name as BOOL
+                    SK: ['petId', 'owner.name'],
+                },
+                {
+                    codec: {
+                        petId: string,
+                        'owner.name': boolean,
+                        owner: object({ name: string }),
+                    },
+                },
+            ),
+        ).toThrow(/writes it as BOOL/)
+    })
+
+    it('refuses a key of one attribute whose two readings write two members, because a key attribute has one type', () => {
+        expect(() =>
+            tableEntry<Kennel>()(
+                {
+                    PK: ['petId'],
+                    // @ts-expect-error the type refuses a key of one attribute with two members too
+                    GSI1PK: 'owner.name',
+                },
+                { codec },
+            ),
+        ).toThrow(/stores 'owner.name' as N and 'owner.name' as S/)
     })
 })
