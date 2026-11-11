@@ -2394,6 +2394,9 @@ export type TableEntryDefinition<
     /**
      * Creates a proxy to generate property paths as strings.
      * Useful for building UpdateExpressions or ProjectionExpressions.
+     * A name has a string where the name is a letter, then letters, digits and `_`. An expression reads
+     * no other name as one name, so `toString` throws a `CodecError` for a key of a record such as
+     * `'rabies.2024'` or `'rabies-2024'`.
      *
      * @example
      * table.path().data.nested.property.toString() // returns "data.nested.property"

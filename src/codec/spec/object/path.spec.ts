@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 import {
     at,
+    CodecError,
     item,
     number,
     object,
@@ -267,4 +268,54 @@ describe('an attribute that shares the name of a method of the path', () => {
         ])
         expect(settled).toBe('resolved')
     })
+})
+
+/**
+ * **A path string addresses the place that the segments address, or no string exists.** A key that
+ * is data can hold a `.`, a `-` or a leading digit. An expression does not read such a key as one
+ * name, so the builder refuses the string, and a plain key prints as the segments say.
+ */
+describe('the string of a path that a key makes', () => {
+    type Adopter = {
+        userId: string
+        checks?: Record<string, { checkId: string; status: string }>
+        pets?: string[]
+    }
+    const Adopters = tableEntry<Adopter>()({ PK: ['userId'] })
+
+    it('prints a plain key', () => {
+        const key: string = 'rabies2024'
+        expect(Adopters.path().checks.at(key).status.toString()).toBe(
+            'checks.rabies2024.status',
+        )
+    })
+
+    it.each([
+        'rabies.2024',
+        'a[0]',
+        'a[',
+        'a]',
+        'a,b',
+        ' a',
+        'rabies-2024',
+        '2024',
+        '_a',
+        '',
+    ])(
+        'refuses the string of the key %j, because an expression does not read the key as one name',
+        (key) => {
+            const placed = Adopters.path().checks.at(key).status
+            expect(() => placed.toString()).toThrow(CodecError)
+            expect(() => placed.toString()).toThrow(/ExpressionAttributeNames/)
+        },
+    )
+
+    it.each([-1, 0.5])(
+        'refuses the string of the position %j, because an expression takes a position that is a non-negative integer',
+        (position) => {
+            const placed = Adopters.path().pets.at(position)
+            expect(() => placed.toString()).toThrow(CodecError)
+            expect(() => placed.toString()).toThrow(/position/)
+        },
+    )
 })

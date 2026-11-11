@@ -144,10 +144,8 @@ export class Disagreement extends CodecError {}
 /**
  * `lines[1].tender.note` — an index is bracketed, an attribute is dotted.
  *
- * One function for both directions this package writes a path in: the document path a
- * {@link LocatedCodec} hands to an expression, and the place a {@link CodecError} says it failed.
- * They were two implementations of the same six lines, which is two chances for a path pasted into
- * a query to disagree with the path an error named.
+ * The place that a {@link CodecError} says it failed, for a person. The text addresses nothing: a
+ * name that holds a `.` prints as two segments. No caller hands the text to an expression.
  */
 export const asPath = (segments: readonly (string | number)[]): string => {
     let out = ''

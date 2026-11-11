@@ -998,7 +998,9 @@ export function narrow(
 /**
  * **The segments of a document path in DynamoDB syntax**: a name, or a position in brackets, each
  * name after the first behind a `.`. A name holds no `.`, `[` or `]`: the tuple form carries such a
- * name. A malformed path is a defect of the caller, and the type of {@link at} refuses it first.
+ * name. The function reads more names than {@link expressionPath} prints: a name with a `-` is a
+ * name here, and has no expression string. A malformed path is a defect of the caller, and the type
+ * of {@link at} refuses it first.
  */
 export const parsePath = (path: string): readonly Segment[] => {
     if (path === '') return []
@@ -1017,6 +1019,47 @@ export const parsePath = (path: string): readonly Segment[] => {
         }
     }
     return segments
+}
+
+/**
+ * A name that an expression of DynamoDB reads as one name: a letter, then letters, digits and `_`.
+ * An expression reads a `.` as a separator, `[n]` as a position and `,` as the end of a path, drops
+ * a space at an end of a name, and refuses each other name.
+ */
+const expressionName = /^[A-Za-z][A-Za-z0-9_]*$/
+
+/**
+ * **The string of the segments of a document path, in DynamoDB expression syntax.** The string is a
+ * projection of the segments, and `parsePath` is the inverse. The projection is partial: the string
+ * exists where an expression reads each name as one name. An expression has no escape for a name:
+ * any other name needs a placeholder of `ExpressionAttributeNames`, which a string cannot carry. So
+ * the projection refuses such a name, and the tuple form of {@link at} still carries the name. The
+ * message gives the position of the segment, and not the name, because a key is data.
+ * A position is a non-negative integer.
+ *
+ * A reserved word of DynamoDB has a string, and DynamoDB refuses the expression with the word in the
+ * message. The list of reserved words belongs to DynamoDB, so this package holds no copy.
+ */
+export const expressionPath = (segments: readonly Segment[]): string => {
+    let out = ''
+    segments.forEach((segment, at) => {
+        if (typeof segment === 'number') {
+            if (!Number.isSafeInteger(segment) || segment < 0) {
+                throw new CodecError(
+                    `the position at segment ${at} of the path is no non-negative integer, so the path has no expression string`,
+                )
+            }
+            out += `[${segment}]`
+            return
+        }
+        if (!expressionName.test(segment)) {
+            throw new CodecError(
+                `the name at segment ${at} of the path is not a letter, then letters, digits and '_': an expression does not read it as one name, so the name needs a placeholder of ExpressionAttributeNames and the path has no expression string`,
+            )
+        }
+        out += out === '' ? segment : `.${segment}`
+    })
+    return out
 }
 
 /** Whether a codec is a whole-item reading: an object's, a union's or a tagged union's `item`. */
@@ -1102,13 +1145,12 @@ export const locate = (
     }
     const here = walk()
 
-    const made: Located = { root, steps, path: located, reached }
+    const made: Located = { root, steps, reached }
     return { ...here, [locatedSlot]: made }
 }
 export type Located = {
     readonly root: AnyCodec
     readonly steps: readonly Step[]
-    readonly path: string
     /** The frontier at the end of the steps, where the walk reached the end. */
     readonly reached: Reached | undefined
 }
@@ -1116,7 +1158,10 @@ export type Located = {
 /**
  * **The document path of a located codec**, in DynamoDB expression syntax: the external form of
  * the segments, so `path(at(c, 'a.b[1]'))` is `'a.b[1]'`. A codec that no `at` located stands at
- * its own root, and its path is empty.
+ * its own root, and its path is empty. A name has a string where the name is a letter, then
+ * letters, digits and `_`, because an expression reads no other name as one name: `path` throws a
+ * {@link CodecError} for another name, and {@link at} still builds from the tuple form, which
+ * carries the name.
  *
  * From a root that is not an item, the path is relative to that root, and `path` gives the segments
  * and no string. Only an item writes the top-level attributes of a row, so no other root knows the
@@ -1140,7 +1185,7 @@ export function path(codec: {
     // only an item writes the top-level attributes of a row, so only a path from an item is a
     // document path; any other root gives its segments, which no expression takes for a path
     return isItemReading(located.root)
-        ? located.path
+        ? expressionPath(segmentsIn(located.steps))
         : segmentsIn(located.steps)
 }
 
@@ -1209,7 +1254,7 @@ export const methodAt = (
 ): ((arg: never) => unknown) | undefined => {
     switch (name) {
         case 'toString':
-            return () => asPath(segmentsIn(steps))
+            return () => expressionPath(segmentsIn(steps))
         case 'at':
             return (index: number | string) => recordPath([...steps, index])
         // an open name, selected by a method, as `at` selects a position

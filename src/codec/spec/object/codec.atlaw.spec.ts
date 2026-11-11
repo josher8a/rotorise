@@ -8,6 +8,7 @@ import {
     type AnyCodec,
     array,
     at,
+    CodecError,
     discriminatedUnion,
     item,
     narrow,
@@ -18,6 +19,7 @@ import {
     preconditions,
     string,
 } from '../../codec'
+import { parsePath } from '../../scopePath'
 
 const Leg = object({ id: string, deliveredAt: optional(string) })
 const Adoption = item(
@@ -101,5 +103,96 @@ describe('at continues the path of a located codec: at(at(c, p), q) is at(c, p +
         const copy = { ...Whole }
         expect(item(copy)).toBe(item(Whole))
         expect(item(copy).unsafeEncode({ id: 'a' })).toEqual({ id: { S: 'a' } })
+    })
+})
+
+/**
+ * **A path string addresses the place that the segments address, or no string exists.** An
+ * expression reads one name where the name is a letter, then letters, digits and `_`, and has no
+ * escape for a name. So `parsePath` of the string equals the segments for such a name, and `path`
+ * throws a `CodecError` for each other name. The tuple form of `at` still builds the place.
+ */
+describe('the string of a path addresses the place of its segments', () => {
+    const names = {
+        plain: ['name', 'owner', 'a_b', 'a1', 'Z'],
+        // an expression reads a separator, a position, or the end of a path
+        dot: ['owner.name', 'a.'],
+        bracket: ['a[0]', 'a[', ']'],
+        comma: ['a,b'],
+        // an expression drops a space at an end of a name
+        space: [' a', 'a '],
+        // DynamoDB refuses the expression
+        store: ['0', '12', '1a', '_a', 'a-b', 'a b', 'é', 'aé'],
+        empty: [''],
+    } as const
+    const attributes = Object.fromEntries(
+        Object.values(names)
+            .flat()
+            .map((name) => [name, string]),
+    )
+    const Pool = item(
+        object({ ...attributes, holder: object({ ...attributes }) }),
+    )
+    // the pool names are data, so the segments are wide for the type of `at`
+    const located = at as unknown as (
+        codec: unknown,
+        segments: readonly string[],
+    ) => AnyCodec
+    // the root is an item, so `path` gives a string
+    const textOf = (codec: AnyCodec): string => {
+        const text = path(codec)
+        if (typeof text !== 'string') throw new Error('the root is no item')
+        return text
+    }
+
+    it('gives a string whose parse is the segments, or throws a CodecError, for each class of name', () => {
+        const none = {
+            plain: 0,
+            dot: 0,
+            bracket: 0,
+            comma: 0,
+            space: 0,
+            store: 0,
+            empty: 0,
+        }
+        const drawn = { ...none }
+        const refused = { ...none }
+        for (const [kind, ofKind] of Object.entries(names)) {
+            for (const name of ofKind) {
+                for (const segments of [[name], ['holder', name]]) {
+                    const codec = located(Pool, segments)
+                    // the place is built whatever the string does
+                    expect(codec.unsafeEncode('x' as never)).toEqual({
+                        S: 'x',
+                    })
+                    const k = kind as keyof typeof drawn
+                    drawn[k] += 1
+                    // only `path` may refuse: a string that `parsePath` cannot read is a failure
+                    let text: string | undefined
+                    try {
+                        text = textOf(codec)
+                    } catch (cause) {
+                        if (!(cause instanceof CodecError)) throw cause
+                        refused[k] += 1
+                    }
+                    if (text !== undefined) {
+                        expect(parsePath(text)).toEqual(segments)
+                    }
+                }
+            }
+        }
+        for (const count of Object.values(drawn))
+            expect(count).toBeGreaterThan(0)
+        // a plain name has a string, and each other name has none
+        expect(refused).toEqual({ ...drawn, plain: 0 })
+    })
+
+    it('refuses the string at path, and builds the place at at, for a name that holds a dot', () => {
+        const flat = located(Pool, ['owner.name'])
+        expect(flat.unsafeEncode('x' as never)).toEqual({ S: 'x' })
+        expect(() => textOf(flat)).toThrow(CodecError)
+        expect(() => textOf(flat)).toThrow(/ExpressionAttributeNames/)
+        // the message gives the position of the segment, and not the name
+        expect(() => textOf(flat)).not.toThrow(/owner\.name/)
     })
 })

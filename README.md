@@ -255,6 +255,8 @@ UserTable.path().email.toString()       // => 'email'
 UserTable.path().PK.toString()          // => 'PK'
 ```
 
+A name has a string where the name is a letter, then letters, digits and `_`. An expression reads no other name as one name: a `.` is a separator, `[n]` is a position, and a `,` ends the path. `toString` throws a `CodecError` for such a name, and the name needs a placeholder of `ExpressionAttributeNames`. A reserved word of DynamoDB, such as `name` or `status`, has a string, and DynamoDB refuses the expression: a reserved word needs a placeholder too.
+
 ## Advanced Features
 
 ### Transforms
