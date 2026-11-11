@@ -2,9 +2,9 @@
 
 One entry per defect. Each entry opens with one of three words.
 
-- **Known** — observed, and reproduced by a command in this file.
-- **Suspected** — the observation is real and the effect is not established.
-- **Partially mitigated** — the effect is reduced, and the entry says what remains.
+- **Known**: observed, and reproduced by a command in this file.
+- **Suspected**: the observation is real and the effect is not established.
+- **Partially mitigated**: the effect is reduced, and the entry says what remains.
 
 Each entry gives the observation, the effect, and the pin: the test, guard or refutation that
 holds the defect in place. An entry with no pin says so, because an unpinned defect is one a later
@@ -19,9 +19,10 @@ moves and a declaration name does not.
 
 **Observation.** The specification's wrapper rule demands total cancellation on the two carriers:
 one composite is the identity on the held set and the other is the identity on the inner carrier.
-The mechanization asks for less. `IsoCancels` in `Codec.lean` restricts both directions to the
-values the write half accepts — one clause per direction, each guarded by the encode being defined
-— and its own docstring says it is the domain-restricted form the laws actually need.
+The mechanization asks for less. `IsoCancels` in `Alg/Combinators.lean` is `IsoCancelsAt` at the
+host. `IsoCancelsAt` restricts both directions to the values the write half accepts: one clause per
+direction, each guarded by the encode being defined. The docstring of `IsoCancelsAt` says it is the
+domain-restricted form the laws actually need.
 
 **Effect.** A caller pays a premise the proof does not use. The theorems that consume the premise,
 `Lawful.held1` through `Obl1`, `LawfulCore.through` and `Lawful.through`, close on the restricted
@@ -47,8 +48,7 @@ asked to discharge the stronger one. That is a specification decision.
 where one option of the entry fits the pattern. The type reads a union entry through the specs of
 its options, and reads a union slot of `ref`s through the split of its parts. A pattern that needs
 the split below a union slot of `ref`s, where one of the `ref`s names a recursive union entry,
-reads as no fit. Measured 2026-10-31 with `tsc --noEmit` and `npx vitest --run`, the same before
-and after the pass that reads a union entry:
+reads as no fit. Measured 2026-10-31 with `tsc --noEmit` and `npx vitest --run`:
 
     const s = scope({
       Leaf: object({ kind: string('leaf') }),
@@ -77,8 +77,8 @@ another scope, and a base entry. No test pins the recursive case above.
 **Observation.** The run time compares the bytes of a binary literal clause with the bytes of each
 member, and exclude drops a member whose bytes the clause names. The type carries no bytes: the
 owner rules that a binary literal stays coarse at the type level. So the type keeps that member.
-Measured 2026-10-13 at 3838e2f: the type bridge holds 25 exclude refuse ids, and the clause of each
-one is a binary literal. One example:
+Measured 2026-11-10: the clause of each exclude refuse id of the type bridge is a binary literal.
+One example:
 
     const r = exclude(union([object({ a: binary(new Uint8Array([1, 2])) }), object({ c: string })]),
       object({ a: binary(new Uint8Array([1, 2])) }))
@@ -89,7 +89,7 @@ one is a binary literal. One example:
 member that the run time dropped stays in the type.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 23 such
-ids, measured 2026-10-14.
+ids, measured 2026-11-10.
 
 ---
 
@@ -219,21 +219,23 @@ run time.
 
 ---
 
-## Known: the type of a slice by a union pattern stops at TS2589 at 89 literals of one field
+## Known: the type of a slice by a union pattern stops at 90 literals of one field
 
 **Observation.** An exclusion that splits one field of literals into two halves of a union pattern
-type-checks at 88 literals and keeps the option. At 89 literals the type checker reports TS2589.
-The bound of the parts does not move the wall. Measured 2026-11-02 with `npx tsc --noEmit`:
+type-checks at 89 literals and keeps the option. At 90 literals the type checker stops. The bound
+of the parts does not move the wall. Measured 2026-11-10 with `tsc --noEmit` on TypeScript 7 and on
+TypeScript 6:
 
-    const big = union([object({ x: string('l00', …, 'l88') })])
-    exclude(big, union([object({ x: string('l00', …, 'l44') }), object({ x: string('l45', …, 'l88') })]))
+    const big = union([object({ x: string('l00', …, 'l89') })])
+    exclude(big, union([object({ x: string('l00', …, 'l44') }), object({ x: string('l45', …, 'l89') })]))
       runtime:      never
-      type checker: TS2589, type instantiation is excessively deep and possibly infinite
+      TypeScript 7: TS5114, instantiations of type 'FlatParts' appear infinitely circular
+      TypeScript 6: TS2589, type instantiation is excessively deep and possibly infinite
 
-**Effect.** The call of the caller does not compile. A literal set at one field of 89 or more
+**Effect.** The call of the caller does not compile. A literal set at one field of 90 or more
 literals cannot be sliced by a pattern that splits the set.
 
-**Pin.** None. A pin compiles a literal set of 89 at one field in the suite, and its cost in
+**Pin.** None. A pin compiles a literal set of 90 at one field in the suite, and its cost in
 instantiations is not measured.
 
 ---
@@ -266,6 +268,98 @@ TypeScript 7 and TS2589 on TypeScript 6.
 **Pin.** `src/codec/spec/union/codec.slice.cover.spec.ts` asserts the options of the fold of
 three patterns at run time only. `npm run check` and `npx tsc --noEmit` check the type of the
 other rows of the spec, which agree on both compilers.
+
+---
+
+## Known: the type of meet builds a call of fewer than two factors
+
+**Observation.** The run time refuses a meet of fewer than two factors at construction. The type of
+`meet` takes a tuple of codecs of any length, and states no lower bound. Measured 2026-11-10 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    meet(string)
+    meet()
+      type checker: builds
+      runtime:      throws, a meet is taken of two or more factors, and fewer were given
+
+**Effect.** The call builds in the type and throws at construction.
+
+**Pin.** None. No test calls `meet` with fewer than two factors.
+
+---
+
+## Known: the type of a literal former builds a literal of no value
+
+**Observation.** The run time refuses a literal that names no value at construction. The type of
+each literal former takes the values as a rest parameter, and states no lower bound. Measured
+2026-11-10 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    string()   number()   decimal()   boolean()   binary()
+      type checker: builds
+      runtime:      throws, a literal admits one of a non-empty set of values
+
+The message prints the base of the literal. The base of `decimal` is `number`, so the message of
+`decimal()` names `number()`.
+
+**Effect.** The call builds in the type and throws at construction. The message of `decimal()`
+names a former that the caller did not call.
+
+**Pin.** `src/codec/spec/literal/codec.literalbase.spec.ts` pins the throw at each base. No test
+pins the text of the message.
+
+---
+
+## Known: the type of discriminatedUnion reads a number tag as JS prints the number, where the run time reads the stored text
+
+**Observation.** A tag is the stored text of a literal, and the run time compares the stored text
+of two tags. The type spells a number tag as a template literal spells the number. So a number that
+JS prints with an exponent differs from the stored text of the number in the type. One call
+disagrees in each direction. Measured 2026-11-10 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`:
+
+    discriminatedUnion('size', [object({ size: number(1e21), a: string }),
+                                object({ size: decimal('1000000000000000000000'), b: string })])
+      type checker: builds
+      runtime:      throws, two options answer to 'size' = '1000000000000000000000'
+
+    discriminatedUnion('size', [object({ size: number(1e21), a: string }),
+                                object({ size: string('1e+21'), b: string })])
+      type checker: refused, options 0 and 1 answer to the same discriminator value
+      runtime:      builds
+
+The first call gives the same two results with `string('1000000000000000000000')` in the second
+option.
+
+**Effect.** The first call builds in the type and throws at construction. The second call does not
+compile, and the run time builds the union.
+
+**Pin.** `src/codec/spec/union/codec.dunion.lookup.spec.ts` pins the stored text of a number tag
+that JS spells with an exponent, at run time, and the refusal of one text at two bases. No test
+pins the two calls above.
+
+---
+
+## Known: the type of at refuses a path below two options that are one codec with a caller function
+
+**Observation.** A path below a union resolves where each option gives the same codec at the path.
+The run time compares the terms of the options, and tells two functions of a caller apart by object
+identity. A structural type holds no identity. So where the options at the path have one type and
+hold a function of a caller, the type answers that the path is ambiguous. Measured 2026-11-10 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    const h = refine(object({ x: string }), (v): v is { x: string } => v.x.length > 0)
+    const Pets = item(object({ op: union([h, h]) }))
+    at(narrow(at(Pets, ['op']), object({ x: string })), [])
+      type checker: refused, the path is ambiguous: no one codec stands at the path
+      runtime:      gives the codec
+
+The call gives the same two results where `h` is
+`legacy({ current: object({ x: string }), older: object({ x: string }) })`. The case where `h` is a
+`held` of a caller adapter is not measured.
+
+**Effect.** The call does not compile, and the run time gives the codec.
+
+**Pin.** None.
 
 ---
 
