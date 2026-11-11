@@ -934,9 +934,11 @@ export const meetOrdered = (option: AnyCodec, pattern: AnyCodec): AnyCodec =>
  * **The meet of codecs: the values that every factor holds**, as TypeScript reads `A & B`.
  *
  * Each factor reads open: a closed object holds each undeclared name at `opaque`. So two objects
- * meet at the union of their names, a name that one factor declares keeps the slot of that factor,
- * and a shared name holds the meet of its two fields. The result closes again where both factors
- * are closed. The meet of two recursive factors is recursive, and a `ref` closes it.
+ * meet at the union of their names, a name that one factor declares keeps the codec of that factor,
+ * and a shared name holds the meet of its two fields. A fill that one factor declares becomes a
+ * required slot, because the fill and the open slot of the other factor share no absent row. The
+ * result closes again where both factors are closed. The meet of two recursive factors is
+ * recursive, and a `ref` closes it.
  *
  * Two literal sets meet at their common literals, a base meets its own literal at the literal, and
  * two bases of different members meet at `never`. A list and a set meet by element, and a fixed list

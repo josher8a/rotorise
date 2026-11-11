@@ -1125,8 +1125,8 @@ const fillsAgree = (a: Field, b: Field): boolean =>
 
 /**
  * **The guard of a position at a path**, the model's `termPreAt`, as conjuncts: `in` for a literal
- * or a union of literals at one base, `type` for a ground base, `exists` for `opaque`, for
- * `legacy` and for `fill`, and `type M` with the conjuncts of each required key for an object. A `held`
+ * or a union of literals at one base, `type` for a ground base, `exists` for `opaque` and for
+ * `legacy`, and `type M` with the conjuncts of each required key for an object. A `held`
  * reads its stored side, and a refinement reads its inner term.
  *
  * **Each conjunct holds of each attribute that the position stores**, so the conjuncts are an upper

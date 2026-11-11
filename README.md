@@ -66,7 +66,7 @@ UserTable.key('GSI1SK', { email: 'a@b.com' })
 **`config` options:**
 
 - **`depth`** — Limit composite key to the first N components. Useful for `begins_with` queries.
-- **`allowPartial`** — When `true`, stops building the key at the first component whose value is `undefined`, `null` or `''`, instead of throwing. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
+- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of throwing. A component with a transform does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
 - **`enforceBoundary`** — When `true`, appends a trailing separator if the key is partial. Ensures a `begins_with` query doesn't match unintended prefixes.
 
 ```ts
@@ -516,9 +516,10 @@ Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'
 import { RotoriseError } from 'rotorise'
 
 try {
-  Table.key('PK', { /* missing required attrs */ })
+  // a segment holds the separator
+  UserTable.key('PK', { orgId: 'acme#eu', id: '123' })
 } catch (e) {
-  if (e instanceof RotoriseError) { /* ... */ }
+  if (e instanceof RotoriseError && e.kind === 'separator') { /* ... */ }
 }
 ```
 
