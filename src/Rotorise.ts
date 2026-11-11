@@ -224,7 +224,8 @@ type CompositeKeyBuilderImpl<
  * The type half of the count in the run-time builder: the boundary follows a print that stops
  * before the last component. A print that holds no component has no boundary: it is the empty word.
  * A depth of `number` is the default of the builder and keeps the whole
- * spec. A call refuses a depth that is no literal non-negative integer, see {@link DepthRefusal}.
+ * spec. A call refuses a slot that is no one literal, and a depth that is no non-negative integer,
+ * see {@link ConfigRefusal}.
  */
 type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
     ? false
@@ -1905,26 +1906,52 @@ type ProcessSpecType<
 // Cache commonly used conditional types
 type SpecConfig<Spec> = Spec extends string ? never : SpecConfigShape
 
+/** The text of the refusal of a slot of the config that is no one literal. */
+type NoLiteralSlot<Slot extends string> =
+    `[key] ${Slot} is one literal or absent: a wide type or a union does not say which key the call builds`
+
 /**
- * The refusal of a depth that is no literal non-negative integer. A depth keeps that many components of
- * the list, so `number` does not say which key the call builds, and a negative and a fraction keep
- * no whole number of components. A depth of `0` keeps none, and the key is the empty prefix. The refusal lands on `depth`.
+ * The refusal of a slot of the config that is no one literal. The type of `key` is a function of the
+ * three slots, and each reader of a slot reads one value. So a slot holds one literal, `undefined`
+ * alone, or nothing. `number` is wide, and a `boolean`, a literal beside `undefined` and two depths
+ * are each a union. `OfLiteral` is the refusal that one literal can still owe. The refusal lands on
+ * the slot.
+ */
+type SlotRefusal<
+    Slot extends keyof SpecConfigShape,
+    Config,
+    OfLiteral = unknown,
+> = Slot extends keyof Config
+    ? (number extends Config[Slot] ? true : IsUnion<Config[Slot]>) extends true
+        ? { [K in Slot]: ErrorMessage<NoLiteralSlot<Slot>> }
+        : OfLiteral
+    : unknown
+
+/**
+ * The refusal of one literal depth that is no non-negative integer. A depth keeps that many
+ * components of the list, so a negative and a fraction keep no whole number of components. A depth
+ * of `0` keeps none, and the key is the empty prefix.
  */
 type DepthRefusal<Config> = Config extends { depth: infer D extends number }
-    ? number extends D
-        ? {
-              depth: ErrorMessage<'[key] depth is a literal non-negative integer, and a number does not say how many components the key keeps'>
+    ? `${D}` extends `${bigint}`
+        ? `${D}` extends `-${string}`
+            ? {
+                  depth: ErrorMessage<'[key] depth is a non-negative integer, and a negative depth keeps no whole number of components'>
+              }
+            : unknown
+        : {
+              depth: ErrorMessage<'[key] depth is a non-negative integer, and this depth keeps no whole number of components'>
           }
-        : `${D}` extends `${bigint}`
-          ? `${D}` extends `-${string}`
-              ? {
-                    depth: ErrorMessage<'[key] depth is a non-negative integer, and a negative depth keeps no whole number of components'>
-                }
-              : unknown
-          : {
-                depth: ErrorMessage<'[key] depth is a non-negative integer, and this depth keeps no whole number of components'>
-            }
     : unknown
+
+/** The refusal of a config that does not say which key the call builds. */
+type ConfigRefusal<Config> = SlotRefusal<
+    'depth',
+    Config,
+    DepthRefusal<Config>
+> &
+    SlotRefusal<'allowPartial', Config> &
+    SlotRefusal<'enforceBoundary', Config>
 
 type SpecConfigShape = {
     depth?: number | undefined
@@ -2273,7 +2300,7 @@ export type TableEntryDefinition<
     >(
         key: Key,
         attributes: Attributes,
-        config?: Config & DepthRefusal<Config>,
+        config?: Config & ConfigRefusal<Config>,
     ) => OptimizedBuiltKey<Attributes, Spec, Separator, Config_, CodecSpec>
 
     /**

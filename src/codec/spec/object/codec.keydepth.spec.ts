@@ -8,6 +8,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
+import type { ErrorMessage } from '../../../utils'
 
 type Pet = { shelterId: string; petId: string }
 
@@ -72,5 +73,118 @@ describe('a depth is a non-negative integer', () => {
             void Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth: 1.5 })
         }
         expect(typeof refused).toBe('function')
+    })
+})
+
+/**
+ * The type of `key` is a function of the three slots of the config. A slot that holds one literal, or
+ * nothing, says which key the call builds and which components the call must give. A wide type, or
+ * a union, says neither, so the type refuses the slot.
+ */
+describe('a slot of the config states one literal, or nothing', () => {
+    const attributes = { shelterId: 's', petId: 'p' } as const
+    const lacking: string = ''
+
+    it('refuses a boolean enforceBoundary, because the two values build two keys', () => {
+        const build = (flag: boolean) =>
+            // @ts-expect-error a boolean does not say whether the key ends with the separator
+            Pets.key('SK', attributes, { depth: 1, enforceBoundary: flag })
+        expect(build(true)).toBe('SHELTERID#s#')
+        expect(build(false)).toBe('SHELTERID#s')
+        expectTypeOf(
+            Pets.key('SK', attributes, { depth: 1, enforceBoundary: true }),
+        ).toEqualTypeOf<'SHELTERID#s#'>()
+        expectTypeOf(
+            Pets.key('SK', attributes, { depth: 1, enforceBoundary: false }),
+        ).toEqualTypeOf<'SHELTERID#s'>()
+    })
+
+    it('refuses a boolean allowPartial, because the two values build two keys', () => {
+        const partial = { shelterId: 's', petId: lacking } as const
+        const build = (flag: boolean) =>
+            // @ts-expect-error a boolean does not say whether the key stops at an empty component
+            Pets.key('SK', partial, { allowPartial: flag })
+        expect(build(true)).toBe('SHELTERID#s')
+        expect(() => build(false)).toThrow(/Attribute petId not found/)
+        expectTypeOf(
+            Pets.key('SK', partial, { allowPartial: true }),
+        ).toEqualTypeOf<'SHELTERID#s' | `SHELTERID#s#PETID#${string}`>()
+    })
+
+    it('refuses a depth that is a number or undefined, because no depth builds the whole key', () => {
+        const build = (depth?: number) =>
+            // @ts-expect-error an optional depth does not say how many components the key keeps
+            Pets.key('SK', { shelterId: 's' }, { depth })
+        expect(build(1)).toBe('SHELTERID#s')
+        expect(() => build()).toThrow(/Attribute petId not found/)
+    })
+
+    it('refuses an optional literal depth, because an absent depth keeps the whole key', () => {
+        const config: { depth?: 1 } = {}
+        // @ts-expect-error a depth that can be absent does not say how many components the key keeps
+        const build = () => Pets.key('SK', { shelterId: 's' }, config)
+        expect(build).toThrow(/Attribute petId not found/)
+    })
+
+    it('refuses two literal depths, because the boundary follows one depth', () => {
+        const build = (depth: 1 | 2) =>
+            // @ts-expect-error two depths do not say whether the key stops before the last component
+            Pets.key('SK', attributes, { depth, enforceBoundary: true })
+        expect(build(1)).toBe('SHELTERID#s#')
+        expect(build(2)).toBe('SHELTERID#s#PETID#p')
+    })
+
+    it('states one reason for each refused depth, so the caller reads the cause', () => {
+        // the type that a call of `key` asks of the slot `depth`
+        type Asked<Config> = NonNullable<Config> extends { depth: infer Depth }
+            ? Depth
+            : never
+        type Attributes = typeof attributes
+        type Wide = Asked<
+            Parameters<
+                typeof Pets.key<'SK', { readonly depth: number }, Attributes>
+            >[2]
+        >
+        type Negative = Asked<
+            Parameters<
+                typeof Pets.key<'SK', { readonly depth: -1 }, Attributes>
+            >[2]
+        >
+        type Fraction = Asked<
+            Parameters<
+                typeof Pets.key<'SK', { readonly depth: 1.5 }, Attributes>
+            >[2]
+        >
+        type TwoDepths = Asked<
+            Parameters<
+                typeof Pets.key<'SK', { readonly depth: 1 | 1.5 }, Attributes>
+            >[2]
+        >
+        type NoLiteral =
+            ErrorMessage<`${string}is one literal or absent${string}`>
+        expectTypeOf<Wide>().toMatchTypeOf<NoLiteral>()
+        expectTypeOf<Negative>().toMatchTypeOf<
+            ErrorMessage<`${string}a negative depth keeps${string}`>
+        >()
+        expectTypeOf<Fraction>().toMatchTypeOf<
+            ErrorMessage<`${string}this depth keeps${string}`>
+        >()
+        // two depths where one is a fraction owe one reason: two reasons at one slot leave `never`
+        expectTypeOf<TwoDepths>().toMatchTypeOf<NoLiteral>()
+        expectTypeOf<Wide>().not.toBeNever()
+        expectTypeOf<Negative>().not.toBeNever()
+        expectTypeOf<Fraction>().not.toBeNever()
+        expectTypeOf<TwoDepths>().not.toBeNever()
+    })
+
+    it('accepts a depth of undefined alone, a config with no slot, and no config', () => {
+        expect(Pets.key('SK', attributes, { depth: undefined })).toBe(
+            'SHELTERID#s#PETID#p',
+        )
+        expect(Pets.key('SK', attributes, {})).toBe('SHELTERID#s#PETID#p')
+        expect(Pets.key('SK', attributes)).toBe('SHELTERID#s#PETID#p')
+        expectTypeOf(
+            Pets.key('SK', attributes, { depth: undefined }),
+        ).toEqualTypeOf<'SHELTERID#s#PETID#p'>()
     })
 })
