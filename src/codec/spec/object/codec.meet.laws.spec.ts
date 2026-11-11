@@ -26,6 +26,7 @@ import {
     never,
     object,
     optional,
+    ref,
     string,
     union,
 } from '../../codec'
@@ -44,6 +45,8 @@ const extractOf = extract as unknown as (t: AnyCodec, p: AnyCodec) => AnyCodec
 /** `exclude` takes an erased codec and an erased pattern, and gives an erased codec. */
 const excludeOf = (t: AnyCodec, p: AnyCodec): AnyCodec => exclude(t, p)
 const atOf = at as unknown as (c: AnyCodec, path: readonly string[]) => AnyCodec
+/** `union` of an erased list of options, where a pool member is one option. */
+const unionOf = union as unknown as (options: readonly AnyCodec[]) => AnyCodec
 
 type Outcome = { readonly kind: 'codec'; readonly codec: AnyCodec } | 'refused'
 
@@ -445,5 +448,45 @@ describe('the meet commutes with a path', () => {
             }
         }
         expect(compared).toBeGreaterThan(0)
+    })
+})
+
+describe('a meet refuses a free name at each position and each depth of the unions of a factor', () => {
+    /**
+     * A factor that names a free `ref` at any depth of its unions, at any position of an option list,
+     * is refused by `meetOptions`, whatever the other factor is. The `ref` stands first, last, and
+     * below one or two unions. The unit and the absorbing element of the meet decide before the factor
+     * is read, and the pool holds neither.
+     */
+    const free = ref('Pet') as unknown as AnyCodec
+    const placements: readonly (readonly [string, AnyCodec])[] = [
+        ['the factor itself', free],
+        ['alone in a union', unionOf([free])],
+        ['first in a union', unionOf([free, string])],
+        ['last in a union', unionOf([string, free])],
+        ['in the middle of three options', unionOf([string, free, boolean])],
+        ['alone under two unions', unionOf([unionOf([free])])],
+        ['last under two unions', unionOf([unionOf([string, free])])],
+        [
+            'last under a union that holds a union',
+            unionOf([string, unionOf([boolean, free])]),
+        ],
+    ]
+
+    it('refuses on each side, for each pool member, at each placement, and names the free name', () => {
+        let refused = 0
+        for (const other of [...PATTERNS, ...LEAVES, ...TAGGED])
+            for (const [place, factor] of placements) {
+                expect(
+                    () => meetOf(factor, other),
+                    `${place}, on the left`,
+                ).toThrow("names ref('Pet')")
+                expect(
+                    () => meetOf(other, factor),
+                    `${place}, on the right`,
+                ).toThrow("names ref('Pet')")
+                refused += 2
+            }
+        expect(refused).toBeGreaterThan(0)
     })
 })

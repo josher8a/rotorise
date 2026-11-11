@@ -139,6 +139,19 @@ describe('a refused value is a failure the caller receives, never a throw', () =
     })
 })
 
+describe('a refinement refuses a write that its predicate refuses, as it refuses the read', () => {
+    it('refuses a value that the predicate refuses on encode, and writes a value that the predicate accepts', () => {
+        type Rex = Brand<string, 'rex'>
+        const isRex = (v: string): v is Rex => v === 'Rex'
+        const PetName = refine(string, isRex, { describe: 'the name Rex' })
+        const refused = PetName.encode('Tom' as Rex)
+        expect(refused).toBeInstanceOf(CodecError)
+        expect(refused instanceof CodecError && refused.kind).toBe('refused')
+        expect(PetName.encode('Rex' as Rex)).toEqual({ S: 'Rex' })
+        expect(PetName.decode({ S: 'Tom' })).toBeInstanceOf(CodecError)
+    })
+})
+
 describe('a refinement reads its predicate as true or false only', () => {
     it('refuses a value that the predicate answers with a falsy number, and keeps the value that it answers with a truthy one', () => {
         const named = ((text: string) => text.length) as unknown as (

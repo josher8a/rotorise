@@ -49,6 +49,7 @@ import {
     checkStable,
     firstDifference,
     rngFrom,
+    roundTrip,
     shrinkOf,
     structuralEquals,
 } from 'rotorise/testing'
@@ -77,8 +78,30 @@ export const PetRows = tableEntry<PetRow>()({
     PK: ['petId'],
     SK: { discriminator: 'kind', spec: { DOG: ['ownerId'], CAT: null } },
 })
+export const Packs = scope({
+    Pet: union([
+        object({ kind: string('DOG'), mate: optional(ref('Pet')) }),
+        object({ kind: string('CAT'), lives: number }),
+    ]),
+})
+export const { Pet: PackPet } = Packs
 export const Families = scope({ Family: object({ name: string, children: optional(array(ref('Family'))) }) })
 export const { Family } = Families
+export const CodedPets = tableEntry<{ petId: string; name: string }>()(
+    { PK: ['petId'], GSI1SK: 'name' },
+    { codec: { petId: string, name: string }, key: { partition: 'PK' } },
+)
+export const TaggedPets = tableEntry<PetRow>()(
+    { PK: ['petId'], SK: { discriminator: 'kind', spec: { DOG: ['ownerId'], CAT: null } } },
+    {
+        codec: item(
+            discriminatedUnion('kind', [
+                object({ petId: string, kind: string('DOG'), ownerId: string }),
+                object({ petId: string, kind: string('CAT') }),
+            ]),
+        ),
+    },
+)
 export const Chip = binary
 export const Vaccinated = boolean
 export const Carry = R.carrying
@@ -129,9 +152,11 @@ export const Und = object({ a: undefinable(string) })
 export const Animal = union([Dog, Cat])
 export const rng = rngFrom(1)
 export const sample = arbitraryOf(object({ name: string }), rng, 3)
-export const roundTrip = checkRoundTrip
+export const roundTripped = roundTrip
+export const checked = checkRoundTrip
 export const difference = firstDifference
 export const Marshal = native({ removeUndefinedValues: true })
+export const Bare = native
 const Shelter = scope({ Pet: union([object({ kind: string('DOG'), name: string }), object({ kind: string('CAT'), lives: number })]) })
 export const ScopedDogs = extract(Shelter.Pet, object({ kind: string('DOG') }))
 export const ScopedNotDogs = exclude(Shelter.Pet, object({ kind: string('DOG') }))

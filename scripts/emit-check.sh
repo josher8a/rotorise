@@ -58,13 +58,17 @@ failed=0
 for version in "${VERSIONS[@]}"; do
   rm -rf "$WORK/out"
   if out=$(cd "$WORK" && npx --yes --package "typescript@$version" -- tsc -p . --pretty false 2>&1); then
-    if holes=$(grep -cw 'any' "$WORK/out/index.d.mts"); then
-      printf 'FAIL  typescript@%s\n' "$version"
-      printf '      | the declaration holds %s lines with the type `any`\n' "$holes"
-      failed=1
-    else
-      printf 'PASS  typescript@%s\n' "$version"
-    fi
+    # `grep -c` exits 0 for a hole, 1 for none, and 2 where the file is absent or unreadable.
+    holes=$(grep -cw 'any' "$WORK/out/index.d.mts" 2>/dev/null)
+    case $? in
+      0) printf 'FAIL  typescript@%s\n' "$version"
+         printf '      | the declaration holds %s lines with the type `any`\n' "$holes"
+         failed=1 ;;
+      1) printf 'PASS  typescript@%s\n' "$version" ;;
+      *) printf 'FAIL  typescript@%s\n' "$version"
+         printf '      | the compiler wrote no declaration file at out/index.d.mts\n'
+         failed=1 ;;
+    esac
   else
     printf 'FAIL  typescript@%s\n' "$version"
     printf '%s\n' "$out" | sed 's/^/      | /' | head -20

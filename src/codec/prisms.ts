@@ -394,19 +394,13 @@ export const binary: BinaryCodec = codecOfTerm({
  *
  * **The obligation is `is`, and it is yours.** Like `held`'s pair and `custom`'s two functions,
  * `refine` is sound *iff* the predicate honestly decides `Narrow` — nothing here can check that,
- * because `Narrow` is a type and `is` is a claim about it. What follows from the claim is why the
- * two directions are checked differently:
+ * because `Narrow` is a type and `is` is a claim about it. Both directions run the predicate:
  *
  * - **`decode` runs `is`.** A stored value was never type-checked — a row is data somebody else
  *   wrote — so the predicate is the only thing between the database and `Narrow`.
- * - **`encode` does not.** Its argument is already a `Narrow`, and TypeScript is what says so.
- *   Re-running `is` would assert nothing the call site had not already asserted.
- *
- * The asymmetry tracks how far the type system's guarantee reaches. Past that edge — `unsafeEncode`
- * still runs `encode`, but an `as` upstream of it is not checked by anything — `refine` will write
- * a value it would refuse to read. {@link literal} checks both directions for exactly that reason:
- * a union can widen a field's type, so the guarantee is not available, and its admissible set is
- * data this library owns, which gives the check an authority a caller's predicate cannot have.
+ * - **`encode` runs `is`.** The argument is a `Narrow` by its type, and a value that an `as` upstream
+ *   forces past the type is refused with a `CodecError` of kind `refused`, and never written. This is
+ *   `Codec.restrict` of the model, which restricts the graph in both directions.
  */
 export type Refined<
     T,
