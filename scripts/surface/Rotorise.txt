@@ -20,9 +20,6 @@ BooleanCodec
 Carrying
 Closed
 CodecError
-CompositeKeyBuilder
-CompositeKeyParams
-CompositeKeyParamsImpl
 ConstantAttributes
 ConstantOf
 DecimalCodec
@@ -103,7 +100,6 @@ SpreadCodec
 SpreadOnce
 StoredItem
 StringCodec
-TableEntry
 TableEntryDefinition
 TableKeys
 Tagged

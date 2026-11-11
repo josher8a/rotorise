@@ -165,19 +165,13 @@ type PathKeyParams<
       >
     : never
 
-export type CompositeKeyParamsImpl<
+type CompositeKeyParamsImpl<
     Entity,
     InputSpec extends InputSpecShape,
     skip extends number = 1,
 > = HoldsPath<InputSpec> extends true
     ? PathKeyParams<Entity, InputSpec, skip>
     : PlainKeyParams<Entity, InputSpec, skip>
-
-export type CompositeKeyParams<
-    Entity extends Record<string, unknown>,
-    FullSpec extends InputSpec<MergeIntersectionObject<Entity>>[],
-    skip extends number = 1,
-> = CompositeKeyParamsImpl<Entity, FullSpec, skip>
 
 type CompositeKeyBuilderImpl<
     Entity,
@@ -237,14 +231,6 @@ type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
                 : true
             : false
         : false
-
-export type CompositeKeyBuilder<
-    Entity extends Record<string, unknown>,
-    Spec extends InputSpec<MergeIntersectionObject<Entity>>[],
-    Separator extends string = '#',
-    Deep extends number = number,
-    isPartial extends boolean = false,
-> = CompositeKeyBuilderImpl<Entity, Spec, Separator, Deep, isPartial>
 
 type joinable = string | number | bigint | boolean | null | undefined
 
@@ -553,20 +539,6 @@ type HeldEntry<
           >
         : never
     : never
-
-/**
- * Represents a complete DynamoDB table entry, combining the original entity
- * with its computed internal and global keys.
- *
- * @template Entity The base entity type.
- * @template Schema The schema defining the table keys.
- * @template Separator The string used to join composite key components (default: '#').
- */
-export type TableEntry<
-    Entity extends Record<string, unknown>,
-    Schema extends Record<string, FullKeySpec<Entity>>,
-    Separator extends string = '#',
-> = TableEntryImpl<Entity, Schema, Separator>
 
 // Partial<T> for objects so narrowed transform defaults pass the InputSpec constraint.
 type DefaultOf<T> = T extends Record<string, unknown> ? Partial<T> : T

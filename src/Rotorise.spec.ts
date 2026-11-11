@@ -1,11 +1,6 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it, test } from 'vitest'
-import {
-    type CompositeKeyBuilder,
-    type CompositeKeyParams,
-    type TransformShape,
-    tableEntry,
-} from './Rotorise'
+import { type TransformShape, tableEntry } from './Rotorise'
 import type { ErrorMessage, Exact, NonEmptyArray, show } from './utils'
 
 // The constraint of a key spec admits any path and any match on a path, whatever the entity holds,
@@ -123,79 +118,65 @@ describe('Exact<> with discriminated unions', () => {
 })
 
 describe('DynamoDB Utils', () => {
-    it('CompositeKeyParams requires the components up to the depth, and makes each later component optional', () => {
-        attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
-            null as any as CompositeKeyParams<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', 'c']
-            >,
+    it('key requires the components up to the depth, and makes each later component optional', () => {
+        const Transformed = tableEntry<{ a: string; b: number; c: boolean }>()({
+            PK: ['a', 'b', ['c', (_c: boolean) => 'TRANSFORM' as const]],
+        })
+        const depth = 2 as number
+        // a depth of two requires the first two components
+        expect(Transformed.key('PK', { a: 'x', b: 1 }, { depth: 2 })).toBe(
+            'A#x#B#1',
         )
-        attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
-            null as any as CompositeKeyParams<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']]
-            >,
+        // allowPartial keeps the first component required
+        expect(Transformed.key('PK', { a: 'x' }, { allowPartial: true })).toBe(
+            'A#x',
         )
-        attest<{ a: string; b: number; c?: boolean | undefined }>(
-            null as any as CompositeKeyParams<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']],
-                2
-            >,
-        )
-        attest<{ a: string; b?: number | undefined; c?: boolean | undefined }>(
-            null as any as CompositeKeyParams<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']],
-                number
-            >,
-        )
+        // @ts-expect-error a depth of two requires the second component
+        const shallow = () => Transformed.key('PK', { a: 'x' }, { depth: 2 })
+        expect(shallow).toThrow(/Attribute b not found/)
+        // @ts-expect-error a depth that is no literal says no component count
+        const loose = () => Transformed.key('PK', { a: 'x' }, { depth })
+        expect(loose).toThrow(/Attribute b not found/)
+        // A thunk, so this asserts the type and never runs.
+        // @ts-expect-error allowPartial still requires the first component
+        const _none = () => Transformed.key('PK', {}, { allowPartial: true })
+        expect(typeof _none).toBe('function')
 
-        attest.instantiations([2010, 'instantiations'])
+        attest.instantiations([8939, 'instantiations'])
     })
 
-    it('CompositeKeyBuilder types the key as the template of its components, joined by the separator', () => {
-        attest<`A#${string}#B#${number}#C#${boolean}`>(
-            null as any as CompositeKeyBuilder<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', 'c']
-            >,
+    it('key types the key as the template of its components, joined by the separator', () => {
+        type Pet = { a: string; b: number; c: boolean }
+        type Union =
+            | { a: 'a1'; b: 1; c: true; z: never }
+            | { a: 'a2'; b: 2; c: false; z: never }
+        const full: Pet = { a: 'x', b: 1, c: true }
+        const Pets = tableEntry<Pet>()({ PK: ['a', 'b', 'c'] })
+        const Dashed = tableEntry<Pet>()(
+            { PK: ['a', 'b', 'c'] },
+            { separator: '-' },
         )
-        attest<`A#${'a1'}#B#${1}` | `A#${'a2'}#B#${2}`>(
-            null as any as CompositeKeyBuilder<
-                | { a: 'a1'; b: 1; c: true; z: never }
-                | { a: 'a2'; b: 2; c: true; z: never },
-                ['a', 'b']
-            >,
-        )
-        attest<`A-${string}-B-${number}-C-${boolean}`>(
-            null as any as CompositeKeyBuilder<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', 'c'],
-                '-'
-            >,
-        )
-        attest<`A-${string}-B-${number}`>(
-            null as any as CompositeKeyBuilder<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', 'c'],
-                '-',
-                2
-            >,
-        )
+        attest<`A#${string}#B#${number}#C#${boolean}`>(Pets.key('PK', full))
+        attest<`A-${string}-B-${number}-C-${boolean}`>(Dashed.key('PK', full))
+        attest<`A-${string}-B-${number}`>(Dashed.key('PK', full, { depth: 2 }))
         attest<
             | `A-${string}`
             | `A-${string}-B-${number}`
             | `A-${string}-B-${number}-C-${boolean}`
-        >(
-            null as any as CompositeKeyBuilder<
-                { a: string; b: number; c: boolean },
-                ['a', 'b', 'c'],
-                '-',
-                3,
-                true
-            >,
+        >(Dashed.key('PK', full, { depth: 3, allowPartial: true }))
+
+        const Variants = tableEntry<Union>()({ PK: ['a', 'b'] })
+        const either = { a: 'a1', b: 1 } as
+            | { a: 'a1'; b: 1 }
+            | { a: 'a2'; b: 2 }
+        attest<`A#${'a1'}#B#${1}` | `A#${'a2'}#B#${2}`>(
+            Variants.key('PK', either),
         )
+
+        const Partial = tableEntry<Union>()({ PK: ['a', 'b', 'c'] })
+        const partial = { a: 'a1', b: 1, c: true } as
+            | { a: 'a1'; b: 1; c: true }
+            | { a: 'a2'; b: 2; c: false }
         attest<
             | 'A#a1'
             | 'A#a1#B#1'
@@ -203,16 +184,11 @@ describe('DynamoDB Utils', () => {
             | 'A#a2'
             | 'A#a2#B#2'
             | 'A#a2#B#2#C#false'
-        >(
-            null as any as CompositeKeyBuilder<
-                | { a: 'a1'; b: 1; c: true; z: never }
-                | { a: 'a2'; b: 2; c: false; z: never },
-                ['a', 'b', 'c'],
-                '#',
-                3,
-                true
-            >,
-        )
+        >(Partial.key('PK', partial, { depth: 3, allowPartial: true }))
+
+        const Transform = tableEntry<Union>()({
+            PK: ['a', 'b', ['c', (_c: boolean) => 'TRANSFORM' as const]],
+        })
         attest<
             | 'A#a1'
             | 'A#a1#B#1'
@@ -220,16 +196,21 @@ describe('DynamoDB Utils', () => {
             | 'A#a2#B#2'
             | 'A#a1#B#1#C#TRANSFORM'
             | 'A#a2#B#2#C#TRANSFORM'
-        >(
-            null as any as CompositeKeyBuilder<
-                | { a: 'a1'; b: 1; c: true; z: never }
-                | { a: 'a2'; b: 2; c: false; z: never },
-                ['a', 'b', ['c', (c: boolean) => 'TRANSFORM']],
-                '#',
-                3,
-                true
-            >,
-        )
+        >(Transform.key('PK', partial, { depth: 3, allowPartial: true }))
+
+        const Tagged = tableEntry<Union>()({
+            PK: [
+                'a',
+                'b',
+                [
+                    'c',
+                    (_c: boolean) => ({
+                        tag: 'TAG' as const,
+                        value: 'TRANSFORM' as const,
+                    }),
+                ],
+            ],
+        })
         attest<
             | 'A#a1'
             | 'A#a1#B#1'
@@ -237,26 +218,15 @@ describe('DynamoDB Utils', () => {
             | 'A#a2#B#2'
             | 'A#a1#B#1#TAG#TRANSFORM'
             | 'A#a2#B#2#TAG#TRANSFORM'
-        >(
-            null as any as CompositeKeyBuilder<
-                | { a: 'a1'; b: 1; c: true; z: never }
-                | { a: 'a2'; b: 2; c: false; z: never },
-                [
-                    'a',
-                    'b',
-                    [
-                        'c',
-                        (c: boolean) => {
-                            tag: 'TAG'
-                            value: 'TRANSFORM'
-                        },
-                    ],
-                ],
-                '#',
-                3,
-                true
-            >,
-        )
+        >(Tagged.key('PK', partial, { depth: 3, allowPartial: true }))
+
+        const Valued = tableEntry<Union>()({
+            PK: [
+                'a',
+                'b',
+                ['c', (_c: boolean) => ({ value: 'TRANSFORM' as const })],
+            ],
+        })
         attest<
             | 'A#a1'
             | 'A#a1#B#1'
@@ -264,29 +234,9 @@ describe('DynamoDB Utils', () => {
             | 'A#a2#B#2'
             | 'A#a1#B#1#TRANSFORM'
             | 'A#a2#B#2#TRANSFORM'
-        >(
-            null as any as CompositeKeyBuilder<
-                | { a: 'a1'; b: 1; c: true; z: never }
-                | { a: 'a2'; b: 2; c: false; z: never },
-                [
-                    'a',
-                    'b',
-                    [
-                        'c',
-                        (c: boolean) => {
-                            value: 'TRANSFORM'
-                        },
-                    ],
-                ],
-                '#',
-                3,
-                true
-            >,
-        )
+        >(Valued.key('PK', partial, { depth: 3, allowPartial: true }))
 
-        // 5662 -> 5746: the type of a key reads `enforceBoundary`, so the builder of the key type
-        // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([5746, 'instantiations'])
+        attest.instantiations([23005, 'instantiations'])
     })
 
     it('tableEntry joins the key components with the separator, and reads an entry back as the entity', () => {
@@ -453,7 +403,7 @@ describe('DynamoDB Utils', () => {
         // the exact type
         // 11406 -> 11232: an N key of an entry is the union of two primitives, which the SDK
         // marshaller writes, and no longer the class `DynamoNumber`
-        attest.instantiations([11232, 'instantiations'])
+        attest.instantiations([11330, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -500,7 +450,7 @@ describe('DynamoDB Utils', () => {
         // carries one more parameter and each prefix of a partial key one more template
         // 2388 -> 2875: the constraint of a key spec admits a path and a match on a path, and the
         // pin of the parameter type states both
-        attest.instantiations([2875, 'instantiations'])
+        attest.instantiations([2966, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -894,7 +844,7 @@ describe('DynamoDB Utils', () => {
         // carries one more parameter and each prefix of a partial key one more template
         // 15628 -> 19066: the constraint of a key spec admits a path and a match on a path, and each
         // pin of the parameter type states both
-        attest.instantiations([19066, 'instantiations'])
+        attest.instantiations([16581, 'instantiations'])
     })
 
     test('a union of many variants over one large record types the key of each tag, within the instantiation count', () => {
@@ -1110,7 +1060,7 @@ describe('DynamoDB Utils', () => {
         // inside the tolerance, so no single change moved the pin out of it
         // 33502 -> 33647: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([33647, 'instantiations'])
+        attest.instantiations([31172, 'instantiations'])
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1444,7 +1394,7 @@ describe('DynamoDB Utils', () => {
         // carries one more parameter and each prefix of a partial key one more template
         // 7329 -> 9028: an arm of a match is a key spec of its variant, so each arm of a discriminated
         // key builds the type of a match that the variant allows, and the schema check reads it
-        attest.instantiations([9028, 'instantiations'])
+        attest.instantiations([7931, 'instantiations'])
     })
 
     test('NeedsValidation detects 3-tuples in mixed arrays', () => {
