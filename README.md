@@ -380,10 +380,13 @@ HandoffTable.key('GSI1PK', {
 
 A transform on a path needs an annotation on its parameter, such as
 `['to.ownerId', (x: string) => x]`. The checker refuses an annotation that the value at the path
-does not fit. A path whose value can be absent needs a transform with a default. The options object
-is for a path only. A name with a `.` is always a path, as DynamoDB reads a `.` in a name of an
-expression. A key cannot read an attribute whose own name holds a `.`: the type refuses that name,
-and an entry with a codec refuses it at construction.
+does not fit. A path whose value can be absent needs a transform with a default. A path whose value
+can be `null` needs a transform that reads the `null`, because a default stands for an absent value
+only. The options object holds no transform and no default, so the options object is for a path
+whose value is always present and never `null`. The options object is for a path only. A name with
+a `.` is always a path, as DynamoDB reads a `.` in a name of an expression. A key cannot read an
+attribute whose own name holds a `.`: the type refuses that name, and an entry with a codec refuses
+it at construction.
 
 ### An Arm that Groups Literals
 

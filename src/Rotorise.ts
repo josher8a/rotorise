@@ -759,14 +759,32 @@ type NoSuchName<E, N> = N extends string
         : ErrorMessage<`'${N}' is no name or path of the entity`>
     : never
 
-/** What a name can be where the value is `V`: an optional value needs a transform with a default. */
+/**
+ * The refusal of a component whose value can be absent. The builder throws where the value is absent
+ * and the component holds no default, so each form of a component needs a transform with a default.
+ * The type is `never` where the value is always present.
+ */
+type AbsentValue<N, V> = undefined extends V
+    ? ErrorMessage<`'${N & string}' can be absent: give a transform with a default`>
+    : never
+
+/**
+ * The refusal of a component with no transform whose value can be absent or `null`. A `null` is a
+ * value: a transform reads the `null`, and a default stands for an absent value only. A component
+ * with no transform prints the stored value, and a `null` does not print.
+ */
+type AbsentOrNull<N, V> = [AbsentValue<N, V>] extends [never]
+    ? null extends V
+        ? ErrorMessage<`'${N & string}' can be null: give a transform that reads the null`>
+        : never
+    : AbsentValue<N, V>
+
+/** What a name can be where the value is `V`: a value that can be absent or `null` needs a transform. */
 type NameOfValue<E, N, V> = [V] extends [never]
     ? NoSuchName<E, N>
-    : undefined extends V
-      ? ErrorMessage<`'${N & string}' can be absent: give a transform with a default`>
-      : null extends V
-        ? ErrorMessage<`'${N & string}' can be null: give a transform with a default`>
-        : N
+    : [AbsentOrNull<N, V>] extends [never]
+      ? N
+      : AbsentOrNull<N, V>
 
 /** One component of a spec, against the options of the entity that its arm reads. */
 type ValidateComponent<E, C> = C extends string
@@ -775,14 +793,20 @@ type ValidateComponent<E, C> = C extends string
       ? [ValueOfKey<E, P>] extends [never]
           ? NoSuchName<E, P>
           : Second extends (...args: never[]) => unknown
-            ? [
-                  P,
-                  (key: Exclude<ValueOfKey<E, P>, undefined>) => TransformShape,
-                  ...(Rest extends [unknown]
-                      ? DefaultSlot<ValueOfKey<E, P>>
-                      : []),
-              ]
-            : [P, Second]
+            ? Rest extends [unknown]
+                ? [
+                      P,
+                      (
+                          key: Exclude<ValueOfKey<E, P>, undefined>,
+                      ) => TransformShape,
+                      ...DefaultSlot<ValueOfKey<E, P>>,
+                  ]
+                : [AbsentValue<P, ValueOfKey<E, P>>] extends [never]
+                  ? [P, (key: ValueOfKey<E, P>) => TransformShape]
+                  : AbsentValue<P, ValueOfKey<E, P>>
+            : [AbsentOrNull<P, ValueOfKey<E, P>>] extends [never]
+              ? [P, Second]
+              : AbsentOrNull<P, ValueOfKey<E, P>>
       : C
 
 /**
@@ -1133,15 +1157,25 @@ type NoKeyMember<
 > = `[tableEntry] '${KeyName}' is built from '${Name}', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B`
 
 /**
- * The text of the refusal of a path whose member the type cannot give. The codec has no field at the path, or the
+ * The causes that the type gives no member for a path. The codec has no field at the path, or the
  * frontier of the type does not know the codec there. The type does not see below nullable, a ref,
  * a union with a leaf option, or the open rest of the item, and `at` walks below each of them.
- * The instruction comes before the causes, because the compiler cuts the print of a long type.
+ */
+type NoPathCauses =
+    'The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item'
+
+/**
+ * The text of the refusal of a path whose member the type cannot give. The instruction comes before
+ * the causes, because the compiler cuts the print of a long type.
  */
 type NoPathMember<
     KeyName extends string,
     Name extends string,
-> = `[tableEntry] '${KeyName}' is built from '${Name}', and the type gives no member for that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item`
+> = `[tableEntry] '${KeyName}' is built from '${Name}', and the type gives no member for that path. Address the attribute itself, or a path that the type enters. ${NoPathCauses}`
+
+/** The text of the refusal of a component at a path that the codec cannot address. */
+type NoPathComponent<Name extends string> =
+    `[tableEntry] '${Name}' is a component, and the codec cannot address that path. Address the attribute itself, or a path that the type enters. ${NoPathCauses}`
 
 /** A key spec against the members of its attributes. A list of components is `S` and joins the members of the arms. */
 type ValidateKeyCarrier<
@@ -3285,11 +3319,24 @@ const componentsOf = (
 type PlainComponent = string | number | bigint | boolean | null | undefined
 
 /**
+ * The name of a component that prints the stored value: a bare name, and the name of a tuple whose
+ * second slot is no function. A tag changes the label only. A transform prints what the function
+ * gives, so the name of a transform is no component of this kind.
+ */
+type StoredName<C> = C extends string
+    ? C
+    : C extends readonly [infer P extends string, infer Second, ...unknown[]]
+      ? Second extends (...args: never[]) => unknown
+          ? never
+          : P
+      : never
+
+/**
  * The names that a key spec uses as a component: each name of a list, at any depth of a match. A
  * name that stands alone is a key of one attribute, and `ValidateLeaf` owns that name.
  */
 type ComponentsOf<Spec> = Spec extends readonly unknown[]
-    ? Extract<Spec[number], string>
+    ? StoredName<Spec[number]>
     : Spec extends { readonly spec: infer Arms }
       ? ComponentsOf<Arms[keyof Arms]>
       : Spec extends { readonly cases: infer C }
@@ -3324,9 +3371,9 @@ type RefuseObject<
  */
 type RefuseComponents<E, Enc, CodecSpec, Spec> = Spec extends readonly unknown[]
     ? {
-          [I in keyof Spec]: Spec[I] extends string
-              ? RefuseComponent<E, Enc, CodecSpec, Spec[I]>
-              : unknown
+          [I in keyof Spec]: [StoredName<Spec[I]>] extends [never]
+              ? unknown
+              : RefuseComponent<E, Enc, CodecSpec, StoredName<Spec[I]>>
       }
     : Spec extends { readonly spec: infer Arms }
       ? {
@@ -3361,7 +3408,7 @@ type RefuseComponent<E, Enc, CodecSpec, Name extends string> = [Enc] extends [
       ? // a name with a `.` is a path, so the codec writes the member at the path
         CodecMemberAtPath<CodecSpec, Name> extends infer M
           ? [M] extends [never]
-              ? ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec cannot address that path, because a path enters an object, a union of objects, and a field under optional, undefinable or fill. The codec has no field at the path, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item, where the run time does. Address the attribute itself`>
+              ? ErrorMessage<NoPathComponent<Name>>
               : [Exclude<M, 'S' | 'N'>] extends [never]
                 ? unknown
                 : ErrorMessage<`[tableEntry] '${Name}' is a component, and the codec writes it as ${Exclude<M, 'S' | 'N'> & string}. A component is text or a number: write the attribute as S or N`>

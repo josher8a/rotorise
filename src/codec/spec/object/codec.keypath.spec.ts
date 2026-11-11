@@ -160,6 +160,75 @@ describe('a key component that reads a path', () => {
                 PK: ['vaccine.lastDose'],
             })
         })
+
+        it('refuses a transform at a path whose value can be absent where no default is given, because the builder throws for an absent value', () => {
+            const Pets = tableEntry<Transfer>()({
+                PK: ['id'],
+                // @ts-expect-error `vaccine.lastDose` can be absent: the transform needs a default
+                SK: [['vaccine.lastDose', (x: string) => x]],
+            })
+            const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
+            expect(() => Pets.toEntry(absent)).toThrow(
+                /Attribute vaccine\.lastDose not found/,
+            )
+        })
+
+        it('refuses a tag at a path whose value can be absent, because a tag has no slot for a default', () => {
+            const Pets = tableEntry<Transfer>()({
+                PK: ['id'],
+                // @ts-expect-error `vaccine.lastDose` can be absent: give a transform with a default
+                SK: [['vaccine.lastDose', { tag: 'DOSE' }]],
+            })
+            const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
+            expect(() => Pets.toEntry(absent)).toThrow(
+                /Attribute vaccine\.lastDose not found/,
+            )
+        })
+
+        it('refuses a transform at a path under a null parent where no default is given', () => {
+            type Nullable = { id: string; vaccine: { lastDose: string } | null }
+            const Pets = tableEntry<Nullable>()({
+                PK: ['id'],
+                // @ts-expect-error the parent can be null, so `vaccine.lastDose` can be absent: the transform needs a default
+                SK: [['vaccine.lastDose', (x: string) => x]],
+            })
+            const absent: Nullable = { id: 'p', vaccine: null }
+            expect(() => Pets.toEntry(absent)).toThrow(
+                /Attribute vaccine\.lastDose not found/,
+            )
+        })
+
+        it('accepts a transform at a path whose value can be null where no default is given, because a null is a value that the transform reads', () => {
+            type Chipped = { id: string; chip: { serial: string | null } }
+            const Pets = tableEntry<Chipped>()({
+                PK: ['id'],
+                SK: [['chip.serial', (x: string | null) => x ?? 'NONE']],
+            })
+            const unchipped: Chipped = { id: 'p', chip: { serial: null } }
+            expect(Pets.toEntry(unchipped).SK).toBe('SERIAL#NONE')
+        })
+
+        it('refuses a tag at a path whose value can be null, because a component with no transform does not print a null', () => {
+            type Chipped = { id: string; chip: { serial: string | null } }
+            const Pets = tableEntry<Chipped>()({
+                PK: ['id'],
+                // @ts-expect-error `chip.serial` can be null: give a transform that reads the null
+                SK: [['chip.serial', { tag: 'CHIP' }]],
+            })
+            const unchipped: Chipped = { id: 'p', chip: { serial: null } }
+            expect(() => Pets.toEntry(unchipped)).toThrow(
+                /Attribute chip\.serial not found/,
+            )
+        })
+
+        it('accepts a transform at a path that can be absent where a default is given, and prints the default', () => {
+            const Pets = tableEntry<Transfer>()({
+                PK: ['id'],
+                SK: [['vaccine.lastDose', (x: string) => x, '0']],
+            })
+            const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
+            expect(Pets.toEntry(absent).SK).toBe('LASTDOSE#0')
+        })
     })
 
     it('refuses a path that no option of the entity holds', () => {

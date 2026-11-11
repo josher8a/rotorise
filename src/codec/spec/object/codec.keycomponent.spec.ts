@@ -65,6 +65,17 @@ describe('a key component with no codec', () => {
         })
     })
 
+    it('refuses a tagged object at a path, because a tag changes the label only', () => {
+        type Noted = { id: string; meta: { note: { text: string } } }
+        const Notes = tableEntry<Noted>()({
+            PK: ['id'],
+            // @ts-expect-error a tag prints the stored value, and an object has no text of its own
+            SK: [['meta.note', { tag: 'NOTE' }]],
+        })
+        const noted: Noted = { id: 'n', meta: { note: { text: 't' } } }
+        expect(() => Notes.toEntry(noted)).toThrow(/the key cannot print it/)
+    })
+
     it('refuses an object at a path, and accepts text at a path', () => {
         const Born_ = tableEntry<Owner>()({
             PK: ['id'],
@@ -129,6 +140,32 @@ describe('a key component with a codec', () => {
                 { codec: { id: string, tag: object({ chip: binary }) } },
             ),
         ).toThrow(/writes it as B/)
+    })
+
+    it('refuses a tagged component that the codec writes as B at a path, because a tag changes the label only', () => {
+        type Chipped = { id: string; tag: { chip: Uint8Array } }
+        expect(() =>
+            tableEntry<Chipped>()(
+                {
+                    PK: ['id'],
+                    // @ts-expect-error a tag prints the stored value, so the codec must write S or N at the path
+                    SK: [['tag.chip', { tag: 'CHIP' }]],
+                },
+                { codec: { id: string, tag: object({ chip: binary }) } },
+            ),
+        ).toThrow(/writes it as B/)
+    })
+
+    it('accepts a transform at a path that the codec writes as B, because the function prints the text', () => {
+        type Chipped = { id: string; tag: { chip: Uint8Array } }
+        const Pets = tableEntry<Chipped>()(
+            {
+                PK: ['id'],
+                SK: [['tag.chip', (chip: Uint8Array) => String(chip.length)]],
+            },
+            { codec: { id: string, tag: object({ chip: binary }) } },
+        )
+        expect(typeof Pets.toEntry).toBe('function')
     })
 
     it('accepts a component that the codec writes as S or N', () => {

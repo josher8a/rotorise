@@ -119,6 +119,26 @@ describe('a path that the type does not see', () => {
         )
     })
 
+    it('names the instruction first for a component that the codec cannot address, because the compiler cuts the print of a long type', () => {
+        attest(() =>
+            tableEntry<{ id: string; meta: { note: string } | string }>()(
+                {
+                    PK: ['id'],
+                    // @ts-expect-error the type does not see below a union with a leaf option
+                    GSI1SK: ['meta.note'],
+                },
+                {
+                    codec: {
+                        id: string,
+                        meta: union([object({ note: string }), string]),
+                    },
+                },
+            ),
+        ).type.errors.snap(
+            "Type '\"meta.note\"' is not assignable to type '\"meta.note\" & ErrorMessage<\"[tableEntry] 'meta.note' is a component, and the codec cannot address that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'meta.note' is a component, and the codec cannot address that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, a ref, a union with a leaf option, or the open rest of the item\">'.",
+        )
+    })
+
     it('names the member rule for an object at a path of an entry with no codec, because no codec has a gap', () => {
         attest(() =>
             tableEntry<{ id: string; meta: { note: { text: string } } }>()({
@@ -143,6 +163,20 @@ describe('a path that the type does not see', () => {
             ),
         ).type.errors.snap(
             "Type '\"tags\"' is not assignable to type '\"tags\" & ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'tags', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'tags', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.",
+        )
+    })
+})
+
+describe('a component whose value can be null', () => {
+    it('names the transform that reads the null, because a default stands for an absent value only', () => {
+        attest(() =>
+            tableEntry<{ id: string; chip: { serial: string | null } }>()({
+                PK: ['id'],
+                // @ts-expect-error a component with no transform does not print a null
+                SK: ['chip.serial'],
+            }),
+        ).type.errors.snap(
+            "Type '\"chip.serial\"' is not assignable to type '\"chip.serial\" & ErrorMessage<\"'chip.serial' can be null: give a transform that reads the null\">'.Type 'string' is not assignable to type 'ErrorMessage<\"'chip.serial' can be null: give a transform that reads the null\">'.",
         )
     })
 })
