@@ -274,7 +274,7 @@ export const readingOf = (t: Term): Reading | undefined => {
 
 /**
  * The same declaration, read as a whole item: the same two directions without the top-level map,
- * and the things only a top-level codec can offer: `encodePartial`, `field`, `at`, `path`.
+ * and the things only a top-level codec can offer: `encodePartial` and `unsafeEncodePartial`.
  *
  * A DynamoDB item is a map that is never written as one; `PutItem` takes the attributes bare.
  * That is the *only* thing that separated an item codec from a nested one, and it is a fact about

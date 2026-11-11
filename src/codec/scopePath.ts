@@ -933,7 +933,7 @@ export type KindOfRoot<C> = C extends Marked ? 'item' : 'relative'
  *
  * @example
  * ```ts
- * const delivered = at(Adoption.item, ['shipment', 'legs', i, 'deliveredAt'])
+ * const delivered = at(item(Adoption), ['shipment', 'legs', i, 'deliveredAt'])
  * path(delivered)             // 'shipment.legs[1].deliveredAt'
  * delivered.encode(stamp)     // through the codec declared for it
  * ```

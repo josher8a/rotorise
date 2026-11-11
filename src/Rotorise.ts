@@ -3025,8 +3025,9 @@ const keyOfAttribute = (
  * One object check instead of three, but the point is the `keys` parameter: it is
  * `(keyof T & string)[]`, so the names a probe looks for are checked against the type that declares
  * them. These predicates decide which branch a codec argument takes. A probe that looks for
- * `'field'` as a bare string keeps compiling after a rename of `field` on {@link ItemCodec}, and
- * then matches nothing, which sends every codec down the "this is a spec" branch.
+ * `'unsafeEncodePartial'` as a bare string keeps compiling after a rename of `unsafeEncodePartial`
+ * on {@link ItemCodec}, and then matches nothing, which sends every codec down the "this is a
+ * spec" branch.
  */
 const callable = <T>(
     value: unknown,
@@ -3635,7 +3636,7 @@ export const tableEntry =
                 : isTagged(attributes)
                   ? (component: string) => agreedConstant(attributes, component)
                   : (component: string) => {
-                        // the spec and not `field`, which hands back the codec a member marks:
+                        // the spec and not the codec that a member marks:
                         // the two marks are the answer here, so the declaration is what is read
                         const found = own(attributes.spec, component)
                         return found && decidedBy(component, found)
@@ -4481,17 +4482,16 @@ export * from './codec/attribute'
  * `codec.ts` from `result.ts`, which is where the pair's error and its combinators live. They are
  * listed like the rest.
  *
- * The list holds each type that the declaration of a codec constant prints. The declaration emitter
- * of a consumer names only a type that the entry publishes, so a type that is missing here refuses
- * `export const Pet = object({ ... })` in the code of the consumer. `scripts/emit-check.sh` pins the
- * list.
+ * The list holds each type that the declaration of a codec constant prints by name. The
+ * declaration emitter of a consumer names only a type that the entry publishes, so a type that is
+ * missing here refuses `export const Pet = object({ ... })` in the code of the consumer.
+ * `scripts/emit-check.sh` pins the list.
  *
- * So the values are listed and the types are starred. **Adding a codec means adding a line here**,
+ * The values and the types are each listed by name. **Adding a codec means adding a line here**,
  * which is the cost of the list and the point of it: an export becomes a decision rather than a
- * consequence of where a function happens to live. `Rotorise.spec.ts` pins both halves, the names
- * that are API and the names that are not, so a name cannot rejoin the surface by accident either
- * — and the counts live there, in the lists the test actually walks, rather than here where
- * nothing would keep them true.
+ * consequence of where a function happens to live. `Rotorise.spec.ts` pins the names that are API
+ * and the names that are not, so a name cannot rejoin the surface by accident either.
+ * `scripts/surface-names.sh` compares the whole name set against `scripts/surface/*.txt`.
  */
 export type {
     AllObjects,

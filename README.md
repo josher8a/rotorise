@@ -410,7 +410,7 @@ HandoffsByOwner.key('GSI1PK', { type: 'ADOPTION', to: { ownerId: 'u1' } })
 
 `at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.
 
-`narrow(pattern)` narrows a path through a union to the options that the pattern does not separate. The pattern is an object codec, read as `extract` reads an object pattern: each object of the pattern is open. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
+`narrow(located, pattern)` narrows a path through a union to the options that the pattern does not separate. The pattern is an object codec, read as `extract` reads an object pattern: each object of the pattern is open. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
 
 `preconditions(at(...))` states the preconditions as data, a conjunction of `in`, `type` and `exists` facts at a path. A path with no `narrow` has no precondition. Where a clause key stores a term that no exact condition states, such as a list, `preconditions` is a `CodecError` that names the path. Test the result with `failed`.
 
