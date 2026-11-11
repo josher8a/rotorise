@@ -11,17 +11,23 @@ The compiler cannot see a file that a module reads or writes at run time, so `SP
 those files. The script fails when a module of a closure reads a file and `SPECS` declares no
 read for the module, and when an emit writes a generated file that `SPECS` does not declare.
 
-A kernel job reads its generated file and the model. The model is each `.lean` source of this
-package, the lake files and the toolchain. The type bridge reads `.pool.types/`, the modules
-that its programs load, its baseline and its script.
+A kernel job reads its generated file and the oleans. The oleans equal the sources of the model
+only where `lake build` passed on those sources. The model is each `.lean` source of this package,
+the lake files and the toolchain. So `build` hashes the model before `lake build`, and writes that
+hash to the seal only when the build passed and the model did not change during the build. A
+kernel job takes the model hash from the seal, and stores an entry only under a seal. A run with
+no seal reads an entry and stores none. The type bridge reads `.pool.types/`, the modules that
+its programs load, its baseline and its script.
 
 GATE_CACHE names the directory, and the default is `formal/.gate-cache`. GATE_CACHE_OFF=1 runs
 every step and stores nothing. GATE_REUSE_LOG names a file where each reuse adds one line.
+GATE_SEAL names the file of the seal for the run.
 
 Usage:  gate_cache.py emit                the emit specs whose key has no entry
         gate_cache.py types               the type bridge, unless its key has an entry
-        gate_cache.py hit <file>          exit 0 when the kernel job of <file> has an entry
-        gate_cache.py store <file>        store the entry of the kernel job of <file>
+        gate_cache.py build               `lake build`, and the seal of the run when it passed
+        gate_cache.py kernel <file> <out> the kernel job of <file>, unless its key has an entry.
+                                          The output of the job goes to <out>
 """
 import hashlib, os, re, shutil, subprocess, sys, tempfile, time
 
@@ -84,9 +90,9 @@ def closure(roots):
             if f.startswith(REPO + os.sep) and f"{os.sep}node_modules{os.sep}" not in f]
 
 
-def key(kind, paths, command, env_from=()):
+def key(kind, paths, command, env_from=(), extra=()):
     """The key of a step: its files, the environment variables that its modules read, its command,
-    and this script."""
+    the strings of `extra`, and this script."""
     h = digest([*paths, os.path.abspath(__file__)])
     names = set()
     for path in env_from:
@@ -95,6 +101,8 @@ def key(kind, paths, command, env_from=()):
     for name in sorted(names):
         h.update(f"{name}={os.environ.get(name, '')}\0".encode())
     h.update("\0".join(command).encode())
+    for text in extra:
+        h.update(b"\0" + text.encode())
     return os.path.join(CACHE, kind, h.hexdigest())
 
 
@@ -217,9 +225,56 @@ def model():
     return found
 
 
-def kernel_entry(file):
-    path = os.path.join(FORMAL, file)
-    return key("kernel", [path, *model()], ["lake", "env", "lean", file, "#assert_axioms_module"])
+def model_digest():
+    """The hash of the model."""
+    return digest(model()).hexdigest()
+
+
+def sealed():
+    """The model hash that `build` sealed for this run, or an empty string."""
+    seal = os.environ.get("GATE_SEAL")
+    if not seal or not os.path.isfile(seal):
+        return ""
+    with open(seal, encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def kernel_entry(file, model_hash):
+    return key("kernel", [os.path.join(FORMAL, file)], ["lake", "env", "lean", file,
+                                                         "#assert_axioms_module"],
+               extra=[model_hash])
+
+
+def build():
+    """Run `lake build`. Seal the model hash from before the build when the build passed on a model
+    that did not change during the build."""
+    seal = os.environ.get("GATE_SEAL")
+    if seal:
+        open(seal, "w", encoding="utf-8").close()
+    before = model_digest()
+    rc = subprocess.run(["lake", "build"], cwd=FORMAL).returncode
+    if rc == 0 and seal and model_digest() == before:
+        with open(seal, "w", encoding="utf-8") as f:
+            f.write(before)
+    return rc
+
+
+def kernel(file, out):
+    """Run the kernel job of `file`, unless its key has an entry. The key comes from before the
+    job. The job stores an entry when it passes with no output, the file did not change during
+    the job, and the run has a seal."""
+    seal = sealed()
+    entry = kernel_entry(file, seal or model_digest())
+    if hit(entry):
+        reused(f"vector bridge: {file} {os.path.basename(entry)[:12]}")
+        open(out, "w", encoding="utf-8").close()
+        return 0
+    with open(out, "w", encoding="utf-8") as f:
+        rc = subprocess.run(["lake", "env", "lean", file], cwd=FORMAL, stdout=f,
+                            stderr=subprocess.STDOUT).returncode
+    if rc == 0 and os.path.getsize(out) == 0 and seal and kernel_entry(file, seal) == entry:
+        store("kernel", entry)
+    return rc
 
 
 def types():
@@ -247,15 +302,10 @@ def main(argv):
         return emit()
     if argv[:1] == ["types"]:
         return types()
-    if len(argv) == 2 and argv[0] == "hit":
-        entry = kernel_entry(argv[1])
-        if hit(entry):
-            reused(f"vector bridge: {argv[1]} {os.path.basename(entry)[:12]}")
-            return 0
-        return 1
-    if len(argv) == 2 and argv[0] == "store":
-        store("kernel", kernel_entry(argv[1]))
-        return 0
+    if argv[:1] == ["build"]:
+        return build()
+    if len(argv) == 3 and argv[0] == "kernel":
+        return kernel(argv[1], argv[2])
     print(__doc__.split("Usage:")[1], file=sys.stderr)
     return 2
 

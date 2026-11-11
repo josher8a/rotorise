@@ -14,7 +14,9 @@
 #
 # The vector emit and the vector bridge reuse the result of a step whose inputs did not change
 # since the step passed: `scripts/gate_cache.py` states the key of each step. The gate prints each
-# reuse. `--full` runs every step, and CI runs `--full`.
+# reuse. `--full` runs every step, and CI runs `--full`. A kernel job reads the oleans, so the gate
+# stores the result of a kernel job only where `lake build` passed in the same run on the same
+# sources: `gate_cache.py build` hashes the sources before the build, and seals the hash.
 #
 # Every check runs even after one fails, so one invocation reports the whole state of the
 # tree rather than its first symptom. The exit code is 1 if any check failed and 0 only when
@@ -31,7 +33,7 @@ for arg in "$@"; do
   case "$arg" in
     --no-build) RUN_BUILD=0 ;;
     --full)     export GATE_CACHE_OFF=1 ;;
-    -h|--help)  sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "gate.sh: unknown argument: $arg" >&2
        echo "usage: gate.sh [--no-build] [--full]" >&2
        exit 2 ;;
@@ -41,7 +43,8 @@ done
 fail=0
 first_failure=""
 GATE_REUSE_LOG=$(mktemp); export GATE_REUSE_LOG
-trap 'rm -f "$GATE_REUSE_LOG"' EXIT
+GATE_SEAL=$(mktemp); export GATE_SEAL
+trap 'rm -f "$GATE_REUSE_LOG" "$GATE_SEAL"' EXIT
 
 # run <label> <command…> — the one place an exit code is read, so there is one
 # place to get it wrong. A step writes its output to a file, and a failed step prints the file.
@@ -71,7 +74,7 @@ run 'docstring_anchor.py'   python3 scripts/docstring_anchor.py
 run 'layer_order.py'        python3 scripts/layer_order.py
 
 if [ "$RUN_BUILD" -eq 1 ]; then
-  run 'lake build' lake build
+  run 'lake build' python3 scripts/gate_cache.py build
   # The routes by which this development reaches `Classical.choice`, against the baseline.
   # A name in the output and not in the baseline is a new classical route and fails. A name
   # in the baseline and not in the output is a fall and passes.
@@ -107,9 +110,7 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
       [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
         { echo \"the last line is not #assert_axioms_module\" > $out/x{}.out; echo 1 > $out/x{}.rc; exit 0; }
-      python3 scripts/gate_cache.py hit {} && { : > $out/x{}.out; echo 0 > $out/x{}.rc; exit 0; }
-      lake env lean {} > $out/x{}.out 2>&1; rc=\$?; echo \$rc > $out/x{}.rc
-      [ \$rc -eq 0 ] && [ ! -s $out/x{}.out ] && python3 scripts/gate_cache.py store {}; exit 0"
+      python3 scripts/gate_cache.py kernel {} $out/x{}.out; echo \$? > $out/x{}.rc; exit 0"
     wait
     fail=0
     for rc in "$out"/*.rc; do
