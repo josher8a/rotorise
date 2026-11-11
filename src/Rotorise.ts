@@ -77,9 +77,9 @@ type TransformOverride<
       ? I
       : Fallback
 
-/** The names of a spec that no attribute of the entity has: the paths that the entity holds. */
+/** The names of a spec that are a path: a name with a `.`, where the entity holds a value at the path. */
 type PathHeads<Entity, Heads> = Heads extends string
-    ? Heads extends keyof Entity
+    ? Heads extends NonPath<Entity>
         ? never
         : [ValueAt<Entity, Heads>] extends [never]
           ? never
@@ -145,13 +145,13 @@ type PathKeyParams<
 > = Entity extends unknown
     ? show<
           {
-              [K in Required_ & keyof Entity]: TransformOverride<
+              [K in Required_ & NonPath<Entity>]: TransformOverride<
                   InputSpec,
                   K,
                   Entity[K]
               >
           } & {
-              [K in All & keyof Entity]?:
+              [K in All & NonPath<Entity>]?:
                   | TransformOverride<InputSpec, K, Entity[K]>
                   | undefined
           } & ([PathHeads<Entity, All>] extends [never]
@@ -440,7 +440,7 @@ type ComputeTableKeyType<
           number,
           false
       >
-    : Spec extends keyof Entity
+    : Spec extends NonPath<Entity>
       ? Replace<SingleText<Entity, Spec, CodecSpec>, null, undefined>
       : Spec extends AnyPath
         ? PathText<Entity, Spec, CodecSpec>
@@ -621,6 +621,13 @@ type AtPath<
  * paths that a spec holds against the entity, and only a spec that holds one.
  */
 type AnyPath = `${string}.${string}`
+
+/**
+ * The names of an entity that a key reads as an attribute: the complement of `AnyPath`. The run time
+ * twin is the branch of `valueAt` on a `.`: a name with a `.` is a path, and the type never reads an
+ * attribute whose own name holds a `.`.
+ */
+type NonPath<Entity> = Exclude<keyof Entity, AnyPath>
 
 /**
  * A component that reads a path: the path, the path with a tag, or the path with a transform.
@@ -1876,7 +1883,7 @@ type ProcessSpecType<
     Spec,
     Config extends SpecConfigShape,
 > = Spec extends string
-    ? Spec extends keyof Entity
+    ? Spec extends NonPath<Entity>
         ? DistributivePick<Entity, Spec>
         : Spec extends AnyPath
           ? PathAttributes<Entity, Spec>
@@ -2028,7 +2035,7 @@ type ProcessKey<
     ? never
     : [Entity] extends [never]
       ? never
-      : Spec extends keyof Entity
+      : Spec extends NonPath<Entity>
         ? Replace<Entity[Spec], null, undefined>
         : Spec extends AnyPath
           ? PathText<Entity, Spec, CodecSpec>
@@ -2069,7 +2076,7 @@ type OptimizedBuiltKey<
               ? never
               : [Entity] extends [never]
                 ? never
-                : Spec extends keyof Entity
+                : Spec extends NonPath<Entity>
                   ? Replace<
                         SingleText<Entity, Spec, CodecSpec>,
                         null,
@@ -2080,7 +2087,7 @@ type OptimizedBuiltKey<
                           Spec['spec'],
                           ValueOfKey<Entity, Spec['discriminator']>
                       > extends infer Arm
-                        ? Arm extends keyof Entity
+                        ? Arm extends NonPath<Entity>
                             ? Replace<
                                   SingleText<Entity, Arm, CodecSpec>,
                                   null,

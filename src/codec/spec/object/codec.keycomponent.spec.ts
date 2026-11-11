@@ -583,4 +583,85 @@ describe('a name of a key that holds a dot is a path', () => {
             ),
         ).toThrow(/writes it as BOOL/)
     })
+    it('types the key of toEntry at the path, for a key of one attribute and for a list', () => {
+        const Pets = tableEntry<Kennel>()({
+            PK: ['petId'],
+            GSI1PK: 'owner.name',
+            GSI1SK: ['owner.name'],
+        })
+        const entry = Pets.toEntry(kennel)
+        expectTypeOf(entry.GSI1PK).toEqualTypeOf<string>()
+        expectTypeOf(entry.GSI1SK).toEqualTypeOf<`NAME#${string}`>()
+        expect(entry.GSI1PK).toBe('bob')
+    })
+
+    it('reads the object at the path in the parameter of key, and refuses the attribute of the whole name', () => {
+        const Pets = tableEntry<Kennel>()({
+            PK: ['petId'],
+            GSI1PK: 'owner.name',
+            GSI1SK: ['owner.name'],
+        })
+        expect(Pets.key('GSI1PK', { owner: { name: 'bob' } })).toBe('bob')
+        expect(Pets.key('GSI1SK', { owner: { name: 'bob' } })).toBe('NAME#bob')
+        // @ts-expect-error a key of one attribute at 'owner.name' reads the path, and the run time reads no value at the whole name
+        const one = Pets.key('GSI1PK', { 'owner.name': 7 })
+        expect(one).toBeUndefined()
+        // @ts-expect-error a list that holds 'owner.name' reads the path, and the run time finds no value at the path
+        const list = () => Pets.key('GSI1SK', { 'owner.name': 7 })
+        expect(list).toThrow(/Attribute owner\.name not found/)
+        // the attribute of the whole name is no input of the key: the type states nothing of its value, and the run time does not read it
+        expect(
+            Pets.key('GSI1SK', {
+                owner: { name: 'bob' },
+                'owner.name': 'any text',
+            }),
+        ).toBe('NAME#bob')
+    })
+
+    it('gives the type and the text at the path to a call of key whose attributes hold both names, for a literal object and for a value of the entity type', () => {
+        const Pets = tableEntry<Kennel>()({
+            PK: ['petId'],
+            GSI1PK: 'owner.name',
+            GSI1SK: ['owner.name'],
+        })
+        const both = {
+            petId: 'p1',
+            'owner.name': 7,
+            owner: { name: 'bob' },
+        } as const
+        expectTypeOf(Pets.key('GSI1PK', both)).toEqualTypeOf<'bob'>()
+        expect(Pets.key('GSI1PK', both)).toBe('bob')
+        expectTypeOf(Pets.key('GSI1PK', kennel)).toEqualTypeOf<string>()
+        expect(Pets.key('GSI1PK', kennel)).toBe('bob')
+        expectTypeOf(Pets.key('GSI1SK', both)).toEqualTypeOf<'NAME#bob'>()
+        expect(Pets.key('GSI1SK', kennel)).toBe('NAME#bob')
+    })
+
+    it('gives the type and the text at the path to the arm of a match that is one name with a `.`, where the attributes hold both names', () => {
+        type Owned =
+            | {
+                  petId: string
+                  'owner.name': number
+                  owner: { kind: 'P'; name: string }
+              }
+            | {
+                  petId: string
+                  'owner.name': number
+                  owner: { kind: 'Q'; id: string }
+              }
+        const Pets = tableEntry<Owned>()({
+            PK: ['petId'],
+            GSI1PK: {
+                discriminator: 'owner.kind',
+                spec: { P: 'owner.name', Q: 'petId' },
+            },
+        })
+        const both = {
+            petId: 'p1',
+            'owner.name': 7,
+            owner: { kind: 'P', name: 'bob' },
+        } as const
+        expectTypeOf(Pets.key('GSI1PK', both)).toEqualTypeOf<'bob'>()
+        expect(Pets.key('GSI1PK', both)).toBe('bob')
+    })
 })

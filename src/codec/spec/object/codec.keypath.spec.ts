@@ -213,9 +213,11 @@ describe('a key component that reads a path', () => {
     it('reads a name with a `.` as a path, and never as the attribute whose own name holds the `.`', () => {
         type Odd = { 'a.b': string; a: { b: string } }
         const Odds = tableEntry<Odd>()({ PK: ['a.b'] })
-        expect(untyped(Odds)('PK', { 'a.b': 'flat', a: { b: 'nested' } })).toBe(
-            'B#nested',
-        )
+        expect(Odds.key('PK', { a: { b: 'nested' } })).toBe('B#nested')
+        // the type refuses the name of the attribute, and the run time finds no value at the path
+        // @ts-expect-error a key of 'a.b' reads the path, so the call gives the object at 'a'
+        const flat = () => Odds.key('PK', { 'a.b': 'flat' })
+        expect(flat).toThrow(/Attribute a\.b not found/)
     })
 })
 
