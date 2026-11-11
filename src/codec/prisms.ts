@@ -222,7 +222,7 @@ export type StoredSpelling<T extends string> = string extends T
  * `'1.50'` is not a price this codec will write. `'1.5'` is. Where exact digits matter more than
  * numeric ordering — trailing zeros that mean something — use {@link string}.
  */
-export const decimal: AttributeCodec<string, Attribute<'N'>> &
+export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> &
     TermMark<DecimalT> & {
         <const T extends string>(
             only: T & StoredSpelling<T>,
@@ -251,7 +251,8 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> &
                     ]
                 >
         }
-    } = numericAdapter<string>(
+    }
+export const decimal: DecimalCodec = numericAdapter<string>(
     { kind: 'number' },
     { kind: 'string' },
     storedOnly,
@@ -267,7 +268,7 @@ export const decimal: AttributeCodec<string, Attribute<'N'>> &
  * loss is: the float has already rounded before this codec sees it. `number.set()` and
  * `decimal.set()` are two carriers over one wire set: each is the set of its adapter.
  */
-export const number: AttributeCodec<number, Attribute<'N'>> &
+export type NumberCodec = AttributeCodec<number, Attribute<'N'>> &
     TermMark<FloatT<BaseT<'number'>>> & {
         <const T extends number>(
             only: T,
@@ -285,7 +286,8 @@ export const number: AttributeCodec<number, Attribute<'N'>> &
             ): AttributeCodec<ReadonlySet<L[number]>, NS> &
                 TermMark<['set', FloatT<LitsT<'number', FloatTexts<L>>>]>
         }
-    } = numericAdapter<number>(
+    }
+export const number: NumberCodec = numericAdapter<number>(
     { kind: 'number' },
     { kind: 'number' },
     asFloat,

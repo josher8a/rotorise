@@ -1,4 +1,4 @@
-export type { Reader } from './adapters'
+export type { MissingCodec, Reader } from './adapters'
 export { held, legacy } from './adapters'
 /**
  * The types that the entries publish. A lower file declares a type where its readers need the
@@ -10,10 +10,12 @@ export type {
     AttributeCodec,
     AttributeOf,
     Attributes,
+    Closed,
     Decoded,
     Encoded,
     EncodedPatch,
     EncodedVariants,
+    Free,
     Marks,
     Nestable,
     ObjectOf,
@@ -44,6 +46,9 @@ export type {
     BinaryCodec,
     BooleanCodec,
     ConstantOf,
+    DecimalCodec,
+    FloatT,
+    NumberCodec,
     Refined,
     SetBase,
     StringCodec,
@@ -60,6 +65,8 @@ export {
     string,
 } from './prisms'
 export type {
+    ArrayOver,
+    ListCodec,
     ListOf,
     ListWrites,
     SetCapable,
@@ -105,9 +112,17 @@ export type {
 } from './sums'
 export { discriminatedUnion, item, mdunion, nullable, union } from './sums'
 export type {
+    BaseT,
+    ElementMark,
+    HeldT,
     LiteralBase,
     LiteralValue,
+    LitT,
+    ObjectTermOf,
+    OptionsMark,
     Refinement,
     Rng,
+    ScopeTerms,
+    TermMark,
 } from './term'
 export type { SetSlot, Shape } from './value'

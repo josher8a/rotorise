@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    // A consumer reads the declaration files of the package, so the project reads them too.
+    "skipLibCheck": false,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "types": [],
+    // The rule of the check: the declaration emitter writes a declaration file for each constant.
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": "out"
+  },
+  "include": ["index.mts"]
+}

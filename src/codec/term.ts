@@ -1705,8 +1705,13 @@ export type FreeTerm = ['ref', '#free']
 /**
  * The default of the term and of the decoded type of {@link ObjectCodec}, {@link ItemCodec} and
  * {@link UnionCodec}: the type that the spec or the options give, computed where a member reads it.
+ *
+ * A string literal, and no `unique symbol`. The declaration of an `item(...)` constant prints the
+ * default, and the declaration emitter of a consumer cannot name a symbol that no entry publishes.
+ * The decoded type of such a codec is an object type, and the term is a tuple, so neither is this
+ * literal.
  */
-export declare const ofParts: unique symbol
+export declare const ofParts: ' ofParts'
 export type OfParts = typeof ofParts
 export type TermOf<C> = C extends { readonly [termMarker]?: infer T }
     ? unknown extends T
@@ -1727,8 +1732,11 @@ export type Itemable<X> = { readonly [itemMarker]: [X] }
  * union as specs, and holds no term, so `at` cannot walk the reading. The marker carries the union,
  * and the term and the members of the union are the term and the members of the reading. Optional,
  * so no value carries it. The marker tells no item from a codec: {@link itemMark} tells that.
+ *
+ * A string literal key, and no `unique symbol`. The declaration of an `item(...)` of a union prints
+ * the key in place, and the declaration emitter of a consumer cannot write a symbol key there.
  */
-export declare const itemOfMarker: unique symbol
+export declare const itemOfMarker: ' itemOfMarker'
 export type ReadingOf<C> = C extends Itemable<infer X>
     ? X & { readonly [itemOfMarker]?: [C] }
     : never
@@ -1803,8 +1811,13 @@ export type DefOf<Defs, C, Seen = never> = TermOf<C> extends [
  */
 export declare const itemTermMarker: unique symbol
 
-/** Type-level only, for the same reason as {@link optionalMarker}. */
-export declare const locatedFrom: unique symbol
+/**
+ * Type-level only, for the same reason as {@link optionalMarker}.
+ *
+ * A string literal key, and no `unique symbol`. The declaration of a located codec prints the key
+ * in place, and the declaration emitter of a consumer cannot write a symbol key there.
+ */
+export declare const locatedFrom: ' locatedFrom'
 
 /** Type-level only: the rest of each member of a dissection, which a slice keeps with the member. */
 export declare const restsMarker: unique symbol
