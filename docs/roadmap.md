@@ -407,3 +407,27 @@ so the input of `opaque(...)` stays exact.
 where every concrete codec sets the input equal to the output today. The pass
 lands where the parameter deletes the widened encode in
 `src/codec/spec/object/codec.undefinable.spec.ts` and the attest snapshots show no growth.
+
+---
+
+## A binary literal is a constant in the type, and the model carries a key of bytes
+
+**The future state.** A former of a binary literal takes the bytes as text, in one fixed spelling
+such as hexadecimal digits. The type then holds each allowed value as a string literal, where
+`LitT<'binary', string>` in `src/codec/prisms.ts` holds `string` today. The type tells two binary
+literals apart as the run time does, by bytes, so the type of `exclude(...)` drops the member that
+the run time drops. The former that takes a byte array stays, and stays coarse in the type, because
+a byte array has no literal type.
+
+The model carries the member `B` of a key. The host writes a key of one byte array attribute as `B`
+today. Each definition of `Dynamo/Alg/KeyItem.lean` takes `mem k ≠ .b`, because an item of
+strings carries no bytes. With bytes in the item, the premise goes, and the laws of a key cover the
+key that the host writes.
+
+**The ruling today is that the form waits, and it is JH's.** JH names no consumer with a binary
+value. A binary sort key is a known DynamoDB form, and the order of such a key is the order of the
+bytes.
+
+**What decides it.** The first consumer that declares a binary literal or a key of bytes. That
+consumer decides the spelling of the text, and decides if a composite key joins bytes. A composite
+key is a joined string today, so the type of a component in `src/Rotorise.ts` admits no byte array.
