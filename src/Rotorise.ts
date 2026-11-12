@@ -3623,6 +3623,19 @@ type ShortCodecCheck<E, S> = [S] extends [undefined]
             : ErrorMessage<`[tableEntry] the codec omits '${Exclude<KnownKeys<E>, keyof S> & string}'`>)
 
 /**
+ * The option `codec` of an entity that is a union. A tagged codec gives a spec of variants. A record
+ * of codecs names the attributes of one variant, so the entity needs a codec `union` built with a
+ * discriminator. The record is a member of the option, so the call infers `CodecSpec` from it, and
+ * the one error lands at the option `codec`, with the text first.
+ */
+type TaggedOrRefused<Entity, CodecSpec> = undefined extends CodecSpec
+    ? TaggedCodec<Entity, CodecSpec>
+    : IsVariantSpec<CodecSpec> extends true
+      ? TaggedCodec<Entity, CodecSpec>
+      : ErrorMessage<'[tableEntry] an entity that is a union takes a codec `union` built with a discriminator, because a record of codecs states the attributes of one variant'> &
+            CodecSpec
+
+/**
  * Entry point for defining a DynamoDB table schema with Rotorise.
  *
  * @template Entity The base entity type that this table represents.
@@ -3720,7 +3733,7 @@ export const tableEntry =
                          * in an index rather than in a field.
                          */
                         readonly codec?: IsUnion<Entity> extends true
-                            ? TaggedCodec<Entity, CodecSpec>
+                            ? TaggedOrRefused<Entity, CodecSpec>
                             :
                                   | (CodecSpec &
                                         ShortCodecCheck<

@@ -2,6 +2,7 @@ import { attest } from '@ark/attest'
 import { describe, it } from 'vitest'
 import {
     array,
+    held,
     never,
     nullable,
     object,
@@ -9,6 +10,7 @@ import {
     string,
     union,
 } from './codec/codec'
+import type { StandardSchemaV1 } from './codec/standard'
 import { tableEntry } from './Rotorise'
 
 /**
@@ -208,6 +210,55 @@ describe('a component whose value can be null', () => {
             }),
         ).type.errors.snap(
             "Type '\"chip.serial\"' is not assignable to type '\"chip.serial\" & ErrorMessage<\"'chip.serial' can be null: give a transform that reads the null\">'.Type 'string' is not assignable to type 'ErrorMessage<\"'chip.serial' can be null: give a transform that reads the null\">'.",
+        )
+    })
+})
+
+describe('an entity that is a union', () => {
+    type Housed = { petId: string; species: 'CAT'; adopted: boolean }
+    type Kennelled = { petId: string; species: 'DOG'; adopted: boolean }
+    const flag: StandardSchemaV1<boolean> = {
+        '~standard': {
+            version: 1,
+            vendor: 'probe',
+            validate: (v) =>
+                typeof v === 'boolean'
+                    ? { value: v }
+                    : { issues: [{ message: 'no' }] },
+        },
+    }
+    const Adopted = held(string('Y', 'N'), flag, {
+        encode: (b: boolean) => (b ? 'Y' : 'N'),
+        decode: (s: string) => s === 'Y',
+    })
+
+    it('refuses a record of codecs at the option codec, because a record states the attributes of one variant', () => {
+        attest(() =>
+            tableEntry<Housed | Kennelled>()(
+                { PK: ['petId'], SK: 'adopted' },
+                {
+                    // @ts-expect-error a record of codecs names the attributes of one variant
+                    codec: {
+                        petId: string,
+                        species: string('CAT', 'DOG'),
+                        adopted: Adopted,
+                    },
+                },
+            ),
+        ).type.errors.snap(
+            'Type \'{ petId: StringCodec; species: AttributeCodec<"CAT" | "DOG", Attribute<"S">> & TermMark<["union", [LitT<"string", "CAT">, LitT<"string", "DOG">]]>; adopted: AttributeCodec<...> & ... 1 more ... & Free<...>; }\' is not assignable to type \'ErrorMessage<"[tableEntry] an entity that is a union takes a codec `union` built with a discriminator, because a record of codecs states the attributes of one variant"> & { ...; }\'.Property \'[errorMessage]\' is missing in type \'{ petId: StringCodec; species: AttributeCodec<"CAT" | "DOG", Attribute<"S">> & TermMark<["union", [LitT<"string", "CAT">, LitT<"string", "DOG">]]>; adopted: AttributeCodec<...> & ... 1 more ... & Free<...>; }\' but required in type \'ErrorMessage<"[tableEntry] an entity that is a union takes a codec `union` built with a discriminator, because a record of codecs states the attributes of one variant">\'.',
+        )
+    })
+
+    it('refuses a key of a boolean attribute where the entry has no codec, because native stores no member for a boolean', () => {
+        attest(() =>
+            tableEntry<Housed | Kennelled>()({
+                PK: ['petId'],
+                // @ts-expect-error a boolean is none of S, N and B
+                SK: 'adopted',
+            }),
+        ).type.errors.snap(
+            "Type '\"adopted\"' is not assignable to type '\"adopted\" & ErrorMessage<\"[tableEntry] 'SK' is built from 'adopted', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'SK' is built from 'adopted', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.",
         )
     })
 })
