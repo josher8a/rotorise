@@ -186,6 +186,64 @@ export const CodedItem = CodedPets.toItem({ petId: 'p1', name: 'Rex' })
 export const CodedFrom = CodedPets.fromItem({ petId: { S: 'p1' }, name: { S: 'Rex' } })
 export const CodedPath = CodedPets.path()
 
+// One record for each entry. `satisfies` asks for each key of the entry, so a method that a later pass adds
+// with no row is an error here. The record of `CodedPets` holds one row for each form of a method.
+export const PetRowPins = {
+    toEntry: PetRows.toEntry({ petId: 'p1', kind: 'CAT' }),
+    fromEntry: PetRows.fromEntry(PetRows.toEntry({ petId: 'p1', kind: 'CAT' })),
+    key: {
+        plain: PetRows.key('PK', { petId: 'p1' }),
+        match: PetRows.key('SK', { petId: 'p1', kind: 'CAT' }),
+    },
+    keyUpdates: PetRows.keyUpdates({ petId: 'p1' }),
+    keys: PetRows.keys(['PK'], { petId: 'p1', kind: 'CAT' }),
+    infer: PetRows.infer,
+    path: PetRows.path(),
+} satisfies { [K in keyof typeof PetRows]: unknown }
+export const CodedPins = {
+    toEntry: CodedPets.toEntry({ petId: 'p1', name: 'Rex' }),
+    fromEntry: CodedPets.fromEntry(CodedPets.toEntry({ petId: 'p1', name: 'Rex' })),
+    key: {
+        plain: CodedPets.key('PK', { petId: 'p1' }),
+        depth: CodedPets.key('PK', { petId: 'p1' }, { depth: 1 }),
+        partial: CodedPets.key('PK', { petId: 'p1' }, { allowPartial: true }),
+        boundary: CodedPets.key('PK', { petId: 'p1' }, { allowPartial: true, enforceBoundary: true }),
+    },
+    keyUpdates: CodedPets.keyUpdates({ name: 'Tom' }),
+    keys: {
+        names: CodedPets.keys(['PK'], { petId: 'p1', name: 'Rex' }),
+        attributes: CodedPets.keys({ petId: 'p1', name: 'Rex' }),
+    },
+    keyCondition: CodedPets.keyCondition({ petId: 'p1' }),
+    infer: CodedPets.infer,
+    path: CodedPets.path(),
+    toItem: CodedPets.toItem({ petId: 'p1', name: 'Rex' }),
+    unsafeToItem: CodedPets.unsafeToItem({ petId: 'p1', name: 'Rex' }),
+    fromItem: CodedPets.fromItem({ petId: { S: 'p1' }, name: { S: 'Rex' } }),
+    unsafeFromItem: CodedPets.unsafeFromItem({ petId: { S: 'p1' }, name: { S: 'Rex' } }),
+    codec: CodedPets.codec,
+} satisfies { [K in keyof typeof CodedPets]: unknown }
+export const TaggedPins = {
+    toEntry: TaggedPets.toEntry({ petId: 'p1', kind: 'CAT' }),
+    fromEntry: TaggedPets.fromEntry(TaggedPets.toEntry({ petId: 'p1', kind: 'CAT' })),
+    key: TaggedPets.key('PK', { petId: 'p1' }),
+    keyUpdates: TaggedPets.keyUpdates({ petId: 'p1' }),
+    keys: TaggedPets.keys(['PK'], { petId: 'p1', kind: 'CAT' }),
+    infer: TaggedPets.infer,
+    path: TaggedPets.path(),
+    toItem: TaggedPets.toItem({ petId: 'p1', kind: 'CAT' }),
+    unsafeToItem: TaggedPets.unsafeToItem({ petId: 'p1', kind: 'CAT' }),
+    fromItem: TaggedPets.fromItem({ petId: { S: 'p1' }, kind: { S: 'CAT' } }),
+    unsafeFromItem: TaggedPets.unsafeFromItem({ petId: { S: 'p1' }, kind: { S: 'CAT' } }),
+    codec: TaggedPets.codec,
+} satisfies { [K in keyof typeof TaggedPets]: unknown }
+// the form of `keyCondition` with the name of an index
+export const IndexedPets = tableEntry<{ petId: string; name: string }>()(
+    { PK: ['petId'], GSI1PK: 'name' },
+    { codec: { petId: string, name: string }, key: { partition: 'PK' }, indexes: { GSI1: { partition: 'GSI1PK' } } },
+)
+export const IndexedCondition = IndexedPets.keyCondition('GSI1', { name: 'Rex' })
+
 // Not in this project: a method that a consumer exports alone, and the function of a half-applied
 // `tableEntry`. The declaration has no name for the type of `key`, `toEntry` and `keyUpdates` on
 // TypeScript 5 and 6 (TS2742 or TS2883, TS4023, TS7056), and none for the function on each compiler

@@ -1,7 +1,7 @@
 import {
     array,
     type Attribute,
-    type AttributeMap,
+    type AttributeValue,
     boolean,
     type Decoded,
     discriminatedUnion,
@@ -9,14 +9,17 @@ import {
     exclude,
     extract,
     item,
+    type ItemCodec,
     list,
     number,
+    type NumberCodec,
     object,
     optional,
     ref,
     type Result,
     scope,
     string,
+    type StringCodec,
     tableEntry,
     union,
 } from 'rotorise'
@@ -67,24 +70,34 @@ export const refused = expectThrow(() =>
     ),
 ).toThrow()
 
-// A pin holds in both directions. An annotation accepts a result of `never`, because `never` is
-// assignable to each type, and a result of `any`, by the rule of the language. So the call states the
-// pin as a type argument, and the rest parameter refuses the call where the result and the pin are not
-// the same type. An `any` inside an object stays out of reach, so each computed member has its own pin.
-type Unequal<Pinned, Result> = 0 extends 1 & Result
-    ? ['the result is `any`']
-    : [Result] extends [Pinned]
-      ? [Pinned] extends [Result]
-          ? []
-          : ['the result is narrower than the pin']
-      : ['the result is wider than the pin']
+// A pin holds when the result and the pin are one type. Assignability in two directions is not enough:
+// `any` inside a member is assignable both ways, and so is an intersection against the one object that
+// it merges to. The pin states the pin as a type argument, and the rest parameter refuses the call where
+// the two types are not identical. The test is the identity that the compiler uses for two
+// conditional types, which each compiler resolves alike.
+type Unequal<Pinned, Result> = (<T>() => T extends Pinned ? 1 : 2) extends <
+    T,
+>() => T extends Result ? 1 : 2
+    ? []
+    : ['the result is not the pin']
 declare const pinned: <Pinned>() => <Result>(
     result: Result,
     ...unequal: Unequal<Pinned, Result>
 ) => Result
 
-// The methods of an entry with a codec. Each result type is pinned, so a compiler that resolves a type
-// in another way refuses the constant.
+// The floor of a pin. A pin names no type of rotorise for the part that it measures, because the identity
+// resolves an alias before it compares, and a mutant of the alias then keeps the pin green. So a pin states
+// the structure down to the floor, and the floor is: `Attribute` and `AttributeValue` (one value of DynamoDB),
+// `Result`, the codec classes (`ItemCodec`, `StringCodec`, `NumberCodec`), and the primitive types.
+type Member = Attribute<'S'> | Attribute<'N'> | Attribute<'B'>
+type Values = { readonly [name: string]: AttributeValue }
+type Sort<Name extends string> =
+    | { readonly name: Name; readonly equals: Member }
+    | { readonly name: Name; readonly beginsWith: Attribute<'S'> }
+
+// The methods of an entry with a codec. One record holds one pin for each key of the entry, so a method
+// that a later pass adds with no pin is an error here: `satisfies` asks for each key of `Kennels`. A method
+// with more than one form holds one pin for each form.
 type Kennel = { petId: string; shelterId: string; name: string; age: number }
 export const Kennels = tableEntry<Kennel>()(
     { PK: ['petId'], SK: ['name'], GSI1PK: 'shelterId', GSI1SK: ['age'] },
@@ -98,45 +111,115 @@ const kennel: Kennel = { petId: 'p1', shelterId: 's1', name: 'Rex', age: 3 }
 const ids = { petId: 'p1' } as const
 const shelter = { shelterId: 's1' } as const
 const older = { age: 4 } as const
-export const kennelKey = pinned<'PETID#p1'>()(Kennels.key('PK', ids))
-export const kennelKeyOfOne = pinned<'s1'>()(Kennels.key('GSI1PK', shelter))
-export const kennelKeyOfEntity = pinned<`NAME#${string}`>()(Kennels.key('SK', kennel))
-export const kennelEntry = pinned<
-    Kennel & {
-        readonly PK: `PETID#${string}`
-        readonly SK: `NAME#${string}`
-        readonly GSI1PK: string
-        readonly GSI1SK: `AGE#${number}`
-    }
->()(Kennels.toEntry(kennel))
-export const kennelEntryPK = pinned<`PETID#${string}`>()(Kennels.toEntry(kennel).PK)
-export const kennelEntrySK = pinned<`NAME#${string}`>()(Kennels.toEntry(kennel).SK)
-export const kennelEntryGSI1PK = pinned<string>()(Kennels.toEntry(kennel).GSI1PK)
-export const kennelEntryGSI1SK = pinned<`AGE#${number}`>()(Kennels.toEntry(kennel).GSI1SK)
-export const kennelKeys = pinned<AttributeMap>()(Kennels.keys(['PK', 'SK'], kennel))
-export const kennelConditionName = pinned<'PK'>()(Kennels.keyCondition(ids).partition.name)
-export const kennelUpdateRemove = pinned<readonly 'GSI1PK'[]>()(Kennels.keyUpdates(older).remove)
-export const kennelItem = pinned<
-    Result<{
-        readonly petId: Attribute<'S'>
-        readonly shelterId: Attribute<'S'>
-        readonly name: Attribute<'S'>
-        readonly age: Attribute<'N'>
-        readonly PK: Attribute<'S'>
-        readonly SK: Attribute<'S'>
-        readonly GSI1PK: Attribute<'S'>
-        readonly GSI1SK: Attribute<'S'>
-    }>
->()(Kennels.toItem(kennel))
-export const kennelFrom = pinned<Result<Kennel>>()(
-    Kennels.fromItem({
-        petId: { S: 'p1' },
-        shelterId: { S: 's1' },
-        name: { S: 'Rex' },
-        age: { N: '3' },
-    }),
-)
-export const kennelPath = pinned<string>()(Kennels.path().name.toString())
+type KennelEntry = {
+    petId: string
+    shelterId: string
+    name: string
+    age: number
+    readonly PK: `PETID#${string}`
+    readonly SK: `NAME#${string}`
+    readonly GSI1PK: string
+    readonly GSI1SK: `AGE#${number}`
+}
+type KennelRow = {
+    readonly petId: Attribute<'S'>
+    readonly shelterId: Attribute<'S'>
+    readonly name: Attribute<'S'>
+    readonly age: Attribute<'N'>
+    readonly PK: Attribute<'S'>
+    readonly SK: Attribute<'S'>
+    readonly GSI1PK: Attribute<'S'>
+    readonly GSI1SK: Attribute<'S'>
+}
+const storedKennel = {
+    petId: { S: 'p1' },
+    shelterId: { S: 's1' },
+    name: { S: 'Rex' },
+    age: { N: '3' },
+} as const
+export const kennelPins = {
+    toEntry: pinned<KennelEntry>()(Kennels.toEntry(kennel)),
+    fromEntry: pinned<Kennel>()(Kennels.fromEntry(Kennels.toEntry(kennel))),
+    key: {
+        plain: pinned<'PETID#p1'>()(Kennels.key('PK', ids)),
+        ofOne: pinned<'s1'>()(Kennels.key('GSI1PK', shelter)),
+        ofEntity: pinned<`NAME#${string}`>()(Kennels.key('SK', kennel)),
+        depth: pinned<`NAME#${string}`>()(Kennels.key('SK', kennel, { depth: 1 })),
+        partial: pinned<'' | `NAME#${string}`>()(
+            Kennels.key('SK', kennel, { allowPartial: true }),
+        ),
+        boundary: pinned<'' | `NAME#${string}`>()(
+            Kennels.key('SK', kennel, { allowPartial: true, enforceBoundary: true }),
+        ),
+    },
+    keyUpdates: pinned<{ set: Values; remove: readonly 'GSI1PK'[] }>()(
+        Kennels.keyUpdates(older),
+    ),
+    keys: {
+        names: pinned<Values>()(Kennels.keys(['PK', 'SK'], kennel)),
+        attributes: pinned<Values>()(Kennels.keys(kennel)),
+    },
+    keyCondition: {
+        attributes: pinned<{
+            readonly partition: { readonly name: 'PK'; readonly value: Member }
+            readonly sort?: Sort<'SK'>
+        }>()(Kennels.keyCondition(ids)),
+        index: pinned<{
+            readonly index: 'GSI1'
+            readonly partition: { readonly name: 'GSI1PK'; readonly value: Member }
+            readonly sort?: Sort<'GSI1SK'>
+        }>()(Kennels.keyCondition('GSI1', shelter)),
+    },
+    infer: pinned<KennelEntry>()(Kennels.infer),
+    path: [
+        pinned<string>()(Kennels.path().name.toString()),
+        // @ts-expect-error the entity holds no attribute `nope`, so the path refuses the name
+        Kennels.path().nope,
+    ],
+    toItem: pinned<Result<KennelRow>>()(Kennels.toItem(kennel)),
+    unsafeToItem: pinned<KennelRow>()(Kennels.unsafeToItem(kennel)),
+    fromItem: pinned<Result<Kennel>>()(Kennels.fromItem(storedKennel)),
+    unsafeFromItem: pinned<Kennel>()(Kennels.unsafeFromItem(storedKennel)),
+    codec: pinned<
+        ItemCodec<
+            Kennel,
+            {
+                readonly petId: StringCodec
+                readonly shelterId: StringCodec
+                readonly name: StringCodec
+                readonly age: NumberCodec
+            }
+        >
+    >()(Kennels.codec),
+} satisfies { [K in keyof typeof Kennels]: unknown }
+
+// The entry of a union, with a match key: an arm that names no key gives no key.
 const pet: Pet = { petId: 'p1', kind: 'CAT' }
-export const petKey = pinned<'PETID#p1'>()(Pets.key('PK', ids))
-export const petKeyOfEntity = pinned<`PETID#${string}`>()(Pets.key('PK', pet))
+const dogPet = { petId: 'p1', kind: 'DOG', ownerId: 'o1' } as const
+const catPet = { petId: 'p1', kind: 'CAT' } as const
+export const petPins = {
+    // defect of the type: the arm `CAT: null` gives no key, and the type states `SK: never` where the run time writes no `SK`
+    entryOfUnion: (value: Pet) =>
+        pinned<
+            | {
+                  readonly PK: `PETID#${string}`
+                  readonly SK: `OWNERID#${string}`
+                  petId: string
+                  kind: 'DOG'
+                  ownerId: string
+              }
+            | {
+                  readonly PK: `PETID#${string}`
+                  readonly SK: never
+                  petId: string
+                  kind: 'CAT'
+              }
+        >()(Pets.toEntry(value)),
+    key: pinned<'PETID#p1'>()(Pets.key('PK', { petId: 'p1' })),
+    keyOfEntity: pinned<`PETID#${string}`>()(Pets.key('PK', pet)),
+    keyOfDog: pinned<'OWNERID#o1'>()(Pets.key('SK', dogPet)),
+    keyOfCat: pinned<undefined>()(Pets.key('SK', catPet)),
+    keyUpdates: pinned<{ set: Values; remove: readonly 'SK'[] }>()(
+        Pets.keyUpdates({ kind: 'DOG', ownerId: 'o2' }),
+    ),
+}
