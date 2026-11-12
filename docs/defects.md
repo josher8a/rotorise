@@ -416,3 +416,291 @@ No term that breaks a core law is known.
 
 **Pin.** `legacyClosed_untyped` in `Lang/ScopeSound.lean` pins that a term with a `legacy` is not
 typed. No test and no theorem pins the laws of a term with a `legacy` below a field.
+
+---
+
+## Known: the type of key reads a config that can be `undefined`, or a slot of type `any`, as one literal
+
+**Observation.** A slot of the config of `key` holds one literal, `undefined` alone, or nothing.
+The type refuses `number` and each union at a slot. Two forms pass the type, and the run time
+builds another key. An optional parameter strips `undefined` from the type of the argument, so a
+config of type `{ depth: 1 } | undefined` has the type of depth 1. A slot of type `any` passes each
+refusal, because a refusal is an intersection with the parameter. Measured 2026-11-11 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    const Pets = tableEntry<{ shelterId: string; petId: string }>()({ SK: ['shelterId', 'petId'] })
+
+    const maybe = undefined as { depth: 1 } | undefined
+    Pets.key('SK', { shelterId: 's' }, maybe)
+      type checker: builds, with the type "SHELTERID#s"
+      runtime:      throws, Attribute petId not found
+
+    const anyDepth: any = undefined
+    Pets.key('SK', { shelterId: 's' }, { depth: anyDepth })
+      type checker: builds
+      runtime:      throws, Attribute petId not found
+
+**Effect.** Each call builds in the type with no `petId`, and throws where the value is `undefined`
+at run time. The type of the first call is the key of depth 1, and the run time builds the whole
+key.
+
+**Pin.** None for the two forms. `src/codec/spec/object/codec.keydepth.spec.ts` pins the refusal of
+an optional slot, of `number`, and of two literals at one slot.
+
+---
+
+## Known: the type of a key component refuses a default beside an options object, where the run time reads the default
+
+**Observation.** A component of a key is a name, or a tuple of a name, a transform and a default.
+The transform is a function, or an options object such as `{ tag: 'DOSE' }`. The type takes a
+default beside a function only. The run time reads the default beside each form. Measured
+2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Pet = { petId: string; vaccine?: { lastDose: string } }
+
+    tableEntry<Pet>()({ PK: ['petId'], SK: [['vaccine.lastDose', { tag: 'DOSE' }, 'x']] })
+      type checker: refused, 'tag' does not exist in type '(key: any) => TransformShape'
+      runtime:      builds, and toEntry({ petId: 'p1' }) gives the SK "DOSE#x"
+
+    tableEntry<Pet>()({ PK: ['petId'], SK: [['vaccine.lastDose', (dose: string) => dose, 'x']] })
+      type checker: builds
+      runtime:      builds, and toEntry({ petId: 'p1' }) gives the SK "LASTDOSE#x"
+
+TypeScript 6 prints the first refusal as `is not assignable to type 'never'`, with no reason.
+
+**Effect.** The first call does not compile, and the run time builds the entry and reads the
+default.
+
+**Pin.** None. No test gives a default beside an options object.
+
+---
+
+## Known: the type of a key admits a path into a union of objects where one option lacks the name
+
+**Observation.** The type refuses a component with no default where the value at the path can be
+absent. The type of a path into a union of objects is the type at the options that hold the name.
+An option that lacks the name adds no `undefined`, so the refusal does not see the option. Measured
+2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Doc = { id: string; meta: { kind: 'a'; a: string } | { kind: 'b'; b: string } }
+    const Docs = tableEntry<Doc>()({ PK: ['id'], SK: ['meta.a'] })
+      type checker: builds
+      runtime:      builds
+
+    Docs.toEntry(doc).SK   // doc: Doc
+      type checker: `A#${string}`
+
+    Docs.toEntry({ id: 'd1', meta: { kind: 'a', a: 'x' } })
+      runtime:      gives the SK "A#x"
+
+    Docs.toEntry({ id: 'd1', meta: { kind: 'b', b: 'x' } })
+      runtime:      throws, Attribute meta.a not found
+
+**Effect.** The entry builds, the type of the key states a text for each `Doc`, and `toEntry`
+throws for each item of the option that lacks the name.
+
+**Pin.** None. `src/codec/spec/object/codec.keypath.spec.ts` pins the refusal of a path whose value
+can be absent, for an optional name and no union.
+
+---
+
+## Known: a key element that two rules refuse prints `never` at the head of the error
+
+**Observation.** A refusal of a key element is an intersection of the element with a message. Two
+refusals of one element give two messages at one property, and the compiler reduces the
+intersection to `never`. The head of the error then names no reason. The line below the head
+prints the intersection, and can elide the second message. Measured 2026-11-11 with `tsc --noEmit`
+on TypeScript 7 and on TypeScript 6:
+
+    type Pet = { id: string; meta: { note: string } | null }
+    tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] },
+                      { codec: { id: string, meta: nullable(object({ note: string })) } })
+      head:      Type '"meta.note"' is not assignable to type 'never'
+      next line: the two messages: the path can be absent, and the codec cannot address the path
+
+    tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] })
+      head:      ... not assignable to type '"meta.note" & ErrorMessage<"'meta.note' can be absent:
+                 give a transform with a default">'
+
+    type Flat = { petId: string; 'owner.name': string }
+    tableEntry<Flat>()({ PK: ['petId'], GSI1PK: 'owner.name' })
+      head:      Type '"owner.name"' is not assignable to type 'never'
+      next line: the first message, and `ErrorMessage<...>` for the second
+
+    tableEntry<Flat>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
+      head:      the message: a `.` in a key name is a path separator
+
+The run time builds the first entry, and reads the path through the codec: `toEntry` gives the SK
+`NOTE#n` for an object at `meta`, and throws `Attribute meta.note not found` for `null`.
+
+**Effect.** A reader of the head of the error gets no reason. A reader of the whole error gets one
+reason or two.
+
+**Pin.** None for the head. `src/codec/spec/object/codec.keycomponent.spec.ts` pins the refusal of
+the entity whose attribute holds the `.`, for a list.
+
+---
+
+## Partially mitigated: the string of a document path can hold a reserved word of DynamoDB, and DynamoDB refuses the expression
+
+**Observation.** `path` and the `toString` of the path builder give a string where each name is a
+letter, then letters, digits and `_`. A reserved word of DynamoDB has that form, so a path through
+a reserved word has a string. DynamoDB refuses an expression that holds a reserved word as a bare
+name. Measured 2026-11-11 with `npx vitest --run` for the string, and on DynamoDB Local
+(`amazon/dynamodb-local`) with the string as the `ProjectionExpression` of a `GetItem` call:
+
+    Pets.path().data.nested.property.toString()   // "data.nested.property"
+      DynamoDB Local: refused, Attribute name is a reserved keyword; reserved keyword: data
+
+    "checks.rabies2024.status"    refused, reserved keyword: status
+    "owner.nick"                  refused, reserved keyword: owner
+    "name"                        refused, reserved keyword: name
+    "total"                       refused, reserved keyword: total
+
+    "#data.#nested.#property", with each name in ExpressionAttributeNames
+      DynamoDB Local: gives the attribute
+
+Each of the four other paths gives the attribute in the same way, with a placeholder for each name.
+
+**Effect.** A caller that writes the string into an expression gets a refusal of DynamoDB for each
+path that holds a reserved word. The library holds no list of the reserved words, and refuses no
+such path.
+
+**What is mitigated.** Rotorise builds no expression. Brushless, the companion library, builds the
+expression: Brushless prints each name of a path as a placeholder, and writes the name into
+`ExpressionAttributeNames`. The adapter in `README.md` gives each path to `AttributePath.fromString`
+of Brushless. A caller that builds each expression with Brushless sends no bare name. What remains
+is a caller that writes the string into an expression by hand. `README.md` and the docstring of
+`path` state that a reserved word needs a placeholder.
+
+**Pin.** None. No test of this repository sends an expression to DynamoDB, and no test runs
+Brushless. The measurement is on DynamoDB Local, and not on the DynamoDB service.
+
+---
+
+## Known: a pin of an instantiation count fails on a rise above 20 percent, and passes on each fall
+
+**Observation.** `src/Rotorise.attest.test.ts` holds two pins of `attest.instantiations`. attest
+0.34.0 fails a pin where the count rises above the pin by more than 20 percent. Where the count
+falls, attest prints a line and the pin passes. Measured 2026-11-11 with `npx vitest --run`, each
+line with one change of the block that the pin measures:
+
+    pin 3751, the block reads an unbound name: 16                 passes
+    pin 2091, the block builds an entry that the file holds: 577  passes
+    pin 2091, one more key in the entry: 2190, 4.73 percent       passes
+    pin 3751, two more calls of key: 4391, 17.06 percent          passes
+    pin 2091, five more keys in the entry: 2747, 31.37 percent    fails
+    pin 3751, three more calls of key: 4624, 23.27 percent        fails
+
+**Effect.** A block that measures no call keeps the pin green. A rise of the cost below 20 percent
+keeps the pin green.
+
+**Pin.** None for a fall. A comment of `src/Rotorise.attest.test.ts` states the two facts. No check
+reads the instantiation count of `npm run check`.
+
+---
+
+## Known: the type of keyUpdates reads a change at a name with a `.` as the attribute of that name, where the run time reads a write to the path
+
+**Observation.** An entity can declare an attribute whose own name holds a `.` beside the object of
+that path. A key name with a `.` is a path, in the type of a key and at run time. The given item of
+an update is a map from a written path to a value, so the run time reads a change at `'owner.name'`
+as a write to the path. The type of the change gives that name the type of the flat attribute.
+Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Kennel = { petId: string; 'owner.name': number; owner: { name: string } }
+    const Pets = tableEntry<Kennel>()({ PK: ['petId'], GSI1SK: ['owner.name'] })
+
+    Pets.keyUpdates({ 'owner.name': 8 })
+      type checker: builds
+      runtime:      gives { set: { GSI1SK: { S: 'NAME#8' } }, remove: [] }
+
+    Pets.keyUpdates({ 'owner.name': 'bea' })
+      type checker: refused, Type 'string' is not assignable to type 'number'
+
+    Pets.keyUpdates({ owner: { name: 'bea' }, 'owner.name': 8 })
+      type checker: builds
+      runtime:      gives { set: { GSI1SK: { S: 'NAME#8' } }, remove: [] }
+
+    Pets.keyUpdates({ owner: { name: 'bea' } })
+      runtime:      gives { set: { GSI1SK: { S: 'NAME#bea' } }, remove: [] }
+
+The run time of the second call is not measured.
+
+**Effect.** The type admits a number at a path that holds a string in the entity, and the key
+prints the number. The type refuses the string that the path holds.
+
+**Pin.** None for the type. `src/codec/spec/laws/codec.keyupdate.spec.ts` pins the run time: the
+patch agrees with the keys of the changed pet, for a key name with a `.` also.
+
+---
+
+## Known: the type of a key with a component whose name is a number states no tag
+
+**Observation.** A component of a key is a name of the entity, and the type admits a name that is a
+number. The run time prints the tag of that name. The type of the key is a union of template
+literal types with no tag. Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`:
+
+    const Rows = tableEntry<{ 0: string; petId: string }>()({ PK: ['petId'], SK: [0] })
+      type checker: builds
+      runtime:      builds
+
+    Rows.toEntry({ 0: 'zero', petId: 'p' }).SK
+      type checker: a union that holds `${string}#${string}`, `${string}#false` and
+                    `undefined#${bigint}`
+      runtime:      gives "0#zero"
+
+`Rows.key('SK', { 0: 'zero' })` gives the same type and the same text. A component whose name is a
+string gives a type with the tag, such as `` `PETID#${string}` ``.
+
+**Effect.** The type admits the text that the run time prints, and admits each other text with a
+`#`.
+
+**Pin.** None. No test declares a component whose name is a number.
+
+---
+
+## Known: the type of key refuses a partial key of no component, where the run time gives the empty string
+
+**Observation.** The type of `key` with `allowPartial` requires the first component of the key
+below. The run time gives the empty string for a partial key of no component.
+Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    const Pets = tableEntry<{ shelterId: string; petId: string }>()({ PK: ['shelterId', 'petId'] })
+
+    Pets.key('PK', {}, { allowPartial: true })
+      type checker: refused, Property 'shelterId' is missing
+      runtime:      gives ""
+
+    Pets.key('PK', {}, { depth: 0 })
+      type checker: builds, with the type ""
+      runtime:      gives ""
+
+**Effect.** The first call does not compile, and the run time gives the key. A caller writes the
+empty prefix with `depth: 0`.
+
+**Pin.** None for the first call. `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty
+string of `depth: 0`.
+
+---
+
+## Known: the declaration of a consumer has no name for a cycle of a scope that goes through a list and a union only
+
+**Observation.** A consumer that exports a codec constant with `declaration: true` needs a name for
+each type that the declaration prints. The decoded type of a cyclic `scope` has a name where the
+cycle goes through an object. A cycle that goes through a list and a union only has no name for
+the decoded type of the union. Measured 2026-11-11 with `bash scripts/emit-check.sh --build`, with
+one constant more in `scripts/emit-check/index.mts`:
+
+    export const Cyclic = scope({ Nest: array(ref('Tags')), Tags: union([string('PUPPY'), ref('Nest')]) })
+      TypeScript 5.4.5, 5.9.3, 6.0.3: no error, and the declaration holds 2 lines with the type `any`
+      TypeScript 7.1.0-beta:          refused, TS5088, the inferred type references a type with a
+                                      cyclic structure
+
+**Effect.** On three compilers the reader of that declaration gets `any` in silence. On
+TypeScript 7 the constant needs a type annotation.
+
+**Pin.** None for the form: the constant is not in the project of the check. `scripts/emit-check.sh`
+counts each line of a declaration that holds `any` as a failure, and a comment of
+`scripts/emit-check/index.mts` states the form.
