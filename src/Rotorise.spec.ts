@@ -142,7 +142,10 @@ describe('DynamoDB Utils', () => {
         const _none = () => Transformed.key('PK', {}, { allowPartial: true })
         expect(typeof _none).toBe('function')
 
-        attest.instantiations([8939, 'instantiations'])
+        // 8939 -> 9878: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([9878, 'instantiations'])
     })
 
     it('key types the key as the template of its components, joined by the separator', () => {
@@ -159,11 +162,9 @@ describe('DynamoDB Utils', () => {
         attest<`A#${string}#B#${number}#C#${boolean}`>(Pets.key('PK', full))
         attest<`A-${string}-B-${number}-C-${boolean}`>(Dashed.key('PK', full))
         attest<`A-${string}-B-${number}`>(Dashed.key('PK', full, { depth: 2 }))
-        attest<
-            | `A-${string}`
-            | `A-${string}-B-${number}`
-            | `A-${string}-B-${number}-C-${boolean}`
-        >(Dashed.key('PK', full, { depth: 3, allowPartial: true }))
+        attest<'' | `A-${string}-B-${number}-C-${boolean}`>(
+            Dashed.key('PK', full, { depth: 3, allowPartial: true }),
+        )
 
         const Variants = tableEntry<Union>()({ PK: ['a', 'b'] })
         const either = { a: 'a1', b: 1 } as
@@ -177,26 +178,16 @@ describe('DynamoDB Utils', () => {
         const partial = { a: 'a1', b: 1, c: true } as
             | { a: 'a1'; b: 1; c: true }
             | { a: 'a2'; b: 2; c: false }
-        attest<
-            | 'A#a1'
-            | 'A#a1#B#1'
-            | 'A#a1#B#1#C#true'
-            | 'A#a2'
-            | 'A#a2#B#2'
-            | 'A#a2#B#2#C#false'
-        >(Partial.key('PK', partial, { depth: 3, allowPartial: true }))
+        attest<'A#a1#B#1#C#true' | 'A#a2#B#2#C#false'>(
+            Partial.key('PK', partial, { depth: 3, allowPartial: true }),
+        )
 
         const Transform = tableEntry<Union>()({
             PK: ['a', 'b', ['c', (_c: boolean) => 'TRANSFORM' as const]],
         })
-        attest<
-            | 'A#a1'
-            | 'A#a1#B#1'
-            | 'A#a2'
-            | 'A#a2#B#2'
-            | 'A#a1#B#1#C#TRANSFORM'
-            | 'A#a2#B#2#C#TRANSFORM'
-        >(Transform.key('PK', partial, { depth: 3, allowPartial: true }))
+        attest<'A#a1#B#1#C#TRANSFORM' | 'A#a2#B#2#C#TRANSFORM'>(
+            Transform.key('PK', partial, { depth: 3, allowPartial: true }),
+        )
 
         const Tagged = tableEntry<Union>()({
             PK: [
@@ -211,14 +202,9 @@ describe('DynamoDB Utils', () => {
                 ],
             ],
         })
-        attest<
-            | 'A#a1'
-            | 'A#a1#B#1'
-            | 'A#a2'
-            | 'A#a2#B#2'
-            | 'A#a1#B#1#TAG#TRANSFORM'
-            | 'A#a2#B#2#TAG#TRANSFORM'
-        >(Tagged.key('PK', partial, { depth: 3, allowPartial: true }))
+        attest<'A#a1#B#1#TAG#TRANSFORM' | 'A#a2#B#2#TAG#TRANSFORM'>(
+            Tagged.key('PK', partial, { depth: 3, allowPartial: true }),
+        )
 
         const Valued = tableEntry<Union>()({
             PK: [
@@ -227,16 +213,14 @@ describe('DynamoDB Utils', () => {
                 ['c', (_c: boolean) => ({ value: 'TRANSFORM' as const })],
             ],
         })
-        attest<
-            | 'A#a1'
-            | 'A#a1#B#1'
-            | 'A#a2'
-            | 'A#a2#B#2'
-            | 'A#a1#B#1#TRANSFORM'
-            | 'A#a2#B#2#TRANSFORM'
-        >(Valued.key('PK', partial, { depth: 3, allowPartial: true }))
+        attest<'A#a1#B#1#TRANSFORM' | 'A#a2#B#2#TRANSFORM'>(
+            Valued.key('PK', partial, { depth: 3, allowPartial: true }),
+        )
 
-        attest.instantiations([23005, 'instantiations'])
+        // 23005 -> 25224: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([25224, 'instantiations'])
     })
 
     it('tableEntry joins the key components with the separator, and reads an entry back as the entity', () => {
@@ -346,7 +330,7 @@ describe('DynamoDB Utils', () => {
             },
         )
 
-        attest<'A-a1-B-1' | 'A-a1'>(key)
+        attest<'A-a1-B-1'>(key)
 
         expect(key).toBe('A-a1-B-1')
 
@@ -403,7 +387,10 @@ describe('DynamoDB Utils', () => {
         // the exact type
         // 11406 -> 11232: an N key of an entry is the union of two primitives, which the SDK
         // marshaller writes, and no longer the class `DynamoNumber`
-        attest.instantiations([11330, 'instantiations'])
+        // 11330 -> 12971: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([12971, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -450,7 +437,10 @@ describe('DynamoDB Utils', () => {
         // carries one more parameter and each prefix of a partial key one more template
         // 2388 -> 2875: the constraint of a key spec admits a path and a match on a path, and the
         // pin of the parameter type states both
-        attest.instantiations([2966, 'instantiations'])
+        // 2966 -> 3538: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([3538, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -844,7 +834,10 @@ describe('DynamoDB Utils', () => {
         // carries one more parameter and each prefix of a partial key one more template
         // 15628 -> 19066: the constraint of a key spec admits a path and a match on a path, and each
         // pin of the parameter type states both
-        attest.instantiations([16581, 'instantiations'])
+        // 16581 -> 17975: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([17975, 'instantiations'])
     })
 
     test('a union of many variants over one large record types the key of each tag, within the instantiation count', () => {
@@ -1046,9 +1039,7 @@ describe('DynamoDB Utils', () => {
             { allowPartial: true, depth: 2 },
         ) satisfies 'TAG#A' | `TAG#A#ID2#${string}`
 
-        attest<'TAG#A' | `TAG#A#ID2#yolo`>(
-            expect_key_depth_partial_discriminator,
-        )
+        attest<'TAG#A#ID2#yolo'>(expect_key_depth_partial_discriminator)
 
         void (RealEntry.key(
             'SK',
@@ -1060,7 +1051,10 @@ describe('DynamoDB Utils', () => {
         // inside the tolerance, so no single change moved the pin out of it
         // 33502 -> 33647: the type of a key reads `enforceBoundary`, so the builder of the key type
         // carries one more parameter and each prefix of a partial key one more template
-        attest.instantiations([31172, 'instantiations'])
+        // 31172 -> 33286: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([33286, 'instantiations'])
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1394,7 +1388,10 @@ describe('DynamoDB Utils', () => {
         // carries one more parameter and each prefix of a partial key one more template
         // 7329 -> 9028: an arm of a match is a key spec of its variant, so each arm of a discriminated
         // key builds the type of a match that the variant allows, and the schema check reads it
-        attest.instantiations([7931, 'instantiations'])
+        // 7931 -> 8734: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([8734, 'instantiations'])
     })
 
     test('NeedsValidation detects 3-tuples in mixed arrays', () => {

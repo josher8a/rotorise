@@ -66,7 +66,10 @@ describe('Rotorise Performance Baseline', () => {
 
     it('measures instantiation count for key generation', () => {
         userSchema.key('PK', { orgId: '123', id: '456' })
-        attest.instantiations([3751, 'instantiations'])
+        // 3751 -> 3823: the builder of the key type reads the case of each component (can be
+        // absent, never absent, always absent). Each call pays the read, and a partial call also
+        // derives the case from the value of the component
+        attest.instantiations([3823, 'instantiations'])
     })
 
     it('verifies type outputs with snapshots', () => {

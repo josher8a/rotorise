@@ -197,7 +197,7 @@ type CompositeKeyBuilderImpl<
                     : SliceFromStart<Spec, Deep>,
               Separator,
               boolean extends isPartial ? false : isPartial,
-              '',
+              null,
               never,
               Boundary,
               Boundary extends true ? StopsBeforeLast<Spec, Deep> : false
@@ -211,7 +211,7 @@ type CompositeKeyBuilderImpl<
                     : SliceFromStart<Spec, Deep>,
               Separator,
               boolean extends isPartial ? false : isPartial,
-              '',
+              null,
               never,
               Boundary,
               Boundary extends true ? StopsBeforeLast<Spec, Deep> : false
@@ -267,23 +267,101 @@ type Printed<Value, Partial extends boolean> = true extends Partial
     ? Exclude<Value, undefined | null | ''>
     : Value
 
+/**
+ * **Whether a component of a partial key is absent**, as the run time reads the value. The partial
+ * builder stops at the first absent component (`printed_partial` of `DerivedKey`), so each component
+ * is one of three cases:
+ * - `'always'`: the prefix so far is the result, and the builder stops;
+ * - `'can'`: the prefix so far joins the union, and the builder continues with the present members;
+ * - `'never'`: the builder continues, and the prefix joins nothing.
+ * A plain component is absent where its value is `undefined`, `null` or `''`. A component with a
+ * transform is absent where its value is `undefined` only, because the transform reads the others.
+ * A name that the attributes lack has the value `undefined`, which `never` stands for here.
+ */
+type Absence<Value, Shaped extends boolean> = [Value] extends [never]
+    ? 'always'
+    : [
+            Exclude<
+                Value,
+                undefined | (Shaped extends true ? never : null | '')
+            >,
+        ] extends [never]
+      ? 'always'
+      : (
+              undefined extends Value
+                  ? true
+                  : Shaped extends true
+                    ? false
+                    : null extends Value
+                      ? true
+                      : '' extends Value
+                        ? true
+                        : false
+          ) extends true
+        ? 'can'
+        : 'never'
+
+/** The pair of a component, and its case. A helper that gives no pair gives no pair. */
+type WithCase<Pair, Case> = Pair extends [infer Key, infer Value]
+    ? [Key, Value, Case]
+    : never
+
+/**
+ * The value that a component reads, where a default stands for `undefined` only. A default is the
+ * element after the transform. A name that the attributes lack has the value `undefined`, which
+ * `never` stands for here.
+ */
+type Defaulted<Value, Rest> = Rest extends [infer Default, ...unknown[]]
+    ? [Value] extends [never]
+        ? Default
+        : Exclude<Value, undefined> | Default
+    : Value
+
+/**
+ * The text of the print so far, where the print ends: the empty list prints the empty text. A print
+ * that stops before the last component takes the separator as its boundary. A stop at an absent
+ * component passes `Boundary`, and the end of the spec passes `Stops`.
+ */
+type StopText<
+    Acc extends string | null,
+    Separator extends string,
+    Bounded extends boolean,
+> = Acc extends null ? '' : Bounded extends true ? `${Acc}${Separator}` : Acc
+
 type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends [
     infer Key extends string,
     // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
     (...key: any[]) => infer Value,
-    ...unknown[],
+    ...infer Rest,
 ]
-    ? ExtractHelper<Uppercase<Key>, Value>
+    ? WithCase<
+          ExtractHelper<Uppercase<Key>, Value>,
+          true extends Partial
+              ? Absence<
+                    Defaulted<
+                        Key extends keyof Entity ? Entity[Key] : never,
+                        Rest
+                    >,
+                    true
+                >
+              : 'never'
+      >
     : Spec extends keyof Entity & string
-      ? [Uppercase<Spec>, Printed<Entity[Spec] & joinable, Partial>]
-      : never
+      ? [
+            Uppercase<Spec>,
+            Printed<Entity[Spec] & joinable, Partial>,
+            true extends Partial ? Absence<Entity[Spec], false> : 'never',
+        ]
+      : true extends Partial
+        ? [Uppercase<Spec & string>, never, 'always']
+        : never
 
 type CompositeKeyStringBuilder<
     Entity,
     Spec,
     Separator extends string,
     KeepIntermediate extends boolean,
-    Acc extends string = '',
+    Acc extends string | null = null,
     AllAcc extends string = never,
     Boundary extends boolean = false,
     Stops extends boolean = false,
@@ -291,39 +369,30 @@ type CompositeKeyStringBuilder<
     ? ExtractPair<Entity, Head, KeepIntermediate> extends [
           infer Key extends joinable,
           infer Value extends joinable,
+          infer Case,
       ]
-        ? CompositeKeyStringBuilder<
-              Entity,
-              Tail,
-              Separator,
-              KeepIntermediate,
-              Acc extends ''
-                  ? [Key] extends [never]
-                      ? `${Value}`
-                      : `${Key}${Separator}${Value}`
-                  : [Key] extends [never]
-                    ? `${Acc}${Separator}${Value}`
-                    : `${Acc}${Separator}${Key}${Separator}${Value}`,
-              KeepIntermediate extends true
-                  ?
-                        | AllAcc
-                        | (Acc extends ''
-                              ? never
-                              : Boundary extends true
-                                ? `${Acc}${Separator}`
-                                : Acc)
-                  : never,
-              Boundary,
-              Stops
-          >
+        ? Case extends 'always'
+            ? AllAcc | StopText<Acc, Separator, Boundary>
+            : CompositeKeyStringBuilder<
+                  Entity,
+                  Tail,
+                  Separator,
+                  KeepIntermediate,
+                  Acc extends null
+                      ? [Key] extends [never]
+                          ? `${Value}`
+                          : `${Key}${Separator}${Value}`
+                      : [Key] extends [never]
+                        ? `${Acc}${Separator}${Value}`
+                        : `${Acc}${Separator}${Key}${Separator}${Value}`,
+                  Case extends 'can'
+                      ? AllAcc | StopText<Acc, Separator, Boundary>
+                      : AllAcc,
+                  Boundary,
+                  Stops
+              >
         : never
-    :
-          | AllAcc
-          | (Boundary extends true
-                ? Stops extends true
-                    ? `${Acc}${Separator}`
-                    : Acc
-                : Acc)
+    : AllAcc | StopText<Acc, Separator, Stops>
 
 /**
  * The pair of a component that reads a path: a path prints its last name, and an attribute prints its
@@ -337,16 +406,33 @@ type ExtractPathPair<
     infer Key extends string,
     // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
     (...key: any[]) => infer Value,
-    ...unknown[],
+    ...infer Rest,
 ]
-    ? ExtractHelper<NameOf<Key>, Value>
+    ? WithCase<
+          ExtractHelper<NameOf<Key>, Value>,
+          true extends Partial
+              ? Absence<Defaulted<ValueOfKey<Entity, Key>, Rest>, true>
+              : 'never'
+      >
     : Spec extends [
             infer Key extends string,
             { readonly tag: infer Tag extends string },
         ]
-      ? [Tag, Printed<ValueOfKey<Entity, Key> & joinable, Partial>]
+      ? [
+            Tag,
+            Printed<ValueOfKey<Entity, Key> & joinable, Partial>,
+            true extends Partial
+                ? Absence<ValueOfKey<Entity, Key>, false>
+                : 'never',
+        ]
       : Spec extends string
-        ? [NameOf<Spec>, Printed<ValueOfKey<Entity, Spec> & joinable, Partial>]
+        ? [
+              NameOf<Spec>,
+              Printed<ValueOfKey<Entity, Spec> & joinable, Partial>,
+              true extends Partial
+                  ? Absence<ValueOfKey<Entity, Spec>, false>
+                  : 'never',
+          ]
         : never
 
 /** Whether a spec holds a component that reads a path. */
@@ -366,7 +452,7 @@ type CompositeKeyStringBuilderPath<
     Spec,
     Separator extends string,
     KeepIntermediate extends boolean,
-    Acc extends string = '',
+    Acc extends string | null = null,
     AllAcc extends string = never,
     Boundary extends boolean = false,
     Stops extends boolean = false,
@@ -374,39 +460,30 @@ type CompositeKeyStringBuilderPath<
     ? ExtractPathPair<Entity, Head, KeepIntermediate> extends [
           infer Key extends joinable,
           infer Value extends joinable,
+          infer Case,
       ]
-        ? CompositeKeyStringBuilderPath<
-              Entity,
-              Tail,
-              Separator,
-              KeepIntermediate,
-              Acc extends ''
-                  ? [Key] extends [never]
-                      ? `${Value}`
-                      : `${Key}${Separator}${Value}`
-                  : [Key] extends [never]
-                    ? `${Acc}${Separator}${Value}`
-                    : `${Acc}${Separator}${Key}${Separator}${Value}`,
-              KeepIntermediate extends true
-                  ?
-                        | AllAcc
-                        | (Acc extends ''
-                              ? never
-                              : Boundary extends true
-                                ? `${Acc}${Separator}`
-                                : Acc)
-                  : never,
-              Boundary,
-              Stops
-          >
+        ? Case extends 'always'
+            ? AllAcc | StopText<Acc, Separator, Boundary>
+            : CompositeKeyStringBuilderPath<
+                  Entity,
+                  Tail,
+                  Separator,
+                  KeepIntermediate,
+                  Acc extends null
+                      ? [Key] extends [never]
+                          ? `${Value}`
+                          : `${Key}${Separator}${Value}`
+                      : [Key] extends [never]
+                        ? `${Acc}${Separator}${Value}`
+                        : `${Acc}${Separator}${Key}${Separator}${Value}`,
+                  Case extends 'can'
+                      ? AllAcc | StopText<Acc, Separator, Boundary>
+                      : AllAcc,
+                  Boundary,
+                  Stops
+              >
         : never
-    :
-          | AllAcc
-          | (Boundary extends true
-                ? Stops extends true
-                    ? `${Acc}${Separator}`
-                    : Acc
-                : Acc)
+    : AllAcc | StopText<Acc, Separator, Stops>
 
 type DiscriminatedSchemaShape = {
     discriminator: PropertyKey

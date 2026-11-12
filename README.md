@@ -66,7 +66,7 @@ UserTable.key('GSI1SK', { email: 'a@b.com' })
 **`config` options:**
 
 - **`depth`** — Limit composite key to the first N components. Useful for `begins_with` queries.
-- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of throwing. A component with a transform does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
+- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of throwing. A component with a transform does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there, and so does a name that the call lacks. A component that is never absent leaves no prefix before it. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
 - **`enforceBoundary`** — When `true`, appends a trailing separator if the key is partial. Ensures a `begins_with` query doesn't match unintended prefixes.
 
 Each option holds one literal, or nothing. The type of the key follows the value, so the type refuses a `number`, a `boolean`, and each other union: `1 | 2`, or a literal that can be `undefined`.
@@ -74,7 +74,7 @@ Each option holds one literal, or nothing. The type of the key follows the value
 ```ts
 UserTable.key('PK', { orgId: 'acme' }, { allowPartial: true })
 // => 'ORGID#acme'
-// Type: 'ORGID#acme' | `ORGID#${string}#ID#${string}`
+// Type: 'ORGID#acme'
 
 UserTable.key('PK', { orgId: 'acme', id: '1' }, { depth: 1 })
 // => 'ORGID#acme'

@@ -9,7 +9,7 @@
  * `key` returns it as a `begins_with` prefix, so the empty prefix is the answer where no part is
  * present.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
 
 type Pet = { petId: string; shelterId: string; nick: string }
@@ -106,5 +106,63 @@ describe('a partial key may be the empty string, because it is a begins_with pre
 
     it('is not empty where a part is present', () => {
         expect(Pets.key('PK', unnamed, { allowPartial: true })).toBe('PETID#p1')
+    })
+})
+
+describe('the type of a key counts the segments that a print holds, and not the text', () => {
+    type Tagless = { petId: string; shelterId: string; nick: string }
+    const hidden = (_nick: string): { value: null } => ({ value: null })
+    const vip = (nick: string): { value: 'VIP' | null } => ({
+        value: nick === 'x' ? null : 'VIP',
+    })
+    const blank = (_nick: string): { value: '' } => ({ value: '' })
+    const tagless: Tagless = { petId: 'p1', shelterId: 's1', nick: 'rex' }
+    const quiet: Tagless = { petId: 'p1', shelterId: 's1', nick: 'x' }
+
+    it('keeps the separator of a first component that prints one empty segment', () => {
+        const Hidden = tableEntry<Tagless>()({
+            PK: [['nick', hidden], 'petId'],
+        })
+        const key = Hidden.key('PK', tagless)
+        expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
+        expect(key).toBe('#PETID#p1')
+        const entry = Hidden.toEntry(tagless).PK
+        expectTypeOf(entry).toEqualTypeOf<`#PETID#${string}`>()
+        expect(entry).toBe('#PETID#p1')
+    })
+
+    it('keeps one separator for each leading empty segment', () => {
+        const Hidden = tableEntry<Tagless>()({
+            PK: [['nick', hidden], ['shelterId', hidden], 'petId'],
+        })
+        const key = Hidden.key('PK', tagless)
+        expectTypeOf(key).toEqualTypeOf<`##PETID#${string}`>()
+        expect(key).toBe('##PETID#p1')
+    })
+
+    it('holds both prints where the value is a literal or null, and the run time gives each', () => {
+        const Vip = tableEntry<Tagless>()({ PK: [['nick', vip], 'petId'] })
+        const key = Vip.key('PK', tagless)
+        expectTypeOf(key).toEqualTypeOf<
+            `VIP#PETID#${string}` | `#PETID#${string}`
+        >()
+        expect(key).toBe('VIP#PETID#p1')
+        expect(Vip.key('PK', quiet)).toBe('#PETID#p1')
+    })
+
+    it('keeps the separator where the value is the empty text', () => {
+        const Blank = tableEntry<Tagless>()({ PK: [['nick', blank], 'petId'] })
+        const key = Blank.key('PK', tagless)
+        expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
+        expect(key).toBe('#PETID#p1')
+    })
+
+    it('holds the print of an empty segment that is not first, as before', () => {
+        const Hidden = tableEntry<Tagless>()({
+            PK: ['petId', ['nick', hidden]],
+        })
+        const key = Hidden.key('PK', tagless)
+        expectTypeOf(key).toEqualTypeOf<`PETID#${string}#`>()
+        expect(key).toBe('PETID#p1#')
     })
 })

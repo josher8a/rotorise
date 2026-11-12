@@ -81,3 +81,18 @@ describe('a key with enforceBoundary', () => {
         ])
     })
 })
+
+describe('a key of a path component with enforceBoundary', () => {
+    type Nested = { a: { x: string }; b: string }
+    const Paths = tableEntry<Nested>()({ P: ['a.x', 'b'] })
+    const as = { a: { x: '1' }, b: '2' } as const
+
+    it('ends a full key with no separator, and a cut key with the separator, in the type and at run time', () => {
+        const full: 'X#1#B#2' = Paths.key('P', as, { enforceBoundary: true })
+        const cut: 'X#1#' = Paths.key('P', as, {
+            depth: 1,
+            enforceBoundary: true,
+        })
+        expect([full, cut]).toEqual(['X#1#B#2', 'X#1#'])
+    })
+})
