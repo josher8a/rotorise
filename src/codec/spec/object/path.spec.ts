@@ -239,7 +239,7 @@ describe('what a path is, to the runtime', () => {
 })
 
 /**
- * DynamoDB admits `at`, `entry`, `narrow` and `toString` as attribute names, and the path type
+ * DynamoDB admits `at`, `narrow` and `toString` as attribute names, and the path type
  * offers each as a hop. The path reads such a name as the attribute, and calls it as the method.
  */
 describe('an attribute that shares the name of a method of the path', () => {
@@ -259,6 +259,10 @@ describe('an attribute that shares the name of a method of the path', () => {
     it('is the method where the path calls it', () => {
         expect(Pet.tags.at(0).toString()).toBe('tags[0]')
         expect(Pet.at.toString()).toBe('at')
+    })
+
+    it('is a plain hop where the path has no method of that name', () => {
+        expect(typeof Reflect.get(Pet.at, 'entry')).toBe('object')
     })
 
     it('is not a thenable, so awaiting one does not hang', async () => {
@@ -310,7 +314,7 @@ describe('the string of a path that a key makes', () => {
         },
     )
 
-    it.each([-1, 0.5])(
+    it.each([-1, 0.5, 2 ** 53])(
         'refuses the string of the position %j, because an expression takes a position that is a non-negative integer',
         (position) => {
             const placed = Adopters.path().pets.at(position)
@@ -318,4 +322,191 @@ describe('the string of a path that a key makes', () => {
             expect(() => placed.toString()).toThrow(/position/)
         },
     )
+
+    it('prints the largest position that a number holds exactly, because a larger position names no list element', () => {
+        const last: number = Number.MAX_SAFE_INTEGER
+        expect(Adopters.path().pets.at(last).toString()).toBe(
+            'pets[9007199254740991]',
+        )
+    })
+})
+
+/**
+ * **A hop in digits is a position, and only a list offers a position.** The builder holds no codec,
+ * so the run time reads the property `'2024'` as the position 2024, and an expression prints
+ * `[2024]`. DynamoDB reads that as a list element, and the place is a key of a map. The type of the
+ * entity owns the fact that a place is a list. So a map offers `at(key)` and no bracket hop, and
+ * `at(key)` refuses a key that an expression cannot print.
+ */
+describe('a hop in digits on a place that is no list', () => {
+    type Visit = { vet: string; weight: number }
+    type Clinic = {
+        clinicId: string
+        visits: Record<string, Visit>
+        optionalVisits?: Record<string, Visit>
+        weights: Record<number, number>
+        doses?: { 2024: string; 2025: string }
+        namedDoses: { '2024': string }
+        tags: { [tag: string]: string; kind: string }
+        history: Record<string, Visit>[]
+        records: Visit[] | Record<string, Visit>
+        pets: string[]
+        pair: [Visit, Visit]
+        byBigint: Record<`${bigint}`, Visit>
+        byPrefixed: Record<`y${number}`, Visit>
+        byNumberThenText: Record<`${number}${string}`, Visit>
+        patterned: { kind: string; [k: `y${number}`]: string }
+    }
+    const Clinics = tableEntry<Clinic>()({ PK: ['clinicId'] })
+    const year: string = '2024'
+    const position: number = 7
+    const bigintYear: `${bigint}` = '2024'
+    const prefixed: `y${number}` = 'y2024'
+    const numberThenText: `${number}${string}` = '2024'
+
+    it('offers no bracket hop on a required map, which a key in digits would print as a position', () => {
+        // @ts-expect-error a map offers `at(key)` and no bracket hop
+        const _byKey = () => Clinics.path().visits[year]
+        // @ts-expect-error a literal in digits is a position too
+        const _byLiteral = () => Clinics.path().visits[2024]
+        expect(typeof _byKey).toBe('function')
+        expect(typeof _byLiteral).toBe('function')
+    })
+
+    it('offers no bracket hop on an optional map', () => {
+        // @ts-expect-error a map offers `at(key)` and no bracket hop
+        const _byKey = () => Clinics.path().optionalVisits[year]
+        expect(typeof _byKey).toBe('function')
+    })
+
+    it('offers no hop on a map that a number indexes, because the stored key of the map is text', () => {
+        // @ts-expect-error a number index signature is a map, and the key is text
+        const _byPosition = () => Clinics.path().weights[position]
+        // @ts-expect-error a number index signature offers no `at`
+        const _byAt = () => Clinics.path().weights.at(year)
+        expect(typeof _byPosition).toBe('function')
+        expect(typeof _byAt).toBe('function')
+    })
+
+    it('offers no hop for a declared name in digits, because no expression prints the name', () => {
+        // @ts-expect-error a name that reads as a number is a key, and a key has no bracket hop
+        const _byNumber = () => Clinics.path().doses[2024]
+        // @ts-expect-error the same name as text
+        const _byText = () => Clinics.path().namedDoses['2024']
+        expect(typeof _byNumber).toBe('function')
+        expect(typeof _byText).toBe('function')
+    })
+
+    it('keeps the declared name of an open map as a hop, and carries any other key through `at`', () => {
+        // @ts-expect-error the index signature of an open map offers no bracket hop
+        const _byKey = () => Clinics.path().tags[year]
+        expect(typeof _byKey).toBe('function')
+        expect(Clinics.path().tags.kind.toString()).toBe('tags.kind')
+        expect(Clinics.path().tags.at('colour').toString()).toBe('tags.colour')
+    })
+
+    it('offers no bracket hop on a map inside a list, and keeps the position of the list', () => {
+        // @ts-expect-error the map inside the list offers no bracket hop
+        const _byKey = () => Clinics.path().history.at(0)[year]
+        expect(typeof _byKey).toBe('function')
+        expect(Clinics.path().history.at(0).at('rabies').vet.toString()).toBe(
+            'history[0].rabies.vet',
+        )
+    })
+
+    it('offers no bracket hop on a place that is a list or a map, because the position is not certain', () => {
+        // @ts-expect-error a place that may be a map offers no position
+        const _byPosition = () => Clinics.path().records[position]
+        // @ts-expect-error a place that may be a map offers no bracket hop for a key
+        const _byKey = () => Clinics.path().records[year]
+        expect(typeof _byPosition).toBe('function')
+        expect(typeof _byKey).toBe('function')
+    })
+
+    it('keeps the position hop on a list and on a tuple', () => {
+        expect(Clinics.path().pets[0]?.toString()).toBe('pets[0]')
+        expect(Clinics.path().pets.at(position).toString()).toBe('pets[7]')
+        expect(Clinics.path().pair[1]?.vet.toString()).toBe('pair[1].vet')
+    })
+
+    it('offers no bracket hop on a map whose key is digits by pattern, because the key can be 2024', () => {
+        // @ts-expect-error a key of the form `${bigint}` is digits
+        const _bigint = () => Clinics.path().byBigint[bigintYear]
+        // @ts-expect-error the key admits a text in digits
+        const _text = () => Clinics.path().byNumberThenText[numberThenText]
+        expect(typeof _bigint).toBe('function')
+        expect(typeof _text).toBe('function')
+    })
+
+    it('offers no bracket hop on a map whose key is another pattern, and carries a key of the pattern through `at`', () => {
+        // @ts-expect-error each index signature is a map, and a map offers no bracket hop
+        const _byKey = () => Clinics.path().byPrefixed[prefixed]
+        // @ts-expect-error `rabies` is no key of the pattern
+        const _outside = () => Clinics.path().byPrefixed.at('rabies')
+        expect(typeof _byKey).toBe('function')
+        expect(typeof _outside).toBe('function')
+        expect(Clinics.path().byPrefixed.at(prefixed).vet.toString()).toBe(
+            'byPrefixed.y2024.vet',
+        )
+    })
+
+    it('refuses the string of a key in digits that a pattern map carries through `at`', () => {
+        const placed = Clinics.path().byBigint.at(bigintYear).vet
+        expect(() => placed.toString()).toThrow(CodecError)
+    })
+
+    it('keeps the declared name beside an index signature of a pattern', () => {
+        expect(Clinics.path().patterned.kind.toString()).toBe('patterned.kind')
+        expect(Clinics.path().patterned.at(prefixed).toString()).toBe(
+            'patterned.y2024',
+        )
+    })
+
+    it('offers no `at` on a map that a number indexes', () => {
+        // @ts-expect-error a number key has no expression string
+        const _at = () => Clinics.path().weights.at('2024')
+        expect(typeof _at).toBe('function')
+    })
+
+    it('refuses the string of the key 2024 through `at`, so the path never prints the position 2024', () => {
+        const placed = Clinics.path().visits.at(year).vet
+        expect(() => placed.toString()).toThrow(CodecError)
+        expect(() => placed.toString()).toThrow(/ExpressionAttributeNames/)
+    })
+})
+
+describe('a hop in digits on a union of entities', () => {
+    type Visit = { vet: string }
+    type Cat = {
+        petId: string
+        kind: 'CAT'
+        checks: Record<string, Visit>
+        toys: string[]
+    }
+    type Dog = {
+        petId: string
+        kind: 'DOG'
+        checks: Visit[]
+        tags: Record<string, string>
+    }
+    const Pets = tableEntry<Cat | Dog>()({ PK: ['petId'] })
+    const year: string = '2024'
+    const position: number = 7
+
+    it('offers no bracket hop on a name that is a map in one option and a list in the other', () => {
+        // @ts-expect-error the place may be a map
+        const _byPosition = () => Pets.path().checks[position]
+        // @ts-expect-error the place may be a map
+        const _byKey = () => Pets.path().checks[year]
+        expect(typeof _byPosition).toBe('function')
+        expect(typeof _byKey).toBe('function')
+    })
+
+    it('keeps the position of a list that one option holds, and refuses the bracket hop of a map that one option holds', () => {
+        expect(Pets.path().toys[0]?.toString()).toBe('toys[0]')
+        expect(Pets.path().tags.at('colour').toString()).toBe('tags.colour')
+        // @ts-expect-error a map offers no bracket hop
+        const _byKey = () => Pets.path().tags[year]
+        expect(typeof _byKey).toBe('function')
+    })
 })

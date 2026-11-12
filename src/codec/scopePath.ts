@@ -387,8 +387,9 @@ export const absent: AnyCodec = codecOfTerm({ kind: 'never' })
  *
  * `at(i)` indexes a list. Bracket syntax works too, but under `noUncheckedIndexedAccess` a variable
  * index yields `| undefined` — again about a value, not a path — so `at` is the form that stays
- * clean. An attribute named `at`, `entry`, `narrow` or `toString` is a hop where the path reads it,
- * and the method where the path calls it.
+ * clean. A map offers `at(key)` and no bracket hop, because a hop in digits is a position, and only
+ * a list holds positions. An attribute named `at`, `narrow` or `toString` is a hop where the path
+ * reads it, and the method where the path calls it.
  */
 export type PathOf<T, F = unknown> = PathTerminal<T> &
     PathBody<NonNullable<T>, F>
@@ -400,7 +401,7 @@ export type PathBody<T, F> = [T] extends [readonly unknown[]]
         : PathList<T[number]>
     : [T] extends [object]
       ? {
-            readonly [K in UnionKeys<T>]: PathOf<ValueAt<T, K>, ChildAt<F, K>>
+            readonly [K in HopNames<T>]: PathOf<ValueAt<T, K>, ChildAt<F, K>>
         } & PathRecord<T> &
             PathNarrowing<T, F>
       : Record<never, never>
@@ -565,16 +566,49 @@ export type ClauseOn<T, F, C> = [Exclude<keyof C, UnionKeys<T>>] extends [never]
           string}'`>
 
 /**
+ * The names that a path offers as a hop on an object: the names that the type declares. The path
+ * reads a hop in digits as a list position, and an expression prints a position as `[n]`. So an
+ * index signature gives no hop, whatever the pattern of the key, and neither does a name that reads
+ * as a number. Such a name is a key of a map, and `at(key)` carries a key ({@link PathRecord}).
+ */
+export type HopNames<T> = T extends unknown
+    ? keyof { [K in keyof T as HopName<K>]: unknown }
+    : never
+/**
+ * A declared name is a required property of `Record<K, unknown>`, so `Record<never, never>` is no
+ * subtype of that record. An index signature of each key form, wide or a pattern, is a subtype.
+ */
+export type HopName<K> = K extends number
+    ? never
+    : K extends string
+      ? Record<never, never> extends Record<K, unknown>
+          ? never
+          : K extends `${number}`
+            ? never
+            : K
+      : K
+
+/** The keys of a map: each index signature whose key is a string, wide or a pattern. */
+export type MapKeys<T> = T extends unknown
+    ? keyof { [K in keyof T as MapKey<K>]: unknown }
+    : never
+export type MapKey<K> = K extends string
+    ? Record<never, never> extends Record<K, unknown>
+        ? K
+        : never
+    : never
+
+/**
  * A map whose keys are not known ahead of time, indexed by `at`.
  *
- * `requirements[someId]` is an index signature access, and under `noUncheckedIndexedAccess` that
- * yields `| undefined` — a statement about whether a *value* is there, which a path does not care
- * about. Only present when the type actually has a string index signature, so an object with known
- * keys is untouched and `.foo` stays the way to reach `foo`.
+ * `requirements[someId]` would be an index signature access. A hop in digits is a list position,
+ * and a key of a map is a name, so the type offers no bracket hop on a map. Only present when the
+ * type has an index signature whose key is a string, so an object with known keys is untouched
+ * and `.foo` stays the way to reach `foo`. The key of `at` is the pattern of the index signature.
  */
-export type PathRecord<T> = string extends UnionKeys<T>
-    ? { at(key: string): PathOf<ValueAt<T, string>> }
-    : unknown
+export type PathRecord<T> = [MapKeys<T>] extends [never]
+    ? unknown
+    : { at(key: MapKeys<T>): PathOf<ValueAt<T, MapKeys<T>>> }
 
 /**
  * A list, indexed by `at`.
@@ -1257,9 +1291,6 @@ export const methodAt = (
             return () => expressionPath(segmentsIn(steps))
         case 'at':
             return (index: number | string) => recordPath([...steps, index])
-        // an open name, selected by a method, as `at` selects a position
-        case 'entry':
-            return (key: string) => recordPath([...steps, key])
         // a clause narrows the frontier of `at`; the document path is unchanged
         case 'narrow':
             return (pattern: ClausePattern) =>
