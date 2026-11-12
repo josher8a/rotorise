@@ -492,3 +492,105 @@ describe('the attribute that the codec at a path writes', () => {
         expectTypeOf(root.unsafeEncode).returns.toEqualTypeOf<AttributeMap>()
     })
 })
+
+/**
+ * **The type of a path string reads the grammar that `parsePath` reads.** A position is digits that
+ * print back as the same text, with no `-` and no `+`, and the text after a `]` is empty or starts with `[`.
+ * The type refuses a literal that the run time refuses, so a caller finds the defect at the
+ * argument. A type that is no literal is a wide position, and the run time refuses a member that is
+ * no position. A caller of plain JavaScript reaches the run time, so each row also asserts it.
+ */
+describe('the type of a path string against the grammar of the run time', () => {
+    const Parcel = itemOf(
+        object({ id: string, tags: array(string), legs: array(Leg) }),
+    )
+
+    it('refuses a negative position, and the run time refuses it', () => {
+        const negative: 'tags[-1]' = 'tags[-1]'
+        // @ts-expect-error a position has no sign
+        const run = () => atOf(Parcel, negative)
+        expect(run).toThrow(CodecError)
+        expect(run).toThrow("'tags[-1]' is no document path")
+    })
+
+    it('refuses a position with an exponent, and the run time refuses it', () => {
+        const exponent: 'tags[1e3]' = 'tags[1e3]'
+        // @ts-expect-error a position is digits
+        const run = () => atOf(Parcel, exponent)
+        expect(run).toThrow("'tags[1e3]' is no document path")
+    })
+
+    it('refuses a position in hexadecimal, and the run time refuses it', () => {
+        const hexadecimal: 'tags[0x1F]' = 'tags[0x1F]'
+        // @ts-expect-error a position is digits
+        const run = () => atOf(Parcel, hexadecimal)
+        expect(run).toThrow("'tags[0x1F]' is no document path")
+    })
+
+    it('refuses a position with a plus sign, and the run time refuses it', () => {
+        const plus: 'tags[+1]' = 'tags[+1]'
+        // @ts-expect-error a position has no sign
+        const run = () => atOf(Parcel, plus)
+        expect(run).toThrow("'tags[+1]' is no document path")
+    })
+
+    it('refuses a position with a plus sign inside an exponent, and the run time refuses it', () => {
+        const exponent: 'tags[1e+21]' = 'tags[1e+21]'
+        // @ts-expect-error the text prints back, and a position holds no `+`
+        const run = () => atOf(Parcel, exponent)
+        expect(run).toThrow("'tags[1e+21]' is no document path")
+    })
+
+    it('refuses a position with a minus sign inside an exponent, and the run time refuses it', () => {
+        const exponent: 'tags[1e-7]' = 'tags[1e-7]'
+        // @ts-expect-error the text prints back, and a position holds no `-`
+        const run = () => atOf(Parcel, exponent)
+        expect(run).toThrow("'tags[1e-7]' is no document path")
+    })
+
+    it('refuses a position with a space, and the run time refuses it', () => {
+        const spaced: 'tags[ 1]' = 'tags[ 1]'
+        // @ts-expect-error a position is digits
+        const run = () => atOf(Parcel, spaced)
+        expect(run).toThrow("'tags[ 1]' is no document path")
+    })
+
+    it('refuses a position with leading zeros, because the text does not print back, and the run time reads 7', () => {
+        const padded: 'tags[007]' = 'tags[007]'
+        // @ts-expect-error the text of a position is the text that the number prints
+        const run = () => atOf(Parcel, padded)
+        expect(path(run())).toBe('tags[7]')
+    })
+
+    it('refuses a position that no number prints back, and the run time gives no string for the place', () => {
+        const long: 'tags[99999999999999999999]' = 'tags[99999999999999999999]'
+        // @ts-expect-error the number prints as 100000000000000000000
+        const run = () => atOf(Parcel, long)
+        expect(() => path(run())).toThrow(CodecError)
+        expect(() => path(run())).toThrow(/position/)
+    })
+
+    it('refuses a name behind a position with no dot, and the run time refuses it', () => {
+        const glued: 'legs[0]legType' = 'legs[0]legType'
+        // @ts-expect-error the text after a `]` is empty or starts with `[`
+        const run = () => atOf(Parcel, glued)
+        expect(run).toThrow("'legs[0]legType' is no document path")
+    })
+
+    it('reads a position that is no literal as a wide position, and the run time refuses a member that is no position', () => {
+        const member: `tags[${number}]` = 'tags[-1]'
+        const run = () => atOf(Parcel, member)
+        expect(run).toThrow(CodecError)
+        const first: `tags[${number}]` = 'tags[0]'
+        expect(path(atOf(Parcel, first))).toBe('tags[0]')
+    })
+
+    it('prints back each string that the type accepts', () => {
+        expect(path(atOf(Parcel, 'id'))).toBe('id')
+        expect(path(atOf(Parcel, 'tags[0]'))).toBe('tags[0]')
+        expect(path(atOf(Parcel, 'legs[1].legType'))).toBe('legs[1].legType')
+        expect(path(atOf(Parcel, 'legs[0].deliveredAt.id'))).toBe(
+            'legs[0].deliveredAt.id',
+        )
+    })
+})

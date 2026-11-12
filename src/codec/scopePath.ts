@@ -1033,8 +1033,8 @@ export function narrow(
  * **The segments of a document path in DynamoDB syntax**: a name, or a position in brackets, each
  * name after the first behind a `.`. A name holds no `.`, `[` or `]`: the tuple form carries such a
  * name. The function reads more names than {@link expressionPath} prints: a name with a `-` is a
- * name here, and has no expression string. A malformed path is a defect of the caller, and the type
- * of {@link at} refuses it first.
+ * name here, and has no expression string. A malformed path is a defect of the caller. The type of
+ * {@link at} refuses a malformed literal first, and a string that is no literal reaches this throw.
  */
 export const parsePath = (path: string): readonly Segment[] => {
     if (path === '') return []

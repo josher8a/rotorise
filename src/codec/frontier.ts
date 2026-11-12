@@ -189,7 +189,10 @@ export type Wide = 'wide'
 /**
  * **A document path in DynamoDB syntax, as its segments**: `'legs[1].at'` is `['legs', 1, 'at']`.
  * A name holds no `.`, `[` or `]`, and the tuple form carries such a name. A part that is no name
- * and no position is a segment that no place offers.
+ * and no position is a segment that no place offers. A position is digits that print back as the
+ * same text, with no `-` and no `+`, and the text after a `]` is empty or starts with `[`. The
+ * pattern `` `a[${number}]` `` reads a wide position, and the run time refuses a member that is no
+ * position.
  */
 export type ParsePath<S extends string> = S extends '' ? [] : PathParts<S>
 export type PathParts<S extends string> =
@@ -200,10 +203,27 @@ export type PathPart<S extends string> =
     S extends `${infer Name}[${infer I}]${infer Rest}`
         ? [
               ...(Name extends '' ? [] : PathName<Name>),
-              I extends `${infer N extends number}` ? N : ['no segment'],
-              ...(Rest extends '' ? [] : PathPart<Rest>),
+              PathPosition<I>,
+              ...(Rest extends ''
+                  ? []
+                  : Rest extends `[${string}`
+                    ? PathPart<Rest>
+                    : [['no segment']]),
           ]
         : PathName<S>
+/**
+ * The position that the text holds: the text that a non-negative integer prints in plain decimal.
+ * A number prints a sign in front of a negative value and inside an exponent (`1e+21`, `1e-7`), and
+ * each such text prints back, so the text holds no `-` and no `+` at any place. A part holds no `.`.
+ */
+export type PathPosition<I extends string> =
+    I extends `${string}${'-' | '+'}${string}`
+        ? ['no segment']
+        : I extends `${infer N extends number}`
+          ? [`${N}`] extends [I]
+              ? N
+              : ['no segment']
+          : ['no segment']
 export type PathName<S extends string> =
     S extends `${string}${'[' | ']'}${string}` ? [['no segment']] : [S]
 
