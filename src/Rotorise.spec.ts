@@ -1471,6 +1471,15 @@ describe('the published surface', () => {
         'termOf',
         'codecOfTerm',
         'constantOf',
+        // the predicates and constants of the attribute domain, and two helpers, that the library
+        // reads and no caller needs
+        'MAX_DOCUMENT_NESTING',
+        'everyEntry',
+        'isNumeral',
+        'isStoredNumeral',
+        'memberOf',
+        'shapeOf',
+        'tooDeeplyNested',
     ] as const
 
     it('does not carry the internal utilities', async () => {
@@ -1482,11 +1491,13 @@ describe('the published surface', () => {
 
     it('names only declarations that a module of the library holds, so no row asserts nothing', async () => {
         const modules = await Promise.all([
+            import('./codec/attribute'),
             import('./codec/codec'),
             import('./codec/denote'),
             import('./codec/objects'),
             import('./codec/scoped'),
             import('./codec/term'),
+            import('./codec/value'),
         ])
         for (const name of internal) {
             expect(

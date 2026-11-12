@@ -20,7 +20,7 @@ import { CodecError, type Result } from './result'
  * either, because each key is known to some member of the union. The AWS SDK's `AttributeValue` has
  * this hole; a codec whose entire job is emitting valid attributes should not.
  */
-export type ExactlyOne<T> = {
+type ExactlyOne<T> = {
     [K in keyof T]-?: { readonly [key in K]-?: T[key] } & {
         readonly [other in Exclude<keyof T, K>]?: never
     }

@@ -39,7 +39,6 @@ EncodedVariants
 EntryOptionSpecs
 EntrySpec
 EveryButNumberT
-ExactlyOne
 Field
 FloatT
 Free
@@ -49,7 +48,6 @@ ItemCodec
 ItemSpec
 KeyComponents
 KeyCondition
-KeyRoles
 L
 ListCodec
 ListOf
@@ -59,10 +57,8 @@ LiteralBase
 LiteralValue
 LocatedCodec
 M
-MAX_DOCUMENT_NESTING
 Marks
 MissingCodec
-MissingComponents
 MovesTheItem
 N
 NS
@@ -101,7 +97,6 @@ SpreadOnce
 StoredItem
 StringCodec
 TableEntryDefinition
-TableKeys
 Tagged
 TaggedCodec
 Term
@@ -123,21 +118,17 @@ carrying
 decimal
 discriminatedUnion
 every
-everyEntry
 exclude
 extract
 failed
 fill
 held
-isNumeral
-isStoredNumeral
 item
 keyComponents
 legacy
 list
 mdunion
 meet
-memberOf
 narrow
 never
 nullValue
@@ -154,10 +145,8 @@ preconditions
 ref
 refine
 scope
-shapeOf
 spread
 string
 tableEntry
-tooDeeplyNested
 undefinable
 union

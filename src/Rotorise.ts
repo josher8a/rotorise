@@ -1441,7 +1441,7 @@ const pathSegments = (path: string): string[] => {
 }
 
 /** How a key name reads a value at a carrier: an item reads one way, and the given item of an update reads another. */
-type Reader = (attributes: object, path: string) => unknown
+type KeyNameReader = (attributes: object, path: string) => unknown
 
 /**
  * The value of a key name at an item. An item is a document. A name that holds no `.` is an
@@ -1449,7 +1449,7 @@ type Reader = (attributes: object, path: string) => unknown
  * expression: the path reads into objects, one own property for each name, and a missing name gives
  * `undefined`. The item never gives an attribute whose own name holds a `.`.
  */
-const valueAt: Reader = (attributes, path) => {
+const valueAt: KeyNameReader = (attributes, path) => {
     let current: unknown = attributes
     for (const segment of path.includes('.') ? pathSegments(path) : [path]) {
         if (
@@ -1469,7 +1469,7 @@ const valueAt: Reader = (attributes, path) => {
  * and a change is a map from a written path to a value: the entry of the change at the flat name
  * comes first, then the walk into a written object. A name above a written path reads no value.
  */
-const givenAt: Reader = (attributes, path) =>
+const givenAt: KeyNameReader = (attributes, path) =>
     Object.hasOwn(attributes, path)
         ? (attributes as Record<string, unknown>)[path]
         : valueAt(attributes, path)
@@ -1491,7 +1491,7 @@ type Part = {
 const partOf = (
     component: unknown,
     attributes: Record<string, unknown>,
-    read: Reader,
+    read: KeyNameReader,
 ): Part | undefined => {
     const [name, transform, Default] = Array.isArray(component)
         ? component
@@ -1517,7 +1517,7 @@ const partOf = (
 const parts = (
     components: readonly unknown[],
     attributes: Record<string, unknown>,
-    read: Reader,
+    read: KeyNameReader,
 ): (Part | undefined)[] =>
     components.map((component) => partOf(component, attributes, read))
 
@@ -1548,7 +1548,7 @@ const isValue = (value: unknown): boolean =>
 const select = (
     spec: unknown,
     attributes: Record<string, unknown>,
-    read: Reader,
+    read: KeyNameReader,
 ): Arm => {
     let arm = spec
     while (isMatch(arm)) {
@@ -1721,7 +1721,7 @@ const key =
             alone?: boolean,
         ) => unknown,
         /** How a key name reads a value at the carrier of the call: an item, or the given item of an update. */
-        read: Reader = valueAt,
+        read: KeyNameReader = valueAt,
     ) => {
         checkPaths(schema)
         return <
@@ -2620,7 +2620,7 @@ type EncodedAttributes<CodecSpec, CodecRest> =
  * DynamoDB addresses an item by one partition key and at most one sort key, and cannot update
  * either. The role is a fact of the table, not of a spec, so it is declared once, by name.
  */
-export type KeyRoles<Name extends string = string> = {
+type KeyRoles<Name extends string = string> = {
     readonly partition: Name
     readonly sort?: Name
 }
@@ -2630,7 +2630,7 @@ export type KeyRoles<Name extends string = string> = {
  * roles are a parameter of the entry and not a mark on a spec, so a spec keeps the type that the
  * caller wrote.
  */
-export type TableKeys<Roles> = Roles extends KeyRoles
+type TableKeys<Roles> = Roles extends KeyRoles
     ?
           | Roles['partition']
           | (Roles extends { readonly sort: infer Sort extends string }
@@ -2823,12 +2823,7 @@ type VariantComponents<Variants, Discriminator extends string, Given> = [
  * whether a key is touched and once to say what the key lacks, is what made this the most
  * expensive type in the signature.
  */
-export type MissingComponents<
-    Schema,
-    Changed,
-    Known = never,
-    Given = Changed,
-> = {
+type MissingComponents<Schema, Changed, Known = never, Given = Changed> = {
     [K in keyof Schema]: KeyComponents<Schema[K], Given> extends infer Of
         ? [TouchedBy<Of, Exclude<keyof Changed, Known>>] extends [never]
             ? never
@@ -3277,7 +3272,7 @@ export const keyComponents = (
 const componentsOf = (
     spec: unknown,
     given: Record<string, unknown>,
-    read: Reader,
+    read: KeyNameReader,
 ): { components: ReadonlySet<string>; narrows: boolean } => {
     const components = new Set<string>()
     let narrows = false
@@ -4226,7 +4221,7 @@ export const tableEntry =
             item: Record<string, unknown>,
             value: unknown,
             written?: AttributeMap,
-            read: Reader = valueAt,
+            read: KeyNameReader = valueAt,
         ): Carrying<KeyMember> => {
             const selected = select(expanded[name], item, read)
             // a list of components and a `null` arm read no attribute of the codec
@@ -4614,7 +4609,27 @@ export const tableEntry =
         } as never
     }
 
-export * from './codec/attribute'
+export type {
+    Attribute,
+    // the declaration of a codec constant prints it, so a consumer needs the name
+    AttributeCarries,
+    AttributeMap,
+    AttributeName,
+    AttributeValue,
+    B,
+    BOOL,
+    BS,
+    Carrying,
+    L,
+    M,
+    N,
+    NS,
+    NULL,
+    S,
+    SS,
+    StoredItem,
+} from './codec/attribute'
+export { carrying, DynamoNumber } from './codec/attribute'
 
 /**
  * The codec surface, **enumerated rather than starred**, because not everything `codec.ts` exports
@@ -4629,7 +4644,7 @@ export * from './codec/attribute'
  * `export * from './codec/codec'` would publish those three, so each export here is a decision.
  * `Rotorise.spec.ts` holds the list, and holds it at the live names for the reason written there.
  *
- * `CodecError`, `andThen`, `every`, `everyEntry`, `failed` and `orThrow` reach here *through*
+ * `CodecError`, `andThen`, `every`, `failed` and `orThrow` reach here *through*
  * `codec.ts` from `result.ts`, which is where the pair's error and its combinators live. They are
  * listed like the rest.
  *
@@ -4637,6 +4652,9 @@ export * from './codec/attribute'
  * declaration emitter of a consumer names only a type that the entry publishes, so a type that is
  * missing here refuses `export const Pet = object({ ... })` in the code of the consumer.
  * `scripts/emit-check.sh` pins the list.
+ *
+ * The attribute names of `./codec/attribute` are a second source of the list: the two statements
+ * above this docstring list them by name, under the same rule.
  *
  * The values and the types are each listed by name. **Adding a codec means adding a line here**,
  * which is the cost of the list and the point of it: an export becomes a decision rather than a
@@ -4738,7 +4756,6 @@ export {
     decimal,
     discriminatedUnion,
     every,
-    everyEntry,
     exclude,
     extract,
     failed,
@@ -4771,6 +4788,3 @@ export {
 } from './codec/codec'
 export { pin } from './codec/pin'
 export type { Field, Term } from './codec/term'
-// `shapeOf` classifies a *value* and reaches no term, so `value.ts` declares it. This is a second
-// `export` and no entry in the list above, because `codec.ts` does not carry `shapeOf`.
-export { shapeOf } from './codec/value'
