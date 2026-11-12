@@ -705,3 +705,36 @@ TypeScript 7 the constant needs a type annotation.
 **Pin.** None for the form: the constant is not in the project of the check. `scripts/emit-check.sh`
 counts each line of a declaration that holds `any` as a failure, and a comment of
 `scripts/emit-check/index.mts` states the form.
+
+## Known: the declaration of a consumer has no name for the type of a method of an entry that the consumer exports alone, or for the function of a half-applied tableEntry
+
+**Observation.** A consumer that exports a constant with `declaration: true` needs a name for
+each type that the declaration prints. An entry that the consumer exports whole has such a
+declaration, and so has the result of each method. Three methods that the consumer exports alone
+have none on three compilers, and the function that `tableEntry<T>()` returns has none on each
+compiler. Measured 2026-11-11 with `bash scripts/emit-check.sh --build`, with two constants more in
+`scripts/emit-check/index.mts`:
+
+    export const { key, toEntry, keys, keyCondition, keyUpdates, toItem, fromItem, path: entryPath } = CodedPets
+      TypeScript 5.4.5, 5.9.3: refused at key, toEntry and keyUpdates, TS2742, the inferred type
+                               cannot be named without a reference to a file of the package.
+                               At key and toEntry also TS7056, the type exceeds the length that the
+                               compiler prints. At toEntry also TS4023, for three marker symbols
+                               that the entry does not publish
+      TypeScript 6.0.3:        refused at the same three methods, with TS2883 in place of TS2742.
+                               Each TS2883 line names one type that the entry does not publish
+      TypeScript 7.1.0-beta:   no error
+      keys, keyCondition, toItem, fromItem and path: no error on each of the four compilers
+    export const forPets = R.tableEntry<PetRow>()
+      each of the four compilers: refused, TS5088, the inferred type references a type with a
+                               cyclic structure. Also TS2742 on TypeScript 5, TS2883 on
+                               TypeScript 6 and 7, and TS7056 on each compiler but TypeScript 6.0.3
+
+**Effect.** The build of the consumer fails, so the consumer publishes no wrong declaration. The
+consumer exports the entry whole and calls the method on the entry, or writes a type annotation
+on the constant. An annotation that states the whole type of one of the three methods needs
+types that the entry does not publish.
+
+**Pin.** None for the two forms: the two constants are not in the project of the check.
+`scripts/emit-check/index.mts` holds each entry whole and the result of each method, and a comment
+of that file states the two forms.

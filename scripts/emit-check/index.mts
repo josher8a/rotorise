@@ -185,3 +185,10 @@ export const CodedUpdate = CodedPets.keyUpdates({ name: 'Tom' })
 export const CodedItem = CodedPets.toItem({ petId: 'p1', name: 'Rex' })
 export const CodedFrom = CodedPets.fromItem({ petId: { S: 'p1' }, name: { S: 'Rex' } })
 export const CodedPath = CodedPets.path()
+
+// Not in this project: a method that a consumer exports alone, and the function of a half-applied
+// `tableEntry`. The declaration has no name for the type of `key`, `toEntry` and `keyUpdates` on
+// TypeScript 5 and 6 (TS2742 or TS2883, TS4023, TS7056), and none for the function on each compiler
+// (TS5088):
+//   export const { key, toEntry, keyUpdates } = CodedPets
+//   export const forPets = tableEntry<PetRow>()
