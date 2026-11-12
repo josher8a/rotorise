@@ -274,3 +274,72 @@ describe('a refusal names the key that refused', () => {
         )
     })
 })
+
+/**
+ * **A change whose type is a union of object types is one of the options, so the type refuses the
+ * change where it refuses one option.** `keyof` of a union holds the common names only, so a name
+ * that one option holds alone was never read. Each option compiles or is refused alone, and the
+ * union takes the refusal of its refused option. A caller of plain JavaScript reaches the run time,
+ * so each row also asserts what the run time gives.
+ */
+describe('a change whose type is a union of object types', () => {
+    it('is refused where one option moves the item, beside an option that is no refusal', () => {
+        type Change = { adoptionId: string } | { userId: string }
+        // @ts-expect-error `adoptionId` is a component of the table key PK, in one option
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(() => rewrite({ adoptionId: 'other' })).toThrow(RotoriseError)
+        expect(Object.keys(rewrite({ userId: 'u2' }).set)).toEqual(['GSI1PK'])
+    })
+
+    it('is refused where the options share no name and one option lacks a component of a key', () => {
+        type Change = { status: 'CANCELED' } | { userId: string }
+        // @ts-expect-error `status` is written with no `updatedAt`, which GSI1SK holds with it
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(() => rewrite({ status: 'CANCELED' })).toThrow(RotoriseError)
+    })
+
+    it('is refused where the options share a name and one option holds a component of the table key', () => {
+        type Change =
+            | { userId: string; adoptionId: string }
+            | { userId: string }
+        // @ts-expect-error the first option moves the item
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(() => rewrite({ userId: 'u2', adoptionId: 'other' })).toThrow(
+            RotoriseError,
+        )
+    })
+
+    it('is refused where one of three options moves the item', () => {
+        type Change =
+            | { userId: string }
+            | { currentLegIndex: number }
+            | { adoptionId: string }
+        // @ts-expect-error the third option moves the item
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(() => rewrite({ adoptionId: 'other' })).toThrow(RotoriseError)
+    })
+
+    it('is refused where an option is empty beside an option that moves the item', () => {
+        type Change = {} | { adoptionId: string }
+        // @ts-expect-error the second option moves the item
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(rewrite({}).set).toEqual({})
+        expect(() => rewrite({ adoptionId: 'other' })).toThrow(RotoriseError)
+    })
+
+    it('is refused where one option holds a name that the entity does not hold, and the run time ignores the name', () => {
+        type Change = { userId: string } | { userId: string; bogus: 1 }
+        // @ts-expect-error the second option holds `bogus`, which the entity does not hold
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(Object.keys(rewrite({ userId: 'u2', bogus: 1 }).set)).toEqual([
+            'GSI1PK',
+        ])
+    })
+
+    it('is no refusal where each option compiles alone, and each option gives its own keys', () => {
+        type Change = { userId: string } | { currentLegIndex: number }
+        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        expect(Object.keys(rewrite({ userId: 'u2' }).set)).toEqual(['GSI1PK'])
+        expect(rewrite({ currentLegIndex: 2 }).set).toEqual({})
+    })
+})

@@ -2367,11 +2367,18 @@ export type TableEntryDefinition<
      * holds a `.`. The given item of this update, `{ ...decided, ...changed }`, gives the entry of the
      * change at the written name first, and then the walk into a written object: a component above a
      * written path reads no value. A written path meets each component at the path, above it and
-     * below it. The type refuses a name that the entity does not hold.
+     * below it. The type refuses a name that the entity does not hold. A change whose type is a
+     * union of object types is one of the options, so the type refuses it where it refuses one option.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
         changed: Exact<Partial<Entity>, Changed> &
-            KeyUpdateRefusal<Schema, Roles, Changed, DecidedValues<CodecSpec>>,
+            ChangeRefusal<
+                Entity,
+                Schema,
+                Roles,
+                Changed,
+                DecidedValues<CodecSpec>
+            >,
     ) => KeyUpdate<AbsentKeyNames<Schema>>
 
     /**
@@ -2863,6 +2870,39 @@ type FrozenBy<Schema, Roles, Given, Block> = {
         ? never
         : K
 }[TableKeys<Roles> & keyof Schema]
+
+/**
+ * Nothing, or why a change is refused. A change whose type is a union is one of its options, and
+ * the refusal of one option holds for the argument. This is the one site that distributes over the
+ * options: each reader below reads one object type, and `keyof` of a union holds the common names
+ * only. The refused options are collected first, because `unknown | X` is `unknown` and would
+ * delete the refusal.
+ */
+type ChangeRefusal<Entity, Schema, Roles, Changed, Decided> = (
+    Changed extends unknown
+        ? OptionRefusal<Entity, Schema, Roles, Changed, Decided>
+        : never
+) extends infer Refused
+    ? [Refused] extends [never]
+        ? unknown
+        : Refused
+    : never
+
+/** The refusal of one option: `never` where the option is accepted. */
+type OptionRefusal<Entity, Schema, Roles, Changed, Decided> =
+    | UnknownNames<Entity, Changed>
+    | Refused<KeyUpdateRefusal<Schema, Roles, Changed, Decided>>
+
+type Refused<R> = unknown extends R ? never : R
+
+/** The names of one option that no variant of the entity holds. */
+type UnknownNames<Entity, Changed> = [
+    Exclude<keyof Changed, EntityNames<Partial<Entity>>>,
+] extends [never]
+    ? never
+    : ErrorMessage<`[keyUpdates] the entity holds no attribute '${Exclude<keyof Changed, EntityNames<Partial<Entity>>> & string}'`>
+
+type EntityNames<E> = E extends unknown ? keyof E : never
 
 /**
  * Nothing, or why a change is not a union of blocks.
