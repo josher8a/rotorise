@@ -740,3 +740,246 @@ types that the entry does not publish.
 **Pin.** None for the two forms: the two constants are not in the project of the check.
 `scripts/emit-check/index.mts` holds each entry whole and the result of each method, and a comment
 of that file states the two forms.
+
+---
+
+## Known: a value can hold a member that its declared type does not state, and the type reads the absence
+
+**Observation.** The type of `key` and the refusal of keyUpdates read the names that the type of
+the argument states. The run time reads the names that the value holds. The host has no exact
+object type, so a constant of the type `{ depth: 1 }` can hold one member more. An object literal
+at the call is not affected: the type reads each member of the literal. Measured 2026-11-12 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    const Pets = tableEntry<{ shelterId: string; petId: string }>()({ SK: ['shelterId', 'petId'] })
+    const shelter: { shelterId: 's' } = { shelterId: 's' }
+    const full: { shelterId: 's'; petId: 'p' } = { shelterId: 's', petId: 'p' }
+
+    Pets.key('SK', shelter, { depth: 1, enforceBoundary: true })
+      type checker: builds, with the type "SHELTERID#s#"
+      runtime:      gives "SHELTERID#s#"
+
+    const wideConfig = { depth: 1, enforceBoundary: true } as const
+    const narrowConfig: { depth: 1 } = wideConfig
+    Pets.key('SK', shelter, narrowConfig)
+      type checker: builds, with the type "SHELTERID#s"
+      runtime:      gives "SHELTERID#s#"
+
+    const pair = (c: { depth: 1 } | { depth: 1; enforceBoundary: true }) => Pets.key('SK', full, c)
+    pair({ depth: 1, enforceBoundary: true })
+      type checker: builds, with the type "SHELTERID#s"
+      runtime:      gives "SHELTERID#s#"
+
+    // Kennels holds the PK ['petId'], a codec, and a key block that names the PK
+    const wideChange = { age: 5, petId: 'p2' }
+    const narrowChange: { age: number } = wideChange
+    Kennels.keyUpdates(wideChange)
+      type checker: refused, 'PK' is a table key that holds 'petId'
+    Kennels.keyUpdates(narrowChange)
+      type checker: builds
+      runtime:      throws, 'PK' is the table's own key and is built from 'petId'
+
+**Effect.** The type of a key states a text that the run time does not give, or a change that the
+type accepts throws. A caller that keeps a config or a change in a variable of a declared type, or
+passes one through a parameter of a union type, gets no error from the compiler.
+
+**Pin.** None.
+
+---
+
+## Known: the type of an entry states a required key where the run time writes no key
+
+**Observation.** The run time writes no key name for a key that builds no value: the arm of a match
+that is null, and a key of one attribute that the item lacks. The type of the entry states the key
+name as required. An arm that is null gives the type `never` for the key. Where one member of the
+entity holds the null arm and another arm, the union drops `never`, and the type states the text of
+the other arm. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Cat = { petId: string; species: 'CAT'; name: string }
+    type Dog = { petId: string; species: 'DOG' }
+    const Animals = tableEntry<Cat | Dog>()({
+        PK: ['petId'],
+        SK: { discriminator: 'species', spec: { CAT: ['name'], DOG: null } },
+    })
+
+    Animals.toEntry(dog)   // dog: Dog
+      type checker: { petId: string; species: "DOG"; readonly PK: `PETID#${string}`; readonly SK: never }
+      runtime:      gives { petId: "p2", species: "DOG", PK: "PETID#p2" }
+
+    const storedDog = { petId: 'p2', species: 'DOG', PK: 'PETID#p2' } as const
+    Animals.fromEntry(storedDog)
+      type checker: refused, Property 'SK' is missing
+      runtime:      gives { petId: "p2", species: "DOG" }
+
+    type Stay = { petId: string; status: 'IN' | 'OUT'; kennel: string }
+    const Stays = tableEntry<Stay>()({
+        PK: ['petId'],
+        SK: { discriminator: 'status', spec: { IN: ['kennel'], OUT: null } },
+    })
+    const read = (): string => Stays.toEntry(out).SK   // out: Stay, with the status 'OUT'
+      type checker: builds, and the type of the SK is `KENNEL#${string}`
+      runtime:      gives undefined, and the row holds no SK
+
+    type Chipped = { petId: string; chip?: string }
+    const Chips = tableEntry<Chipped>()({ PK: ['petId'], SK: 'chip' })
+    Chips.toEntry(unchipped)   // unchipped: Chipped, with no chip
+      type checker: { petId: string; chip?: string; readonly PK: `PETID#${string}`; readonly SK: string | undefined }
+      runtime:      gives { petId: "p4", PK: "PETID#p4" }
+
+**Effect.** A read of the key as a string compiles with no cast, and the value is undefined. The
+type of fromEntry refuses the row that toEntry wrote for the null arm, and the run time reads
+the row.
+
+**Pin.** `scripts/consumer/index.mts` and `scripts/consumer/index.cts` pin the entry of a union
+with a null arm at the required key of the type `never`, with a comment that names the defect.
+`src/Rotorise.spec.ts` pins the type of an entry that holds a required key of the type `never`.
+
+---
+
+## Known: the type of key states the value of the entity for a key of one attribute below a second match, where the run time gives the stored text
+
+**Observation.** A key of one attribute is the stored value of the attribute. With a tagged codec,
+the type of `key` reads the stored text of the attribute where the key is the arm of one match.
+Where the key is the arm of a match inside the arm of a match, the type of `key` reads the type of
+the entity. The type of toEntry reads the stored text at each depth. Measured 2026-11-12 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    // flag: a schema of boolean
+    const Adopted = held(string('Y', 'N'), flag, {
+        encode: (b: boolean) => (b ? 'Y' : 'N'),
+        decode: (s: string) => s === 'Y',
+    })
+    type HousedCat = { petId: string; species: 'CAT'; status: 'IN' | 'OUT'; adopted: boolean }
+    type HousedDog = { petId: string; species: 'DOG'; status: 'IN'; adopted: boolean }
+    const TaggedPets = item(
+        discriminatedUnion('species', [
+            object({ petId: string, species: string('CAT'), status: string('IN', 'OUT'), adopted: Adopted }),
+            object({ petId: string, species: string('DOG'), status: string('IN'), adopted: Adopted }),
+        ]),
+    )
+    const housed: HousedCat = { petId: 'p1', species: 'CAT', status: 'IN', adopted: true }
+
+    const OneLevel = tableEntry<HousedCat | HousedDog>()(
+        { PK: ['petId'], SK: { discriminator: 'species', spec: { CAT: 'adopted', DOG: null } } },
+        { codec: TaggedPets },
+    )
+    OneLevel.key('SK', housed)
+      type checker: builds, with the type "N" | "Y"
+      runtime:      gives "Y"
+
+    const TwoLevels = tableEntry<HousedCat | HousedDog>()(
+        {
+            PK: ['petId'],
+            SK: {
+                discriminator: 'species',
+                spec: { CAT: { discriminator: 'status', spec: { IN: 'adopted', OUT: null } }, DOG: null },
+            },
+        },
+        { codec: TaggedPets },
+    )
+    TwoLevels.key('SK', housed)
+      type checker: builds, with the type boolean | undefined
+      runtime:      gives "Y"
+
+    TwoLevels.toEntry(housed).SK
+      type checker: "N" | "Y"
+      runtime:      gives "Y"
+
+**Effect.** The type of the second key is a boolean or undefined, and the value is a string. The
+type of toEntry states the stored text for the same key, so the two methods state two types for
+one value.
+
+**Pin.** None.
+
+---
+
+## Known: the arm of a match reads no option for a member of the entity that holds two literals at the discriminator
+
+**Observation.** The run time selects the arm of a match by the value of the item. The type selects
+the options of an arm by the type of the discriminator, and an option that holds two literals is
+the option of no arm. With no path in the schema the type accepts each name, a name that the entity
+lacks included. With a path in the schema, or in the cases form, the type refuses each name. The
+type of `key` asks for no attribute of such an arm. Measured 2026-11-12 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`:
+
+    type Boarder = { petId: string; status: 'IN' | 'OUT'; kennel: string; owner: { id: string } }
+    // boarder: Boarder, with the status 'IN', the kennel 'k1' and the owner id 'o1'
+
+    const Plain = tableEntry<Boarder>()({
+        PK: ['petId'],
+        SK: { discriminator: 'status', spec: { IN: ['kennel'], OUT: ['petId'] } },
+    })
+      type checker: builds
+      runtime:      builds, and toEntry(boarder) gives the SK "KENNEL#k1"
+
+    tableEntry<Boarder>()({
+        PK: ['petId'],
+        SK: { discriminator: 'status', spec: { IN: ['cage'], OUT: ['petId'] } },
+    })
+      type checker: builds
+      runtime:      builds, and toEntry(boarder) throws, Attribute cage not found
+
+    tableEntry<Boarder>()({
+        PK: ['petId'],
+        SK: { discriminator: 'status', spec: { IN: ['kennel', 'owner.id'], OUT: ['petId'] } },
+    })
+      type checker: refused at each of the three names, with the text that the name is no name or
+                    path of the entity
+      runtime:      builds, and toEntry(boarder) gives the SK "KENNEL#k1#ID#o1"
+
+    tableEntry<Boarder>()({
+        PK: ['petId'],
+        SK: { discriminator: 'status', cases: [[['IN'], ['kennel']], [['OUT'], ['petId']]] },
+    })
+      type checker: refused at each of the two names, with the same text
+      runtime:      builds, and toEntry(boarder) gives the SK "KENNEL#k1"
+
+    const tagOnly = { status: 'IN' } as const
+    Plain.key('SK', tagOnly)
+      type checker: builds
+      runtime:      throws, Attribute kennel not found
+
+**Effect.** A schema with a wrong name compiles, and toEntry throws for an item of the arm. A
+right schema with a path, or in the cases form, does not compile, and the text of the refusal is
+false. A call of `key` with the discriminator alone compiles, and throws.
+
+**Pin.** None. A test of `src/codec/spec/object/codec.patch.shapes.spec.ts` declares such an
+entity for another rule, and its schema compiles because the arm reads no option.
+
+---
+
+## Known: the type of at admits a literal position of a list that is no non-negative safe integer, where the path has no expression string
+
+**Observation.** The expression string of a path takes a position that is a non-negative integer.
+The tuple form of `at` takes each number as a position. The string form refuses a negative
+position, and admits a run of digits above the largest integer that a number holds exactly. For
+each of the three calls below that compile, `at` returns, and `path` of the result throws.
+Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    const Toybox = item(object({ petId: string, toys: array(string) }))
+
+    at(Toybox, ['toys', -1])
+      type checker: builds
+      runtime:      at returns, and path throws, the position at segment 1 of the path is no
+                    non-negative integer
+
+    at(Toybox, ['toys', 1.5])
+      type checker: builds
+      runtime:      at returns, and path throws with the same text
+
+    const beyond: 'toys[9007199254740992]' = 'toys[9007199254740992]'
+    at(Toybox, beyond)
+      type checker: builds
+      runtime:      at returns, and path throws with the same text
+
+    const negative: 'toys[-1]' = 'toys[-1]'
+    at(Toybox, negative)
+      type checker: refused, 'toys[-1]' is no path of this codec
+      runtime:      at throws, 'toys[-1]' is no document path
+
+**Effect.** A position that has no expression string compiles, and the failure arrives where the
+caller builds the expression, not where the caller names the position.
+
+**Pin.** `src/codec/spec/object/path.spec.ts` pins the throw of the string for a position that is no
+non-negative integer, on the path builder. `src/codec/spec/object/codec.at.spec.ts` pins the
+refusal of the string form with a negative position, in the type and at run time.
