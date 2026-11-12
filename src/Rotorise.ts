@@ -2396,10 +2396,12 @@ export type TableEntryDefinition<
      * Useful for building UpdateExpressions or ProjectionExpressions.
      * A name has a string where the name is a letter, then letters, digits and `_`. An expression reads
      * no other name as one name, so `toString` throws a `CodecError` for a key of a record such as
-     * `'rabies.2024'` or `'rabies-2024'`.
+     * `'rabies.2024'` or `'rabies-2024'`. A reserved word of DynamoDB, such as `name` or `data`, has a
+     * string, and DynamoDB refuses the expression: such a name needs a placeholder of
+     * `ExpressionAttributeNames`.
      *
      * @example
-     * table.path().data.nested.property.toString() // returns "data.nested.property"
+     * table.path().vaccine.lastDose.toString() // returns "vaccine.lastDose"
      */
     path: () => PathOf<
         HeldEntry<Entity, Schema, Separator, CodecSpec, CodecRest>
