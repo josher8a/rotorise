@@ -924,14 +924,39 @@ type ValidateSpec<E, S> = S extends string
           : S
 
 /**
+ * The options that can hold no value at the discriminator: an option that lacks the name, and an
+ * option whose value can be `undefined`.
+ */
+type LacksValueAt<E, D> = E extends unknown
+    ? [ValueHeldAt<E, D>] extends [never]
+        ? E
+        : undefined extends ValueHeldAt<E, D>
+          ? E
+          : never
+    : never
+
+/**
+ * The discriminator of a match. The run time selects the arm by the value at the discriminator,
+ * and throws for an item that holds no value there. So each option that the match reads holds a
+ * value at the discriminator, and a discriminator that can be absent is refused on its own slot.
+ */
+type PresentDiscriminator<E, D> = [LacksValueAt<E, D>] extends [never]
+    ? D
+    : AbsentDiscriminator<D>
+
+/** The refusal of a discriminator that can be absent, on the slot of the discriminator. */
+type AbsentDiscriminator<D> = D &
+    ErrorMessage<`'${D & string}' can be absent, and a match selects its arm by the value of '${D & string}'`>
+
+/**
  * A match: the arms name the literals of the value at the discriminator and no other, and each arm
  * is a spec of the options that its literal selects.
  */
 type ValidateMatchPaths<E, D extends string, Arms> = {
-    discriminator: D
+    discriminator: PresentDiscriminator<E, D>
     spec: {
         [Literal in ValueOfKey<E, D> & PropertyKey]: Literal extends keyof Arms
-            ? ValidateSpec<Extract<E, Tagged<D, Literal>>, Arms[Literal]>
+            ? ValidateSpec<ExtractVariant<E, D, Literal>, Arms[Literal]>
             : ErrorMessage<`'${D}' has the literal '${Literal & string}', and this match has no arm for it`>
     }
 } & {
@@ -1049,10 +1074,7 @@ type ValidateCases<E, D extends string, C, Seen = never> = C extends readonly [
                         ? Literals[I]
                         : ErrorMessage<`'${D}' never holds '${Literals[I] & (string | number)}'`>
               },
-              ValidateGroupArm<
-                  Extract<E, Tagged<D, Literals[number] & PropertyKey>>,
-                  Arm
-              >,
+              ValidateGroupArm<ExtractVariant<E, D, Literals[number]>, Arm>,
           ],
           ...ValidateCases<E, D, Rest, Seen | Literals[number]>,
       ]
@@ -1067,7 +1089,7 @@ type ValidateCasesMatch<E, D extends string, C> = {
     discriminator: [
         Exclude<ValueOfKey<E, D> & PropertyKey, LiteralOfCases<C>>,
     ] extends [never]
-        ? D
+        ? PresentDiscriminator<E, D>
         : ErrorMessage<`'${D}' has the literal '${Exclude<ValueOfKey<E, D> & PropertyKey, LiteralOfCases<C>> & (string | number)}', and no case names it`>
     cases: ValidateCases<E, D, C>
 }
@@ -1418,18 +1440,15 @@ type OpenKeys<E, Used extends PropertyKey> = {
  * attribute that already selected an arm selects nothing again.
  */
 type DiscriminatedSchema<Entity, E, Used extends PropertyKey = never> = {
-    [key in OpenKeys<E, Used>]: E[key] extends PropertyKey
+    [key in OpenKeys<E, Used>]: Exclude<E[key], undefined> extends PropertyKey
         ? {
-              discriminator: key
+              discriminator: undefined extends E[key]
+                  ? AbsentDiscriminator<key>
+                  : key
               cases?: never
               spec: {
-                  [val in E[key]]: NestedKeySpec<
-                      Extract<
-                          Entity,
-                          {
-                              [k in key]: val
-                          }
-                      >,
+                  [val in Exclude<E[key], undefined>]: NestedKeySpec<
+                      ExtractVariant<Entity, key, val>,
                       Used | key
                   >
               }
@@ -2090,11 +2109,6 @@ type SpecConfigShape = {
     enforceBoundary?: boolean | undefined
 }
 
-/** The object that holds the literal of a discriminator, which is an attribute or a path. */
-type Tagged<K extends PropertyKey, V extends PropertyKey> = K extends string
-    ? AtPath<K, V>
-    : { [k in K]: V }
-
 /** A variant of a match on a path: the options that hold the literal at the path. */
 type ProcessPathVariant<
     Entity,
@@ -2106,23 +2120,33 @@ type ProcessPathVariant<
 > = [
     VariantSpec extends null | undefined
         ? unknown
-        : ProcessSpecType<
-              [Entity] extends [never] ? never : Extract<Entity, AtPath<K, V>>,
-              VariantSpec,
-              Config
-          >,
+        : ProcessSpecType<ExtractVariant<Entity, K, V>, VariantSpec, Config>,
 ] extends [infer Processed]
     ? [Processed] extends [never]
         ? AtPath<K, V>
         : Processed & AtPath<K, V>
     : never
 
-// Pre-compute discriminated variant types
-type ExtractVariant<Entity, K extends PropertyKey, V extends PropertyKey> = [
-    Entity,
-] extends [never]
-    ? never
-    : Extract<Entity, { [k in K]: V }>
+/**
+ * The options that a literal of a discriminator selects: each option whose value at the
+ * discriminator can be the literal. The run time selects the arm by the value. An option that
+ * holds two literals does not extend the tag of one literal, and the arm of each literal reads it.
+ */
+type ExtractVariant<Entity, K, V> = Entity extends unknown
+    ? V extends ValueOfKey<Entity, K>
+        ? Entity
+        : never
+    : never
+
+/**
+ * The value that an option holds at a discriminator. A name with no `.` is an attribute, and the
+ * read of an attribute is the cheap case: a path is parsed only where the name holds a `.`.
+ */
+type ValueHeldAt<Entity, K> = K extends `${string}.${string}`
+    ? ValueOfKey<Entity, K>
+    : K extends keyof Entity
+      ? Entity[K]
+      : never
 
 type TagVariant<Entity, K extends PropertyKey, V extends PropertyKey> = [
     Entity,

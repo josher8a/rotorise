@@ -279,11 +279,14 @@ describe('a discriminator that the codec decides', () => {
     })
 
     it('reads the codec and not the entity, which can type the attribute wider', () => {
+        // `phone` is required: the arm PHONE reads the option that holds the literal PHONE, and an
+        // optional `phone` there is refused as a component that can be absent. The attribute that the
+        // entity types wider than the codec is `TAG`.
         type Wide = {
             TAG: 'EMAIL' | 'PHONE'
             userId: string
             email: string
-            phone?: string
+            phone: string
         }
         const Wider = tableEntry<Wide>()(
             {

@@ -844,159 +844,52 @@ one value.
 
 ---
 
-## Known: the arm of a match reads no option for a member of the entity that holds two literals at the discriminator
+## Known: the refusal of a match in the form with `spec` names no element, or a rule that the match does not break
 
-**Observation.** The run time selects the arm of a match by the value of the item. The type selects
-the options of an arm by the type of the discriminator, and an option that holds two literals is
-the option of no arm. With no path in the schema the type accepts each name, a name that the entity
-lacks included. With a path in the schema, or in the cases form, the type refuses each name. The
-type of `key` asks for no attribute of such an arm. Measured 2026-11-12 with `tsc --noEmit` on
-TypeScript 7 and `npx vitest --run`:
+**Observation.** The constraint of a key spec is a union of forms, and the compiler reports a refusal
+against one form of the union. In the form with `cases`, the refusal lands on the name that is wrong, or
+on the discriminator, with a text that states the cause. In the form with `spec`, the refusal lands on the
+whole match, or on a literal, with a text of another rule. Measured 2026-11-12 with `tsc --noEmit` on
+TypeScript 7:
 
     type Boarder = { petId: string; status: 'IN' | 'OUT'; kennel: string; owner: { id: string } }
-    // boarder: Boarder, with the status 'IN', the kennel 'k1' and the owner id 'o1'
-
-    const Plain = tableEntry<Boarder>()({
-        PK: ['petId'],
-        SK: { discriminator: 'status', spec: { IN: ['kennel'], OUT: ['petId'] } },
-    })
-      type checker: builds
-      runtime:      builds, and toEntry(boarder) gives the SK "KENNEL#k1"
+    type Optional =
+        | { petId: string; kind?: 'CAT'; kennel: string }
+        | { petId: string; kind: 'DOG'; ownerId: string }
 
     tableEntry<Boarder>()({
         PK: ['petId'],
         SK: { discriminator: 'status', spec: { IN: ['cage'], OUT: ['petId'] } },
     })
-      type checker: builds
-      runtime:      builds, and toEntry(boarder) throws, Attribute cage not found
+      type checker: refused at 'SK', Type '{ discriminator: "status"; spec: ... }' is not assignable
+                    to type 'FullKeySpec<Boarder>'
 
     tableEntry<Boarder>()({
         PK: ['petId'],
-        SK: { discriminator: 'status', spec: { IN: ['kennel', 'owner.id'], OUT: ['petId'] } },
+        SK: { discriminator: 'status', cases: [[['IN'], ['cage']], [['OUT'], ['petId']]] },
     })
-      type checker: refused at each of the three names, with the text that the name is no name or
-                    path of the entity
-      runtime:      builds, and toEntry(boarder) gives the SK "KENNEL#k1#ID#o1"
-
-    tableEntry<Boarder>()({
-        PK: ['petId'],
-        SK: { discriminator: 'status', cases: [[['IN'], ['kennel']], [['OUT'], ['petId']]] },
-    })
-      type checker: refused at each of the two names, with the same text
-      runtime:      builds, and toEntry(boarder) gives the SK "KENNEL#k1"
-
-    const tagOnly = { status: 'IN' } as const
-    Plain.key('SK', tagOnly)
-      type checker: builds
-      runtime:      throws, Attribute kennel not found
-
-**Effect.** A schema with a wrong name compiles, and toEntry throws for an item of the arm. A
-right schema with a path, or in the cases form, does not compile, and the text of the refusal is
-false. A call of `key` with the discriminator alone compiles, and throws.
-
-**Pin.** None. A test of `src/codec/spec/object/codec.patch.shapes.spec.ts` declares such an
-entity for another rule, and its schema compiles because the arm reads no option.
-
----
-
-## Known: the type of at admits a literal position of a list that is no non-negative safe integer, where the path has no expression string
-
-**Observation.** The expression string of a path takes a position that is a non-negative integer.
-The tuple form of `at` takes each number as a position. The string form refuses a negative
-position, and admits a run of digits above the largest integer that a number holds exactly. For
-each of the three calls below that compile, `at` returns, and `path` of the result throws.
-Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    const Toybox = item(object({ petId: string, toys: array(string) }))
-
-    at(Toybox, ['toys', -1])
-      type checker: builds
-      runtime:      at returns, and path throws, the position at segment 1 of the path is no
-                    non-negative integer
-
-    at(Toybox, ['toys', 1.5])
-      type checker: builds
-      runtime:      at returns, and path throws with the same text
-
-    const beyond: 'toys[9007199254740992]' = 'toys[9007199254740992]'
-    at(Toybox, beyond)
-      type checker: builds
-      runtime:      at returns, and path throws with the same text
-
-    const negative: 'toys[-1]' = 'toys[-1]'
-    at(Toybox, negative)
-      type checker: refused, 'toys[-1]' is no path of this codec
-      runtime:      at throws, 'toys[-1]' is no document path
-
-**Effect.** A position that has no expression string compiles, and the failure arrives where the
-caller builds the expression, not where the caller names the position.
-
-**Pin.** `src/codec/spec/object/path.spec.ts` pins the throw of the string for a position that is no
-non-negative integer, on the path builder. `src/codec/spec/object/codec.at.spec.ts` pins the
-refusal of the string form with a negative position, in the type and at run time.
-
----
-
-## Known: a match admits a discriminator that an item can lack, where the run time throws for that item
-
-**Observation.** A match selects its arm by the value of the discriminator. The run time throws for
-an item that holds no value at the discriminator. The form with `cases` admits a discriminator that
-one option of the entity lacks. The form with `spec` refuses such a discriminator, and refuses a
-discriminator that is optional in one option, each with a text that names another rule. The form
-with `cases` refuses the optional discriminator at a component of an arm, with a text that names a
-path. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Lacking =
-        | { petId: string; kind: 'CAT'; kennel: string }
-        | { petId: string; ownerId: string }
-    type Optional =
-        | { petId: string; kind?: 'CAT'; kennel: string }
-        | { petId: string; kind: 'DOG'; ownerId: string }
-    const stray: Lacking = { petId: 'p4', ownerId: 'u4' }
-
-    const Strays = tableEntry<Lacking>()({
-        PK: ['petId'],
-        SK: { discriminator: 'kind', cases: [[['CAT'], ['kennel']]] },
-    })
-      type checker: builds
-      runtime:      builds
-
-    Strays.toEntry(stray)
-      type checker: builds, and the type of the SK is never
-      runtime:      throws, Discriminator kind not found in the attributes
-
-    Strays.key('SK', stray)
-      type checker: refused, the argument is missing the properties kennel and kind
-      runtime:      throws, Discriminator kind not found in the attributes
-
-    tableEntry<Lacking>()({
-        PK: ['petId'],
-        SK: { discriminator: 'kind', spec: { CAT: ['kennel'] } },
-    })
-      type checker: refused at 'CAT', a match holds spec or cases, not both
-      runtime:      builds, gives the SK "KENNEL#k1" for a cat, and throws for the stray
+      type checker: refused at 'cage', 'cage' is no name or path of the entity
 
     tableEntry<Optional>()({
         PK: ['petId'],
         SK: { discriminator: 'kind', spec: { CAT: ['kennel'], DOG: ['ownerId'] } },
     })
       type checker: refused at 'CAT', a match holds spec or cases, not both
-      runtime:      builds, gives the SK "KENNEL#k1" for a cat, and throws for a pet of no kind
 
     tableEntry<Optional>()({
         PK: ['petId'],
         SK: { discriminator: 'kind', cases: [[['CAT'], ['kennel']], [['DOG'], ['ownerId']]] },
     })
-      type checker: refused at 'kennel', 'kennel' is no name or path of the entity
-      runtime:      builds, gives the SK "KENNEL#k1" for a cat, and throws for a pet of no kind
+      type checker: refused at 'kind', 'kind' can be absent, and a match selects its arm by the value
+                    of 'kind'
 
-**Effect.** For the first table, `toEntry(item)` compiles for an item of the option that lacks the
-discriminator, and the call throws. For the other three tables, the text of the refusal names a
-rule that the table does not break, so the caller does not learn that the discriminator can be
-absent.
+The run time throws `Discriminator kind not found in the attributes` for a pet of no kind, and
+`Attribute cage not found` for a pet of the arm IN.
 
-**Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the throw of the run time for a
-discriminator that holds `null`, behind a cast.
+**Effect.** A caller of the form with `spec` learns that the match is wrong, and learns no name and no
+cause. For a discriminator that can be absent the text names a rule that the match does not break.
+
+**Pin.** `src/codec/spec/object/codec.keyoption.spec.ts` pins each refusal, with no text.
 
 ---
 

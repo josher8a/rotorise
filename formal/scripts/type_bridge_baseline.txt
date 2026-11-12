@@ -36,27 +36,13 @@
 #   typing       one item of a draw assigned to the entity type. An error is a defect of the generator and
 #                a hard failure of the script, so no id of this group is in the list.
 construct|accept|01c2f117|nullableMeta.codecPath
-construct|accept|0ef657fc|kind_mixed.otherpath_spec_pos
 construct|accept|13c58e39|flatdot.attr
 construct|accept|158dae9a|nest.pathTagDefault
-construct|accept|4ad71e3d|literal_path.none
-construct|accept|4e8f2747|kind_double.nopath_cases_pos
-construct|accept|4f6de125|literal_path.record
-construct|accept|56481357|kind_double.otherpath_spec_pos
-construct|accept|68d09589|kind_double.armpath_cases_pos
-construct|accept|8ccd728f|kind_mixed.armpath_spec_pos
 construct|accept|98e0a4e3|plain.defaultOpts
-construct|accept|a48b62f5|kind_double.armpath_spec_pos
 construct|accept|a6d27a96|plain.tagOpts
 construct|accept|bd98ba26|nullableMeta.noCodec
-construct|accept|cd425843|kind_double.otherpath_cases_pos
 construct|accept|cd45d4d0|opt.pathDefaultOpts
-construct|refuse|0dc91cde|kind_mixed.nopath_spec_neg
-construct|refuse|2fec3bd1|kind_lacking.otherpath_cases_pos
-construct|refuse|718e4703|kind_lacking.armpath_cases_pos
 construct|refuse|82892850|doc.pathList
-construct|refuse|8ca3525d|kind_double.nopath_spec_neg
-construct|refuse|8cb63785|kind_lacking.nopath_cases_pos
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|20f6d97843|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|22507207dc|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -98,6 +84,10 @@ key|accept|2fa8f7f9|T_opt_pathAttr.key(SK,unowned,none).call
 key|accept|3bfb0c15|T_union_path_tagged.key(SK,cat,none).call
 key|accept|3bfb0c15|T_union_path_tagged.key(SK,catFull,none).call
 key|accept|490e4ea0|T_plain_pkList.key(PK,none,partial).call
+key|accept|4ad71e3d|T_literal_path_none.key(SK,out,none).call
+key|accept|4ad71e3d|T_literal_path_none.key(SK,outFull,none).call
+key|accept|4f6de125|T_literal_path_record.key(SK,out,none).call
+key|accept|4f6de125|T_literal_path_record.key(SK,outFull,none).call
 key|accept|5a8a23a6|T_held_twoLevels.key(SK,catIn,none).result
 key|accept|8c2ecdc4|T_union_path_none.key(SK,cat,none).call
 key|accept|8c2ecdc4|T_union_path_none.key(SK,catFull,none).call
@@ -109,21 +99,15 @@ key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,d0).call
 key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,partial).call
 key|accept|f1510f52|T_plain_list2.key(SK,none,partial).call
 key|accept|f1510f52|T_plain_list2.key(SK,sLit,narrow).result
-key|refuse|0e5a3ce7|T_kind_mixed_otherpath_cases_pos.key(SK,tag_bird,none).call
-key|refuse|0e5a3ce7|T_kind_mixed_otherpath_cases_pos.key(SK,tag_cat,none).call
 key|refuse|137363d8|T_numname_numList.key(SK,zero,none).foreign
 key|refuse|137363d8|T_numname_numList.key(SK,zeroArg,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,blank,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,blank,partial).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,ok,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,ok,partial).foreign
-key|refuse|2dbf8b12|T_kind_mixed_armpath_cases_pos.key(SK,tag_bird,none).call
-key|refuse|2dbf8b12|T_kind_mixed_armpath_cases_pos.key(SK,tag_cat,none).call
 key|refuse|30bc3e95|T_plain_taglessTf.key(SK,blank,none).call
 key|refuse|490e4ea0|T_plain_pkList.key(PK,blankId,bnd).call
 key|refuse|490e4ea0|T_plain_pkList.key(PK,blankId,none).call
-key|refuse|6f70a9e1|T_kind_double_nopath_spec_pos.key(SK,tag_in,none).call
-key|refuse|6f70a9e1|T_kind_double_nopath_spec_pos.key(SK,tag_out,none).call
 key|refuse|afe107af|T_nest_pathPlain.key(SK,blankCode,none).call
 key|refuse|b04a5f18|T_plain_listOne.key(SK,blank,none).call
 key|refuse|b04a5f18|T_plain_listOne.key(SK,sep,none).call
@@ -131,8 +115,6 @@ key|refuse|b04a5f18|T_plain_listOne.key(SK,sep,partial).call
 key|refuse|b688f70a|T_nest_pathTag.key(SK,blankCode,none).call
 key|refuse|b97df3e1|T_plain_attrName.key(SK,blank,none).call
 key|refuse|bf6ad666|T_plain_attrNote.key(SK,blankNote,none).call
-key|refuse|e4cc0abb|T_kind_mixed_nopath_spec_pos.key(SK,tag_bird,none).call
-key|refuse|e4cc0abb|T_kind_mixed_nopath_spec_pos.key(SK,tag_cat,none).call
 key|refuse|f1510f52|T_plain_list2.key(SK,blank,any).call
 key|refuse|f1510f52|T_plain_list2.key(SK,blank,bnd).call
 key|refuse|f1510f52|T_plain_list2.key(SK,blank,maybe).call
@@ -146,8 +128,6 @@ key|refuse|f1510f52|T_plain_list2.key(SK,sep,bnd).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,maybe).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,none).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,partial).call
-key|refuse|f6e66470|T_kind_mixed_nopath_cases_pos.key(SK,tag_bird,none).call
-key|refuse|f6e66470|T_kind_mixed_nopath_cases_pos.key(SK,tag_cat,none).call
 toEntry|accept|1b35cc8d|T_doc_pathAttr.toEntry(b).result
 toEntry|refuse|137363d8|T_numname_numList.toEntry(zero).foreign:SK
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blank).foreign:SK
