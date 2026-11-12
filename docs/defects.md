@@ -787,55 +787,6 @@ passes one through a parameter of a union type, gets no error from the compiler.
 
 ---
 
-## Known: the type of an entry states a required key where the run time writes no key
-
-**Observation.** The run time writes no key name for a key that builds no value: the arm of a match
-that is null, and a key of one attribute that the item lacks. The type of the entry states the key
-name as required. An arm that is null gives the type `never` for the key. Where one member of the
-entity holds the null arm and another arm, the union drops `never`, and the type states the text of
-the other arm. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Cat = { petId: string; species: 'CAT'; name: string }
-    type Dog = { petId: string; species: 'DOG' }
-    const Animals = tableEntry<Cat | Dog>()({
-        PK: ['petId'],
-        SK: { discriminator: 'species', spec: { CAT: ['name'], DOG: null } },
-    })
-
-    Animals.toEntry(dog)   // dog: Dog
-      type checker: { petId: string; species: "DOG"; readonly PK: `PETID#${string}`; readonly SK: never }
-      runtime:      gives { petId: "p2", species: "DOG", PK: "PETID#p2" }
-
-    const storedDog = { petId: 'p2', species: 'DOG', PK: 'PETID#p2' } as const
-    Animals.fromEntry(storedDog)
-      type checker: refused, Property 'SK' is missing
-      runtime:      gives { petId: "p2", species: "DOG" }
-
-    type Stay = { petId: string; status: 'IN' | 'OUT'; kennel: string }
-    const Stays = tableEntry<Stay>()({
-        PK: ['petId'],
-        SK: { discriminator: 'status', spec: { IN: ['kennel'], OUT: null } },
-    })
-    const read = (): string => Stays.toEntry(out).SK   // out: Stay, with the status 'OUT'
-      type checker: builds, and the type of the SK is `KENNEL#${string}`
-      runtime:      gives undefined, and the row holds no SK
-
-    type Chipped = { petId: string; chip?: string }
-    const Chips = tableEntry<Chipped>()({ PK: ['petId'], SK: 'chip' })
-    Chips.toEntry(unchipped)   // unchipped: Chipped, with no chip
-      type checker: { petId: string; chip?: string; readonly PK: `PETID#${string}`; readonly SK: string | undefined }
-      runtime:      gives { petId: "p4", PK: "PETID#p4" }
-
-**Effect.** A read of the key as a string compiles with no cast, and the value is undefined. The
-type of fromEntry refuses the row that toEntry wrote for the null arm, and the run time reads
-the row.
-
-**Pin.** `scripts/consumer/index.mts` and `scripts/consumer/index.cts` pin the entry of a union
-with a null arm at the required key of the type `never`, with a comment that names the defect.
-`src/Rotorise.spec.ts` pins the type of an entry that holds a required key of the type `never`.
-
----
-
 ## Known: the type of key states the value of the entity for a key of one attribute below a second match, where the run time gives the stored text
 
 **Observation.** A key of one attribute is the stored value of the attribute. With a tagged codec,
@@ -882,7 +833,7 @@ the entity. The type of toEntry reads the stored text at each depth. Measured 20
       runtime:      gives "Y"
 
     TwoLevels.toEntry(housed).SK
-      type checker: "N" | "Y"
+      type checker: "N" | "Y" | undefined
       runtime:      gives "Y"
 
 **Effect.** The type of the second key is a boolean or undefined, and the value is a string. The

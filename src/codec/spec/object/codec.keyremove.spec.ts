@@ -145,3 +145,43 @@ describe('the type of `remove`', () => {
         expectTypeOf(remove).toEqualTypeOf<readonly ('GSI1PK' | 'GSI2PK')[]>()
     })
 })
+
+describe('the type of an entry holds a key that builds no value as optional', () => {
+    const rowOf = (pet: Pet) => Pets.toEntry(pet)
+    const adoptedPet = { petId: 'p1', ...adopted } as const
+    const dogPet = { petId: 'p1', ...availableDog } as const
+
+    it('is absent from the row, so the type holds the key as optional for a member that can build it', () => {
+        const read = (row: ReturnType<typeof rowOf>) => {
+            // @ts-expect-error the row of an adopted pet holds no GSI1PK, so the key can be absent
+            const text: string = row.GSI1PK
+            return text
+        }
+        expect(typeof read).toBe('function')
+        expect(rowOf(adoptedPet)).not.toHaveProperty('GSI1PK')
+        expect(rowOf({ petId: 'p1', ...availableCat })).toHaveProperty(
+            'GSI1PK',
+            'SHELTER#s1',
+        )
+    })
+
+    it('holds the key as optional with no value for a member that builds no value', () => {
+        const row = Pets.toEntry(adoptedPet)
+        expectTypeOf(row.GSI1PK).toEqualTypeOf<undefined>()
+        expect(row).not.toHaveProperty('GSI1PK')
+    })
+
+    it('gives the key that a null arm builds the type undefined, as the row holds no such key', () => {
+        const key = Pets.key('GSI1PK', adoptedPet)
+        expectTypeOf(key).toEqualTypeOf<undefined>()
+        expect(key).toBeUndefined()
+    })
+
+    it('holds a key that each member builds as required, beside the optional key', () => {
+        const row = Pets.toEntry(dogPet)
+        expectTypeOf(row.GSI3PK).toEqualTypeOf<'PETID#p1'>()
+        expectTypeOf(row.GSI2PK).toEqualTypeOf<undefined>()
+        expect(row).toHaveProperty('GSI3PK', 'PETID#p1')
+        expect(row).not.toHaveProperty('GSI2PK')
+    })
+})

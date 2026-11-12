@@ -198,7 +198,7 @@ const pet: Pet = { petId: 'p1', kind: 'CAT' }
 const dogPet = { petId: 'p1', kind: 'DOG', ownerId: 'o1' } as const
 const catPet = { petId: 'p1', kind: 'CAT' } as const
 export const petPins = {
-    // defect of the type: the arm `CAT: null` gives no key, and the type states `SK: never` where the run time writes no `SK`
+    // the arm `CAT: null` builds no value, so the row holds no `SK`, and the type holds `SK` as optional
     entryOfUnion: (value: Pet) =>
         pinned<
             | {
@@ -210,7 +210,7 @@ export const petPins = {
               }
             | {
                   readonly PK: `PETID#${string}`
-                  readonly SK: never
+                  readonly SK?: never
                   petId: string
                   kind: 'CAT'
               }

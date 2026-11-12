@@ -709,7 +709,7 @@ describe('DynamoDB Utils', () => {
                   readonly GSI1SK:
                       | 'A-a1-B-1-NEW_TAG-VERDADERO'
                       | 'A-a1-B-1-NEW_TAG-FALSO'
-                  readonly GSI2PK: never
+                  readonly GSI2PK?: never
               })
             | ({
                   a: 'a2'
@@ -1105,7 +1105,7 @@ describe('DynamoDB Utils', () => {
               } & {
                   readonly PK: `A-a2-B-${string}-C-0`
                   readonly SK: 'C-0-Z-DEFAULT' | 'C-0-Z-never'
-                  readonly GSIPK: 'never' | undefined
+                  readonly GSIPK?: 'never'
                   readonly GSISK: 'Z-never' | 'Z-DEFAULT'
               })
         >

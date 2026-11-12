@@ -508,7 +508,6 @@ type ComputeTableKeyType<
     Entity,
     Spec,
     Separator extends string,
-    NullAs extends never | undefined = never,
     CodecSpec = undefined,
 > = Spec extends InputSpecShape
     ? CompositeKeyBuilderImpl<
@@ -523,7 +522,7 @@ type ComputeTableKeyType<
       : Spec extends AnyPath
         ? PathText<Entity, Spec, CodecSpec>
         : Spec extends null
-          ? NullAs
+          ? undefined
           : Spec extends DiscriminatedSchemaShape
             ? ComputeTableKeyType<
                   Entity,
@@ -532,7 +531,6 @@ type ComputeTableKeyType<
                       ValueOfKey<Entity, Spec['discriminator']>
                   >,
                   Separator,
-                  NullAs,
                   CodecSpec
               >
             : never
@@ -572,7 +570,6 @@ type TableEntryImpl<
                             ValueOfKey<Entity, Schema[Key]['discriminator']>
                         >,
                         Separator,
-                        never,
                         CodecSpec
                     >
                   : Schema[Key] extends
@@ -584,7 +581,6 @@ type TableEntryImpl<
                           Entity,
                           Schema[Key],
                           Separator,
-                          never,
                           CodecSpec
                       >
                     : ErrorMessage<'Invalid schema definition'>
@@ -607,7 +603,12 @@ type HeldEntry<
     ? TableEntryImpl<Entity, Schema, Separator, CodecSpec> extends infer Entry
         ? show<
               {
-                  readonly [Key in keyof Schema]: Schema[Key] extends InputSpecShape
+                  readonly [Key in keyof Schema as KeyWhere<
+                      Schema,
+                      Entry,
+                      Key,
+                      false
+                  >]: Schema[Key] extends InputSpecShape
                       ? Entry[Key & keyof Entry]
                       : HeldKey<
                             Entry[Key & keyof Entry],
@@ -619,6 +620,25 @@ type HeldEntry<
                                 Key
                             >
                         >
+              } & {
+                  readonly [Key in keyof Schema as KeyWhere<
+                      Schema,
+                      Entry,
+                      Key,
+                      true
+                  >]?: Exclude<
+                      HeldKey<
+                          Entry[Key & keyof Entry],
+                          StoredMembers<
+                              Entity,
+                              Schema,
+                              CodecSpec,
+                              CodecRest,
+                              Key
+                          >
+                      >,
+                      undefined
+                  >
               } & Entity
           >
         : never
@@ -2166,7 +2186,6 @@ type ProcessKey<
     Entity,
     Spec,
     Separator extends string,
-    NullAs extends never | undefined = never,
     Config extends SpecConfigShape = SpecConfigShape,
     CodecSpec = undefined,
 > = Separator extends ''
@@ -2187,7 +2206,7 @@ type ProcessKey<
                   [Config['enforceBoundary']] extends [true] ? true : false
               >
             : Spec extends null | undefined
-              ? NullAs
+              ? undefined
               : Spec extends DiscriminatedSchemaShape
                 ? ProcessKey<
                       Entity,
@@ -2196,7 +2215,6 @@ type ProcessKey<
                           ValueOfKey<Entity, Spec['discriminator']>
                       >,
                       Separator,
-                      NullAs,
                       Config,
                       CodecSpec
                   >
@@ -2235,19 +2253,11 @@ type OptimizedBuiltKey<
                                   Entity,
                                   Arm,
                                   Separator,
-                                  undefined,
                                   Config,
                                   CodecSpec
                               >
                         : never
-                    : ProcessKey<
-                          Entity,
-                          Spec,
-                          Separator,
-                          undefined,
-                          Config,
-                          CodecSpec
-                      >
+                    : ProcessKey<Entity, Spec, Separator, Config, CodecSpec>
       >
     : never
 
@@ -2384,7 +2394,7 @@ export type TableEntryDefinition<
         >,
     >(
         entry: Entry,
-    ) => DistributiveOmit<Entry, keyof Schema>
+    ) => DistributiveOmit<Entry, keyof Schema & keyof Entry>
 
     /**
      * Generates a specific key for the given entity attributes.
@@ -2681,11 +2691,19 @@ type NamedKey<
     Entry,
     K extends keyof Schema,
     Absent extends boolean,
-> = string extends K
-    ? never
-    : (undefined extends Entry[K & keyof Entry] ? true : false) extends Absent
-      ? K
-      : never
+> = string extends K ? never : KeyWhere<Schema, Entry, K, Absent>
+
+/**
+ * A key of the schema, kept where whether the key can be absent matches `Absent`. The entry holds
+ * `undefined` in the text of a key that can be absent, and the run time writes no such key.
+ */
+type KeyWhere<Schema, Entry, K extends keyof Schema, Absent extends boolean> = (
+    undefined extends Entry[K & keyof Entry]
+        ? true
+        : false
+) extends Absent
+    ? K
+    : never
 
 /**
  * What the codec half writes.
