@@ -28,6 +28,8 @@ tsconfig.tsbuildinfo
 /formal/.keys.lean
 # the generated pool: the type vectors
 /formal/.pool.types/
+# the generated pool of the entry methods: the type vectors
+/formal/.entry.types/
 
 # local tarballs for installing into consuming repos before a release
 .pack/

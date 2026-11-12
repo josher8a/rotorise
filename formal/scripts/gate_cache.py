@@ -16,7 +16,7 @@ only where `lake build` passed on those sources. The model is each `.lean` sourc
 the lake files and the toolchain. So `build` hashes the model before `lake build`, and writes that
 hash to the seal only when the build passed and the model did not change during the build. A
 kernel job takes the model hash from the seal, and stores an entry only under a seal. A run with
-no seal reads an entry and stores none. The type bridge reads `.pool.types/`, the modules that
+no seal reads an entry and stores none. The type bridge reads each directory of `TYPE_DIRS`, the modules that
 its programs load, its baseline and its script.
 
 GATE_CACHE names the directory, and the default is `formal/.gate-cache`. GATE_CACHE_OFF=1 runs
@@ -36,7 +36,8 @@ FORMAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.dirname(FORMAL)
 CACHE = os.environ.get("GATE_CACHE") or os.path.join(FORMAL, ".gate-cache")
 OFF = os.environ.get("GATE_CACHE_OFF") == "1"
-TYPES = ".pool.types"
+# Each type directory has one owner, a spec of `SPECS`: a restore of the directory replaces the whole directory.
+TYPE_DIRS = (".pool.types", ".entry.types")
 TSC = os.path.join(REPO, "node_modules", "typescript-7", "bin", "tsc")
 KEEP_DAYS = 14
 
@@ -52,9 +53,10 @@ SPECS = {
         "writes": [".pool.disjoints.lean", ".pool.separations.lean", ".pool.slices.lean",
                    ".pool.paths0.lean", ".pool.paths1.lean", ".pool.paths2.lean",
                    ".pool.paths3.lean", ".pool.guards.lean", ".pool.fits.lean",
-                   ".pool.meets.lean", TYPES],
+                   ".pool.meets.lean", ".pool.types"],
         "reads": [],
     },
+    "src/codec/lean/lean.entry.spec.ts": {"writes": [".entry.types"], "reads": []},
     "src/codec/lean/lean.key.spec.ts": {"writes": [".keys.lean"], "reads": []},
     "src/codec/lean/lean.update.spec.ts": {"writes": [".updates.lean"], "reads": []},
 }
@@ -162,17 +164,18 @@ def generated():
     """Each generated file in `formal/`, with the time of its last write."""
     found = {f: os.path.getmtime(os.path.join(FORMAL, f))
              for f in os.listdir(FORMAL) if f.startswith(".") and f.endswith(".lean")}
-    types = os.path.join(FORMAL, TYPES)
-    if os.path.isdir(types):
-        found[TYPES] = max((os.path.getmtime(os.path.join(types, f)) for f in os.listdir(types)),
-                           default=0)
+    for name in TYPE_DIRS:
+        types = os.path.join(FORMAL, name)
+        if os.path.isdir(types):
+            found[name] = max((os.path.getmtime(os.path.join(types, f)) for f in os.listdir(types)),
+                              default=0)
     return found
 
 
 def restore(entry, spec):
     for name in SPECS[spec]["writes"]:
         target = os.path.join(FORMAL, name)
-        if name == TYPES:
+        if name in TYPE_DIRS:
             shutil.rmtree(target, ignore_errors=True)
             shutil.copytree(os.path.join(entry, name), target)
         else:
@@ -205,7 +208,7 @@ def emit():
         def fill(tmp, spec=spec):
             for name in SPECS[spec]["writes"]:
                 source = os.path.join(FORMAL, name)
-                if name == TYPES:  # the files of this run only, not a file that an older emit left
+                if name in TYPE_DIRS:  # the files of this run only, not a file that an older emit left
                     os.makedirs(os.path.join(tmp, name))
                     for f in os.listdir(source):
                         if os.path.getmtime(os.path.join(source, f)) >= marker:
@@ -287,9 +290,9 @@ def kernel_files():
 
 def types():
     script = os.path.join(FORMAL, "scripts", "type_bridge.py")
-    if not os.path.isdir(os.path.join(FORMAL, TYPES)):  # the script names the missing emit
+    if not all(os.path.isdir(os.path.join(FORMAL, d)) for d in TYPE_DIRS):  # the script names the missing emit
         return subprocess.run([sys.executable, script], cwd=FORMAL).returncode
-    roots = [os.path.join(FORMAL, TYPES, f) for f in os.listdir(os.path.join(FORMAL, TYPES))]
+    roots = [os.path.join(FORMAL, d, f) for d in TYPE_DIRS for f in os.listdir(os.path.join(FORMAL, d))]
     programs = [f for f in roots if f.endswith(".ts")]
     files = closure(programs)
     baseline = os.path.join(FORMAL, "scripts", "type_bridge_baseline.txt")
