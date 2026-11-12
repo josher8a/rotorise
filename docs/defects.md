@@ -1072,8 +1072,16 @@ TypeScript 7 and `npx vitest --run`:
       type checker: builds
       runtime:      throws, buildCompositeKey: Attribute petId not found
 
+    type Housed = { petId: string; shelter: { code: string } }
+    const Homes = tableEntry<Housed>()({ PK: ['petId'], SK: ['shelter.code'] })
+
+    Homes.key('SK', { petId: 'p1', shelter: { code: '' } })
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute shelter.code not found
+
 **Effect.** The call compiles, and the run time throws. The text of the throw says that the
-attribute is not found, where the item holds the attribute with the empty text.
+attribute is not found, where the item holds the attribute with the empty text. The rule is the
+same for a component that is a path.
 
 **Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
 composite key whose plain component is the empty text.
@@ -1485,3 +1493,148 @@ with `lake env lean` on a scratch file that imports `Calculus.Bridge.KeyRows`:
 give no key, and the term adds no check.
 
 **Pin.** None.
+
+---
+
+## Known: the type of a full key admits a text that holds the separator, where the run time throws
+
+**Observation.** A key whose component prints the separator does not read back as its components,
+and the run time refuses the key. The type of the component is `string`, which holds each text.
+Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Pet = { petId: string; shelterId: string; name: string; note?: string }
+    const Pets = tableEntry<Pet>()({ PK: ['petId'], SK: ['name'] })
+    const rex: Pet = { petId: 'p1', shelterId: 's1', name: 'rex' }
+    const split: Pet = { petId: 'p1', shelterId: 's1', name: 'a#b' }
+
+    Pets.key('SK', split)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: the print of name holds the separator, so the key
+                    cannot be read back
+
+    Pets.key('SK', rex)
+      type checker: builds
+      runtime:      gives "NAME#rex"
+
+**Effect.** The call compiles, and the run time throws for a value of the declared type.
+
+**Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the refusal of the run time for a
+complete key. None for the type.
+
+---
+
+## Known: the type of a key states no label for a component whose transform function gives the tag
+
+**Observation.** A transform function can give an object with a tag and a value, and the run time
+prints the tag as the label of the component. The type of the key states a text with a `#` and no
+label. The type of a key with a plain component states the label. Measured 2026-11-12 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the type Pet and the item rex of the
+entry above:
+
+    const Tagged = tableEntry<Pet>()({
+        PK: ['petId'],
+        SK: [['name', (name: string) => ({ tag: 'T', value: name })]],
+    })
+
+    Tagged.key('SK', rex)
+      type checker: builds, and the type of the key is `${string}#${string}`
+      runtime:      gives "T#rex"
+
+    const key = () => Tagged.key('SK', rex)
+    const other: ReturnType<typeof key> = '~T#rex'
+      type checker: builds
+
+    tableEntry<Pet>()({ PK: ['petId'], SK: ['name'] }).key('SK', rex)
+      type checker: builds, and the type of the key is `NAME#${string}`
+      runtime:      gives "NAME#rex"
+
+**Effect.** The type of the key is wider than the value. Each value that the run time gives fits
+the type, and a text with another label fits the type also.
+
+**Pin.** None for the label in the type.
+
+---
+
+## Known: the type of key refuses an item of the entity for a key of one path through a union where one option lacks the name, where the run time gives the key
+
+**Observation.** For a key of one path, the parameter of `key` states the object above the last
+name with that name as required. An entity whose object is a union, where one option lacks the
+name, does not fit the parameter. The run time reads the path, and gives undefined where the
+option lacks the name. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`:
+
+    type Doc = { id: string; meta: { kind: 'a'; a: string } | { kind: 'b'; b: string } }
+    const Docs = tableEntry<Doc>()({ PK: ['id'], SK: 'meta.a' })
+    const first: Doc = { id: 'd1', meta: { kind: 'a', a: 'x' } }
+    const second: Doc = { id: 'd2', meta: { kind: 'b', b: 'y' } }
+
+    Docs.key('SK', first)
+      type checker: refused, 'Doc' is not assignable to '{ meta: { a: string; }; }'
+      runtime:      gives "x"
+
+    Docs.key('SK', second)
+      type checker: refused, with the same text
+      runtime:      gives undefined
+
+    Docs.toEntry(first)
+      runtime:      gives the SK "x"
+
+    Docs.toEntry(second)
+      runtime:      writes no SK
+
+The type checker of the two calls of toEntry is not measured.
+
+**Effect.** A caller that holds an item of the entity cannot pass the item to `key` with no cast.
+
+**Pin.** None.
+
+---
+
+## Known: the type of key refuses an argument that holds no component of the key at depth 0, where the run time gives the empty text
+
+**Observation.** A key of depth 0 reads no component, and the run time gives the empty text for
+each argument. The parameter of `key` at depth 0 states each component as optional. An argument of
+a declared type that holds another name only has no property in common with the parameter, and
+the type refuses the argument. The empty object compiles. Measured 2026-11-12 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the entry Pets above:
+
+    const nameOnly: { name: string } = { name: 'rex' }
+
+    Pets.key('PK', nameOnly, { depth: 0 })
+      type checker: refused, '{ name: string; }' has no properties in common with
+                    '{ petId?: string | undefined; }'
+      runtime:      gives ""
+
+    Pets.key('PK', {}, { depth: 0 })
+      type checker: builds
+      runtime:      gives ""
+
+**Effect.** The first call does not compile, and the run time gives the key.
+
+**Pin.** `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty text of `depth: 0` at run
+time. None for the refusal.
+
+---
+
+## Known: the type of a key component refuses an options object at a top level name, where the run time builds the key
+
+**Observation.** A component of a key is a name, or a tuple of a name and a transform. The
+transform is a function, or an options object such as `{ tag: 'NM' }`. The type takes the options
+object at a path, and refuses the options object at a name of the top level. The run time reads
+the options object at each. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`, with the type Pet and the item rex above:
+
+    tableEntry<Pet>()({ PK: ['petId'], SK: [['name', { tag: 'NM' }]] })
+      type checker: refused, 'tag' does not exist in type '(key: string) => TransformShape'
+      runtime:      builds, and key('SK', rex) gives "NM#rex"
+
+    type Housed = { petId: string; shelter: { code: string } }
+    tableEntry<Housed>()({ PK: ['petId'], SK: [['shelter.code', { tag: 'SC' }]] })
+      type checker: builds
+      runtime:      builds, and key('SK', { petId: 'p1', shelter: { code: 'c1' } }) gives "SC#c1"
+
+TypeScript 6 refuses the first call at the same line with the code TS2322.
+
+**Effect.** The first call does not compile, and the run time builds the entry and prints the tag.
+
+**Pin.** None for a name of the top level.
