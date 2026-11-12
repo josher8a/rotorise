@@ -419,11 +419,11 @@ typed. No test and no theorem pins the laws of a term with a `legacy` below a fi
 
 ---
 
-## Known: the type of key reads a config that can be `undefined`, or a slot of type `any`, as one literal
+## Known: the type of key reads a config that can be undefined, or a slot of type `any`, as one literal
 
-**Observation.** A slot of the config of `key` holds one literal, `undefined` alone, or nothing.
+**Observation.** A slot of the config of `key` holds one literal, undefined alone, or nothing.
 The type refuses `number` and each union at a slot. Two forms pass the type, and the run time
-builds another key. An optional parameter strips `undefined` from the type of the argument, so a
+builds another key. An optional parameter strips undefined from the type of the argument, so a
 config of type `{ depth: 1 } | undefined` has the type of depth 1. A slot of type `any` passes each
 refusal, because a refusal is an intersection with the parameter. Measured 2026-11-11 with
 `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
@@ -440,9 +440,9 @@ refusal, because a refusal is an intersection with the parameter. Measured 2026-
       type checker: builds
       runtime:      throws, Attribute petId not found
 
-**Effect.** Each call builds in the type with no `petId`, and throws where the value is `undefined`
-at run time. The type of the first call is the key of depth 1, and the run time builds the whole
-key.
+**Effect.** Each call builds in the type with no second component, and throws where the value is
+undefined at run time. The type of the first call is the key of depth 1, and the run time builds
+the whole key.
 
 **Pin.** None for the two forms. `src/codec/spec/object/codec.keydepth.spec.ts` pins the refusal of
 an optional slot, of `number`, and of two literals at one slot.
@@ -479,7 +479,7 @@ default.
 
 **Observation.** The type refuses a component with no default where the value at the path can be
 absent. The type of a path into a union of objects is the type at the options that hold the name.
-An option that lacks the name adds no `undefined`, so the refusal does not see the option. Measured
+An option that lacks the name adds no undefined, so the refusal does not see the option. Measured
 2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
     type Doc = { id: string; meta: { kind: 'a'; a: string } | { kind: 'b'; b: string } }
@@ -496,8 +496,8 @@ An option that lacks the name adds no `undefined`, so the refusal does not see t
     Docs.toEntry({ id: 'd1', meta: { kind: 'b', b: 'x' } })
       runtime:      throws, Attribute meta.a not found
 
-**Effect.** The entry builds, the type of the key states a text for each `Doc`, and `toEntry`
-throws for each item of the option that lacks the name.
+**Effect.** The entry builds, the type of the key states a text for each item of the entity, and
+`toEntry(item)` throws for each item of the option that lacks the name.
 
 **Pin.** None. `src/codec/spec/object/codec.keypath.spec.ts` pins the refusal of a path whose value
 can be absent, for an optional name and no union.
@@ -530,8 +530,9 @@ on TypeScript 7 and on TypeScript 6:
     tableEntry<Flat>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
       head:      the message: a `.` in a key name is a path separator
 
-The run time builds the first entry, and reads the path through the codec: `toEntry` gives the SK
-`NOTE#n` for an object at `meta`, and throws `Attribute meta.note not found` for `null`.
+The run time builds the first entry, and reads the path through the codec. `toEntry(item)` gives
+the SK `NOTE#n` where the value below the first name is an object, and throws
+`Attribute meta.note not found` where that value is `null`.
 
 **Effect.** A reader of the head of the error gets no reason. A reader of the whole error gets one
 reason or two.
@@ -547,7 +548,7 @@ the entity whose attribute holds the `.`, for a list.
 letter, then letters, digits and `_`. A reserved word of DynamoDB has that form, so a path through
 a reserved word has a string. DynamoDB refuses an expression that holds a reserved word as a bare
 name. Measured 2026-11-11 with `npx vitest --run` for the string, and on DynamoDB Local
-(`amazon/dynamodb-local`) with the string as the `ProjectionExpression` of a `GetItem` call:
+(`amazon/dynamodb-local`) with the string as the ProjectionExpression of a GetItem call:
 
     Pets.path().data.nested.property.toString()   // "data.nested.property"
       DynamoDB Local: refused, Attribute name is a reserved keyword; reserved keyword: data
@@ -568,10 +569,10 @@ such path.
 
 **What is mitigated.** Rotorise builds no expression. Brushless, the companion library, builds the
 expression: Brushless prints each name of a path as a placeholder, and writes the name into
-`ExpressionAttributeNames`. The adapter in `README.md` gives each path to `AttributePath.fromString`
-of Brushless. A caller that builds each expression with Brushless sends no bare name. What remains
-is a caller that writes the string into an expression by hand. `README.md` and the docstring of
-`path` state that a reserved word needs a placeholder.
+ExpressionAttributeNames. The adapter in `README.md` gives each path to
+`AttributePath.fromString(...)` of Brushless. A caller that builds each expression with Brushless
+sends no bare name. What remains is a caller that writes the string into an expression by hand.
+`README.md` and the docstring of `path` state that a reserved word needs a placeholder.
 
 **Pin.** None. No test of this repository sends an expression to DynamoDB, and no test runs
 Brushless. The measurement is on DynamoDB Local, and not on the DynamoDB service.
@@ -580,7 +581,7 @@ Brushless. The measurement is on DynamoDB Local, and not on the DynamoDB service
 
 ## Known: a pin of an instantiation count fails on a rise above 20 percent, and passes on each fall
 
-**Observation.** `src/Rotorise.attest.test.ts` holds two pins of `attest.instantiations`. attest
+**Observation.** `src/Rotorise.attest.test.ts` holds two pins of an instantiation count. attest
 0.34.0 fails a pin where the count rises above the pin by more than 20 percent. Where the count
 falls, attest prints a line and the pin passes. Measured 2026-11-11 with `npx vitest --run`, each
 line with one change of the block that the pin measures:
