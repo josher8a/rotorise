@@ -84,8 +84,10 @@ if [ "$RUN_BUILD" -eq 1 ]; then
                     <(grep -v "^#" scripts/classical_gateways.txt | sort))
      [ -z "$new" ] || { echo "new classical route(s):"; echo "$new"; exit 1; }'
   run 'vector emit' python3 scripts/gate_cache.py emit
-  # The vector bridge runs as one set of parallel jobs, longest first: the kernel checks the
-  # theorems of one file in sequence, so the wall time of the set is the time of its longest file.
+  # The vector bridge runs as one set of parallel jobs, one for each file that
+  # `gate_cache.py kernel-files` prints, in the order of that list. `SPECS` of that script owns the
+  # list, and the emit step fails a generated file that `SPECS` does not state, so each generated
+  # file has a kernel job.
   # A file prints the name of each failing row and exits 0 after a print, so a job passes only
   # when the file prints nothing. A job writes its output to a file, and the step reads every file
   # after the set ends, so one failure does not hide another. GATE_JOBS bounds the memory of the set.
@@ -98,14 +100,14 @@ if [ "$RUN_BUILD" -eq 1 ]; then
   # type checker, the slice program beside the path programs, and the path programs in sequence.
   # The bridge prints a summary when it passes, so its job keeps the output of a failure only, and
   # reports as one more job.
+  # The step pins the count of the jobs that report. The pin fails a job that ended with no report,
+  # and fails a list that lost a file or that did not print. A pass that adds a vector file moves
+  # the pin.
   run 'vector bridge' bash -c '
     jobs=${GATE_JOBS:-3}; out=$(mktemp -d); trap "rm -rf $out" EXIT
     ( python3 scripts/gate_cache.py types > $out/types.log 2>&1; rc=$?
       [ $rc -eq 0 ] || cp $out/types.log $out/xtype_bridge.out; echo $rc > $out/xtype_bridge.rc ) &
-    printf "%s\n" .pool.separations.lean .pool.slices.lean .pool.disjoints.lean \
-      .pool.paths0.lean .pool.paths1.lean .pool.paths3.lean .pool.paths2.lean \
-      .legacyreads.lean .separations.lean .readverdicts.lean .disjoints.lean .vectors.full.lean \
-      .resolutions.lean lean.sample.lean lean.sample.check.lean .readvectors.lean .pool.guards.lean .pool.meets.lean .pool.fits.lean .keys.lean .updates.lean |
+    python3 scripts/gate_cache.py kernel-files |
     xargs -P "$jobs" -I{} sh -c "
       [ -f {} ] || { echo missing > $out/x{}.rc; exit 0; }
       [ \"\$(tail -n 1 {})\" = \"#assert_axioms_module\" ] ||
@@ -118,7 +120,8 @@ if [ "$RUN_BUILD" -eq 1 ]; then
       if [ "$(cat "$rc")" != 0 ]; then echo "$f: exit $(cat "$rc")"; echo "$o"; fail=1; continue; fi
       [ -z "$o" ] || { echo "$f: $o"; fail=1; }
     done
-    [ "$(ls "$out"/*.rc | wc -l)" -eq 22 ] || { echo "a job did not report"; fail=1; }
+    reported=$(ls "$out"/*.rc | wc -l)
+    [ "$reported" -eq 22 ] || { echo "$reported jobs reported, and the step pins 22"; fail=1; }
     exit $fail'
 else
   printf 'SKIP  %-28s (--no-build)\n' 'lake build'

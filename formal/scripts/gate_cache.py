@@ -28,6 +28,7 @@ Usage:  gate_cache.py emit                the emit specs whose key has no entry
         gate_cache.py build               `lake build`, and the seal of the run when it passed
         gate_cache.py kernel <file> <out> the kernel job of <file>, unless its key has an entry.
                                           The output of the job goes to <out>
+        gate_cache.py kernel-files        the file of each kernel job, one for each line
 """
 import hashlib, os, re, shutil, subprocess, sys, tempfile, time
 
@@ -277,6 +278,13 @@ def kernel(file, out):
     return rc
 
 
+def kernel_files():
+    """The file of each kernel job: each `.lean` file that a spec writes, then each `.lean` file
+    that a spec reads. Each is a file of `formal/`."""
+    return [os.path.basename(name) for kind in ("writes", "reads") for files in SPECS.values()
+            for name in files[kind] if name.endswith(".lean")]
+
+
 def types():
     script = os.path.join(FORMAL, "scripts", "type_bridge.py")
     if not os.path.isdir(os.path.join(FORMAL, TYPES)):  # the script names the missing emit
@@ -304,6 +312,9 @@ def main(argv):
         return types()
     if argv[:1] == ["build"]:
         return build()
+    if argv == ["kernel-files"]:
+        print("\n".join(kernel_files()))
+        return 0
     if len(argv) == 3 and argv[0] == "kernel":
         return kernel(argv[1], argv[2])
     print(__doc__.split("Usage:")[1], file=sys.stderr)
