@@ -983,3 +983,242 @@ caller builds the expression, not where the caller names the position.
 **Pin.** `src/codec/spec/object/path.spec.ts` pins the throw of the string for a position that is no
 non-negative integer, on the path builder. `src/codec/spec/object/codec.at.spec.ts` pins the
 refusal of the string form with a negative position, in the type and at run time.
+
+---
+
+## Known: a match admits a discriminator that an item can lack, where the run time throws for that item
+
+**Observation.** A match selects its arm by the value of the discriminator. The run time throws for
+an item that holds no value at the discriminator. The form with `cases` admits a discriminator that
+one option of the entity lacks. The form with `spec` refuses such a discriminator, and refuses a
+discriminator that is optional in one option, each with a text that names another rule. The form
+with `cases` refuses the optional discriminator at a component of an arm, with a text that names a
+path. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Lacking =
+        | { petId: string; kind: 'CAT'; kennel: string }
+        | { petId: string; ownerId: string }
+    type Optional =
+        | { petId: string; kind?: 'CAT'; kennel: string }
+        | { petId: string; kind: 'DOG'; ownerId: string }
+    const stray: Lacking = { petId: 'p4', ownerId: 'u4' }
+
+    const Strays = tableEntry<Lacking>()({
+        PK: ['petId'],
+        SK: { discriminator: 'kind', cases: [[['CAT'], ['kennel']]] },
+    })
+      type checker: builds
+      runtime:      builds
+
+    Strays.toEntry(stray)
+      type checker: builds, and the type of the SK is never
+      runtime:      throws, Discriminator kind not found in the attributes
+
+    Strays.key('SK', stray)
+      type checker: refused, the argument is missing the properties kennel and kind
+      runtime:      throws, Discriminator kind not found in the attributes
+
+    tableEntry<Lacking>()({
+        PK: ['petId'],
+        SK: { discriminator: 'kind', spec: { CAT: ['kennel'] } },
+    })
+      type checker: refused at 'CAT', a match holds spec or cases, not both
+      runtime:      builds, gives the SK "KENNEL#k1" for a cat, and throws for the stray
+
+    tableEntry<Optional>()({
+        PK: ['petId'],
+        SK: { discriminator: 'kind', spec: { CAT: ['kennel'], DOG: ['ownerId'] } },
+    })
+      type checker: refused at 'CAT', a match holds spec or cases, not both
+      runtime:      builds, gives the SK "KENNEL#k1" for a cat, and throws for a pet of no kind
+
+    tableEntry<Optional>()({
+        PK: ['petId'],
+        SK: { discriminator: 'kind', cases: [[['CAT'], ['kennel']], [['DOG'], ['ownerId']]] },
+    })
+      type checker: refused at 'kennel', 'kennel' is no name or path of the entity
+      runtime:      builds, gives the SK "KENNEL#k1" for a cat, and throws for a pet of no kind
+
+**Effect.** For the first table, `toEntry(item)` compiles for an item of the option that lacks the
+discriminator, and the call throws. For the other three tables, the text of the refusal names a
+rule that the table does not break, so the caller does not learn that the discriminator can be
+absent.
+
+**Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the throw of the run time for a
+discriminator that holds `null`, behind a cast.
+
+---
+
+## Known: the type of a full key admits a plain component whose value is the empty text, where the run time throws
+
+**Observation.** The run time reads a plain component whose value is the empty text as an absent
+component, and a full key refuses an absent component. The type of the component is `string`. The
+host has no type for a text of one character or more. Measured 2026-11-12 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`:
+
+    type Pet = { petId: string; name: string }
+    const Pets = tableEntry<Pet>()({ PK: ['petId'], SK: ['name'] })
+    const blank: Pet = { petId: 'p1', name: '' }
+
+    Pets.toEntry(blank)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute name not found
+
+    Pets.key('SK', blank)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute name not found
+
+    Pets.key('PK', { petId: '' })
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute petId not found
+
+**Effect.** The call compiles, and the run time throws. The text of the throw says that the
+attribute is not found, where the item holds the attribute with the empty text.
+
+**Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
+composite key whose plain component is the empty text.
+
+---
+
+## Known: the type of key refuses an entity whose key of one path lies below an optional object, where the run time gives the key
+
+**Observation.** For a key of one path, the parameter of `key` states each object above the last
+name as required, and states the last name with undefined. An entity whose object can be absent
+does not fit the parameter. The run time reads the path, and gives undefined where the object is
+absent. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Owned = { petId: string; owner?: { id: string } }
+    const Owners = tableEntry<Owned>()({ PK: ['petId'], SK: 'owner.id' })
+    const owned: Owned = { petId: 'p1', owner: { id: 'o1' } }
+    const unowned: Owned = { petId: 'p2' }
+
+    Owners.key('SK', owned)
+      type checker: refused, 'Owned' is not assignable to '{ owner: { id: string | undefined } }'
+      runtime:      gives "o1"
+
+    Owners.key('SK', unowned)
+      type checker: refused, with the same text
+      runtime:      gives undefined
+
+    Owners.key('SK', { owner: { id: 'o1' } })
+      type checker: builds
+
+    Owners.toEntry(owned)
+      type checker: builds
+      runtime:      gives the SK "o1"
+
+**Effect.** A caller that holds an item of the entity cannot pass the item to `key` with no cast.
+An object literal that holds the object compiles.
+
+**Pin.** None.
+
+---
+
+## Known: the refusal of a union codec with no discriminator lands on the key, where the key reads a held codec
+
+**Observation.** An item codec that is a `union` with no discriminator cannot name the option of an
+item, and the run time refuses the codec. The type refuses the codec at the option that holds the
+codec. Where a key of one attribute reads an attribute of a `held` codec, the type refuses the key
+and not the codec. The text says that the attribute is stored as none of S, N and B. The `held`
+codec of the measurement stores the text 'Y' or 'N'. Measured 2026-11-12 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`:
+
+    // flag is a schema of boolean
+    const Adopted = held(string('Y', 'N'), flag, {
+        encode: (b: boolean) => (b ? 'Y' : 'N'),
+        decode: (s: string) => s === 'Y',
+    })
+
+    tableEntry<Cat | Dog>()(
+        { PK: ['petId'], SK: 'adopted' },
+        {
+            codec: item(
+                union([
+                    object({ petId: string, species: string('CAT'), adopted: Adopted }),
+                    object({ petId: string, species: string('DOG'), adopted: Adopted }),
+                ]),
+            ),
+        },
+    )
+      type checker: refused at 'adopted', [tableEntry] 'SK' is built from 'adopted', which is
+                    stored as none of S, N and B
+      runtime:      throws, the codec passed here is neither an item codec nor a tagged one
+
+    the same call, where each option holds adopted: string
+      type checker: refused at the codec, the codec is not assignable to a tagged codec
+      runtime:      throws, with the same text
+
+**Effect.** The caller reads a refusal of the key, and the cause is the codec. A correction of the
+key does not make the table build.
+
+**Pin.** `src/codec/spec/object/codec.patch.shapes.spec.ts` pins the throw of the run time for a
+codec that cannot name a variant, behind a cast.
+
+---
+
+## Known: a codec builds and writes an attribute name of no character, where DynamoDB refuses the name
+
+**Observation.** The former of an object takes the empty text as the name of a field. The codec
+writes the name, and reads the name back. DynamoDB refuses an item that holds an attribute name of
+no character, at the top of the item and inside a map. Measured 2026-11-12 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`, and with a PutItem call on DynamoDB Local:
+
+    const Named = item(object({ petId: string, '': string }))
+      type checker: builds
+      runtime:      builds
+
+    Named.unsafeEncode({ petId: 'p1', '': 'ball' })
+      type checker: builds
+      runtime:      gives { petId: { S: 'p1' }, '': { S: 'ball' } }
+
+    PutItem, the name "" at the top of the item
+      DynamoDB Local: refused, Empty attribute name
+
+    PutItem, the name "" inside a map
+      DynamoDB Local: refused, Empty attribute name
+
+**Effect.** The codec gives an item that DynamoDB refuses. The failure arrives at the write, not
+where the caller declares the field.
+
+**Pin.** None.
+
+---
+
+## Known: the test of a transform at a path that the codec writes as B reads no key
+
+**Observation.** `src/codec/spec/object/codec.keycomponent.spec.ts` holds the test 'accepts a
+transform at a path that the codec writes as B, because the function prints the text'. The test
+builds the entry, and asserts that the method that builds a row is a function. The test calls no
+method of the entry. Measured 2026-11-12 with `npx vitest --run` and the name of the test, on a
+tree where the function that builds a row throws at its first statement:
+
+    the test of the file                                          passes
+    a probe that reads the SK of the row of one pet, same tree    fails, Error: mutant
+
+**Effect.** A change that breaks the key of such a path keeps the test green. The test fails only
+where the construction of the entry throws.
+
+**Pin.** None.
+
+---
+
+## Suspected: the rows of a path in the type bridge compare the kind of a value, and no value of the same kind
+
+**Observation.** `src/codec/typeVectors.ts` writes two rows for the decoded type of a codec at a
+path. The first row holds one value that the codec draws, and the type must accept the value. The
+second row holds one value of another kind, and the type must refuse the value: the numeral '1'
+where the draw is a number, and the number 1 otherwise. A decoded type that is widened from a
+literal to the base type gives the same verdict on each row. Measured 2026-11-12 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`, for the path `['kind']` of
+`object({ kind: string('DOG'), name: string })`:
+
+                                    the decoded type, 'DOG'    the widened type, string
+    the first row, 'DOG'            builds                     builds
+    the second row, 1               refused                    refused
+    a text of another literal       refused                    builds
+
+**Effect.** Not established. The measurement holds the two types side by side, and no change of
+the decoded type ran against the bridge. If a change widens the decoded type at a path from a
+literal to the base type, the two rows give the verdict of today.
+
+**Pin.** None.
