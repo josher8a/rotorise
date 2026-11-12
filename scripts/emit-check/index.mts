@@ -169,3 +169,19 @@ export const structural = structuralEquals
 // Not in this project: a cycle that goes through a list and a union only has no name for the decoded
 // type of the union, so the declaration holds `any` and TypeScript 7 refuses it (TS5088):
 //   scope({ Nest: array(ref('Tags')), Tags: union([string('PUPPY'), ref('Nest')]) })
+
+// the result of each method of an entry: the emitter prints the type of each result, and each name that
+// the type holds must be published
+export const PetRowKey = PetRows.key('PK', { petId: 'p1' })
+export const PetRowEntry = PetRows.toEntry({ petId: 'p1', kind: 'CAT' })
+export const PetRowKeys = PetRows.keys(['PK'], { petId: 'p1', kind: 'CAT' })
+export const PetRowUpdate = PetRows.keyUpdates({ petId: 'p1' })
+export const PetRowPath = PetRows.path()
+export const CodedKey = CodedPets.key('PK', { petId: 'p1' })
+export const CodedEntry = CodedPets.toEntry({ petId: 'p1', name: 'Rex' })
+export const CodedKeys = CodedPets.keys(['PK'], { petId: 'p1', name: 'Rex' })
+export const CodedCondition = CodedPets.keyCondition({ petId: 'p1' })
+export const CodedUpdate = CodedPets.keyUpdates({ name: 'Tom' })
+export const CodedItem = CodedPets.toItem({ petId: 'p1', name: 'Rex' })
+export const CodedFrom = CodedPets.fromItem({ petId: { S: 'p1' }, name: { S: 'Rex' } })
+export const CodedPath = CodedPets.path()
