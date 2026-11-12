@@ -1222,3 +1222,266 @@ the decoded type ran against the bridge. If a change widens the decoded type at 
 literal to the base type, the two rows give the verdict of today.
 
 **Pin.** None.
+
+---
+
+## Known: item builds a union with an option that is no object, where a read or a write at that option throws a TypeError
+
+**Observation.** An item is a map, so a union with an option that is no object has no reading as an
+item. The type states the refusal as the type of the result: the call compiles, and each use of the
+result does not. The run time builds the codec. A row that the first option reads gives the value.
+A row or a value that reaches the option that is no object throws a TypeError of the engine, and no
+CodecError. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    const Pet = object({ petId: string })
+    const Rows = item(union([Pet, string]))
+      type checker: builds, and the type of Rows is the message "[union] this union can hold an
+                    attribute that is not a map, so it has no whole-item reading"
+      runtime:      builds
+
+    Rows.decode({ petId: { S: 'p1' } })
+      type checker: refused, Property 'decode' does not exist on the type of the message
+      runtime:      gives { petId: 'p1' }
+
+    Rows.decode({ name: { S: 'Rex' } })
+      type checker: refused, with the same text
+      runtime:      throws, TypeError: Cannot read properties of undefined (reading 'decode')
+
+    Rows.unsafeEncode('Rex')
+      type checker: refused, Property 'unsafeEncode' does not exist on the type of the message
+      runtime:      throws, TypeError: Cannot read properties of undefined (reading 'encode')
+
+    item(union([Pet, object({ name: string })])).decode({ name: { S: 'Rex' } })
+      type checker: builds
+      runtime:      gives { name: 'Rex' }
+
+**Effect.** The call compiles, and the error appears at the first use of the result. In code with
+no type check, or behind a cast, the codec builds, and the failure arrives at the read of a row
+that the first option does not read.
+
+**Pin.** `src/codec/spec/object/codec.item.spec.ts` pins the type: the result holds the message and
+no method. None for the run time.
+
+---
+
+## Known: discriminatedUnion throws a TypeError where the decoded tag of an option has no primitive form
+
+**Observation.** A tag can be a `held` codec, and the decoded tag is then the output of a function
+of the caller. The construction prints the decoded tag of each option into a text with the string
+conversion of JS. An object with no prototype has no such conversion. The type refuses the call of
+the measurement, so the run is behind a cast. Measured 2026-11-12 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`:
+
+    // anyTag is a schema of unknown, and dogTag is Object.create(null)
+    const DogTag = held(string('D'), anyTag, {
+        encode: (value: unknown) => (value === dogTag ? 'D' : new CodecError('only the dog tag')),
+        decode: () => dogTag,
+    })
+
+    discriminatedUnion('species', [
+        object({ species: DogTag, name: string }),
+        object({ species: string('cat'), name: string }),
+    ])
+      type checker: refused, [discriminatedUnion] options 0 and 1 answer to the same
+                    discriminator value
+      runtime:      throws, TypeError: Cannot convert object to primitive value
+
+    the same call, where the function gives the plain object { species: 'dog' }
+      runtime:      throws, CodecError: { species, name } and { species, name } are not shown
+                    compatible
+
+The type checker of the second call is not measured.
+
+**Effect.** The run time refuses the two calls. The first refusal is a throw of the engine, and its
+text names no option and no tag.
+
+**Pin.** None.
+
+---
+
+## Known: a codec reads an attribute that holds two members, and the member that it reads follows the codec and the order of the names
+
+**Observation.** A stored attribute holds one member, and the type of an attribute refuses a value
+that holds two. The run time counts no member. A codec of one member reads that member, and reads
+no other name. A `union` and the opaque codec read the member whose name comes first in the object.
+The run rows are behind a cast. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`:
+
+    string.decode({ S: 'Rex', N: '1' })
+      type checker: refused, '{ S: string; N: string; }' is not assignable to 'AttributeValue'
+      runtime:      gives 'Rex'
+
+    number.decode({ S: 'Rex', N: '1' })
+      runtime:      gives 1
+
+    string.encode('Rex')
+      runtime:      gives { S: 'Rex' }
+
+    union([string, number]).decode({ S: 'Rex', N: '1' })
+      runtime:      gives 'Rex'
+
+    union([string, number]).decode({ N: '1', S: 'Rex' })
+      runtime:      gives 1
+
+    opaque.decode({ S: 'Rex', N: '1' })
+      runtime:      gives 'Rex'
+
+    opaque.decode({ N: '1', S: 'Rex' })
+      runtime:      gives a number whose JSON form is { digits: '1' }
+
+**Effect.** Two objects that hold the same two members give two decoded values. An attribute that
+the read admits does not write back: the write gives one member. The input is a value that the
+type refuses, so the input is data with no type, or a cast.
+
+**Pin.** None.
+
+---
+
+## Known: keyUpdates gives the empty patch for a change at a name that the entity does not hold, behind a cast
+
+**Observation.** The type of the change of keyUpdates refuses a name that the entity does not hold.
+The run time refuses no name. A change at a name that no key reads gives the patch of no key. A
+name with a `.` is a path, so a change at the name of a path that a key reads gives the patch of
+the write to that path. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`:
+
+    type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
+    const Pets = tableEntry<OwnedPet>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
+
+    Pets.keyUpdates({ ghost: 1 })
+      type checker: refused, 'ghost' does not exist in the type of the change
+      runtime:      gives { set: {}, remove: [] }
+
+    Pets.keyUpdates({ 'owner.name': 'bob' })
+      type checker: refused, ''owner.name'' does not exist in the type of the change
+      runtime:      gives { set: { GSI1PK: { S: 'NAME#bob' } }, remove: [] }
+
+    Pets.keyUpdates({ 'owner.nick': 'bob' })
+      runtime:      gives { set: {}, remove: [] }
+
+    Pets.keyUpdates({ owner: { name: 'bob', nick: 'b' } })
+      type checker: builds
+      runtime:      gives { set: { GSI1PK: { S: 'NAME#bob' } }, remove: [] }
+
+**Effect.** In code with no type check, a change at a name that the caller wrote wrong gives a
+patch that changes no key, and no error.
+
+**Pin.** `src/codec/spec/object/codec.entryexact.spec.ts` pins the refusal of the type. None for
+the run time.
+
+---
+
+## Known: the run time refuses a tag that is a union of number literals with a text that names another rule
+
+**Observation.** A variant answers to one tag, so a tag that is a `union` of literals is refused.
+The type refuses the call at each base with one text. The run time refuses a `union` of `string`
+literals with the text of that rule. For a `union` of number literals, and for a `union` of decimal
+literals, the text of the run time says that one option names the tag with no literal. The run rows
+are behind a cast. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    discriminatedUnion('k', [
+        object({ k: union([string('a'), string('b')]), a: string }),
+        object({ k: string('c'), b: string }),
+    ])
+      type checker: refused, [discriminatedUnion] option 0 names the discriminator with a literal
+                    admitting several values
+      runtime:      throws, 'k' names 2 values at one option (a, b), and a variant answers to
+                    exactly one tag
+
+    the same call with number(1), number(2) and number(3)
+      type checker: refused, with the same text
+      runtime:      throws, every option must name 'k' with a literal
+
+    the same call with decimal('1'), decimal('2') and decimal('3')
+      type checker: refused, with the same text
+      runtime:      throws, every option must name 'k' with a literal
+
+    discriminatedUnion('k', [object({ k: decimal('1'), a: string }),
+                             object({ k: decimal('3'), b: string })])
+      type checker: builds
+      runtime:      builds
+
+**Effect.** The call does not compile. Behind a cast, the text of the throw says that one option
+names the tag with no literal, where each option names the tag with literals. The text does not
+state the rule that the call breaks.
+
+**Pin.** `src/codec/spec/union/codec.dunion.lookup.spec.ts` pins the text of the run time for one
+`string` literal of two values. None for a `union` of literals.
+
+---
+
+## Known: the type bridge holds no row for a method of an entry
+
+**Observation.** `src/codec/typeVectors.ts` prints each decision of the run time as one line for
+the type checker. Each row is a call of a codec. The generated files import the codec modules
+only, and no line calls a method of an entry. Measured 2026-11-12 with
+`EMIT_LEAN_REFUSALS=1 npx vitest --run src/codec/lean/lean.pool.spec.ts` and the name of the test
+that emits the type vectors, on the files under `formal/.pool.types/`:
+
+    the groups of the rows of rows.json
+      declaration, call, extract, exclude, path, decoded, encoded, meet, meetvalue
+
+    the lines of the generated files that hold tableEntry, or a call of key, toEntry,
+    keyUpdates or fromEntry
+      0
+
+    the modules of src/ that the generated files import
+      codec/codec, codec/attribute, codec/prisms, codec/native, codec/result
+
+**Effect.** A change of the type of a method of an entry moves no row of the type bridge. The
+bridge compares the type of such a method with the run time for no input.
+
+**Pin.** None.
+
+---
+
+## Known: a key row of the gate gives the model each component of a composite key as a constant that the emitter evaluated
+
+**Observation.** A row of the gate holds a key spec as a tree. An item row holds a plain component
+as the name and the label: the model reads the item of the row, and applies the rule of the empty
+text. A key row holds each component as a constant. The emitter of
+`src/codec/lean/lean.key.spec.ts` reads the item, applies the rule of the empty text and prints the
+label, and the model joins the constants. So the emitter states the two rules a second time.
+Measured 2026-11-12 with `EMIT_LEAN_REFUSALS=1 npx vitest --run src/codec/lean/lean.key.spec.ts`,
+on `formal/.keys.lean`:
+
+    a leaf of a key row
+      .leaf (.const 2 [some (.named "A" "1"), some (.named "B" "2")])
+
+    a leaf of an item row
+      .leaf ⟨2, [Part.named "petId" "PETID", Part.named "nick" "NICK"]⟩
+
+    the lines of the file that hold Part.named
+      12, each one a line of the item rows
+
+**Effect.** For a composite key of a key row, the model checks the join, the separator and the read
+of the key on the constants of the emitter. The read of the item and the rule of the empty text
+have their statement in the emitter, and not in the model. The header of
+`formal/Calculus/Bridge/KeyRows.lean` says that the host evaluated the parts.
+
+**Pin.** The test 'reads each outcome of the builder as the model states it' of
+`src/codec/lean/lean.key.spec.ts` pins the two rules of the emitter against the builder. The test
+fails on a tree where the emitter reads the empty text as a present part, and on a tree where the
+emitter prints the whole name as the label.
+
+---
+
+## Known: one term of the check of a key row reads no field of the row
+
+**Observation.** `keyRowOk` of `formal/Calculus/Bridge/KeyRows.lean` compares what the host did
+with what the model gives. Where the host and the model give no key, the check is the term
+`((Codec.empty : Codec).e (Attr.s "")).isNone`. The term holds no field of the row.
+`keyRowOk_iff` states the same fact in the disjunct of that arm. `nullArm_writes_nothing` of
+`formal/Calculus/Dynamo/Alg/DerivedKey.lean` proves the fact for each value. Measured 2026-11-12
+with `lake env lean` on a scratch file that imports `Calculus.Bridge.KeyRows`:
+
+    example : ((Codec.empty : Codec).e (Attr.s "")).isNone = true := rfl
+      accepted
+
+    example (r : KeyRow) : keyRowOk r = keyRowOk' r
+      accepted, where keyRowOk' is keyRowOk with true in place of the term
+
+**Effect.** The term is true for each row. The arm accepts each row where the host and the model
+give no key, and the term adds no check.
+
+**Pin.** None.
