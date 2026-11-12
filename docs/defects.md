@@ -681,8 +681,10 @@ Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 **Effect.** The first call does not compile, and the run time gives the key. A caller writes the
 empty prefix with `depth: 0`.
 
-**Pin.** None for the first call. `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty
-string of `depth: 0`.
+**Pin.** `src/Rotorise.spec.ts` pins the refusal of the type checker for the first call, with an
+expected error. `src/codec/spec/object/codec.keyempty.spec.ts` pins the empty string of the run
+time for the first call, behind a cast. `src/codec/spec/object/codec.keydepth.spec.ts` pins the
+empty string of `depth: 0`.
 
 ---
 
