@@ -51,6 +51,7 @@
  * as library calls would compare a codec that the library did not build.
  */
 import { createHash } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import { codecOfTerm } from './capabilities'
 import type { AnyCodec } from './codec'
@@ -654,6 +655,74 @@ const keptOptions = (
         : options.map((o) => kept.some((k) => sameTerm(k, o)))
 }
 
+/** The seeds of the values that a member draws. The same seeds give the same rows. */
+const VALUE_SEEDS = 40
+
+/** The distinct values that an option draws, with their literals: one draw of the option for all its rows. */
+const drawsOfOption = new WeakMap<
+    Term,
+    readonly { readonly value: unknown; readonly text: string }[]
+>()
+const drawn = (option: Term, root: string) => {
+    const known = drawsOfOption.get(option)
+    if (known !== undefined) return known
+    const codec = codecOfTerm(option)
+    const seen = new Set<string>()
+    const draws: { readonly value: unknown; readonly text: string }[] = []
+    for (let seed = 1; seed <= VALUE_SEEDS; seed++) {
+        try {
+            const value = arbitraryOf(codec, rngFrom(seed), 2)
+            const text = valueText(value, `${root} value`)
+            if (seen.has(text)) continue
+            seen.add(text)
+            draws.push({ value, text })
+        } catch (error) {
+            // a codec that cannot draw (an adapter that refuses its inner values), or a recursive option that
+            // has no finite draw (the draw overflows the stack), has no value to state
+            if (
+                error instanceof CodecError ||
+                error instanceof TypeUnemittable ||
+                error instanceof RangeError
+            )
+                continue
+            throw error
+        }
+    }
+    drawsOfOption.set(option, draws)
+    return draws
+}
+
+/**
+ * The values of an option that the slice keeps and that the slice refuses, each as a literal, for a
+ * member whose drawn values lie on both sides of the narrowing. The member row states all values of
+ * the option, and its verdict is right: a slice that keeps a narrowed copy of the option does not
+ * keep the option. A type that is too narrow still refuses the values that the slice keeps, and the
+ * member row cannot see it, so a value row states one value. A value is kept where the sliced codec
+ * encodes it and the decode of the stored value gives the value back. A value is refused where
+ * `encode` gives a `CodecError` value. A member whose drawn values all lie on one side has no value
+ * row: the member row states that verdict.
+ */
+const valuesOf = (
+    run: AnyCodec,
+    option: Term,
+    root: string,
+): readonly { readonly keeps: boolean; readonly text: string }[] => {
+    const values: { readonly keeps: boolean; readonly text: string }[] = []
+    for (const { value, text } of drawn(option, root)) {
+        const stored = run.encode(value as never)
+        if (failed(stored)) {
+            values.push({ keeps: false, text })
+            continue
+        }
+        const back = run.decode(stored as never)
+        if (!failed(back) && isDeepStrictEqual(back, value))
+            values.push({ keeps: true, text })
+    }
+    return values.some((v) => v.keeps) && values.some((v) => !v.keeps)
+        ? values
+        : []
+}
+
 /** The run-time slice, or nothing where the run time refuses the pattern. */
 const sliced = (
     run: (pattern: AnyCodec) => AnyCodec,
@@ -950,7 +1019,10 @@ const sliceRoot = (
                 },
                 `const r = ${op}(C.${p.full('root')}, ${pattern.source})`,
             )
-            if (kept !== undefined)
+            if (kept !== undefined) {
+                const after =
+                    dissection === undefined ? callRow : [callRow, dissection]
+                const run = slice.codec[op](pattern.codec)
                 keptOptions(options, kept).forEach((keeps, i) => {
                     const expect = keeps ? 'accept' : 'refuse'
                     assert(
@@ -958,14 +1030,31 @@ const sliceRoot = (
                         {
                             id: rowId(op, expect, root, `${text} member ${i}`),
                             expect,
-                            after:
-                                dissection === undefined
-                                    ? callRow
-                                    : [callRow, dissection],
+                            after,
                         },
                         `const m${i}: Decoded<typeof r> = C.${p.full(`m${i}`)}`,
                     )
+                    valuesOf(run, options[i] as Term, root).forEach(
+                        (value, n) => {
+                            const verdict = value.keeps ? 'accept' : 'refuse'
+                            assert(
+                                b,
+                                {
+                                    id: rowId(
+                                        'value',
+                                        verdict,
+                                        root,
+                                        `${text} member ${i} value ${n}`,
+                                    ),
+                                    expect: verdict,
+                                    after,
+                                },
+                                `const v${i}_${n}: Decoded<typeof r> = ${value.text}`,
+                            )
+                        },
+                    )
                 })
+            }
             b.lines.push('}')
         }
     return { root, declarations: p.declarations, checks: b }

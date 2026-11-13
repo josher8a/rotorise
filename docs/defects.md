@@ -83,9 +83,15 @@ value that the run time refuses.
 **Pin.** `src/codec/spec/union/codec.slice.spec.ts`: an object pattern reads each option of a union
 entry that a `ref` names, an option that names another union entry, an option that is an entry of
 another scope, and a base entry. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 1 id of the group exclude, for the case of exclude
-above. The rows of extract hold no id: the row of the pool for that member states a refusal, where
-the run time keeps the value. No test pins the recursive case of extract.
+formal/scripts/type_bridge_baseline.txt, holds 3 ids for the case above. The id of the group exclude
+is the member row of the exclusion: the row states that the type keeps the whole option Holder, and
+the run time does not keep it. The two ids of the group value are one drawn value that fits the
+pattern. The id with accept states that extract gives the stored value, that the decode gives the
+value back, and that the type refuses the value, because Decoded is never. The id with refuse states
+that exclude gives a CodecError for the value, and that the type admits the value. The member rows
+of extract hold no id: a member row states all values of the option, the run time keeps a narrowed
+copy that holds some of them, and the verdict of the row, refuse, is right. No test pins the
+recursive case of extract.
 
 ---
 

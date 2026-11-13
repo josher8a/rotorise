@@ -18,6 +18,10 @@
 #   meet         the call of `meet` on two codecs: `accept` where the run time gives a codec,
 #                `refuse` where the run time gives none.
 #   meetvalue    one sample value of the codec that `meet` gives, assigned to `Decoded` of it.
+#   value        one value of an option that a slice keeps or refuses, assigned to `Decoded` of the result of the
+#                slice. A member whose drawn values lie on both sides of the narrowing has such rows. `accept`: the
+#                sliced codec encodes the value and the decode gives the value back. `refuse`: `encode` gives a
+#                `CodecError` value. The member row of the slice states all values of the option.
 #   declaration  one constant of the generated codecs file: the run time built each one.
 #                A `dissection` declaration is a union with a discriminator. Where the type refuses it, each call
 #                row and member row of that root reads it (`after`), so those rows have no verdict.
@@ -271,3 +275,5 @@ toEntry|refuse|f1510f52|T_plain_list2.toEntry(blankId).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(sep).call
 toItem|refuse|4977ab43|T_plain_codecItem.toItem(blank).call
 toItem|refuse|4977ab43|T_plain_codecItem.toItem(sep).call
+value|accept|51086640d5|extract({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0
+value|refuse|51086640d5|exclude({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0

@@ -2253,6 +2253,47 @@ describe('the generated pool, against the model', () => {
         ])
     })
 
+    it('states a value that a slice keeps as an accept row and a value that it refuses as a refuse row, for a member whose drawn values lie on both sides of the narrowing', () => {
+        const rows: readonly {
+            readonly id: string
+            readonly after?: unknown
+        }[] = JSON.parse(
+            typeFiles().find(([file]) => file === 'rows.json')?.[1] ?? '[]',
+        )
+        const values = rows.filter((row) => row.id.startsWith('value|'))
+        const members = new Set(
+            values.map((row) =>
+                row.id
+                    .replace(/ value \d+$/, '')
+                    .split('|')
+                    .slice(2)
+                    .join('|'),
+            ),
+        )
+        expect({
+            accept: values.filter((row) => row.id.startsWith('value|accept|'))
+                .length,
+            refuse: values.filter((row) => row.id.startsWith('value|refuse|'))
+                .length,
+            members: members.size,
+            // the extract of the recursive union entry: the type refuses the value that the run time keeps
+            recursiveEntryAccept: values.filter(
+                (row) =>
+                    row.id.startsWith('value|accept|') &&
+                    row.id.includes('kids: object({ kind: string("leaf") })'),
+            ).length,
+            // each value row reads the call row of its slice
+            withoutAfter: values.filter((row) => row.after === undefined)
+                .length,
+        }).toEqual({
+            accept: 53,
+            refuse: 53,
+            members: 10,
+            recursiveEntryAccept: 4,
+            withoutAfter: 0,
+        })
+    })
+
     it('holds one row for each entry of the defects document that the pool reaches: a recursive union entry, two adapters of one type, an object with a rest, a number tag, and a path below two options with a function of a caller', () => {
         const rows: readonly {
             readonly id: string
@@ -2281,7 +2322,7 @@ describe('the generated pool, against the model', () => {
             // a clause below a union of two options that hold one function of a caller
             callerClause: holding('["r", "op"]), object({ x: string })), [])'),
         }).toEqual({
-            recursiveEntry: 6,
+            recursiveEntry: 14,
             meetRefuse: 4,
             rest: 1,
             numberTag: 1,
