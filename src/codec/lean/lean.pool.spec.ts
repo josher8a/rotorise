@@ -2253,6 +2253,90 @@ describe('the generated pool, against the model', () => {
         ])
     })
 
+    /**
+     * **The site of a refused path is the first prefix where the walk gives none.** The model's
+     * fold gives none where a segment has no answer, which is the kind `vacant` or `refused`. The
+     * row states the column of that hop. A path of the kind `ambiguous` or `someVariants` has a
+     * frontier and refuses on use, so the whole tuple is the site. A prefix of those kinds is no
+     * site: the path `u.k.z` is ambiguous at `u.k` and gives none at `z`. The row has no
+     * directive, so the one compile of the program gives the verdict and the first error.
+     */
+    it('puts the error of a refused path at the first prefix where the walk gives none, and at the whole path where the path refuses on use', () => {
+        const codec = erase(
+            object({
+                a: string,
+                u: union([
+                    object({ k: string('x'), n: string }),
+                    object({ k: string('y'), n: string }),
+                ]),
+            }),
+        )
+        const paths: (readonly PathStep[])[] = [
+            ['a', 'a'],
+            ['u', 'k'],
+            ['u', 'k', 'z'],
+            ['u', { narrow: object({ k: string('z') }) }],
+        ]
+        const files = typeVectorFiles({
+            slices: [],
+            paths: [{ name: 'path_site', codec, paths }],
+            meets: [],
+            foreign: [],
+            clauses: [],
+        })
+        const text = (name: string) =>
+            files.find(([file]) => file === name)?.[1] ?? ''
+        const rows: readonly {
+            readonly id: string
+            readonly file: string
+            readonly line: number
+            readonly hop?: number
+            readonly bare?: boolean
+        }[] = JSON.parse(text('rows.json'))
+        const sited = rows
+            .filter((row) => row.id.startsWith('path|refuse|'))
+            .map((row) => {
+                const lines = text(row.file).split('\n')
+                return {
+                    call: row.id
+                        .split('|')
+                        .slice(3)
+                        .join('|')
+                        .replace(/C\.\w+/, 'C.w'),
+                    site: (lines[row.line - 1] ?? '').slice((row.hop ?? 1) - 1),
+                    directive:
+                        lines[row.line - 2]?.includes('@ts-expect-error'),
+                    bare: row.bare,
+                }
+            })
+        expect(sited).toEqual([
+            {
+                call: 'at(C.w, ["r", "a", "a"])',
+                site: '"a"])',
+                directive: false,
+                bare: true,
+            },
+            {
+                call: 'at(C.w, ["r", "u", "k"])',
+                site: '["r", "u", "k"])',
+                directive: false,
+                bare: true,
+            },
+            {
+                call: 'at(C.w, ["r", "u", "k", "z"])',
+                site: '"z"])',
+                directive: false,
+                bare: true,
+            },
+            {
+                call: 'at(narrow(at(C.w, ["r", "u"]), object({ k: string("z") })), [])',
+                site: 'object({ k: string("z") })), [])',
+                directive: false,
+                bare: true,
+            },
+        ])
+    })
+
     it('states a value that a slice keeps as an accept row and a value that it refuses as a refuse row, for a member whose drawn values lie on both sides of the narrowing', () => {
         const rows: readonly {
             readonly id: string

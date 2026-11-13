@@ -5,7 +5,8 @@
  * same decisions to the type checker. Each root of the pool prints as library calls in a generated
  * TypeScript file. Each check states one decision of the run time as one line. Where the run time
  * accepts, the line compiles. Where the run time refuses, the line sits under `@ts-expect-error`.
- * The checker in `formal/scripts/type_bridge.py` compiles the files, maps each error to its row,
+ * A refused path row has no directive: the checker reads the error of its line, so the one compile
+ * gives the verdict and the site. The checker in `formal/scripts/type_bridge.py` compiles the files, maps each error to its row,
  * and compares the set of disagreements with a list of known disagreements.
  *
  * ── the roots ─────────────────────────────────────────────────────────────────────────────────
@@ -106,6 +107,10 @@ export type TypeRow = {
     readonly line: number
     readonly expect: Verdict
     readonly after?: string | readonly string[]
+    /** A refusal with no directive on the line before: the error of the line is the verdict. */
+    readonly bare?: boolean
+    /** The 1-based column of the line where the first error of a bare row must start. */
+    readonly hop?: number
 }
 
 /* ── lexical ─────────────────────────────────────────────────────────────────────────────── */
@@ -627,6 +632,12 @@ const assert = (b: Block, row: Omit<Check, 'at'>, text: string): void => {
     b.checks.push({ ...row, at: b.lines.length })
 }
 
+/** A refusal that no directive hides: the checker reads the error of the line and where it starts. */
+const assertBare = (b: Block, row: Omit<Check, 'at'>, text: string): void => {
+    b.lines.push(text)
+    b.checks.push({ ...row, at: b.lines.length })
+}
+
 const hash = (text: string): string =>
     createHash('sha256').update(text).digest('hex').slice(0, 10)
 
@@ -1114,6 +1125,25 @@ const foreignAt = (codec: AnyCodec): number | string | undefined => {
     return failed(codec.encode(foreign as never)) ? foreign : undefined
 }
 
+/**
+ * **The number of steps of the shortest prefix where the walk of `at` gives none**, or nothing.
+ * The model's fold gives none where a segment has no answer: the host decision of the prefix is
+ * `vacant` or `refused`. Such a prefix refuses at its last step, and each longer prefix refuses
+ * too, so the first one is the hop that the path cannot take. A path of the kind `someVariants`
+ * or `ambiguous` gives none at no prefix: the fold reaches a frontier, and the refusal is on use.
+ * Another prefix may be in those kinds and a longer path leaves them, so those kinds find no hop.
+ */
+const noneAt = (
+    codec: AnyCodec,
+    path: readonly PathStep[],
+): number | undefined => {
+    for (let n = 1; n <= path.length; n++) {
+        const at = hostAt(codec, path.slice(0, n)).kind
+        if (at === 'vacant' || at === 'refused') return n
+    }
+    return undefined
+}
+
 /** One path root: the codec, the item that holds it at `r`, and each path. */
 const pathRoot = (
     vectors: PathVectors,
@@ -1129,32 +1159,70 @@ const pathRoot = (
     /*
      * The call of a path is the steps themselves: each run of segments is one `at`, and each
      * clause is one `narrow`. A path that ends at a clause ends in `at(…, [])`, which checks that
-     * one codec stands at the place.
+     * one codec stands at the place. The text comes with the offset of each step, which is the
+     * start of an element of a tuple or of the object of a clause, and with the offset of the last
+     * tuple. A refusal on use starts at the last tuple.
      */
-    const spelled = (path: readonly PathStep[]): string => {
+    const spelled = (path: readonly PathStep[]) => {
         let call = `C.${p.full('w')}`
-        let run: string[] = [quoted('r')]
-        for (const s of path) {
+        let offsets: number[] = []
+        let run: { text: string; step: number }[] = [
+            { text: quoted('r'), step: -1 },
+        ]
+        // the offsets of the elements of a run, from the start of the first element
+        const placed = (from: number, into: number[]): void => {
+            let at = from
+            for (const { text, step } of run) {
+                if (step >= 0) into[step] = at
+                at += text.length + ', '.length
+            }
+        }
+        path.forEach((s, step) => {
             if (typeof s !== 'object') {
-                run.push(typeof s === 'number' ? String(s) : quoted(s))
-                continue
+                run.push({
+                    text: typeof s === 'number' ? String(s) : quoted(s),
+                    step,
+                })
+                return
             }
             const clause = Object.entries(s.narrow.spec)
                 .map(([k, c]) => `${keyText(k)}: ${p.clause(c)}`)
                 .join(', ')
-            call = `narrow(${run.length === 0 ? call : `at(${call}, [${run.join(', ')}])`}, object({ ${clause} }))`
+            const head = run.length === 0 ? 'narrow(' : 'narrow(at('
+            const tuple = run.map((r) => r.text).join(', ')
+            const mid = run.length === 0 ? '' : `, [${tuple}])`
+            const moved = offsets.map((o) => o + head.length)
+            placed(head.length + call.length + ', ['.length, moved)
+            moved[step] = head.length + call.length + mid.length + ', '.length
+            call = `${head}${call}${mid}, object({ ${clause} }))`
+            offsets = moved
             run = []
+        })
+        const head = 'at('
+        const moved = offsets.map((o) => o + head.length)
+        placed(head.length + call.length + ', ['.length, moved)
+        return {
+            call: `at(${call}, [${run.map((r) => r.text).join(', ')}])`,
+            offsets: moved,
+            tuple: head.length + call.length + ', '.length,
         }
-        return `at(${call}, [${run.join(', ')}])`
     }
     const b = block()
     for (const path of vectors.paths) {
         const host = hostAt(vectors.codec, path)
         const expect = host.kind === 'resolved' ? 'accept' : 'refuse'
-        const call = spelled(path)
+        const spelling = spelled(path)
+        const call = spelling.call
         const text = call
         const id = rowId('path', expect, root, text)
-        assert(b, { id, expect }, call)
+        if (expect === 'accept') assert(b, { id, expect }, call)
+        else {
+            const none = noneAt(vectors.codec, path)
+            const start =
+                (none === undefined ? undefined : spelling.offsets[none - 1]) ??
+                spelling.tuple
+            assertBare(b, { id, expect, bare: true, hop: start + 1 }, call)
+        }
         if (host.kind !== 'resolved') continue
         const sample = decodedSample(host.codec, root)
         if (sample !== undefined)

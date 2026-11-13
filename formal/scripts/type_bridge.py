@@ -6,17 +6,24 @@ decision of the run time, and a rows file, which names the row of each check. Th
 `formal/.entry.types/` in the same form: the methods of an entry, one program for the pool of the
 entries. Each directory has its own rows, its own programs and one owner spec. A check where the
 run time accepts is a plain line. A check where the run time refuses is a line under
-`@ts-expect-error`. This script compiles the slice program beside the path programs, and the path
+`@ts-expect-error`, and a refused path row is a bare line (the row has `bare`). This script compiles the slice program beside the path programs, and the path
 programs one after another, so the peak memory holds one path program. Each program holds the
 codecs file. The script maps each error to its row:
 
   an `accept` row with an error         the type refuses what the run time accepts
   a `refuse` row whose directive is     the type accepts what the run time refuses
-  unused (TS2578)
+  unused (TS2578), or a bare `refuse`
+  row with no error on its line
 
 A row with `after` reads the result of other rows: `after` is an id or a list of ids. Where one of
 those rows disagrees, the type of the result is not the type of the run time, and the script reads
 no verdict at the row. The script follows no chain, so a row names each row that it reads.
+
+A bare `refuse` row of a path program states the column where its first error starts (`hop`). The
+site is the first prefix where the walk of `at` gives none: the element of the tuple or the object
+of the clause at the last step of the prefix. A path that refuses on use (the frontier holds a
+`never` codec, or two codecs) has the whole tuple as the site. The one compile of the program gives
+the verdict and the site. An error that starts elsewhere is the id `site|<id of the row>`.
 
 A `refuse` row of the entry pool can state where its error starts (`at`, a text of the line) and the
 rule that the message of the library holds (`rule`). The directive hides the error, so the script
@@ -110,9 +117,14 @@ def parse(directory, program, output, hard):
 def disagreements(rows, errors, hard):
     """The ids of the rows where the type checker and the run time disagree."""
     at = {(r["file"], r["line"]): r for r in rows}
-    directive = {(r["file"], r["line"] - 1): r for r in rows if r["expect"] == "refuse"}
+    directive = {(r["file"], r["line"] - 1): r for r in rows if r["expect"] == "refuse" and not r.get("bare")}
+    bare = {(r["file"], r["line"]): r for r in rows if r.get("bare")}
+    first = {}
     failing = set()
     for file, line, col, code, message in errors:
+        if (file, line) in bare:
+            first[(file, line)] = min(col, first.get((file, line), col))
+            continue
         if code == "TS2578" and (file, line) in directive:
             failing.add(directive[(file, line)]["id"])
             continue
@@ -124,8 +136,22 @@ def disagreements(rows, errors, hard):
             failing.add(row["id"])
             continue
         hard.append(f"{file}({line},{col}): {code}: an error at no row: {message}")
+    failing |= {r["id"] for key, r in bare.items() if key not in first}
     unread = {r["id"] for r in rows if any(a in failing for a in as_list(r.get("after")))}
-    return failing - unread
+    return failing - unread, first
+
+
+def bare_sites(rows, failing, first):
+    """The ids `site|<id>` of the bare rows whose first error starts at another column than `hop`.
+    A row whose `after` row disagrees has no verdict."""
+    return {
+        "site|" + r["id"]
+        for r in rows
+        if r.get("bare")
+        and (r["file"], r["line"]) in first
+        and first[(r["file"], r["line"])] != r["hop"]
+        and not any(a in failing for a in as_list(r.get("after")))
+    }
 
 
 def site_ids(rows, failing, hard):
@@ -234,8 +260,9 @@ def main():
         if code not in (0, 1, 2):
             hard.append(f"{program}: tsc exit {code}")
         errors.update(parse(directory, program, output, hard))
-    failing = disagreements(rows, sorted(errors), hard)
+    failing, first = disagreements(rows, sorted(errors), hard)
     failing |= site_ids(rows, failing, hard)
+    failing |= bare_sites(rows, failing, first)
     header, baseline = load_baseline()
     new = sorted(failing - baseline)
     fallen = baseline - failing

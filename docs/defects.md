@@ -394,6 +394,60 @@ group path, for the call above with a refinement of a caller predicate.
 
 ---
 
+## Known: the type of at refuses the whole path where the run time refuses at a position of a list
+
+**Observation.** The run time walks the segments of a path, and it refuses at the first segment that
+has no answer. The type checks a tuple path by an intersection with the parameter, so a segment that
+the place does not offer meets the refusal on the element. A place that is a list always offers a
+position, because the type holds no length. So the type refuses a position that the list does not
+hold at the end of the path, on the whole tuple, and the error names no element. Measured 2026-11-13
+with `tsc --noEmit` on TypeScript 7 (TypeScript 6 prints the same four errors) and with a
+test run:
+
+    const Plain = item(object({ xs: list(string, number) }))
+    at(Plain, ['xs', 2])
+      type checker: refused at column 11, the tuple, and not at column 18, the position:
+                    the path is vacant: no one codec stands at the path
+      runtime:      throws a CodecError, kind vacant: no attribute is declared at 'xs[2]'
+
+    const Suffix = item(object({ xs: list(string, spread(number), boolean) }))
+    at(Suffix, ['xs', 1])
+      type checker: refused at column 12, the tuple, and not at column 19, the position:
+                    the path is refused: no one codec stands at the path
+      runtime:      returns a codec, and decode gives a CodecError value, kind refused: a path
+                    cannot go to position 1 of a list with a suffix
+
+    const Pets = item(object({ u: union([union([object({ k: string('a'), m: string }),
+        list(string, spread(number), boolean)]), nullValue]) }))
+    at(narrow(at(Pets, ['u']), object({ k: string('a') })), [1])
+      type checker: refused at column 57, the tuple, and not at column 58, the position:
+                    the path is refused: no one codec stands at the path
+      runtime:      returns a codec, and decode gives a CodecError value, kind refused: a path
+                    cannot go to position 1 of a list with a suffix
+
+    const Name = item(object({ xs: list(object({ b: optional(never) }), spread(string)) }))
+    at(Name, ['xs', 0, 'b'])
+      type checker: refused at column 10, the tuple, and not at column 20, the name:
+                    the path is vacant: no one codec stands at the path
+      runtime:      throws a CodecError, kind vacant: no attribute is declared at 'xs[0].b'
+
+The clause keeps the union that holds the list, because the walk of a clause reads one level of
+options. A position that the object option does not hold, with no list in the union, meets the
+refusal on the element: the place offers no such segment. The verdict of the type agrees with the
+run time in each call above.
+
+**Effect.** Each call does not compile, and the run time refuses each call. The error of the type
+starts at the tuple. An editor marks the whole path, and not the position that the list lacks.
+
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 135 ids
+with the prefix site of the group path. Each id states that the first error of a refused path row
+starts at the tuple, where the run time refuses at one hop. 100 ids end at a position of a plain
+path, 32 put a position after a clause, and 3 end at a name. The rows of the pool state the column
+of the hop. A fix of the type, which offers a position only where the list holds it, moves the
+error to the element, and the ids fall from the baseline.
+
+---
+
 ## Suspected: a term that no former built is judged at its top node, at each option of a union and at the element of a set only
 
 **Observation.** The model states the obligation of each operation at each position of a term
