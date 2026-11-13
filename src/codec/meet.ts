@@ -379,13 +379,15 @@ export type FoldMeet<Fs extends readonly unknown[]> = Fs extends readonly [
  * through a codec of its own. The run time meets the open block, and the type of a meet reads no
  * open block, so the type refuses the factor at the call.
  */
-export type ValidateMeet<Fs extends readonly unknown[]> = [
-    AnyOpen<Fs[number]>,
-] extends [never]
-    ? HeldRefusal<Fs> extends true
-        ? ErrorMessage<'[meet] a factor holds a `held` or an older part that fits neither side, and the two parts are apart in neither view. An opaque function decides which common rows relate one value, and the host cannot read the function. Meet only a part that one side fits'>
-        : unknown
-    : ErrorMessage<'[meet] a factor holds undeclared names through a `rest` codec, and the type of a meet reads no open block. Close every factor: give it no open key entry'>
+export type ValidateMeet<Fs extends readonly unknown[]> = Fs extends
+    | readonly []
+    | readonly [unknown]
+    ? ErrorMessage<'[meet] a meet is taken of two or more factors, and fewer were given'>
+    : [AnyOpen<Fs[number]>] extends [never]
+      ? HeldRefusal<Fs> extends true
+          ? ErrorMessage<'[meet] a factor holds a `held` or an older part that fits neither side, and the two parts are apart in neither view. An opaque function decides which common rows relate one value, and the host cannot read the function. Meet only a part that one side fits'>
+          : unknown
+      : ErrorMessage<'[meet] a factor holds undeclared names through a `rest` codec, and the type of a meet reads no open block. Close every factor: give it no open key entry'>
 
 /**
  * **Whether the fold of a meet reaches a `held` or an older part that the run time refuses**, read

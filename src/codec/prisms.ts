@@ -103,6 +103,14 @@ export type ConstantOf<C> = TermOf<C> extends [
       : never
 export type ConstantPair<V, D> = IsUnion<V> extends true ? never : [V, D]
 
+/** Nothing, or why a literal former names no value: a literal admits one of a non-empty set. */
+export type SomeValue<
+    Former extends string,
+    L extends readonly unknown[],
+> = L extends readonly []
+    ? ErrorMessage<`[${Former}] a literal admits one of a non-empty set of values, and \`${Former}()\` names none; pass the values, or use \`${Former}\` itself if anything is admissible`>
+    : unknown
+
 /**
  * A string, as `S`. Exact in both directions: DynamoDB does not normalise strings.
  *
@@ -124,7 +132,7 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
             only: T,
         ): AttributeCodec<T, Attribute<'S'>> & TermMark<LitT<'string', T>>
         <const L extends readonly string[]>(
-            ...allowed: L
+            ...allowed: L & SomeValue<'string', L>
         ): AttributeCodec<L[number], Attribute<'S'>> &
             TermMark<LitsT<'string', L>>
         readonly set: {
@@ -174,7 +182,7 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
         // a tuple, because inference unions no two object candidates: `readonly T[]` reads `T` off
         // the first numeral, and refuses a second numeral with another text
         <const T extends readonly DynamoNumber[]>(
-            ...allowed: T
+            ...allowed: T & SomeValue<'dynamoNumber', T>
         ): AttributeCodec<T[number], Attribute<'N'>> &
             TermMark<LitsT<'number', NumTexts<T>>>
         readonly set: {
@@ -229,7 +237,9 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> &
         ): AttributeCodec<T, Attribute<'N'>> &
             TermMark<HeldT<LitT<'number', T>, LitT<'string', T>, 'decimalText'>>
         <const L extends readonly string[]>(
-            ...allowed: L & { [I in keyof L]: StoredSpelling<L[I]> }
+            ...allowed: L & {
+                [I in keyof L]: StoredSpelling<L[I]>
+            } & SomeValue<'decimal', L>
         ): AttributeCodec<L[number], Attribute<'N'>> &
             TermMark<
                 HeldT<LitsT<'number', L>, LitsT<'string', L>, 'decimalText'>
@@ -275,7 +285,7 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> &
         ): AttributeCodec<T, Attribute<'N'>> &
             TermMark<FloatT<LitT<'number', FloatText<T>>>>
         <const L extends readonly number[]>(
-            ...allowed: L
+            ...allowed: L & SomeValue<'number', L>
         ): AttributeCodec<L[number], Attribute<'N'>> &
             TermMark<FloatT<LitsT<'number', FloatTexts<L>>>>
         readonly set: {
@@ -308,7 +318,7 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
             only: T,
         ): AttributeCodec<T, Attribute<'BOOL'>> & TermMark<LitT<'boolean', T>>
         <const L extends readonly boolean[]>(
-            ...allowed: L
+            ...allowed: L & SomeValue<'boolean', L>
         ): AttributeCodec<L[number], Attribute<'BOOL'>> &
             TermMark<LitsT<'boolean', L>>
     }
@@ -355,8 +365,8 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
             only: Uint8Array,
         ): AttributeCodec<Uint8Array, Attribute<'B'>> &
             TermMark<LitT<'binary', string>>
-        (
-            ...allowed: readonly Uint8Array[]
+        <const L extends readonly Uint8Array[]>(
+            ...allowed: L & SomeValue<'binary', L>
         ): AttributeCodec<Uint8Array, Attribute<'B'>> &
             TermMark<['union', LitT<'binary', string>[]]>
         readonly set: {

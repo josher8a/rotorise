@@ -109,6 +109,28 @@ describe('the meet of two closed objects', () => {
     })
 })
 
+describe('a meet is taken of two or more factors', () => {
+    /**
+     * **A meet of fewer than two factors is no meet.** The fold needs a head and a rest, so the
+     * constructor refuses. The type refuses the exact tuple, and a list whose length the type does
+     * not know reaches the same throw at run time.
+     */
+    it('is refused at the type for no factor and for one factor, and takes two', () => {
+        // @ts-expect-error a meet is taken of two or more factors
+        expect(() => meet()).toThrow(/two or more factors/)
+        // @ts-expect-error a meet is taken of two or more factors
+        expect(() => meet(Pet)).toThrow(/two or more factors/)
+        expect(() => meet(Pet, Price)).not.toThrow()
+    })
+
+    it('still throws for a list whose length the type does not know', () => {
+        const none: readonly AnyCodec[] = []
+        const one: readonly AnyCodec[] = [Pet]
+        expect(() => meet(...none)).toThrow(/two or more factors/)
+        expect(() => meet(...one)).toThrow(/two or more factors/)
+    })
+})
+
 describe('the meet of two objects at a shared name', () => {
     /**
      * **A shared name holds the meet of its two fields**, as `A & B` reads it: the values that both

@@ -299,41 +299,42 @@ other rows of the spec, which agree on both compilers.
 
 ---
 
-## Known: the type of meet builds a call of fewer than two factors
+## Known: the type of meet builds a list of unknown length that holds fewer than two factors
 
-**Observation.** The run time refuses a meet of fewer than two factors at construction. The type of
-`meet` takes a tuple of codecs of any length, and states no lower bound. Measured 2026-11-10 with
-`tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+**Observation.** The run time refuses a meet of fewer than two factors at construction. The type
+of `meet` refuses the exact tuple of no factor and of one factor. A list whose length the type does
+not know states no lower bound. Measured 2026-11-13 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`, where `none` is a `readonly AnyCodec[]` that holds no factor and `one` holds
+one:
 
-    meet(string)
-    meet()
+    meet(...none)
+    meet(...one)
       type checker: builds
       runtime:      throws, a meet is taken of two or more factors, and fewer were given
 
 **Effect.** The call builds in the type and throws at construction.
 
-**Pin.** None. No test calls `meet` with fewer than two factors.
+**Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the refusal of the exact tuple at the type
+and the throw for a list of unknown length.
 
 ---
 
-## Known: the type of a literal former builds a literal of no value
+## Known: the type of a literal former builds a list of unknown length that names no value
 
 **Observation.** The run time refuses a literal that names no value at construction. The type of
-each literal former takes the values as a rest parameter, and states no lower bound. Measured
-2026-11-10 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+each literal former refuses the exact empty call. A list whose length the type does not know
+states no lower bound. Measured 2026-11-13 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`, where `none` is a `never[]`:
 
-    string()   number()   decimal()   boolean()   binary()
+    string(...none)   number(...none)   decimal(...none)   dynamoNumber(...none)
+    boolean(...none)  binary(...none)
       type checker: builds
       runtime:      throws, a literal admits one of a non-empty set of values
 
-The message prints the base of the literal. The base of `decimal` is `number`, so the message of
-`decimal()` names `number()`.
+**Effect.** The call builds in the type and throws at construction.
 
-**Effect.** The call builds in the type and throws at construction. The message of `decimal()`
-names a former that the caller did not call.
-
-**Pin.** `src/codec/spec/literal/codec.literalbase.spec.ts` pins the throw at each base. No test
-pins the text of the message.
+**Pin.** `src/codec/spec/literal/codec.literalbase.spec.ts` pins the refusal of the empty call at
+the type, and pins the throw and the former that the message names, for each former.
 
 ---
 

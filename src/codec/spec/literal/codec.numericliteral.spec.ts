@@ -268,7 +268,8 @@ describe('a literal with no alternatives', () => {
      * silently got `string`, and there is no term in the model that denotes it.
      */
     it('is refused, rather than admitting everything', () => {
-        expect(() => string()).toThrow(CodecError)
+        const none: never[] = []
+        expect(() => string(...none)).toThrow(CodecError)
     })
 
     /** And the honest caller the type could not be tightened for is still honest. */

@@ -147,10 +147,11 @@ export const setOf =
 export const someAlternatives = <T extends LiteralValue>(
     base: LiteralBase,
     allowed: readonly T[],
+    former: string = base,
 ): readonly T[] => {
     if (allowed.length === 0) {
         throw new CodecError(
-            `a literal admits one of a non-empty set of values, and \`${base}()\` names none; pass the values, or use \`${base}\` itself if anything is admissible`,
+            `a literal admits one of a non-empty set of values, and \`${former}()\` names none; pass the values, or use \`${former}\` itself if anything is admissible`,
         )
     }
     // the values rather than the indices, so the pair is two `T`s and not two lookups the checker
@@ -160,7 +161,7 @@ export const someAlternatives = <T extends LiteralValue>(
             if (sameLiteral(one, other)) {
                 const at = i + 1 + after
                 throw new CodecError(
-                    `a literal's alternatives are a *set*, and \`${base}()\` names the same value at positions ${i} and ${at}; the model's \`NEFinset\` cannot hold it twice, and a repeat makes a two-value literal that admits one — which stops it reading as a constant`,
+                    `a literal's alternatives are a *set*, and \`${former}()\` names the same value at positions ${i} and ${at}; the model's \`NEFinset\` cannot hold it twice, and a repeat makes a two-value literal that admits one — which stops it reading as a constant`,
                 )
             }
         }
@@ -169,9 +170,9 @@ export const someAlternatives = <T extends LiteralValue>(
 }
 
 export const literalCapability =
-    (base: LiteralBase) =>
+    (base: LiteralBase, former: string = base) =>
     (...allowed: readonly LiteralValue[]) =>
-        literalCodec(base, someAlternatives(base, allowed))
+        literalCodec(base, someAlternatives(base, allowed, former))
 
 /**
  * **The capabilities that a term decides**, added to the codec that `codecOfTerm` denotes for it.
@@ -228,10 +229,13 @@ export const literalCallOf = (
 ): ((...allowed: never[]) => AnyCodec) | undefined => {
     switch (term.kind) {
         case 'string':
-        case 'number':
         case 'boolean':
         case 'binary':
             return literalCapability(term.kind) as (
+                ...allowed: never[]
+            ) => AnyCodec
+        case 'number':
+            return literalCapability('number', 'dynamoNumber') as (
                 ...allowed: never[]
             ) => AnyCodec
         case 'held':
@@ -295,7 +299,7 @@ export const storedOnly = (value: string): Result<DynamoNumber> =>
 export const decimalCall = (...allowed: readonly string[]) => {
     const stored = allowed.map((one) => orThrow(storedOnly(one)))
     return numericAdapter<string>(
-        termOf(literalCapability('number')(...stored) as AnyCodec),
+        termOf(literalCapability('number', 'decimal')(...stored) as AnyCodec),
         // the held side is the texts the adapter hands the caller, so the view is exact
         literalTermOf(
             'string',

@@ -35,6 +35,7 @@ import {
     valueKinds,
 } from '../../codec'
 import { readsBack } from '../../denote'
+import { dynamoNumber } from '../../prisms'
 import { checkRoundTrip } from '../../testing'
 
 describe('the base is named, not inferred', () => {
@@ -189,11 +190,42 @@ describe('the two bases that were unreachable', () => {
 
 describe('what each base refuses', () => {
     it('refuses no alternatives at all, naming the constructor that named none', () => {
+        // a list whose length the type does not know still throws
+        const none: never[] = []
+        expect(() => string(...none)).toThrow(/`string\(\)` names none/)
+        expect(() => number(...none)).toThrow(/`number\(\)` names none/)
+        expect(() => decimal(...none)).toThrow(/`decimal\(\)` names none/)
+        expect(() => dynamoNumber(...none)).toThrow(
+            /`dynamoNumber\(\)` names none/,
+        )
+        expect(() => boolean(...none)).toThrow(/`boolean\(\)` names none/)
+        expect(() => binary(...none)).toThrow(/`binary\(\)` names none/)
+    })
+
+    it('refuses the empty call of each former at the type, and takes a literal', () => {
+        // @ts-expect-error a literal admits one of a non-empty set of values
         expect(() => string()).toThrow(CodecError)
+        // @ts-expect-error a literal admits one of a non-empty set of values
         expect(() => number()).toThrow(CodecError)
+        // @ts-expect-error a literal admits one of a non-empty set of values
         expect(() => decimal()).toThrow(CodecError)
+        // @ts-expect-error a literal admits one of a non-empty set of values
+        expect(() => dynamoNumber()).toThrow(CodecError)
+        // @ts-expect-error a literal admits one of a non-empty set of values
         expect(() => boolean()).toThrow(CodecError)
+        // @ts-expect-error a literal admits one of a non-empty set of values
         expect(() => binary()).toThrow(CodecError)
+        expect(string('A', 'B').encode('A')).toEqual({ S: 'A' })
+        expect(number(1).encode(1)).toEqual({ N: '1' })
+        expect(decimal('1').encode('1')).toEqual({ N: '1' })
+        expect(boolean(true).encode(true)).toEqual({ BOOL: true })
+    })
+
+    it('names the former that the duplicate repeats a value of', () => {
+        expect(() => decimal('1', '1')).toThrow(
+            /`decimal\(\)` names the same value/,
+        )
+        expect(() => number(1, 1)).toThrow(/`number\(\)` names the same value/)
     })
 
     /**
@@ -285,11 +317,12 @@ describe('what replaced the constructor that guessed', () => {
     })
 
     it('refuses to name nothing, at every base', () => {
-        expect(() => string()).toThrow(CodecError)
-        expect(() => number()).toThrow(CodecError)
-        expect(() => decimal()).toThrow(CodecError)
-        expect(() => boolean()).toThrow(CodecError)
-        expect(() => binary()).toThrow(CodecError)
+        const none: never[] = []
+        expect(() => string(...none)).toThrow(CodecError)
+        expect(() => number(...none)).toThrow(CodecError)
+        expect(() => decimal(...none)).toThrow(CodecError)
+        expect(() => boolean(...none)).toThrow(CodecError)
+        expect(() => binary(...none)).toThrow(CodecError)
     })
 })
 
