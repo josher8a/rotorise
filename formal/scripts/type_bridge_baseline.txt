@@ -49,6 +49,15 @@
 #   encodePartial  `encodePartial` of the codec of an entry, on a change.
 #
 # The tables with the suffix `_sep` hold the option `separator`, with the text `|`.
+#
+# Two ids state a fact of the error of a `refuse` row that the type refuses. The kind of an id is the prefix.
+#
+#   site|<id>   the error of the row starts at another text than the one that the row states in `at`:
+#               the argument variable of a call, the property of a foreign row, or the name that a
+#               negative pole of a kind names.
+#   text|<id>   the message holds a rule text of the library, and the text lacks the rule that the row
+#               states in `rule`. A plain compiler message is no fact, because TypeScript 6 and 7 give
+#               another code for one refusal.
 construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
 construct|accept|158dae9a|nest.pathTagDefault
@@ -193,6 +202,27 @@ key|refuse|f1510f52|T_plain_list2.key(SK,sep,bnd).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,maybe).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,none).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,partial).call
+site|construct|refuse|0dc91cde|kind_mixed.nopath_spec_neg
+site|construct|refuse|1862c02e|kind_optional.otherpath_spec_neg
+site|construct|refuse|215c7c13|kind_single.otherpath_spec_neg
+site|construct|refuse|7f24baed|kind_lacking.armpath_spec_neg
+site|construct|refuse|890a3a4d|kind_single.armpath_spec_neg
+site|construct|refuse|8ca3525d|kind_double.nopath_spec_neg
+site|construct|refuse|8f96efb1|kind_double.otherpath_spec_neg
+site|construct|refuse|9333dbb0|kind_optional.armpath_spec_neg
+site|construct|refuse|9776bc42|kind_lacking.otherpath_spec_neg
+site|construct|refuse|b5810ff7|kind_single.nopath_spec_neg
+site|construct|refuse|bf8b09ae|kind_mixed.armpath_spec_neg
+site|construct|refuse|dbf68a63|kind_mixed.otherpath_spec_neg
+site|construct|refuse|dfb3f055|kind_lacking.nopath_spec_neg
+site|construct|refuse|e3057ef2|kind_double.armpath_spec_neg
+site|construct|refuse|fa506674|kind_optional.nopath_spec_neg
+text|construct|refuse|1862c02e|kind_optional.otherpath_spec_neg
+text|construct|refuse|7f24baed|kind_lacking.armpath_spec_neg
+text|construct|refuse|9333dbb0|kind_optional.armpath_spec_neg
+text|construct|refuse|9776bc42|kind_lacking.otherpath_spec_neg
+text|construct|refuse|dfb3f055|kind_lacking.nopath_spec_neg
+text|construct|refuse|fa506674|kind_optional.nopath_spec_neg
 toEntry|accept|1b35cc8d|T_doc_pathAttr.toEntry(b).result
 toEntry|refuse|137363d8|T_numname_numList.toEntry(zero).foreign:SK
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blank).foreign:SK

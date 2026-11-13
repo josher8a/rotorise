@@ -900,7 +900,11 @@ The run time throws `Discriminator kind not found in the attributes` for a pet o
 **Effect.** A caller of the form with `spec` learns that the match is wrong, and learns no name and no
 cause. For a discriminator that can be absent the text names a rule that the match does not break.
 
-**Pin.** `src/codec/spec/object/codec.keyoption.spec.ts` pins each refusal, with no text.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 21 ids of
+the group construct: 15 with the prefix site, where the error starts at an arm name or at the whole
+match and not at the name that the draw states, and 6 with the prefix text, where the message holds
+the rule of another refusal. src/codec/spec/object/codec.keyoption.spec.ts pins each refusal, with
+no text.
 
 ---
 

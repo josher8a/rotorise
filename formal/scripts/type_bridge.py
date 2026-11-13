@@ -18,6 +18,13 @@ A row with `after` reads the result of other rows: `after` is an id or a list of
 those rows disagrees, the type of the result is not the type of the run time, and the script reads
 no verdict at the row. The script follows no chain, so a row names each row that it reads.
 
+A `refuse` row of the entry pool can state where its error starts (`at`, a text of the line) and the
+rule that the message of the library holds (`rule`). The directive hides the error, so the script
+compiles a copy of the entry program without the directive of those rows. An error that starts
+elsewhere is the id `site|<id of the row>`. A message that holds a rule text of the library, and
+lacks `rule`, is the id `text|<id of the row>`. A plain compiler message is no fact, because
+TypeScript 6 and 7 give another code for one refusal.
+
 An error at no row is a hard failure, and the script prints the error. The codecs file has a row
 for each declaration, so an error at a declaration is the row of that declaration. An error at a
 `typing` row is a hard failure: the row puts an item of a draw to the type of its entity, so an
@@ -30,7 +37,7 @@ fall: the script counts it, and the check passes.
 Usage:  python3 scripts/type_bridge.py            (exit 1 on a new id or a hard failure)
         python3 scripts/type_bridge.py --accept   (rewrite the baseline to the current set)
 """
-import glob, json, os, re, subprocess, sys
+import glob, json, os, re, shutil, subprocess, sys, tempfile
 from collections import Counter
 
 FORMAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -49,7 +56,7 @@ def tsc(directory, program):
     TypeScript 6 for the compiler API, and the bridge reads only the diagnostics."""
     compiler = os.path.join(REPO, "node_modules", "typescript-7", "bin", "tsc")
     return subprocess.Popen(
-        ["node", compiler, "-p", os.path.join(directory, program), "--pretty", "false"],
+        ["node", compiler, "-p", os.path.join(directory, program), "--pretty", "false", "--noErrorTruncation"],
         cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
     )
 
@@ -88,15 +95,16 @@ def parse(directory, program, output, hard):
         m = ERROR.match(line)
         if m is None:
             if line.startswith(" ") and errors:
-                continue  # the continuation of the message above
+                errors[-1][4] += " / " + line.strip()  # the continuation of the message above
+                continue
             hard.append(f"{program}: {line}")
             continue
         path = os.path.normpath(os.path.join(REPO, m[1]))
         if os.path.dirname(path) != directory:
             hard.append(f"{program}: an error outside the generated files: {line}")
             continue
-        errors.append((os.path.join(os.path.basename(directory), os.path.basename(path)), int(m[2]), int(m[3]), m[4], m[5]))
-    return errors
+        errors.append([os.path.join(os.path.basename(directory), os.path.basename(path)), int(m[2]), int(m[3]), m[4], m[5]])
+    return [tuple(e) for e in errors]
 
 
 def disagreements(rows, errors, hard):
@@ -118,6 +126,69 @@ def disagreements(rows, errors, hard):
         hard.append(f"{file}({line},{col}): {code}: an error at no row: {message}")
     unread = {r["id"] for r in rows if any(a in failing for a in as_list(r.get("after")))}
     return failing - unread
+
+
+def site_ids(rows, failing, hard):
+    """The ids of the `refuse` rows that state a site (`at`) or a rule (`rule`), where the error of the
+    row starts elsewhere (`site|<id>`), or where a library rule message lacks the rule (`text|<id>`).
+    The directive of a row hides its error, so a copy of each entry program, with the directive of each
+    such row removed, compiles beside the original. The copy lives in a scratch directory of the same
+    depth as the type directory, so the imports resolve, and the script deletes the directory. A row
+    whose `after` row disagrees has no verdict. A plain compiler message is no fact: TypeScript 6 and 7
+    give another code for one refusal."""
+    wanted = [r for r in rows if r["expect"] == "refuse" and (r.get("at") or r.get("rule"))]
+    if not wanted:
+        return set()
+    scratch = tempfile.mkdtemp(prefix=".site", dir=FORMAL)
+    try:
+        lines, names = {}, set()
+        for r in wanted:
+            names.add(os.path.basename(r["file"]))
+        for name in names:
+            text = open(os.path.join(ENTRY, name), encoding="utf-8").read().split("\n")
+            for r in wanted:
+                if os.path.basename(r["file"]) != name:
+                    continue
+                if text[r["line"] - 2].strip() != "// @ts-expect-error":
+                    hard.append(f"{r['id']}: no directive above the line {r['line']}")
+                    continue
+                text[r["line"] - 2] = "//"
+            lines[name] = text
+            with open(os.path.join(scratch, name), "w", encoding="utf-8") as out:
+                out.write("\n".join(text))
+            config = "tsconfig." + os.path.splitext(name)[0] + ".json"
+            shutil.copy(os.path.join(ENTRY, config), os.path.join(scratch, config))
+        found = {}
+        for name in names:
+            config = "tsconfig." + os.path.splitext(name)[0] + ".json"
+            proc = tsc(scratch, config)
+            output, code = proc.communicate()[0], proc.returncode
+            if code not in (0, 1, 2):
+                hard.append(f"{config}: tsc exit {code}")
+            for file, line, col, _code, message in parse(scratch, config, output, hard):
+                found.setdefault((os.path.basename(file), line), []).append((col, message))
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    ids = set()
+    for r in wanted:
+        if any(a in failing for a in as_list(r.get("after"))):
+            continue
+        name = os.path.basename(r["file"])
+        errors = found.get((name, r["line"]))
+        if not errors:
+            continue  # the type accepts the row: the verdict of the row is the disagreement
+        first = min(col for col, _ in errors)
+        line = lines[name][r["line"] - 1]
+        if r.get("at"):
+            starts = [m.start() + 1 for m in re.finditer(re.escape(r["at"]), line)]
+            if not starts:
+                hard.append(f"{r['id']}: the text {r['at']} is not in the line")
+            elif first not in starts:
+                ids.add("site|" + r["id"])
+        message = " / ".join(m for _, m in errors)
+        if r.get("rule") and "ErrorMessage<" in message and r["rule"] not in message:
+            ids.add("text|" + r["id"])
+    return ids
 
 
 def as_list(after):
@@ -164,6 +235,7 @@ def main():
             hard.append(f"{program}: tsc exit {code}")
         errors.update(parse(directory, program, output, hard))
     failing = disagreements(rows, sorted(errors), hard)
+    failing |= site_ids(rows, failing, hard)
     header, baseline = load_baseline()
     new = sorted(failing - baseline)
     fallen = baseline - failing

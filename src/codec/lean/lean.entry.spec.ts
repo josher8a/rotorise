@@ -25,6 +25,13 @@
  *   typing     An item of the draw, assigned to the entity type. An error here is a defect of the
  *              generator, and the bridge fails it as a hard failure.
  *
+ * A `refuse` row can state `at`, the text where its first error must start, and `rule`, a text that a
+ * library rule message must hold. A call row states its argument variable. A foreign property row states
+ * the property. The negative pole of a kind states the name that the entity lacks, and the rule of the
+ * library for that name. A foreign result of `key` states no site: the compiler puts the error of
+ * `const r: T = "text"` on the declared name, so the site would test the row and not the type. The bridge
+ * reads `at` and `rule` as the ids `site|<id>` and `text|<id>`.
+ *
  * A row that reads the result of another row names that row in `after`. The bridge gives no verdict
  * at a row whose `after` row disagrees, or is a `refuse` row. The id of a row is the group, the
  * verdict of the run time, a hash of the draw, and the text of the check. The hash of a typing row
@@ -152,6 +159,8 @@ type Spec = {
     readonly calls?: readonly string[] // the methods that have no other loop: keys, keyCondition, toItem, fromItem, encodePartial
     readonly args?: readonly string[] // the arguments of keys and keyCondition: Partial<Entity>, so a prefix or none is drawn
     readonly patches?: readonly string[] // the changes that encodePartial reads
+    readonly at?: string // construct: the text of the element where the error must start
+    readonly rule?: string // construct: a text that the library rule message must hold
     readonly indexes?: readonly string[] // the names of the indexes that keyCondition reads
     readonly extra?: Readonly<Record<string, string>> // more axes: the place of a path, the polarity
 }
@@ -1199,6 +1208,7 @@ type Kind = {
     readonly arms: readonly (readonly [readonly string[], string])[]
     readonly values: readonly (readonly [string, number, string, string])[] // label, member, literal, the axis "value"
     readonly lacking: string
+    readonly absent?: boolean // the discriminator can be absent: the type refuses each table of the kind at the discriminator
 }
 const KINDS: Record<string, Kind> = {
     single: {
@@ -1315,6 +1325,7 @@ const KINDS: Record<string, Kind> = {
             ],
         ],
         lacking: 'ownerId',
+        absent: true,
     },
     lacking: {
         members: [
@@ -1338,6 +1349,7 @@ const KINDS: Record<string, Kind> = {
             ],
         ],
         lacking: 'ownerId',
+        absent: true,
     },
     dpath: {
         members: [
@@ -1463,6 +1475,22 @@ for (const [kindId, kind] of Object.entries(KINDS)) {
                     keyArgs,
                     configs: ['none'],
                     items: labels,
+                    // A discriminator that can be absent breaks its rule in both poles, and the cases form
+                    // refuses it there. The negative pole of another kind names an attribute that no option
+                    // holds: the error starts at the name.
+                    ...(kind.absent === true
+                        ? pole === 'neg' || form === 'cases'
+                            ? {
+                                  at: `discriminator: '${kind.disc}'`,
+                                  rule: 'can be absent',
+                              }
+                            : {}
+                        : pole === 'neg'
+                          ? {
+                                at: `'${kind.lacking}'`,
+                                rule: 'is no name or path of the entity',
+                            }
+                          : {}),
                 })
             }
     specs.push({
@@ -1496,7 +1524,8 @@ for (const [kindId, kind] of Object.entries(KINDS)) {
 }
 
 // A draw with the option `separator` for one schema form: the first table of the form that holds no
-// options and that the type does not refuse at construction. A refused table gives no method row.
+// options. The type can refuse the copy at construction, as it refuses opt.pathList, and a refused
+// table gives no method row. So each form of the list holds method rows except that one.
 const SEPARATED = [
     'list2',
     'attrNote',
@@ -1551,6 +1580,8 @@ type Row = {
     file: string
     line: number
     after?: string[]
+    at?: string // the text where the first error of a refuse row must start
+    rule?: string // a text that a library rule message of a refuse row must hold
     axes: Record<string, string>
     run?: string
 }
@@ -1647,6 +1678,7 @@ export const printPool = (parts: number, reverse: boolean) => {
             after?: string[],
             run?: Outcome,
             h = hash,
+            site: { at?: string | undefined; rule?: string | undefined } = {},
         ): string => {
             const id = `${group}|${expect}|${h}|${text}`
             if (ids.has(id)) throw new Error(`duplicate row id ${id}`)
@@ -1662,6 +1694,8 @@ export const printPool = (parts: number, reverse: boolean) => {
                 axes: { ...base, ...axes },
             }
             if (after) r.after = after
+            if (site.at !== undefined) r.at = site.at
+            if (site.rule !== undefined) r.rule = site.rule
             if (run) {
                 r.run = showRun(run, group)
                 runs.push(`RUNROW ${id} ${r.run}`)
@@ -1738,6 +1772,8 @@ export const printPool = (parts: number, reverse: boolean) => {
             {},
             undefined,
             built,
+            hash,
+            { at: s.at, rule: s.rule },
         )
         if (!built.ok) continue
         const table = made.ok ? (made.value as Table) : (undefined as never)
@@ -1758,6 +1794,9 @@ export const printPool = (parts: number, reverse: boolean) => {
                 axes,
                 [cid],
                 run,
+                hash,
+                // the argument is a variable of its declared type, and the error of a refused call starts there
+                { at: /\b(?:v|si?)_\w+/.exec(expr)?.[0] },
             )
             return { v, id }
         }
@@ -1793,6 +1832,10 @@ export const printPool = (parts: number, reverse: boolean) => {
                 `export const f_${v}_${sha(tag)}: typeof ${v} = ${value}`,
                 axes,
                 [cid, id],
+                undefined,
+                hash,
+                // a foreign property holds one element, the property. The result of key and keyUpdates has no site.
+                tag.startsWith(':') ? { at: `"${tag.slice(1)}"` } : {},
             )
         const entryRows = (
             group: string,
@@ -1871,6 +1914,9 @@ export const printPool = (parts: number, reverse: boolean) => {
                     `export const if_${hash}_${name}_${sha(k)}: typeof ${T}.infer = ${lit(changed)}`,
                     { ...axes, method: 'infer' },
                     [cid, iid],
+                    undefined,
+                    hash,
+                    { at: `"${k}"` },
                 )
             }
             // fromEntry on the row that toEntry wrote, as a constant of its own type
@@ -2385,6 +2431,102 @@ describe('the pool of the entry methods', () => {
             expect(
                 verdict('T_plain_indexKeys.keyCondition(G1,none).call'),
             ).toBe('refuse')
+        },
+    )
+
+    it(
+        'states the argument variable as the site of a call row, because a refused call starts its error at the argument',
+        { timeout: LONG },
+        () => {
+            const at = (text: string) =>
+                pool().rows.find((r) => textOf(r) === text)?.at
+            expect(at('T_plain_roleKeys.keys(none).call')).toBe('v_plain_none')
+            expect(at('T_plain_list2.toEntry(blank).call')).toBe(
+                'v_plain_blank',
+            )
+            expect(at('T_plain_list2.key(SK,blank,none).call')).toBe(
+                'v_plain_blank',
+            )
+            // every call row states a site, and the other groups state none
+            const calls = pool().rows.filter((r) => textOf(r).endsWith('.call'))
+            expect(calls.every((r) => r.at !== undefined)).toBe(true)
+            expect(
+                pool()
+                    .rows.filter(
+                        (r) =>
+                            r.at !== undefined && !textOf(r).endsWith('.call'),
+                    )
+                    .every(
+                        (r) =>
+                            /foreign:|^construct$/.test(textOf(r)) ||
+                            r.group === 'construct',
+                    ),
+            ).toBe(true)
+        },
+    )
+
+    it(
+        'states the property as the site of a foreign property row, and no site for the foreign result of key or keyUpdates',
+        { timeout: LONG },
+        () => {
+            const rows = pool().rows
+            const at = (text: string) =>
+                rows.find((r) => textOf(r) === text)?.at
+            expect(at('T_plain_list2.toEntry(ok).foreign:SK')).toBe('"SK"')
+            expect(at('T_plain_list2.infer(ok).foreign:SK')).toBe('"SK"')
+            const results = rows.filter(
+                (r) =>
+                    (r.group === 'key' || r.group === 'keyUpdates') &&
+                    textOf(r).endsWith('.foreign'),
+            )
+            expect(results.length).toBeGreaterThan(0)
+            // the compiler puts the error on the declared name of `const r: T = "text"`: a site there tests the row
+            expect(results.filter((r) => r.at !== undefined)).toEqual([])
+        },
+    )
+
+    it(
+        'declares the site and the rule for the negative pole of a kind, and none for the positive pole',
+        { timeout: LONG },
+        () => {
+            const construct = (text: string) =>
+                pool().rows.find(
+                    (r) => r.group === 'construct' && textOf(r) === text,
+                )
+            const neg = construct('kind_single.nopath_cases_neg')
+            expect(neg?.at).toBe("'ownerId'")
+            expect(neg?.rule).toBe('is no name or path of the entity')
+            const pos = construct('kind_single.nopath_cases_pos')
+            expect(pos?.at).toBeUndefined()
+            expect(pos?.rule).toBeUndefined()
+            // a draw that names no element states no site
+            expect(construct('opt.pathList')?.at).toBeUndefined()
+        },
+    )
+
+    it(
+        'declares the discriminator and the rule that it can be absent, for the kinds that can lack a discriminator, in the negative pole and in the cases form',
+        { timeout: LONG },
+        () => {
+            const construct = (text: string) =>
+                pool().rows.find(
+                    (r) => r.group === 'construct' && textOf(r) === text,
+                )
+            for (const kind of ['kind_optional', 'kind_lacking']) {
+                for (const table of [
+                    `${kind}.nopath_spec_neg`,
+                    `${kind}.nopath_cases_neg`,
+                    `${kind}.nopath_cases_pos`,
+                ]) {
+                    expect(construct(table)?.at).toBe("discriminator: 'kind'")
+                    expect(construct(table)?.rule).toBe('can be absent')
+                }
+                // the spec form of the positive pole lands on an arm name, with the rule of another refusal
+                expect(construct(`${kind}.nopath_spec_pos`)?.at).toBeUndefined()
+            }
+            expect(construct('kind_single.nopath_cases_neg')?.at).toBe(
+                "'ownerId'",
+            )
         },
     )
 
