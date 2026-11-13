@@ -926,6 +926,11 @@ const typeOnlySlices: readonly Slice[] = (() => {
  */
 const typeOnlyMeets: readonly MeetPair[] = (() => {
     const widened = legacy({ current: string, older: decimal })
+    const shifted = () =>
+        held(number, number, {
+            encode: (v: number) => v + 1,
+            decode: (v: number) => v - 1,
+        })
     return [
         [string, opaque('lossy')],
         [opaque('lossy'), string],
@@ -933,6 +938,8 @@ const typeOnlyMeets: readonly MeetPair[] = (() => {
         [decimal('1', '2'), decimal('2', '3')],
         [decimal, decimal],
         [widened, decimal('1')],
+        // two adapters of a caller with one type: the run time tells them apart by identity
+        [shifted(), shifted()],
     ].map(([left, right]) => ({
         left: erase(left),
         right: erase(right),
@@ -953,6 +960,11 @@ const typeOnlyForeign: readonly ForeignSample[] = [
     { codec: decimal, sample: 1 },
     { codec: boolean, sample: 'true' },
     { codec: binary, sample: 'x' },
+    // a value at an undeclared name, with the type of a declared field: the rest holds a number
+    {
+        codec: object({ a: string }, [string, optional(number)]),
+        sample: { a: 'x', c: 'y' },
+    },
 ].map(({ codec, sample }) => ({ codec: erase(codec), sample }))
 
 /**
@@ -1037,6 +1049,17 @@ const refObjects: readonly Slice[] = (() => {
         Mother: object({ tag: string('mother'), kits: list(ref('Mother')) }),
         Stray: object({ tag: string('stray'), kits: list(ref('Stray')) }),
     })
+    // a union slot of refs, where one ref names a recursive union entry, below the field of a pattern
+    const tree = scope({
+        Leaf: object({ kind: string('leaf') }),
+        Branch: object({
+            kind: string('branch'),
+            kids: union([ref('Leaf'), ref('Tree')]),
+        }),
+        Tree: union([ref('Leaf'), ref('Branch')]),
+        Holder: object({ tag: string('holder'), tree: ref('Tree') }),
+        Other: object({ tag: string('other'), tree: ref('Leaf') }),
+    })
     const unions = (nested: boolean): Slice => {
         const entries = scope({
             Cat: object({ kind: string('cat'), home: optional(ref('Basket')) }),
@@ -1082,6 +1105,35 @@ const refObjects: readonly Slice[] = (() => {
         unions(true),
         roots(many, 'pets', (c) => erase(list(c)), ['Kennel', 'Run']),
         roots(each, 'herd', (c) => erase(array(c)), ['Herd', 'Pack']),
+        {
+            // a number tag that JS prints with an exponent, and a text tag of the same text
+            name: 'dissection_number_tag',
+            codec: sliceableOf(
+                erase(
+                    union([
+                        object({ size: number(1e21), a: string }),
+                        object({ size: string('1e+21'), b: string }),
+                    ]),
+                ),
+            ),
+            clauses: [],
+            keys: ['size'],
+        },
+        {
+            name: 'through_ref_recursive_entry',
+            codec: sliceableOf(erase(union([tree.Holder, tree.Other]))),
+            clauses: [],
+            shapes: [
+                {
+                    tree: erase(
+                        object({
+                            kind: string('branch'),
+                            kids: object({ kind: string('leaf') }),
+                        }),
+                    ),
+                },
+            ],
+        },
         {
             name: 'through_ref_cycle',
             codec: sliceableOf(erase(union([Mother, Stray]))),
@@ -1545,6 +1597,23 @@ const nestedClause = (): PathVectors => ({
 })
 
 /**
+ * **A path below two options that are one codec with a function of a caller**, beside the pool. A
+ * structural type holds no identity, so the two options have one type, and the run time tells the
+ * functions apart by identity and finds one codec at the path.
+ */
+const callerClause = (): PathVectors => {
+    const h = refine(
+        object({ x: string }),
+        (v): v is { x: string } => v.x.length > 0,
+    )
+    return {
+        name: 'path_clause_caller',
+        codec: erase(object({ op: union([h, h]) })),
+        paths: [['op', { narrow: object({ x: erase(string) }) }]],
+    }
+}
+
+/**
  * **The value as the model reads it**: a key that holds `undefined` is an absent key, as
  * `leanValueOf` prints it. `opaque` refuses such a key on a write, so the host value and the
  * printed value must be one value before the host writes it.
@@ -1816,6 +1885,23 @@ const poolModules = (
 describe('the generated pool, against the model', () => {
     const perSeed = buildPool()
     const pairs = perSeed.flatMap((one) => one.pairs)
+    const typeFiles = () =>
+        typeVectorFiles({
+            slices: [
+                ...perSeed.flatMap((one) => one.slices),
+                ...typeOnlySlices,
+                presenceAndHolds,
+                ...refObjects,
+            ],
+            paths: [
+                ...perSeed.flatMap((one) => one.paths),
+                nestedClause(),
+                callerClause(),
+            ],
+            meets: [...pairs, ...typeOnlyMeets],
+            foreign: typeOnlyForeign,
+            clauses: clauseVocabulary,
+        })
 
     /**
      * **The item reading and the slice are functions of the term.** The codec that `codecOfTerm`
@@ -2167,6 +2253,43 @@ describe('the generated pool, against the model', () => {
         ])
     })
 
+    it('holds one row for each entry of the defects document that the pool reaches: a recursive union entry, two adapters of one type, an object with a rest, a number tag, and a path below two options with a function of a caller', () => {
+        const rows: readonly {
+            readonly id: string
+            readonly after?: string | readonly string[]
+        }[] = JSON.parse(
+            typeFiles().find(([file]) => file === 'rows.json')?.[1] ?? '[]',
+        )
+        const ids = rows.map((row) => row.id)
+        const dissection = 'declaration|accept|ce03a404b2|dissection size'
+        const holding = (text: string) =>
+            ids.filter((id) => id.includes(text)).length
+        expect({
+            // a union slot of refs below the field of a pattern, with a recursive union entry
+            recursiveEntry: holding('kids: object({ kind: string("leaf") })'),
+            // two held parts with distinct functions and one type: the meet that the run time refuses
+            meetRefuse: ids.filter((id) => id.startsWith('meet|refuse|'))
+                .length,
+            // an object with a rest and a value at an undeclared name
+            rest: holding('Decoded of the codec = { a: "x", c: "y" }'),
+            // the line of a union with a discriminator at a number tag and a text tag of one text
+            numberTag: holding('ce03a404b2|dissection size'),
+            // a row of a root that the type refuses reads the line of the root, so it has no verdict
+            readersOfTheNumberTag: rows.filter((row) =>
+                [row.after ?? []].flat(2).includes(dissection),
+            ).length,
+            // a clause below a union of two options that hold one function of a caller
+            callerClause: holding('["r", "op"]), object({ x: string })), [])'),
+        }).toEqual({
+            recursiveEntry: 6,
+            meetRefuse: 4,
+            rest: 1,
+            numberTag: 1,
+            readersOfTheNumberTag: 324,
+            callerClause: 4,
+        })
+    })
+
     /**
      * **The type of a slice and of a path states the decision of the run time.** Each check is one
      * decision of the run time, put to the type checker. The gate compiles the files and holds the
@@ -2174,18 +2297,7 @@ describe('the generated pool, against the model', () => {
      * root leaves the check in silence.
      */
     it('emits the type vectors for the gate', () => {
-        const files = typeVectorFiles({
-            slices: [
-                ...perSeed.flatMap((one) => one.slices),
-                ...typeOnlySlices,
-                presenceAndHolds,
-                ...refObjects,
-            ],
-            paths: [...perSeed.flatMap((one) => one.paths), nestedClause()],
-            meets: [...pairs, ...typeOnlyMeets],
-            foreign: typeOnlyForeign,
-            clauses: clauseVocabulary,
-        })
+        const files = typeFiles()
         if (process.env.EMIT_LEAN_REFUSALS) {
             const types = join(process.cwd(), 'formal', '.pool.types')
             mkdirSync(types, { recursive: true })
@@ -2211,10 +2323,10 @@ describe('the generated pool, against the model', () => {
             foreignRows: rowsOf('decoded', 'refuse') - pathForeign,
             pathForeignRows: pathForeign,
         }).toEqual({
-            resolvedPathRows: 7359,
-            decodedRows: 7210,
-            foreignRows: 6,
-            pathForeignRows: 6810,
+            resolvedPathRows: 7360,
+            decodedRows: 7211,
+            foreignRows: 7,
+            pathForeignRows: 6811,
         })
         expect(files.map(([file]) => file)).toEqual([
             'codecs.ts',

@@ -117,7 +117,7 @@ def disagreements(rows, errors, hard):
             failing.add(directive[(file, line)]["id"])
             continue
         row = at.get((file, line))
-        if row is not None and row["group"] == "typing":
+        if row is not None and row["id"].startswith("typing|"):
             hard.append(f"{file}({line},{col}): {code}: an error at the typing row {row['id']}: {message}")
             continue
         if row is not None and row["expect"] == "accept":

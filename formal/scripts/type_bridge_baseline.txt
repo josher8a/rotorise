@@ -19,6 +19,8 @@
 #                `refuse` where the run time gives none.
 #   meetvalue    one sample value of the codec that `meet` gives, assigned to `Decoded` of it.
 #   declaration  one constant of the generated codecs file: the run time built each one.
+#                A `dissection` declaration is a union with a discriminator. Where the type refuses it, each call
+#                row and member row of that root reads it (`after`), so those rows have no verdict.
 #
 # The groups of the entry pool (`.entry.types/`, from `lean.entry.spec.ts`) put the methods of an entry to
 # the type checker. An id has the same form. The hash is the hash of the draw: an entity, a key spec and
@@ -66,6 +68,8 @@ construct|accept|a6d27a96|plain.tagOpts
 construct|accept|bd98ba26|nullableMeta.noCodec
 construct|accept|cd45d4d0|opt.pathDefaultOpts
 construct|refuse|82892850|doc.pathList
+declaration|accept|ce03a404b2|dissection size
+decoded|refuse|b3aa5bd4bf|Decoded of the codec = { a: "x", c: "y" }
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|20f6d97843|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|22507207dc|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -73,6 +77,7 @@ exclude|refuse|280579ecc4|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|2c2859150d|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|3a44071f4a|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|4665f76c84|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+exclude|refuse|51086640d5|exclude({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0
 exclude|refuse|5175e3f279|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 exclude|refuse|522f5b796a|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|53878c2fa6|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
@@ -202,6 +207,8 @@ key|refuse|f1510f52|T_plain_list2.key(SK,sep,bnd).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,maybe).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,none).call
 key|refuse|f1510f52|T_plain_list2.key(SK,sep,partial).call
+meet|refuse|26fd3c2238|meet(m0_l, m0_r)
+path|accept|d255ceca7a|at(narrow(at(C.p482_w, ["r", "op"]), object({ x: string })), [])
 site|construct|refuse|0dc91cde|kind_mixed.nopath_spec_neg
 site|construct|refuse|1862c02e|kind_optional.otherpath_spec_neg
 site|construct|refuse|215c7c13|kind_single.otherpath_spec_neg

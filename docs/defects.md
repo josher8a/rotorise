@@ -62,13 +62,30 @@ reads as no fit. Measured 2026-10-31 with `tsc --noEmit` and `npx vitest --run`:
       runtime: keeps Holder
       type:    Decoded is never
 
+The type of exclude reads the same pattern as no fit, and admits the value that the run time
+refuses. Measured 2026-11-13 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the
+scope and the pattern above:
+
+    const fits = { tag: 'holder', tree: { kind: 'branch', kids: { kind: 'leaf' } } }
+    exclude(union([s.Holder, s.Other]), p).encode(fits)
+      type checker: builds, Decoded admits the value
+      runtime:      gives a CodecError, no option admits this value with attributes 'tag', 'tree'
+
+    extract(union([s.Holder, s.Other]), p).encode(fits)
+      type checker: refused, Decoded is never
+      runtime:      gives the stored value
+
 **Effect.** The type of `extract(...)` is narrower than the value: a value that the run time gives
 does not fit the type. The pattern that names the branch entry alone reads exactly, and so does a
-pattern that names the leaf entry and the branch entry as a union.
+pattern that names the leaf entry and the branch entry as a union. The type of exclude(...) admits a
+value that the run time refuses.
 
 **Pin.** `src/codec/spec/union/codec.slice.spec.ts`: an object pattern reads each option of a union
 entry that a `ref` names, an option that names another union entry, an option that is an entry of
-another scope, and a base entry. No test pins the recursive case above.
+another scope, and a base entry. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 1 id of the group exclude, for the case of exclude
+above. The rows of extract hold no id: the row of the pool for that member states a refusal, where
+the run time keeps the value. No test pins the recursive case of extract.
 
 ---
 
@@ -111,7 +128,8 @@ no identity. So `meet(h, h)` and `meet(h1, h2)` have one type, and a refusal of 
 **Effect.** The call builds in the type and throws at run time.
 
 **Pin.** `src/codec/spec/object/codec.meet.spec.ts` pins the refused pairs, the pairs that build,
-and the pair of one type.
+and the pair of one type. The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt,
+holds 1 id of the group meet, for the pair of two adapters of one type.
 
 ---
 
@@ -190,7 +208,8 @@ type. A value with the type of a declared field at an undeclared name compiles, 
 refuses the value.
 
 **Pin.** `src/codec/spec/object/codec.rest.spec.ts`: the type admits a declared field type at an
-undeclared name, and the run time refuses the value.
+undeclared name, and the run time refuses the value. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 1 id of the group decoded, for that value.
 
 ---
 
@@ -214,8 +233,11 @@ the type.
 run time.
 
 **Pin.** `src/codec/spec/union/codec.slice.empty.spec.ts`: the option that is the entry is dropped
-in the type, and the held option inside the union of an entry is kept in the type and dropped at
-run time.
+in the type, and the held option inside the union of an entry is kept in the type and dropped at run
+time. The type bridge holds no id for the held option inside the union of an entry, because the pool
+print cannot hold the case: the printer prints a ref that closes no cycle as its body, so the print
+holds the held part over the empty body, and the type drops the option as the run time does. A slice
+of the entry in the pool gave no id.
 
 ---
 
@@ -334,8 +356,10 @@ option.
 compile, and the run time builds the union.
 
 **Pin.** `src/codec/spec/union/codec.dunion.lookup.spec.ts` pins the stored text of a number tag
-that JS spells with an exponent, at run time, and the refusal of one text at two bases. No test
-pins the two calls above.
+that JS spells with an exponent, at run time, and the refusal of one text at two bases. The baseline
+of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 1 id of the group declaration,
+for the second call above. The first call has no row: the pool prints built codecs only. No test
+pins the first call.
 
 ---
 
@@ -359,7 +383,8 @@ The call gives the same two results where `h` is
 
 **Effect.** The call does not compile, and the run time gives the codec.
 
-**Pin.** None.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 1 id of the
+group path, for the call above with a refinement of a caller predicate.
 
 ---
 

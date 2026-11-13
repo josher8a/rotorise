@@ -2146,7 +2146,9 @@ const entryFiles = (
     [
         'rows.json',
         `${JSON.stringify(
-            pool.rows.map(({ axes: _axes, run: _run, ...row }) => row),
+            pool.rows.map(
+                ({ axes: _axes, run: _run, group: _group, ...row }) => row,
+            ),
             null,
             1,
         )}\n`,

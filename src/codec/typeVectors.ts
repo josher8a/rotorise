@@ -104,7 +104,7 @@ export type TypeRow = {
     readonly file: string
     readonly line: number
     readonly expect: Verdict
-    readonly after?: string
+    readonly after?: string | readonly string[]
 }
 
 /* ── lexical ─────────────────────────────────────────────────────────────────────────────── */
@@ -864,12 +864,23 @@ const sliceRoot = (
     })
     const list = `[${options.map((_, i) => p.full(`o${i}`)).join(', ')}]`
     const [key] = keys
-    if (key !== undefined)
+    // the row of the dissection line: a row that reads a root that the type refuses has no verdict
+    let dissection: string | undefined
+    if (key !== undefined) {
         p.line(
             `dissection ${keys.join(',')}`,
             def,
             `export const ${p.full('root')} = ${keys.length === 1 ? `discriminatedUnion(${quoted(key)}, ${list})` : `mdunion([${keys.map(quoted).join(', ')}], ${list})`}`,
         )
+        const line = p.declarations.at(-1)
+        if (line !== undefined)
+            dissection = rowId(
+                'declaration',
+                'accept',
+                hash(line.content),
+                line.kind,
+            )
+    }
     options.forEach((o, i) => {
         p.line(
             'sample',
@@ -935,6 +946,7 @@ const sliceRoot = (
                 {
                     id: callRow,
                     expect: kept === undefined ? 'refuse' : 'accept',
+                    ...(dissection === undefined ? {} : { after: dissection }),
                 },
                 `const r = ${op}(C.${p.full('root')}, ${pattern.source})`,
             )
@@ -946,7 +958,10 @@ const sliceRoot = (
                         {
                             id: rowId(op, expect, root, `${text} member ${i}`),
                             expect,
-                            after: callRow,
+                            after:
+                                dissection === undefined
+                                    ? callRow
+                                    : [callRow, dissection],
                         },
                         `const m${i}: Decoded<typeof r> = C.${p.full(`m${i}`)}`,
                     )
