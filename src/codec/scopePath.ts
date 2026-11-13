@@ -746,7 +746,16 @@ export type CheckPath<H, S, Done extends readonly unknown[] = []> = H extends
       ? StepAt<H, Head> extends infer N
           ? N extends Refused
               ? readonly [...Done, Head & NoSegment<OfferedAt<H>>, ...Tail]
-              : CheckPath<N, Tail, [...Done, Head]>
+              : N extends ['term', infer Fs, unknown, unknown, unknown]
+                ? [KindOfFrames<Fs>] extends ['vacant' | 'refused']
+                    ? readonly [
+                          ...Done,
+                          Head &
+                              ErrorMessage<`[at] the path is ${KindOfFrames<Fs> & string} from this segment: no one codec stands at the path`>,
+                          ...Tail,
+                      ]
+                    : CheckPath<N, Tail, [...Done, Head]>
+                : CheckPath<N, Tail, [...Done, Head]>
           : never
       : S extends readonly []
         ? ResolvesAt<H>

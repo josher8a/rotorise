@@ -12,6 +12,7 @@ import type { Decoded } from '../../codec'
 import {
     array,
     at,
+    boolean,
     CodecError,
     decimal,
     discriminatedUnion,
@@ -20,8 +21,10 @@ import {
     held,
     item,
     legacy,
+    list,
     mdunion,
     meet,
+    never,
     nullable,
     nullValue,
     number,
@@ -29,6 +32,7 @@ import {
     optional,
     ref,
     scope,
+    spread,
     string,
     union,
 } from '../../codec'
@@ -236,5 +240,66 @@ describe('the meet of two lists keeps the row of length zero, in the type as in 
         const both = meet(array(string('PUPPY')), array(dynamoNumber))
         expectTypeOf<Decoded<typeof both>>().toEqualTypeOf<readonly never[]>()
         expect(both.unsafeDecode({ L: [] })).toEqual([])
+    })
+})
+
+describe('a position that the list does not hold is refused on the position, as the run time refuses it', () => {
+    const Plain = item(object({ xs: list(string, number) }))
+    const Suffix = item(object({ xs: list(string, spread(number), boolean) }))
+    const Holds = item(object({ xs: list(string, spread(number)) }))
+
+    it('refuses the position past a list with no spread, and the run time throws there', () => {
+        expect(() =>
+            at(Plain, [
+                'xs',
+                // @ts-expect-error the list holds no position past its prefix
+                2,
+            ]),
+        ).toThrow(CodecError)
+    })
+
+    it('refuses the position past the prefix of a list with a suffix, and the run time refuses there', () => {
+        // a refused path has the type never, so the binding states what the run time returns
+        const refused: { decode(value: unknown): unknown } = at(Suffix, [
+            'xs',
+            // @ts-expect-error the position depends on the length, and a path carries no length
+            1,
+        ])
+        expect(refused.decode({ L: [] })).toBeInstanceOf(CodecError)
+    })
+
+    it('refuses a name below a position, where the codec at the name holds no value', () => {
+        const Below = item(
+            object({
+                xs: list(object({ b: optional(never) }), spread(string)),
+            }),
+        )
+        expect(() =>
+            at(Below, [
+                'xs',
+                0,
+                // @ts-expect-error the codec at the name holds no value
+                'b',
+            ]),
+        ).toThrow(CodecError)
+    })
+
+    it('keeps a path that crosses a place that holds a codec in one option only, where a longer path leaves it', () => {
+        const Pets = item(
+            object({
+                pet: union([
+                    object({ kind: string('dog'), tag: optional(never) }),
+                    object({ kind: string('cat'), tag: object({ x: string }) }),
+                ]),
+            }),
+        )
+        expect(at(Pets, ['pet', 'tag', 'x']).unsafeDecode({ S: 'a' })).toBe('a')
+    })
+
+    it('keeps the position that the prefix or the spread holds, and the wide position', () => {
+        expect(at(Holds, ['xs', 0]).unsafeDecode({ S: 'a' })).toBe('a')
+        expect(at(Holds, ['xs', 4]).unsafeDecode({ N: '1' })).toBe(1)
+        const wide: number = 2
+        expect(() => at(Plain, ['xs', wide])).toThrow(CodecError)
     })
 })
