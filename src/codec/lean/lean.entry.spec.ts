@@ -1321,6 +1321,32 @@ const KINDS: Record<string, Kind> = {
         ],
         lacking: 'ownerId',
     },
+    // one option that holds two literals at the path of the discriminator
+    dpathdouble: {
+        members: [
+            `{ petId: string; meta: { status: 'IN' | 'OUT' }; kennel: string; ${OWNER} }`,
+        ],
+        disc: 'meta.status',
+        arms: [
+            [['IN'], 'kennel'],
+            [['OUT'], 'petId'],
+        ],
+        values: [
+            [
+                'in',
+                0,
+                "{ petId: 'p1', meta: { status: 'IN' }, kennel: 'k1', owner: { id: 'o1' } }",
+                'two-literal-member',
+            ],
+            [
+                'out',
+                0,
+                "{ petId: 'p2', meta: { status: 'OUT' }, kennel: 'k2', owner: { id: 'o2' } }",
+                'two-literal-member',
+            ],
+        ],
+        lacking: 'ownerId',
+    },
 }
 const armText = (names: readonly string[]) =>
     `[${names.map((n) => `'${n}'`).join(', ')}]`
@@ -1336,9 +1362,10 @@ const tagOf = (disc: string, value: string): string | null => {
     const leaf = disc.split('.').at(-1) as string
     const m = new RegExp(`\\b${leaf}: ('[A-Z]+')`).exec(value)
     if (!m) return null
-    return disc.includes('.')
-        ? `{ meta: { kind: ${m[1]} } }`
-        : `{ ${leaf}: ${m[1]} }`
+    // the object that holds the literal at the path of the discriminator
+    return disc
+        .split('.')
+        .reduceRight((inner, name) => `{ ${name}: ${inner} }`, m[1] as string)
 }
 for (const [kindId, kind] of Object.entries(KINDS)) {
     const vars: Record<string, Var> = {}
@@ -1904,15 +1931,15 @@ const pool = () => {
 }
 const textOf = (row: Row) => row.id.split('|').slice(3).join('|')
 const LONG = 120_000
-const TYPING_ROWS = 63
+const TYPING_ROWS = 65
 const GROUP_ROWS = {
-    typing: 63,
-    constructAccept: 80,
-    constructRefuse: 56,
-    toEntry: 669,
-    fromEntry: 537,
-    infer: 401,
-    key: 843,
+    typing: 65,
+    constructAccept: 88,
+    constructRefuse: 62,
+    toEntry: 731,
+    fromEntry: 585,
+    infer: 447,
+    key: 911,
     keyUpdates: 68,
 }
 
@@ -2046,6 +2073,33 @@ describe('the pool of the entry methods', () => {
                     byId.get((r.after as string[])[0] as string)?.group,
                 ).toBe('construct')
             }
+        },
+    )
+
+    it(
+        'holds a match on a path where one option holds two literals at the path, with the items of each literal',
+        { timeout: LONG },
+        () => {
+            const rows = pool().rows
+            const table = 'kind_dpathdouble.nopath_spec_pos'
+            expect(
+                rows.find((r) => r.group === 'construct' && textOf(r) === table)
+                    ?.expect,
+            ).toBe('accept')
+            const calls = rows
+                .filter((r) => r.group === 'key')
+                .map(textOf)
+                .filter((t) =>
+                    t.startsWith('T_kind_dpathdouble_nopath_spec_pos.'),
+                )
+            expect(calls).toEqual(
+                expect.arrayContaining([
+                    'T_kind_dpathdouble_nopath_spec_pos.key(SK,in,none).call',
+                    'T_kind_dpathdouble_nopath_spec_pos.key(SK,out,none).call',
+                    'T_kind_dpathdouble_nopath_spec_pos.key(SK,tag_in,none).call',
+                    'T_kind_dpathdouble_nopath_spec_pos.key(SK,tag_out,none).call',
+                ]),
+            )
         },
     )
 

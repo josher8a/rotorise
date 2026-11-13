@@ -1434,6 +1434,48 @@ The type checker of the two calls of toEntry is not measured.
 
 ---
 
+## Known: the type of key refuses an item whose option holds two literals at the path of a match, where the run time gives the key
+
+**Observation.** The parameter of `key` for a match on a path is a union with one object type for each
+literal, and the literal stands at the nested path. The host decomposes an argument over a union by a
+property of the top level only. An argument whose value at the path is a union of literals fits no
+member. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Placed = { petId: string; meta: { status: 'IN' | 'OUT' }; kennel: string }
+    const Placeds = tableEntry<Placed>()({
+        PK: ['petId'],
+        SK: { discriminator: 'meta.status', spec: { IN: ['kennel'], OUT: ['petId'] } },
+    })
+    const placed: Placed = { petId: 'p1', meta: { status: 'IN' }, kennel: 'k1' }
+
+    Placeds.key('SK', placed)
+      type checker: refused, Argument of type 'Placed' is not assignable to parameter of type
+                    '{ kennel: string; meta: { status: "IN"; }; } | { meta: { status: "OUT"; }; petId: string; }'
+      runtime:      gives "KENNEL#k1"
+
+    Placeds.toEntry(placed).SK, Placeds.infer and Placeds.fromEntry(stored)
+      type checker: build, with the type `KENNEL#${string}` | `PETID#${string}` for the key
+
+    type Plain = { petId: string; status: 'IN' | 'OUT'; kennel: string }
+    Plains.key('SK', plain)   // the discriminator at the top level, plain: Plain
+      type checker: builds
+
+The host has the same limit without the library. A function of the parameter
+`{ a: { k: 'I' }; n: string } | { a: { k: 'O' }; m: string }` refuses
+`{ a: { k: 'I' | 'O' }; n: string; m: string }`, and a function of the parameter
+`{ k: 'I'; n: string } | { k: 'O'; m: string }` accepts `{ k: 'I' | 'O'; n: string; m: string }`.
+A constant of the literal type, `{ meta: { status: 'IN' }, ... } as const`, fits the member of its literal.
+Before the pass that moved the arm of a match to the options that can hold its literal, the table
+was refused at construction, and the call was refused with a parameter of no attribute.
+
+**Effect.** A caller with an item of the declared type of the entity cannot call `key` for a match on
+a path where one option holds two literals. A cast or a constant of the literal type passes.
+
+**Pin.** `src/codec/lean/lean.entry.spec.ts` draws the tables of the kind dpathdouble, and the
+baseline of `formal/scripts/type_bridge_baseline.txt` holds 14 ids of the calls of `key` on them.
+
+---
+
 ## Known: the type of key refuses an argument that holds no component of the key at depth 0, where the run time gives the empty text
 
 **Observation.** A key of depth 0 reads no component, and the run time gives the empty text for
