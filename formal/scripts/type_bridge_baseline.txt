@@ -35,6 +35,20 @@
 #                `infer` assigns the row of `toEntry` to the type of the entity.
 #   typing       one item of a draw assigned to the entity type. An error is a defect of the generator and
 #                a hard failure of the script, so no id of this group is in the list.
+#
+# More groups of the entry pool, each the call of one method with the argument as a variable of its declared
+# type, a `result` row, and a `refuse` row for a throw.
+#
+#   keys           `keys` of an entry that holds the option `key`.
+#   keyCondition   `keyCondition` of the table, and of an index named by the option `indexes`.
+#   toItem         `toItem` of an entry that holds a codec. The owner ruled that `toItem` throws where the
+#                  builder of a key refuses a component, so a `refuse` row of this group records the ruling
+#                  and is no defect of the type: the type of the result is `Result`.
+#   fromItem       `fromItem` on a stored item. An error value is an `accept` row, and its `result` row
+#                  assigns a `CodecError` to the type of the result.
+#   encodePartial  `encodePartial` of the codec of an entry, on a change.
+#
+# The tables with the suffix `_sep` hold the option `separator`, with the text `|`.
 construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
 construct|accept|158dae9a|nest.pathTagDefault
@@ -73,11 +87,30 @@ infer|refuse|184b973a|T_plain_tagTf.infer(blank).foreign:SK
 infer|refuse|184b973a|T_plain_tagTf.infer(blankNote).foreign:SK
 infer|refuse|184b973a|T_plain_tagTf.infer(nonote).foreign:SK
 infer|refuse|184b973a|T_plain_tagTf.infer(ok).foreign:SK
+infer|refuse|83487729|T_plain_tagTf_sep.infer(blank).foreign:SK
+infer|refuse|83487729|T_plain_tagTf_sep.infer(blankNote).foreign:SK
+infer|refuse|83487729|T_plain_tagTf_sep.infer(nonote).foreign:SK
+infer|refuse|83487729|T_plain_tagTf_sep.infer(ok).foreign:SK
+infer|refuse|83487729|T_plain_tagTf_sep.infer(sep).foreign:SK
+keyCondition|refuse|7bb4c8d4|T_plain_indexKeys.keyCondition(G1,none).call
+keyCondition|refuse|7bb4c8d4|T_plain_indexKeys.keyCondition(G1,pidOnly).call
+keyCondition|refuse|7bb4c8d4|T_plain_indexKeys.keyCondition(G1,sep).call
+keyCondition|refuse|7bb4c8d4|T_plain_indexKeys.keyCondition(none).call
+keyCondition|refuse|7bb4c8d4|T_plain_indexKeys.keyCondition(sep).call
+keyCondition|refuse|d178e45a|T_plain_roleKeys.keyCondition(none).call
+keyCondition|refuse|d178e45a|T_plain_roleKeys.keyCondition(sep).call
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chGhost).call
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chStr).call
 keyUpdates|refuse|5e2a25bf|T_kennel_roles.keyUpdates(chWide).call
+keys|refuse|4977ab43|T_plain_codecItem.keys(blank).call
+keys|refuse|4977ab43|T_plain_codecItem.keys(none).call
+keys|refuse|d178e45a|T_plain_roleKeys.keys(blank).call
+keys|refuse|d178e45a|T_plain_roleKeys.keys(none).call
+keys|refuse|d178e45a|T_plain_roleKeys.keys(pidOnly).call
+keys|refuse|d178e45a|T_plain_roleKeys.keys(sep).call
 key|accept|022680cb|T_kind_dpathdouble_otherpath_cases_pos.key(SK,in,none).call
 key|accept|022680cb|T_kind_dpathdouble_otherpath_cases_pos.key(SK,out,none).call
+key|accept|05e13f83|T_held_twoLevels_sep.key(SK,catIn,none).result
 key|accept|07e8a757|T_kind_dpathdouble_nopath_spec_pos.key(SK,in,none).call
 key|accept|07e8a757|T_kind_dpathdouble_nopath_spec_pos.key(SK,out,none).call
 key|accept|0fc56058|T_kind_dpathdouble_armpath_spec_pos.key(SK,in,none).call
@@ -99,6 +132,9 @@ key|accept|4ad71e3d|T_literal_path_none.key(SK,outFull,none).call
 key|accept|4f6de125|T_literal_path_record.key(SK,out,none).call
 key|accept|4f6de125|T_literal_path_record.key(SK,outFull,none).call
 key|accept|5a8a23a6|T_held_twoLevels.key(SK,catIn,none).result
+key|accept|7f04b386|T_opt_pathAttr_sep.key(SK,owned,none).call
+key|accept|7f04b386|T_opt_pathAttr_sep.key(SK,unowned,none).call
+key|accept|83487729|T_plain_tagTf_sep.key(SK,none,partial).call
 key|accept|8c2ecdc4|T_union_path_none.key(SK,cat,none).call
 key|accept|8c2ecdc4|T_union_path_none.key(SK,catFull,none).call
 key|accept|b04a5f18|T_plain_listOne.key(PK,nameOnly,d0).call
@@ -109,6 +145,8 @@ key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,d0).call
 key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,partial).call
 key|accept|b5bad5e0|T_kind_dpathdouble_nullArms.key(SK,in,none).call
 key|accept|b5bad5e0|T_kind_dpathdouble_nullArms.key(SK,out,none).call
+key|accept|b869b9a6|T_plain_list2_sep.key(SK,none,partial).call
+key|accept|b869b9a6|T_plain_list2_sep.key(SK,sLit,narrow).result
 key|accept|c9ccab71|T_kind_dpathdouble_armpath_cases_pos.key(SK,in,none).call
 key|accept|c9ccab71|T_kind_dpathdouble_armpath_cases_pos.key(SK,out,none).call
 key|accept|f1510f52|T_plain_list2.key(SK,none,partial).call
@@ -122,11 +160,24 @@ key|refuse|184b973a|T_plain_tagTf.key(SK,ok,partial).foreign
 key|refuse|30bc3e95|T_plain_taglessTf.key(SK,blank,none).call
 key|refuse|490e4ea0|T_plain_pkList.key(PK,blankId,bnd).call
 key|refuse|490e4ea0|T_plain_pkList.key(PK,blankId,none).call
+key|refuse|7eecf917|T_plain_attrNote_sep.key(SK,blankNote,none).call
+key|refuse|83487729|T_plain_tagTf_sep.key(SK,blank,none).foreign
+key|refuse|83487729|T_plain_tagTf_sep.key(SK,blank,partial).foreign
+key|refuse|83487729|T_plain_tagTf_sep.key(SK,ok,none).foreign
+key|refuse|83487729|T_plain_tagTf_sep.key(SK,ok,partial).foreign
 key|refuse|afe107af|T_nest_pathPlain.key(SK,blankCode,none).call
 key|refuse|b04a5f18|T_plain_listOne.key(SK,blank,none).call
 key|refuse|b04a5f18|T_plain_listOne.key(SK,sep,none).call
 key|refuse|b04a5f18|T_plain_listOne.key(SK,sep,partial).call
 key|refuse|b688f70a|T_nest_pathTag.key(SK,blankCode,none).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,any).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,bnd).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,maybe).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,none).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sFirst,any).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sFirst,maybe).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sLit,any).call
+key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sLit,maybe).call
 key|refuse|b97df3e1|T_plain_attrName.key(SK,blank,none).call
 key|refuse|bf6ad666|T_plain_attrNote.key(SK,blankNote,none).call
 key|refuse|f1510f52|T_plain_list2.key(SK,blank,any).call
@@ -154,15 +205,32 @@ toEntry|refuse|2fa8f7f9|T_opt_pathAttr.toEntry(blankOwner).call
 toEntry|refuse|30bc3e95|T_plain_taglessTf.toEntry(blank).call
 toEntry|refuse|30bc3e95|T_plain_taglessTf.toEntry(sep).call
 toEntry|refuse|490e4ea0|T_plain_pkList.toEntry(blankId).call
+toEntry|refuse|4977ab43|T_plain_codecItem.toEntry(blank).call
+toEntry|refuse|4977ab43|T_plain_codecItem.toEntry(sep).call
+toEntry|refuse|7bb4c8d4|T_plain_indexKeys.toEntry(blank).call
+toEntry|refuse|7eecf917|T_plain_attrNote_sep.toEntry(blankId).call
+toEntry|refuse|7eecf917|T_plain_attrNote_sep.toEntry(blankNote).call
+toEntry|refuse|7f04b386|T_opt_pathAttr_sep.toEntry(blankOwner).call
+toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blank).foreign:SK
+toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blankId).call
+toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blankNote).foreign:SK
+toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(nonote).foreign:SK
+toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(ok).foreign:SK
+toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(sep).foreign:SK
 toEntry|refuse|afe107af|T_nest_pathPlain.toEntry(blankCode).call
 toEntry|refuse|b04a5f18|T_plain_listOne.toEntry(blank).call
 toEntry|refuse|b04a5f18|T_plain_listOne.toEntry(blankId).call
 toEntry|refuse|b04a5f18|T_plain_listOne.toEntry(sep).call
 toEntry|refuse|b688f70a|T_nest_pathTag.toEntry(blankCode).call
+toEntry|refuse|b869b9a6|T_plain_list2_sep.toEntry(blank).call
+toEntry|refuse|b869b9a6|T_plain_list2_sep.toEntry(blankId).call
 toEntry|refuse|b97df3e1|T_plain_attrName.toEntry(blank).call
 toEntry|refuse|b97df3e1|T_plain_attrName.toEntry(blankId).call
 toEntry|refuse|bf6ad666|T_plain_attrNote.toEntry(blankId).call
 toEntry|refuse|bf6ad666|T_plain_attrNote.toEntry(blankNote).call
+toEntry|refuse|d178e45a|T_plain_roleKeys.toEntry(blank).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(blank).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(blankId).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(sep).call
+toItem|refuse|4977ab43|T_plain_codecItem.toItem(blank).call
+toItem|refuse|4977ab43|T_plain_codecItem.toItem(sep).call

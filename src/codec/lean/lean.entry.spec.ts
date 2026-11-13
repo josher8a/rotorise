@@ -37,6 +37,7 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../Rotorise'
 import {
+    CodecError,
     discriminatedUnion,
     held,
     item,
@@ -148,6 +149,10 @@ type Spec = {
     readonly configs?: readonly string[]
     readonly items?: readonly string[] // the items of toEntry, fromEntry and infer
     readonly changes?: readonly string[]
+    readonly calls?: readonly string[] // the methods that have no other loop: keys, keyCondition, toItem, fromItem, encodePartial
+    readonly args?: readonly string[] // the arguments of keys and keyCondition: Partial<Entity>, so a prefix or none is drawn
+    readonly patches?: readonly string[] // the changes that encodePartial reads
+    readonly indexes?: readonly string[] // the names of the indexes that keyCondition reads
     readonly extra?: Readonly<Record<string, string>> // more axes: the place of a path, the polarity
 }
 type Entity = {
@@ -257,6 +262,11 @@ add({
             vk: 'typical',
         },
         chNone: { declared: '{}', value: '{}', vk: 'no-attribute' },
+        chGhost: {
+            declared: '{ note: string; ghost: number }',
+            value: "{ note: 'n2', ghost: 1 }",
+            vk: 'unheld-name',
+        },
         sFirst: {
             declared: '{ shelterId: string }',
             value: "{ shelterId: 's1' }",
@@ -291,6 +301,40 @@ add({
             configs: [...CORE, ...VARIABLE],
             items: PLAIN_ITEMS,
             changes: ['chSN', 'chName', 'chNote', 'chNone'],
+        },
+        {
+            id: 'roleKeys',
+            form: 'list',
+            codec: 'none',
+            schema: "{ PK: ['petId'], SK: ['shelterId', 'name'] }",
+            options: "{ key: { partition: 'PK', sort: 'SK' } }",
+            items: ['ok', 'blank'],
+            args: ['ok', 'nonote', 'blank', 'sep', 'none', 'pidOnly'],
+            calls: ['keys', 'keyCondition'],
+        },
+        {
+            id: 'indexKeys',
+            form: 'list',
+            codec: 'none',
+            schema: "{ PK: ['petId'], SK: ['shelterId', 'name'], GSI1PK: ['shelterId'], GSI1SK: ['name'] }",
+            options:
+                "{ key: { partition: 'PK', sort: 'SK' }, indexes: { G1: { partition: 'GSI1PK', sort: 'GSI1SK' } } }",
+            items: ['ok', 'blank'],
+            args: ['ok', 'blank', 'sep', 'none', 'pidOnly'],
+            calls: ['keyCondition', 'keyConditionIndex'],
+            indexes: ['G1'],
+        },
+        {
+            id: 'codecItem',
+            form: 'list',
+            codec: 'record',
+            schema: "{ PK: ['petId'], SK: ['shelterId', 'name'] }",
+            options:
+                "{ key: { partition: 'PK', sort: 'SK' }, codec: { petId: string, shelterId: string, name: string, note: optional(string) } }",
+            items: ['ok', 'nonote', 'blank', 'sep'],
+            args: ['ok', 'blank', 'none'],
+            patches: ['chNote', 'chName', 'chNone', 'chGhost'],
+            calls: ['keys', 'toItem', 'fromItem', 'encodePartial'],
         },
         {
             id: 'pkList',
@@ -1451,6 +1495,53 @@ for (const [kindId, kind] of Object.entries(KINDS)) {
     })
 }
 
+// A draw with the option `separator` for one schema form: the first table of the form that holds no
+// options and that the type does not refuse at construction. A refused table gives no method row.
+const SEPARATED = [
+    'list2',
+    'attrNote',
+    'pathAttr',
+    'pathList',
+    'pathDefault',
+    'tagTf',
+    'defaultFn',
+    'nopath_spec_pos',
+    'nopath_cases_pos',
+    'nullArms',
+    'twoLevels',
+]
+{
+    const seen = new Set<string>()
+    ENTITIES.forEach((entity, at) => {
+        const copies: Spec[] = []
+        for (const spec of entity.specs) {
+            if (
+                !SEPARATED.includes(spec.id) ||
+                (spec.options !== undefined && spec.id !== 'twoLevels') ||
+                seen.has(spec.form) ||
+                !(
+                    entity.id === 'plain' ||
+                    entity.id.startsWith('kind_single') ||
+                    entity.id === 'opt' ||
+                    entity.id === 'held'
+                )
+            )
+                continue
+            seen.add(spec.form)
+            copies.push({
+                ...spec,
+                id: `${spec.id}_sep`,
+                options:
+                    spec.options === undefined
+                        ? "{ separator: '|' }"
+                        : spec.options.replace(/ }$/, ", separator: '|' }"),
+            })
+        }
+        if (copies.length > 0)
+            ENTITIES[at] = { ...entity, specs: [...entity.specs, ...copies] }
+    })
+}
+
 // ---------------------------------------------------------------- the print
 
 type Row = {
@@ -1464,7 +1555,10 @@ type Row = {
     run?: string
 }
 // A text that carries a label of the key, as `PETID#p1`. Only such a text has a foreign value.
-const LABELLED = /^[A-Z0-9_]+#/
+const labelled = (options: string | undefined): RegExp => {
+    const separator = /separator: '(.)'/.exec(options ?? '')?.[1] ?? '#'
+    return new RegExp(`^[A-Z0-9_]+\\${separator}`)
+}
 // A key that the run time does not write is foreign to a declared member only where every arm of the
 // spec for that member gives no value: a `null` arm. An attribute or a path can hold a value in another item.
 const forcesAbsence = (form: string) =>
@@ -1481,11 +1575,16 @@ export const plain = (value: unknown): boolean =>
             Object.values(value).every(plain)
 const sha = (text: string) =>
     createHash('sha1').update(text).digest('hex').slice(0, 8)
+// A value of the run time as a line of the program. An error value is a CodecError.
+const exprOf = (value: unknown): string =>
+    value instanceof CodecError
+        ? `new CodecError(${JSON.stringify(value.reason)}, '${value.kind}')`
+        : lit(value)
 const showRun = (o: Outcome, group: string) =>
     o.ok
         ? group === 'construct'
             ? 'builds'
-            : `ok ${lit(o.value).slice(0, 200)}`
+            : `ok ${exprOf(o.value).slice(0, 200)}`
         : `throw ${o.message}`
 
 type Table = {
@@ -1493,6 +1592,11 @@ type Table = {
     readonly toEntry: (item: object) => Record<string, unknown>
     readonly fromEntry: (entry: object) => unknown
     readonly keyUpdates: (change: object) => unknown
+    readonly keys: (item: object) => unknown
+    readonly keyCondition: (a: object | string, b?: object) => unknown
+    readonly toItem: (item: object) => unknown
+    readonly fromItem: (stored: object) => unknown
+    readonly codec: { readonly encodePartial: (change: object) => unknown }
 }
 
 // The names are joined, so that no template cites a file that the tree does not hold.
@@ -1514,7 +1618,7 @@ export const printPool = (parts: number, reverse: boolean) => {
     const header = [
         '// The pool of the entry methods. Generated by lean.entry.spec.ts. One line is one decision of the run time.',
         "import type { StandardSchemaV1 } from '../../src/codec/standard'",
-        "import { discriminatedUnion, held, item, nullable, number, object, optional, string, union } from '../../src/codec/codec'",
+        "import { CodecError, discriminatedUnion, held, item, nullable, number, object, optional, string, union } from '../../src/codec/codec'",
         "import { tableEntry } from '../../src/Rotorise'",
         'export const library = { discriminatedUnion, held, item, nullable, number, object, optional, string, union }',
         ...PRELUDE.map(([n, t]) => `export const ${n} = ${t}`),
@@ -1532,6 +1636,7 @@ export const printPool = (parts: number, reverse: boolean) => {
             ...s.extra,
         }
         const T = `T_${e.id}_${s.id}`
+        const LAB = labelled(s.options)
         const emit = (line: string) => out.push(line)
         const row = (
             group: string,
@@ -1668,7 +1773,7 @@ export const printPool = (parts: number, reverse: boolean) => {
                 group,
                 'accept',
                 `${text}.result`,
-                `export const r_${v}: typeof ${v} = ${lit(value)}`,
+                `export const r_${v}: typeof ${v} = ${exprOf(value)}`,
                 axes,
                 [cid, id],
             )
@@ -1702,7 +1807,7 @@ export const printPool = (parts: number, reverse: boolean) => {
                 const held = entry[k]
                 if (
                     typeof held === 'string'
-                        ? !LABELLED.test(held)
+                        ? !LAB.test(held)
                         : !forcesAbsence(s.form)
                 )
                     continue
@@ -1750,7 +1855,7 @@ export const printPool = (parts: number, reverse: boolean) => {
                 const held = entry[k]
                 if (
                     typeof held === 'string'
-                        ? !LABELLED.test(held)
+                        ? !LAB.test(held)
                         : !forcesAbsence(s.form)
                 )
                     continue
@@ -1835,7 +1940,7 @@ export const printPool = (parts: number, reverse: boolean) => {
                     result('key', text, c.v, c.id, run.value, axes)
                     if (
                         typeof run.value === 'string'
-                            ? !LABELLED.test(run.value)
+                            ? !LAB.test(run.value)
                             : !forcesAbsence(s.form)
                     )
                         continue
@@ -1851,6 +1956,91 @@ export const printPool = (parts: number, reverse: boolean) => {
                         '',
                     )
                 }
+            }
+        }
+        for (const method of s.calls ?? []) {
+            const names =
+                method === 'encodePartial'
+                    ? (s.patches ?? [])
+                    : method === 'keys' || method.startsWith('keyCondition')
+                      ? (s.args ?? [])
+                      : (s.items ?? [])
+            if (method === 'keyConditionIndex') {
+                for (const index of s.indexes ?? [])
+                    for (const name of names) {
+                        const vr = e.vars[name] as Var
+                        const axes = {
+                            value: vr.vk,
+                            arg: name,
+                            method: 'keyCondition',
+                        }
+                        const run = attempt(() =>
+                            table.keyCondition(index, ev(vr.value) as object),
+                        )
+                        const text = `${T}.keyCondition(${index},${name})`
+                        const c = call(
+                            'keyCondition',
+                            text,
+                            `${T}.keyCondition('${index}', v_${e.id}_${name})`,
+                            run,
+                            axes,
+                        )
+                        if (run.ok)
+                            result(
+                                'keyCondition',
+                                text,
+                                c.v,
+                                c.id,
+                                run.value,
+                                axes,
+                            )
+                    }
+                continue
+            }
+            for (const name of names) {
+                const vr = e.vars[name] as Var
+                const axes = { value: vr.vk, arg: name, method }
+                const value = ev(vr.value) as object
+                const text = `${T}.${method}(${name})`
+                if (method === 'fromItem') {
+                    // the stored items: the item that toItem writes for the arg, and the empty item
+                    const written = attempt(() => table.toItem(value))
+                    const stored = written.ok ? [[name, written.value]] : []
+                    for (const [label, item] of [...stored, ['empty', {}]] as [
+                        string,
+                        object,
+                    ][]) {
+                        const sv = `si_${hash}_${name}_${label}`
+                        emit(`export const ${sv} = ${lit(item)} as const`)
+                        const run = attempt(() => table.fromItem(item))
+                        const t = `${T}.fromItem(${name},${label})`
+                        const c = call(
+                            'fromItem',
+                            t,
+                            `${T}.fromItem(${sv})`,
+                            run,
+                            axes,
+                        )
+                        if (run.ok)
+                            result('fromItem', t, c.v, c.id, run.value, axes)
+                    }
+                    continue
+                }
+                const run = attempt(() =>
+                    method === 'keys'
+                        ? table.keys(value)
+                        : method === 'keyCondition'
+                          ? table.keyCondition(value)
+                          : method === 'toItem'
+                            ? table.toItem(value)
+                            : table.codec.encodePartial(value),
+                )
+                const expr =
+                    method === 'encodePartial'
+                        ? `${T}.codec.encodePartial(v_${e.id}_${name})`
+                        : `${T}.${method}(v_${e.id}_${name})`
+                const c = call(method, text, expr, run, axes)
+                if (run.ok) result(method, text, c.v, c.id, run.value, axes)
             }
         }
         for (const name of s.changes ?? []) {
@@ -1934,13 +2124,18 @@ const LONG = 120_000
 const TYPING_ROWS = 65
 const GROUP_ROWS = {
     typing: 65,
-    constructAccept: 88,
-    constructRefuse: 62,
-    toEntry: 731,
-    fromEntry: 585,
-    infer: 447,
-    key: 911,
-    keyUpdates: 68,
+    constructAccept: 101,
+    constructRefuse: 63,
+    toEntry: 858,
+    fromEntry: 681,
+    infer: 524,
+    key: 1113,
+    keyUpdates: 87,
+    keys: 12,
+    keyCondition: 25,
+    toItem: 6,
+    fromItem: 12,
+    encodePartial: 8,
 }
 
 describe('the pool of the entry methods', () => {
@@ -2103,6 +2298,96 @@ describe('the pool of the entry methods', () => {
         },
     )
 
+    it(
+        'gives a toItem call that throws for a key component with no text a refuse row, as the owner ruled',
+        { timeout: LONG },
+        () => {
+            const toItem = pool().rows.filter((r) => r.group === 'toItem')
+            const verdict = (name: string) =>
+                toItem.find(
+                    (r) =>
+                        textOf(r) === `T_plain_codecItem.toItem(${name}).call`,
+                )?.expect
+            expect(verdict('ok')).toBe('accept')
+            expect(verdict('blank')).toBe('refuse')
+            expect(verdict('sep')).toBe('refuse')
+        },
+    )
+
+    it(
+        'gives an error value of fromItem an accept call row, and the result row builds a CodecError',
+        { timeout: LONG },
+        () => {
+            const rows = pool().rows
+            const call = rows.find(
+                (r) =>
+                    textOf(r) === 'T_plain_codecItem.fromItem(ok,empty).call',
+            )
+            expect(call?.expect).toBe('accept')
+            expect(
+                rows.some(
+                    (r) =>
+                        textOf(r) ===
+                        'T_plain_codecItem.fromItem(ok,empty).result',
+                ),
+            ).toBe(true)
+            expect(pool().files[0]?.join('\n')).toContain('= new CodecError(')
+        },
+    )
+
+    it(
+        'draws the option separator for one table of each schema form that the type builds, and reads a label with that separator',
+        { timeout: LONG },
+        () => {
+            const tables = new Set(
+                pool()
+                    .rows.filter((r) => r.group === 'construct')
+                    .map(textOf)
+                    .filter((t) => t.endsWith('_sep')),
+            )
+            expect([...tables].sort()).toEqual(
+                [
+                    'opt.pathList_sep',
+                    'plain.attrNote_sep',
+                    'plain.defaultFn_sep',
+                    'plain.list2_sep',
+                    'plain.tagTf_sep',
+                    'opt.pathAttr_sep',
+                    'opt.pathDefault_sep',
+                    'kind_single.nopath_spec_pos_sep',
+                    'kind_single.nopath_cases_pos_sep',
+                    'kind_single.nullArms_sep',
+                    'held.twoLevels_sep',
+                ].sort(),
+            )
+            // a text with the label of the separator `|` has a foreign value, as a text with `#` has
+            expect(pool().files[0]?.join('\n')).toContain('"~T|rex"')
+        },
+    )
+
+    it(
+        'draws keys and keyCondition with an argument that holds no component of the key, or a prefix of it',
+        { timeout: LONG },
+        () => {
+            const verdict = (text: string) =>
+                pool().rows.find((r) => textOf(r) === text)?.expect
+            expect(verdict('T_plain_roleKeys.keys(ok).call')).toBe('accept')
+            expect(verdict('T_plain_roleKeys.keys(none).call')).toBe('refuse')
+            expect(verdict('T_plain_roleKeys.keys(pidOnly).call')).toBe(
+                'refuse',
+            )
+            expect(verdict('T_plain_roleKeys.keyCondition(pidOnly).call')).toBe(
+                'accept',
+            )
+            expect(verdict('T_plain_indexKeys.keyCondition(G1,ok).call')).toBe(
+                'accept',
+            )
+            expect(
+                verdict('T_plain_indexKeys.keyCondition(G1,none).call'),
+            ).toBe('refuse')
+        },
+    )
+
     it('pins the count of the rows of each group', { timeout: LONG }, () => {
         const count = (g: string, v?: string) =>
             pool().rows.filter(
@@ -2117,6 +2402,11 @@ describe('the pool of the entry methods', () => {
             infer: count('infer'),
             key: count('key'),
             keyUpdates: count('keyUpdates'),
+            keys: count('keys'),
+            keyCondition: count('keyCondition'),
+            toItem: count('toItem'),
+            fromItem: count('fromItem'),
+            encodePartial: count('encodePartial'),
         }).toEqual(GROUP_ROWS)
     })
 

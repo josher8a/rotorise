@@ -444,8 +444,10 @@ refusal, because a refusal is an intersection with the parameter. Measured 2026-
 undefined at run time. The type of the first call is the key of depth 1, and the run time builds
 the whole key.
 
-**Pin.** None for the two forms. `src/codec/spec/object/codec.keydepth.spec.ts` pins the refusal of
-an optional slot, of `number`, and of two literals at one slot.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 8 ids of
+the group key for the two forms, 4 of them on a table with the option separator.
+src/codec/spec/object/codec.keydepth.spec.ts pins the refusal of an optional slot, of `number`, and
+of two literals at one slot.
 
 ---
 
@@ -471,7 +473,8 @@ TypeScript 6 prints the first refusal as `is not assignable to type 'never'`, wi
 **Effect.** The first call does not compile, and the run time builds the entry and reads the
 default.
 
-**Pin.** None. No test gives a default beside an options object.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids of
+the group construct, one for each table with a default beside an options object.
 
 ---
 
@@ -499,8 +502,10 @@ An option that lacks the name adds no undefined, so the refusal does not see the
 **Effect.** The entry builds, the type of the key states a text for each item of the entity, and
 `toEntry(item)` throws for each item of the option that lacks the name.
 
-**Pin.** None. `src/codec/spec/object/codec.keypath.spec.ts` pins the refusal of a path whose value
-can be absent, for an optional name and no union.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 4 ids: 1 of
+the group construct, 1 of toEntry, 1 of infer and 1 of fromEntry.
+src/codec/spec/object/codec.keypath.spec.ts pins the refusal of a path whose value can be absent,
+for an optional name and no union.
 
 ---
 
@@ -537,8 +542,10 @@ the SK `NOTE#n` where the value below the first name is an object, and throws
 **Effect.** A reader of the head of the error gets no reason. A reader of the whole error gets one
 reason or two.
 
-**Pin.** None for the head. `src/codec/spec/object/codec.keycomponent.spec.ts` pins the refusal of
-the entity whose attribute holds the `.`, for a list.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids of
+the group construct, one for each table that the type refuses and the run time builds. No test pins
+the head. src/codec/spec/object/codec.keycomponent.spec.ts pins the refusal of the entity whose
+attribute holds the `.`, for a list.
 
 ---
 
@@ -631,8 +638,9 @@ The run time of the second call is not measured.
 **Effect.** The type admits a number at a path that holds a string in the entity, and the key
 prints the number. The type refuses the string that the path holds.
 
-**Pin.** None for the type. `src/codec/spec/laws/codec.keyupdate.spec.ts` pins the run time: the
-patch agrees with the keys of the changed pet, for a key name with a `.` also.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 1 id of the
+group keyUpdates. src/codec/spec/laws/codec.keyupdate.spec.ts pins the run time: the patch agrees
+with the keys of the changed pet, for a key name with a `.` also.
 
 ---
 
@@ -658,7 +666,8 @@ string gives a type with the tag, such as `` `PETID#${string}` ``.
 **Effect.** The type admits the text that the run time prints, and admits each other text with a
 `#`.
 
-**Pin.** None. No test declares a component whose name is a number.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 4 ids: 1 of
+toEntry, 1 of infer and 2 of key.
 
 ---
 
@@ -783,7 +792,8 @@ at the call is not affected: the type reads each member of the literal. Measured
 type accepts throws. A caller that keeps a config or a change in a variable of a declared type, or
 passes one through a parameter of a union type, gets no error from the compiler.
 
-**Pin.** None.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids: 2 of
+the group key and 1 of keyUpdates.
 
 ---
 
@@ -840,7 +850,8 @@ the entity. The type of toEntry reads the stored text at each depth. Measured 20
 type of toEntry states the stored text for the same key, so the two methods state two types for
 one value.
 
-**Pin.** None.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 2 ids of
+the group key.
 
 ---
 
@@ -962,7 +973,8 @@ absent. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest 
 **Effect.** A caller that holds an item of the entity cannot pass the item to `key` with no cast.
 An object literal that holds the object compiles.
 
-**Pin.** None.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 4 ids of
+the group key.
 
 ---
 
@@ -1262,31 +1274,6 @@ state the rule that the call breaks.
 
 ---
 
-## Known: the type bridge holds no row for a method of an entry
-
-**Observation.** `src/codec/typeVectors.ts` prints each decision of the run time as one line for
-the type checker. Each row is a call of a codec. The generated files import the codec modules
-only, and no line calls a method of an entry. Measured 2026-11-12 with
-`EMIT_LEAN_REFUSALS=1 npx vitest --run src/codec/lean/lean.pool.spec.ts` and the name of the test
-that emits the type vectors, on the files under `formal/.pool.types/`:
-
-    the groups of the rows of rows.json
-      declaration, call, extract, exclude, path, decoded, encoded, meet, meetvalue
-
-    the lines of the generated files that hold tableEntry, or a call of key, toEntry,
-    keyUpdates or fromEntry
-      0
-
-    the modules of src/ that the generated files import
-      codec/codec, codec/attribute, codec/prisms, codec/native, codec/result
-
-**Effect.** A change of the type of a method of an entry moves no row of the type bridge. The
-bridge compares the type of such a method with the run time for no input.
-
-**Pin.** None.
-
----
-
 ## Known: a key row of the gate gives the model each component of a composite key as a constant that the emitter evaluated
 
 **Observation.** A row of the gate holds a key spec as a tree. An item row holds a plain component
@@ -1395,7 +1382,8 @@ entry above:
 **Effect.** The type of the key is wider than the value. Each value that the run time gives fits
 the type, and a text with another label fits the type also.
 
-**Pin.** None for the label in the type.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 26 ids: 9
+of toEntry, 9 of infer and 8 of key. Each is a foreign text with another label.
 
 ---
 
@@ -1430,7 +1418,8 @@ The type checker of the two calls of toEntry is not measured.
 
 **Effect.** A caller that holds an item of the entity cannot pass the item to `key` with no cast.
 
-**Pin.** None.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 10 ids of
+the group key.
 
 ---
 
@@ -1473,6 +1462,54 @@ a path where one option holds two literals. A cast or a constant of the literal 
 
 **Pin.** `src/codec/lean/lean.entry.spec.ts` draws the tables of the kind dpathdouble, and the
 baseline of `formal/scripts/type_bridge_baseline.txt` holds 14 ids of the calls of `key` on them.
+
+---
+
+## Known: the type of keys and of keyCondition admits an argument that holds no component of a key, where the run time throws
+
+**Observation.** The parameter of keys and of keyCondition is a partial entity with any other name.
+The run time builds the key of the table from each component of the key, and the partition of an
+index from each component of the partition. The argument can lack a component, and the type does not
+read the components. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+
+    type Pet = { petId: string; shelterId: string; name: string }
+    const Pets = tableEntry<Pet>()(
+        { PK: ['petId'], SK: ['shelterId', 'name'], GSI1PK: ['shelterId'] },
+        { key: { partition: 'PK', sort: 'SK' }, indexes: { Shelter: { partition: 'GSI1PK' } } },
+    )
+    const full: Pet = { petId: 'p1', shelterId: 's1', name: 'rex' }
+    const first: { petId: string } = { petId: 'p1' }
+    const empty: Partial<Pet> = {}
+
+    Pets.keys(full)
+      type checker: builds
+      runtime:      gives { PK: { S: 'PETID#p1' }, SK: { S: 'SHELTERID#s1#NAME#rex' } }
+
+    Pets.keys(first)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute shelterId not found
+
+    Pets.keys(empty)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute petId not found
+
+    Pets.keyCondition(empty)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute petId not found
+
+    Pets.keyCondition('Shelter', first)
+      type checker: builds
+      runtime:      throws, buildCompositeKey: Attribute shelterId not found
+
+    Pets.keyCondition(first)
+      type checker: builds
+      runtime:      gives { partition: { name: 'PK', value: { S: 'PETID#p1' } } }
+
+**Effect.** The call compiles, and the run time throws for an argument of the declared type. The
+type of the result is the same for each argument.
+
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 7 ids: 3 of
+the group keys and 4 of the group keyCondition. src/codec/lean/lean.entry.spec.ts draws each call.
 
 ---
 
