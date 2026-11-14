@@ -153,8 +153,11 @@ export const kennelPins = {
             Kennels.key('SK', kennel, { allowPartial: true, enforceBoundary: true }),
         ),
     },
-    keyUpdates: pinned<{ set: Values; remove: readonly 'GSI1PK'[] }>()(
+    keyUpdates: pinned<Result<{ set: Values; remove: readonly 'GSI1PK'[] }>>()(
         Kennels.keyUpdates(older),
+    ),
+    unsafeKeyUpdates: pinned<{ set: Values; remove: readonly 'GSI1PK'[] }>()(
+        Kennels.unsafeKeyUpdates(older),
     ),
     keys: {
         names: pinned<Result<Values>>()(Kennels.keys(['PK', 'SK'], kennel)),
@@ -236,6 +239,6 @@ export const petPins = {
     keyOfDog: pinned<'OWNERID#o1'>()(Pets.key('SK', dogPet)),
     keyOfCat: pinned<undefined>()(Pets.key('SK', catPet)),
     keyUpdates: pinned<{ set: Values; remove: readonly 'SK'[] }>()(
-        Pets.keyUpdates({ kind: 'DOG', ownerId: 'o2' }),
+        Pets.unsafeKeyUpdates({ kind: 'DOG', ownerId: 'o2' }),
     ),
 }

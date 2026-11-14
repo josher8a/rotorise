@@ -70,7 +70,7 @@ describe('a key of one number attribute is N in every path that writes a row', (
     })
 
     it('keyUpdates sets N, the member that toItem writes', () => {
-        expect(Litters.keyUpdates({ born: 10 }).set).toEqual({
+        expect(Litters.unsafeKeyUpdates({ born: 10 }).set).toEqual({
             GSI1SK: { N: '10' },
         })
     })
@@ -109,7 +109,9 @@ describe('null gives no key in every path, as undefined does', () => {
     })
 
     it('keyUpdates removes the key of a null attribute arm', () => {
-        expect(Pets.keyUpdates({ status: 'ADOPTED', owner: null })).toEqual({
+        expect(
+            Pets.unsafeKeyUpdates({ status: 'ADOPTED', owner: null }),
+        ).toEqual({
             set: {},
             remove: ['GSI2PK'],
         })
@@ -215,10 +217,10 @@ describe('a key attribute of DynamoDB is S, N or B, at a path as at a name', () 
     })
 
     it('writes B in keyUpdates, with a codec and with none', () => {
-        expect(Plain.keyUpdates({ tag: { chip } }).set).toEqual({
+        expect(Plain.unsafeKeyUpdates({ tag: { chip } }).set).toEqual({
             GSI1PK: { B: chip },
         })
-        expect(Coded.keyUpdates({ tag: { chip } }).set).toEqual({
+        expect(Coded.unsafeKeyUpdates({ tag: { chip } }).set).toEqual({
             GSI1PK: { B: chip },
         })
     })
@@ -248,9 +250,14 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
     })
 
     it('keyUpdates refuses an empty key, where the update writes a key that DynamoDB refuses', () => {
-        expect(() => Tags.keyUpdates({ nick: '' })).toThrow(
-            "'SK' cannot be rebuilt from this change: Key SK: the attribute 'nick' is empty, so the key is empty.",
-        )
+        {
+            const refused = Tags.keyUpdates({ nick: '' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "'SK' cannot be rebuilt from this change: Key SK: the attribute 'nick' is empty, so the key is empty.",
+                )
+        }
     })
 
     it('toEntry refuses an empty key, which a marshaller writes as a key that DynamoDB refuses', () => {
@@ -398,7 +405,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
             names: readonly string[],
             attributes: never,
         ) => Record<string, unknown>
-        readonly keyUpdates: (changed: never) => {
+        readonly unsafeKeyUpdates: (changed: never) => {
             readonly set: Record<string, unknown>
             readonly remove: readonly string[]
         }
@@ -849,7 +856,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
                     return result as Record<string, unknown>
                 })
                 const entered = said(() => entry.unsafeToEntry(entity))
-                const updated = said(() => entry.keyUpdates(entity))
+                const updated = said(() => entry.unsafeKeyUpdates(entity))
                 const refusedBy = names.find(
                     (name) =>
                         keyed[name]?.said !== undefined &&

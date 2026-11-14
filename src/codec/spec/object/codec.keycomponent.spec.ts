@@ -395,17 +395,22 @@ describe('a name of a key that holds a dot is a path', () => {
             set: { GSI1SK: { S: 'NAME#bea' } },
             remove: [],
         }
-        expect(None.keyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
+        expect(None.unsafeKeyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
         // a write to the path is a change of the key: the given item reads the written name first
-        expect(None.keyUpdates({ 'owner.name': 8 })).toEqual({
+        expect(None.unsafeKeyUpdates({ 'owner.name': 8 })).toEqual({
             set: { GSI1SK: { S: 'NAME#8' } },
             remove: [],
         })
-        expect(Coded.keyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
+        expect(Coded.unsafeKeyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
         // the codec writes the path as text, so a number written to the path is refused
-        expect(() => Coded.keyUpdates({ 'owner.name': 8 })).toThrow(
-            /codec writes no text or number/,
-        )
+        {
+            const refused = Coded.keyUpdates({ 'owner.name': 8 })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /codec writes no text or number/,
+                )
+        }
     })
 
     it('refuses a change of a path above the path that a key reads, because the change writes a part of what the key reads', () => {
@@ -418,10 +423,13 @@ describe('a name of a key that holds a dot is a path', () => {
             PK: ['petId'],
             GSI1PK: ['owner.name.first'],
         })
-        expect(() =>
-            // the type reads a write to 'owner.name' as a hold of the path below it, and the run time reads no value there
-            Pets.keyUpdates({ 'owner.name': 8 }),
-        ).toThrow(/cannot be rebuilt/)
+        {
+            const refused = // the type reads a write to 'owner.name' as a hold of the path below it, and the run time reads no value there
+                Pets.keyUpdates({ 'owner.name': 8 })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/cannot be rebuilt/)
+        }
     })
 
     it('gives the transform of a component the value at the path, and types its parameter as the type at the path', () => {
@@ -528,12 +536,12 @@ describe('a name of a key that holds a dot is a path', () => {
         expect(Pets.unsafeKeys(['GSI1SK'], pet)).toEqual({
             GSI1SK: { S: 'NAME#bob' },
         })
-        expect(Pets.keyUpdates({ owner: { name: 'bea' } })).toEqual({
+        expect(Pets.unsafeKeyUpdates({ owner: { name: 'bea' } })).toEqual({
             set: { GSI1SK: { S: 'NAME#bea' } },
             remove: [],
         })
         // a write to the path is a change of the key, and the rest of the open codec holds no reading
-        expect(Pets.keyUpdates({ 'owner.name': 'cat' })).toEqual({
+        expect(Pets.unsafeKeyUpdates({ 'owner.name': 'cat' })).toEqual({
             set: { GSI1SK: { S: 'NAME#cat' } },
             remove: [],
         })
@@ -549,14 +557,20 @@ describe('a name of a key that holds a dot is a path', () => {
             { PK: ['petId'], GSI1SK: ['owner'] },
             { codec: { petId: string, owner: string, 'owner.name': number } },
         )
-        // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
-        expect(() => None.keyUpdates({ 'owner.name': 8 })).toThrow(
-            /cannot be rebuilt/,
-        )
-        // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
-        expect(() => Coded.keyUpdates({ 'owner.name': 8 })).toThrow(
-            /cannot be rebuilt/,
-        )
+        {
+            // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
+            const refused = None.keyUpdates({ 'owner.name': 8 })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/cannot be rebuilt/)
+        }
+        {
+            // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
+            const refused = Coded.keyUpdates({ 'owner.name': 8 })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/cannot be rebuilt/)
+        }
     })
 
     it('refuses an entity whose attribute holds the dot, in the type and at construction, and gives the reason', () => {
@@ -602,7 +616,7 @@ describe('a name of a key that holds a dot is a path', () => {
                 owner: { name: 'bob' },
             }).GSI1SK,
         ).toEqual({ S: 'NAME#bob' })
-        expect(Pets.keyUpdates({ owner: { name: 'bea' } })).toEqual({
+        expect(Pets.unsafeKeyUpdates({ owner: { name: 'bea' } })).toEqual({
             set: { GSI1SK: { S: 'NAME#bea' } },
             remove: [],
         })

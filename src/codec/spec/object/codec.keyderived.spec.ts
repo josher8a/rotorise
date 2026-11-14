@@ -77,9 +77,14 @@ describe('the codec decides a component, so no caller passes it', () => {
                     /'TAG' is decided by the codec as 'PET'/,
                 )
         }
-        expect(() => Pets.keyUpdates(other)).toThrow(
-            /'TAG' is decided by the codec as 'PET'/,
-        )
+        {
+            const refused = Pets.keyUpdates(other)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /'TAG' is decided by the codec as 'PET'/,
+                )
+        }
         expect(
             Pets.unsafeKeys({ TAG: 'PET', petId: 'p1', createdAt: 'c' }),
         ).toEqual({

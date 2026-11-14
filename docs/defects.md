@@ -802,14 +802,16 @@ at the call is not affected: the type reads each member of the literal. Measured
       type checker: refused, 'PK' is a table key that holds 'petId'
     Kennels.keyUpdates(narrowChange)
       type checker: builds
-      runtime:      throws, 'PK' is the table's own key and is built from 'petId'
+      runtime:      returns a CodecError, 'PK' is the table's own key and is built from 'petId'
+                    (unsafeKeyUpdates throws it)
 
-**Effect.** The type of a key states a text that the run time does not give, or a change that the
-type accepts throws. A caller that keeps a config or a change in a variable of a declared type, or
-passes one through a parameter of a union type, gets no error from the compiler.
+**Effect.** The type of a key states a text that the run time does not give, and a change that the
+type accepts gives a CodecError, which the type of the result states. A caller that keeps a config
+or a change in a variable of a declared type, or passes one through a parameter of a union type,
+gets no error from the compiler.
 
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids: 2 of
-the group key and 1 of keyUpdates.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 2 ids,
+both of the group key. keyUpdates returns the refusal as a value, so that call is no id.
 
 ---
 

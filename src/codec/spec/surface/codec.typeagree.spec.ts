@@ -116,7 +116,7 @@ describe('a constant is decided at the type where it is decided at run time', ()
             { PK: ['adoptedOn', 'petId'] },
             { codec: item(object({ adoptedOn: adoptedOn(), petId: string })) },
         )
-        const patch = Pets.keyUpdates({ petId: 'p1' })
+        const patch = Pets.unsafeKeyUpdates({ petId: 'p1' })
         expect(Object.keys(patch.set)).toEqual(['PK'])
     })
 })

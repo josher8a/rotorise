@@ -52,19 +52,19 @@ const availableDog = {
 
 describe('the change of a key that a `null` arm builds', () => {
     it('removes the key of a change into a `null` arm', () => {
-        const update = Pets.keyUpdates(adopted)
+        const update = Pets.unsafeKeyUpdates(adopted)
         expect(update.remove).toEqual(['GSI1PK'])
         expect(update.set).toEqual({ GSI2PK: { S: 'OWNER#ann' } })
     })
 
     it('removes the key of a change into a `null` arm of a nested match', () => {
-        const update = Pets.keyUpdates(availableDog)
+        const update = Pets.unsafeKeyUpdates(availableDog)
         expect(update.remove).toEqual(['GSI2PK'])
         expect(update.set).toEqual({ GSI1PK: { S: 'SHELTER#s1' } })
     })
 
     it('sets the key of a change out of a `null` arm', () => {
-        const update = Pets.keyUpdates(availableCat)
+        const update = Pets.unsafeKeyUpdates(availableCat)
         expect(update.remove).toEqual([])
         expect(update.set).toEqual({
             GSI1PK: { S: 'SHELTER#s1' },
@@ -73,7 +73,7 @@ describe('the change of a key that a `null` arm builds', () => {
     })
 
     it('leaves a key out of both parts when the change does not touch the key', () => {
-        const update = Pets.keyUpdates(adopted)
+        const update = Pets.unsafeKeyUpdates(adopted)
         expect(update.set).not.toHaveProperty('GSI3PK')
         expect(update.remove).not.toContain('GSI3PK')
     })
@@ -96,18 +96,21 @@ const expectAgreement = (
 
 describe('the agreement of a key update with `toEntry`', () => {
     it('sets the key that toEntry writes, and removes the key that toEntry omits, for an adopted pet', () => {
-        expectAgreement(Pets.keyUpdates(adopted), { petId: 'p1', ...adopted })
+        expectAgreement(Pets.unsafeKeyUpdates(adopted), {
+            petId: 'p1',
+            ...adopted,
+        })
     })
 
     it('sets the key that toEntry writes, and removes the key that toEntry omits, for an available cat', () => {
-        expectAgreement(Pets.keyUpdates(availableCat), {
+        expectAgreement(Pets.unsafeKeyUpdates(availableCat), {
             petId: 'p1',
             ...availableCat,
         })
     })
 
     it('sets the key that toEntry writes, and removes the key that toEntry omits, for an available dog', () => {
-        expectAgreement(Pets.keyUpdates(availableDog), {
+        expectAgreement(Pets.unsafeKeyUpdates(availableDog), {
             petId: 'p1',
             ...availableDog,
         })
@@ -124,7 +127,7 @@ const Nicknames = tableEntry<Nickname>()({
 
 describe('the change of a key that an attribute holds', () => {
     it('removes the key of a change that leaves the attribute undefined', () => {
-        const update = Nicknames.keyUpdates({ nickname: undefined })
+        const update = Nicknames.unsafeKeyUpdates({ nickname: undefined })
         expect(update).toEqual({ set: {}, remove: ['GSI1PK'] })
         const entry: Record<string, unknown> = Nicknames.unsafeToEntry({
             petId: 'p1',
@@ -136,12 +139,12 @@ describe('the change of a key that an attribute holds', () => {
 
 describe('the type of `remove`', () => {
     it('names the keys that an attribute holds, because the attribute can be absent', () => {
-        const { remove } = Nicknames.keyUpdates({ nickname: 'rex' })
+        const { remove } = Nicknames.unsafeKeyUpdates({ nickname: 'rex' })
         expectTypeOf(remove).toEqualTypeOf<readonly 'GSI1PK'[]>()
     })
 
     it('names the keys whose spec reaches a `null` arm, and no other key', () => {
-        const { remove } = Pets.keyUpdates(adopted)
+        const { remove } = Pets.unsafeKeyUpdates(adopted)
         expectTypeOf(remove).toEqualTypeOf<readonly ('GSI1PK' | 'GSI2PK')[]>()
     })
 })

@@ -35,7 +35,7 @@ describe('a key that builds no value', () => {
         toItem: (item: object) => unknown
         toEntry: (item: object) => Record<string, unknown> | CodecError
         unsafeToEntry: (item: object) => Record<string, unknown>
-        keyUpdates: (changed: object) => {
+        unsafeKeyUpdates: (changed: object) => {
             set: Record<string, unknown>
             remove: string[]
         }
@@ -55,7 +55,7 @@ describe('a key that builds no value', () => {
     })
 
     it('is removed and not set by keyUpdates, which builds its own keys', () => {
-        const { set, remove } = Pets.keyUpdates(stale)
+        const { set, remove } = Pets.unsafeKeyUpdates(stale)
         expect(remove).toEqual(['GSI1PK'])
         expect(set).not.toHaveProperty('GSI1PK')
     })
@@ -130,19 +130,17 @@ describe('a step that cannot rebuild a key names the key', () => {
     })
 
     it('puts the key first and keeps the kind of the refusal that the builder gave', () => {
-        const run = () =>
-            (Pets.keyUpdates as (changed: object) => unknown)({
-                species: 'CAT#1',
-                name: 'Rex',
-            })
-        expect(run).toThrow(RotoriseError)
-        expect(run).toThrow(
-            /^'GSI1SK' cannot be rebuilt from this change: buildCompositeKey: the print of species holds the separator/,
-        )
-        try {
-            run()
-        } catch (thrown) {
-            expect((thrown as RotoriseError).kind).toBe('separator')
+        const refused = (Pets.keyUpdates as (changed: object) => unknown)({
+            species: 'CAT#1',
+            name: 'Rex',
+        })
+        expect(refused).toBeInstanceOf(CodecError)
+        if (refused instanceof CodecError) {
+            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(refused.message).toMatch(
+                /^'GSI1SK' cannot be rebuilt from this change: buildCompositeKey: the print of species holds the separator/,
+            )
+            expect(refused.kind).toBe('separator')
         }
     })
 })
@@ -288,9 +286,12 @@ describe('a key whose discriminator is null', () => {
 
     it('names the components of every arm in the refusal of keyUpdates, as an absent discriminator does', () => {
         // a null is no value, so the change selects no arm and each arm is a candidate
-        const refused = () => Pets.keyUpdates({ status: null })
-        expect(refused).toThrow(RotoriseError)
-        expect(refused).toThrow(/petId/)
-        expect(refused).toThrow(/shelter/)
+        const refused = Pets.keyUpdates({ status: null })
+        expect(refused).toBeInstanceOf(CodecError)
+        if (refused instanceof CodecError) {
+            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(refused.message).toMatch(/petId/)
+            expect(refused.message).toMatch(/shelter/)
+        }
     })
 })

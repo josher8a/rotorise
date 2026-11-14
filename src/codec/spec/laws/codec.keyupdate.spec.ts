@@ -110,7 +110,9 @@ const build = (): Run => {
                             unsafeToItem: (
                                 pet: Record<string, unknown>,
                             ) => Record<string, unknown>
-                            keyUpdates: (part: Record<string, unknown>) => {
+                            unsafeKeyUpdates: (
+                                part: Record<string, unknown>,
+                            ) => {
                                 set: Record<string, unknown>
                                 remove: string[]
                             }
@@ -160,7 +162,7 @@ const build = (): Run => {
                                         ? table.unsafeToEntry(pet).SK
                                         : table.unsafeToItem(pet).SK,
                                 ),
-                            patch: (part) => table.keyUpdates(part),
+                            patch: (part) => table.unsafeKeyUpdates(part),
                             pets,
                             parts,
                         })
@@ -192,7 +194,7 @@ const build = (): Run => {
                         unsafeToItem: (
                             pet: Record<string, unknown>,
                         ) => Record<string, unknown>
-                        keyUpdates: (part: Record<string, unknown>) => {
+                        unsafeKeyUpdates: (part: Record<string, unknown>) => {
                             set: Record<string, unknown>
                             remove: string[]
                         }
@@ -220,7 +222,7 @@ const build = (): Run => {
                             label: `tagged ${kind} owner=${owner} ${form} ${key}`,
                             keyOf: (pet) => textOf(table.unsafeToItem(pet).SK),
                             patch: (part) =>
-                                table.keyUpdates({ kind, ...part }),
+                                table.unsafeKeyUpdates({ kind, ...part }),
                             pets: [0, 1].map((v) => ({
                                 kind,
                                 ...petOf(declared, owner, v as 0 | 1),

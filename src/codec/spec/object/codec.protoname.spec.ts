@@ -142,12 +142,12 @@ describe('a key named __proto__', () => {
         PK: ['petId'],
         ['__proto__']: ['petId'],
     } as never) as unknown as {
-        keyUpdates: (changed: object) => { set: Record<string, unknown> }
+        unsafeKeyUpdates: (changed: object) => { set: Record<string, unknown> }
         unsafeKeys: (names: string[], given: object) => Record<string, unknown>
     }
 
     it('is an own attribute of the update that keyUpdates writes', () => {
-        const { set } = Pets.keyUpdates({ petId: 'p2' })
+        const { set } = Pets.unsafeKeyUpdates({ petId: 'p2' })
         expect(Object.hasOwn(set, '__proto__')).toBe(true)
     })
 

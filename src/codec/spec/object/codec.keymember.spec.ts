@@ -44,7 +44,7 @@ describe('a key has one stored member in every write', () => {
         expect(Listings.unsafeKeys(['PK'], { weight: '1.5' })).toEqual({
             PK: { N: '1.5' },
         })
-        expect(Listings.keyUpdates({ weight: '1.5' }).set).toEqual({
+        expect(Listings.unsafeKeyUpdates({ weight: '1.5' }).set).toEqual({
             PK: { N: '1.5' },
         })
     })

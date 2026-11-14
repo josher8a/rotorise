@@ -126,7 +126,8 @@ describe('a refusal of the key builder', () => {
     )
     const kindOf = (run: () => unknown) => {
         try {
-            run()
+            const value = run()
+            if (value instanceof CodecError) return value.kind
         } catch (thrown) {
             expect(thrown).toBeInstanceOf(RotoriseError)
             return (thrown as RotoriseError).kind

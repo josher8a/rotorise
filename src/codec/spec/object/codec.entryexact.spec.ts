@@ -108,27 +108,27 @@ const Owned = tableEntry<Owned>()({
 
 describe('keyUpdates refuses a change with a name that the entity does not hold', () => {
     it('accepts a change that holds the names of the entity', () => {
-        expect(Owned.keyUpdates({ note: 'n' }).set).toEqual({})
+        expect(Owned.unsafeKeyUpdates({ note: 'n' }).set).toEqual({})
     })
 
     it('refuses a dotted name that the entity does not hold, alone, as the weak type of the change already refuses', () => {
         const refused = () =>
             // @ts-expect-error the entity holds owner, and owner.nick is no attribute
-            Owned.keyUpdates({ 'owner.nick': 'bob' })
+            Owned.unsafeKeyUpdates({ 'owner.nick': 'bob' })
         expect(refused).toBeTypeOf('function')
     })
 
     it('refuses a dotted name that the entity does not hold, beside a name that it holds', () => {
         const refused = () =>
             // @ts-expect-error the entity holds note, and owner.name is no attribute
-            Owned.keyUpdates({ note: 'n', 'owner.name': 'bob' })
+            Owned.unsafeKeyUpdates({ note: 'n', 'owner.name': 'bob' })
         expect(refused).toBeTypeOf('function')
     })
 
     it('refuses a name that no member of a union entity holds', () => {
         const refused = () =>
             // @ts-expect-error no member of the union holds the name legs
-            Animals.keyUpdates({ kind: 'dog', legs: 4 })
+            Animals.unsafeKeyUpdates({ kind: 'dog', legs: 4 })
         expect(refused).toBeTypeOf('function')
     })
 })

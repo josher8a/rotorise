@@ -140,7 +140,7 @@ describe('the type walk and the runtime walk agree', () => {
             },
         })
         expect(
-            Pets.keyUpdates({ meta: { kind: 'DOG' }, collar: 'red' }).set,
+            Pets.unsafeKeyUpdates({ meta: { kind: 'DOG' }, collar: 'red' }).set,
         ).toEqual({ GSI1PK: { S: 'COLLAR#red' } })
     })
 })

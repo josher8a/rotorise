@@ -8,7 +8,7 @@
  * the partition key and the sort key once, by name.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
 import { number, string } from '../../codec'
 
@@ -44,13 +44,13 @@ describe('a change that would move the item', () => {
     it('is a compile error', () => {
         // PK and SK are built from adoptionId; rewriting it is a different item
         // @ts-expect-error this changes an attribute the table key is built from
-        const _moves = () => Adoption.keyUpdates({ adoptionId: 'other' })
+        const _moves = () => Adoption.unsafeKeyUpdates({ adoptionId: 'other' })
         expect(typeof _moves).toBe('function')
     })
 
     it('is refused at runtime too, and says what to do instead', () => {
-        const untyped = Adoption.keyUpdates as (c: object) => unknown
-        expect(() => untyped({ adoptionId: 'other' })).toThrow(RotoriseError)
+        const untyped = Adoption.unsafeKeyUpdates as (c: object) => unknown
+        expect(() => untyped({ adoptionId: 'other' })).toThrow(CodecError)
         expect(() => untyped({ adoptionId: 'other' })).toThrow(
             /'PK' is the table's own key.*Write the new item and delete the old one/s,
         )
@@ -59,7 +59,7 @@ describe('a change that would move the item', () => {
 
 describe('index keys are still rebuilt', () => {
     it('rebuilds them and never emits a table key', () => {
-        const { set: keys } = Adoption.keyUpdates({
+        const { set: keys } = Adoption.unsafeKeyUpdates({
             status: 'CANCELED',
             updatedAt: '2026-08-26T00:00:00.000Z',
         })
@@ -70,7 +70,7 @@ describe('index keys are still rebuilt', () => {
 
     it('refuses a component that its codec refuses, because the key cannot print the value', () => {
         // the codec of `status` admits three texts, so the literal 'LOST' is refused with no text to print
-        const untyped = Adoption.keyUpdates as (c: object) => unknown
+        const untyped = Adoption.unsafeKeyUpdates as (c: object) => unknown
         expect(() =>
             untyped({ status: 'LOST', updatedAt: '2026-08-26T00:00:00.000Z' }),
         ).toThrow(
@@ -80,9 +80,9 @@ describe('index keys are still rebuilt', () => {
 
     it('refuses a write of one component of an index key, and names the other', () => {
         // @ts-expect-error GSI1SK is built from status and updatedAt, and the write holds status alone
-        const _partial = () => Adoption.keyUpdates({ status: 'CANCELED' })
+        const _partial = () => Adoption.unsafeKeyUpdates({ status: 'CANCELED' })
         expect(typeof _partial).toBe('function')
-        const untyped = Adoption.keyUpdates as (c: object) => unknown
+        const untyped = Adoption.unsafeKeyUpdates as (c: object) => unknown
         expect(() => untyped({ status: 'CANCELED' })).toThrow(
             /'GSI1SK' is built from 'status', 'updatedAt'.*Write 'updatedAt' in the change/s,
         )
@@ -90,7 +90,7 @@ describe('index keys are still rebuilt', () => {
 
     it('asks for nothing on behalf of a table key that the write does not reach', () => {
         // GSI1SK needs status and updatedAt; PK needs adoptionId, which no component of the write joins
-        const { set: keys } = Adoption.keyUpdates({
+        const { set: keys } = Adoption.unsafeKeyUpdates({
             status: 'CANCELED',
             updatedAt: '2026-08-26T00:00:00.000Z',
         })
@@ -114,25 +114,26 @@ describe('a block that holds a component of a table key', () => {
     it('is frozen, so a write of one attribute of the block is refused', () => {
         // buyerId is tied to TAG by GSI1PK, and TAG is a component of PK
         // @ts-expect-error the block of buyerId holds TAG, a component of the table key PK
-        const _frozen = () => Orders.keyUpdates({ buyerId: 'b1' })
+        const _frozen = () => Orders.unsafeKeyUpdates({ buyerId: 'b1' })
         expect(typeof _frozen).toBe('function')
     })
 
     it('is frozen, so a write of the whole block is refused too', () => {
-        // @ts-expect-error the write touches TAG, a component of the table key PK
-        const _whole = () => Orders.keyUpdates({ buyerId: 'b1', TAG: 'T' })
+        const _whole = () =>
+            // @ts-expect-error the write touches TAG, a component of the table key PK
+            Orders.unsafeKeyUpdates({ buyerId: 'b1', TAG: 'T' })
         expect(typeof _whole).toBe('function')
     })
 
     it('names the key that refuses and then the table key that freezes the block, at runtime', () => {
-        const untyped = Orders.keyUpdates as (c: object) => unknown
+        const untyped = Orders.unsafeKeyUpdates as (c: object) => unknown
         expect(() => untyped({ buyerId: 'b1' })).toThrow(
             /'GSI1PK' is built from.*touches 'buyerId'.*'TAG' is not given.*holds 'TAG', 'id' of 'PK'.*freezes its block/s,
         )
     })
 
     it('leaves a write that no key reaches alone', () => {
-        expect(Orders.keyUpdates({ note: 'n' })).toEqual({
+        expect(Orders.unsafeKeyUpdates({ note: 'n' })).toEqual({
             set: {},
             remove: [],
         })
@@ -168,7 +169,7 @@ describe('a schema that marks nothing', () => {
     it('keeps rebuilding everything, as before', () => {
         // marking is opt-in, so an existing schema is unchanged — including the
         // unsound part, where PK is rebuilt and DynamoDB would reject the update
-        expect(Unmarked.keyUpdates({ adoptionId: 'q2' })).toEqual({
+        expect(Unmarked.unsafeKeyUpdates({ adoptionId: 'q2' })).toEqual({
             set: { PK: { S: 'ADOPTIONID#q2' } },
             remove: [],
         })
@@ -240,7 +241,7 @@ describe('the key option names the keys, and each spec keeps the type that the c
             { PK: ['litterId'], SK: 'name' },
             { key: { partition: 'PK' } },
         )
-        expect(Litters.keyUpdates({ name: 'b' })).toEqual({
+        expect(Litters.unsafeKeyUpdates({ name: 'b' })).toEqual({
             set: { SK: { S: 'b' } },
             remove: [],
         })
@@ -259,8 +260,8 @@ describe('a refusal names the key that refused', () => {
     )
 
     it('names the table key SK first, whether or not the change gives `name`, and then the table key that the block meets', () => {
-        const untyped = Pets.keyUpdates as (changed: object) => unknown
-        expect(() => untyped({ species: 'DOG' })).toThrow(RotoriseError)
+        const untyped = Pets.unsafeKeyUpdates as (changed: object) => unknown
+        expect(() => untyped({ species: 'DOG' })).toThrow(CodecError)
         for (const changed of [
             { species: 'DOG' },
             { species: 'DOG', name: 'Rex' },
@@ -286,16 +287,16 @@ describe('a change whose type is a union of object types', () => {
     it('is refused where one option moves the item, beside an option that is no refusal', () => {
         type Change = { adoptionId: string } | { userId: string }
         // @ts-expect-error `adoptionId` is a component of the table key PK, in one option
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
-        expect(() => rewrite({ adoptionId: 'other' })).toThrow(RotoriseError)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
+        expect(() => rewrite({ adoptionId: 'other' })).toThrow(CodecError)
         expect(Object.keys(rewrite({ userId: 'u2' }).set)).toEqual(['GSI1PK'])
     })
 
     it('is refused where the options share no name and one option lacks a component of a key', () => {
         type Change = { status: 'CANCELED' } | { userId: string }
         // @ts-expect-error `status` is written with no `updatedAt`, which GSI1SK holds with it
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
-        expect(() => rewrite({ status: 'CANCELED' })).toThrow(RotoriseError)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
+        expect(() => rewrite({ status: 'CANCELED' })).toThrow(CodecError)
     })
 
     it('is refused where the options share a name and one option holds a component of the table key', () => {
@@ -303,9 +304,9 @@ describe('a change whose type is a union of object types', () => {
             | { userId: string; adoptionId: string }
             | { userId: string }
         // @ts-expect-error the first option moves the item
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
         expect(() => rewrite({ userId: 'u2', adoptionId: 'other' })).toThrow(
-            RotoriseError,
+            CodecError,
         )
     })
 
@@ -315,22 +316,22 @@ describe('a change whose type is a union of object types', () => {
             | { currentLegIndex: number }
             | { adoptionId: string }
         // @ts-expect-error the third option moves the item
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
-        expect(() => rewrite({ adoptionId: 'other' })).toThrow(RotoriseError)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
+        expect(() => rewrite({ adoptionId: 'other' })).toThrow(CodecError)
     })
 
     it('is refused where an option is empty beside an option that moves the item', () => {
         type Change = {} | { adoptionId: string }
         // @ts-expect-error the second option moves the item
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
         expect(rewrite({}).set).toEqual({})
-        expect(() => rewrite({ adoptionId: 'other' })).toThrow(RotoriseError)
+        expect(() => rewrite({ adoptionId: 'other' })).toThrow(CodecError)
     })
 
     it('is refused where one option holds a name that the entity does not hold, and the run time ignores the name', () => {
         type Change = { userId: string } | { userId: string; bogus: 1 }
         // @ts-expect-error the second option holds `bogus`, which the entity does not hold
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
         expect(Object.keys(rewrite({ userId: 'u2', bogus: 1 }).set)).toEqual([
             'GSI1PK',
         ])
@@ -338,7 +339,7 @@ describe('a change whose type is a union of object types', () => {
 
     it('is no refusal where each option compiles alone, and each option gives its own keys', () => {
         type Change = { userId: string } | { currentLegIndex: number }
-        const rewrite = (change: Change) => Adoption.keyUpdates(change)
+        const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
         expect(Object.keys(rewrite({ userId: 'u2' }).set)).toEqual(['GSI1PK'])
         expect(rewrite({ currentLegIndex: 2 }).set).toEqual({})
     })

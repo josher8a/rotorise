@@ -198,6 +198,7 @@ export const PetRowPins = {
         match: PetRows.key('SK', { petId: 'p1', kind: 'CAT' }),
     },
     keyUpdates: PetRows.keyUpdates({ petId: 'p1' }),
+    unsafeKeyUpdates: PetRows.unsafeKeyUpdates({ petId: 'p1' }),
     keys: PetRows.keys(['PK'], { petId: 'p1', kind: 'CAT' }),
     unsafeKeys: PetRows.unsafeKeys(['PK'], { petId: 'p1', kind: 'CAT' }),
     infer: PetRows.infer,
@@ -214,6 +215,7 @@ export const CodedPins = {
         boundary: CodedPets.key('PK', { petId: 'p1' }, { allowPartial: true, enforceBoundary: true }),
     },
     keyUpdates: CodedPets.keyUpdates({ name: 'Tom' }),
+    unsafeKeyUpdates: CodedPets.unsafeKeyUpdates({ name: 'Tom' }),
     keys: {
         names: CodedPets.keys(['PK'], { petId: 'p1', name: 'Rex' }),
         attributes: CodedPets.keys({ petId: 'p1', name: 'Rex' }),
@@ -238,6 +240,7 @@ export const TaggedPins = {
     fromEntry: TaggedPets.fromEntry(TaggedPets.unsafeToEntry({ petId: 'p1', kind: 'CAT' })),
     key: TaggedPets.key('PK', { petId: 'p1' }),
     keyUpdates: TaggedPets.keyUpdates({ petId: 'p1' }),
+    unsafeKeyUpdates: TaggedPets.unsafeKeyUpdates({ petId: 'p1' }),
     keys: TaggedPets.keys(['PK'], { petId: 'p1', kind: 'CAT' }),
     unsafeKeys: TaggedPets.unsafeKeys(['PK'], { petId: 'p1', kind: 'CAT' }),
     infer: TaggedPets.infer,

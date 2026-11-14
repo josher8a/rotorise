@@ -439,7 +439,7 @@ describe('the change of a key that reads a path', () => {
     })
 
     it('rebuilds each key that reads a path below a written attribute', () => {
-        const { set: keys } = Things.keyUpdates({
+        const { set: keys } = Things.unsafeKeyUpdates({
             meta: { kind: 'k', size: 1 },
             label: 'l',
         })
@@ -448,19 +448,20 @@ describe('the change of a key that reads a path', () => {
     })
 
     it('refuses a write that reaches a key by a path and leaves a component of the key out', () => {
-        // @ts-expect-error `label` is a component of the key that the write reaches
-        const _lacks = () => Things.keyUpdates({ meta: { kind: 'k', size: 1 } })
-        expect(_lacks).toThrow(RotoriseError)
+        const _lacks = () =>
+            // @ts-expect-error `label` is a component of the key that the write reaches
+            Things.unsafeKeyUpdates({ meta: { kind: 'k', size: 1 } })
+        expect(_lacks).toThrow(CodecError)
     })
 
     it('reads a write to a path as a change of each key that reads the attribute above it', () => {
         const write = () =>
             (
-                Things.keyUpdates as unknown as (
+                Things.unsafeKeyUpdates as unknown as (
                     changed: object,
                 ) => Record<string, unknown>
             )({ 'meta.kind': 'k', label: 'l' })
         // `GSI2PK` reads the whole of `meta`, and the write gives only a part of it
-        expect(write).toThrow(RotoriseError)
+        expect(write).toThrow(CodecError)
     })
 })

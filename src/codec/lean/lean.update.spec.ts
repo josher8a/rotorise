@@ -17,7 +17,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { keyComponents, RotoriseError, tableEntry } from '../../Rotorise'
+import { CodecError, keyComponents, tableEntry } from '../../Rotorise'
 import { number, string } from '../codec'
 import {
     leanUpdateModule,
@@ -113,10 +113,12 @@ type Schema = {
 }
 
 type Host = {
-    readonly keyUpdates: (changed: object) => {
-        set: Record<string, { S: string } | { N: string }>
-        remove: readonly string[]
-    }
+    readonly keyUpdates: (changed: object) =>
+        | {
+              set: Record<string, { S: string } | { N: string }>
+              remove: readonly string[]
+          }
+        | CodecError
 }
 
 /** The table entry of `src/` for the keys of a schema, with the constants that the codec decides. */
@@ -198,27 +200,24 @@ const hostOutcome = (
     schema: Schema,
     changed: Changes,
 ): UpdateOutcome => {
-    try {
-        const { set, remove } = host.keyUpdates(changeObject(changed))
-        const entries: (readonly [
-            string,
-            readonly [boolean, string] | null,
-        ])[] = []
-        for (const { name } of schema.keys) {
-            const inSet = Object.hasOwn(set, name)
-            const inRemove = remove.includes(name)
-            expect(inSet && inRemove, `${name} is in both parts`).toBe(false)
-            if (inSet) entries.push([name, writtenAt(name, set[name])])
-            if (inRemove) entries.push([name, null])
-        }
-        return { kind: 'patch', entries }
-    } catch (thrown) {
-        if (!(thrown instanceof RotoriseError)) throw thrown
-        const { kind } = thrown
+    const patch = host.keyUpdates(changeObject(changed))
+    // a refusal is a value, and the kind of the value is the kind of the refusal
+    if (patch instanceof CodecError) {
+        const { kind } = patch
         return {
             kind: kind === 'decided' || kind === 'rewrite' ? kind : 'unbuilt',
         }
     }
+    const { set, remove } = patch
+    const entries: (readonly [string, readonly [boolean, string] | null])[] = []
+    for (const { name } of schema.keys) {
+        const inSet = Object.hasOwn(set, name)
+        const inRemove = remove.includes(name)
+        expect(inSet && inRemove, `${name} is in both parts`).toBe(false)
+        if (inSet) entries.push([name, writtenAt(name, set[name])])
+        if (inRemove) entries.push([name, null])
+    }
+    return { kind: 'patch', entries }
 }
 
 /** The components that `keyComponents` read at the item that the update reads. */

@@ -2138,6 +2138,7 @@ export const printPool = (parts: number, reverse: boolean) => {
             )
             if (!run.ok) continue
             result('keyUpdates', text, c.v, c.id, run.value, axes)
+            if (run.value instanceof CodecError) continue
             foreign(
                 'keyUpdates',
                 text,
@@ -2213,7 +2214,7 @@ const GROUP_ROWS = {
     fromEntry: 693,
     infer: 536,
     key: 1119,
-    keyUpdates: 87,
+    keyUpdates: 96,
     keys: 18,
     keyCondition: 32,
     toItem: 10,

@@ -229,7 +229,7 @@ describe('the type of a nested key match', () => {
 
 describe('the change of a key that a nested match builds', () => {
     it('gives the key of the variant that the change selects', () => {
-        expect(Creatures.keyUpdates(lab).set.SK).toEqual({
+        expect(Creatures.unsafeKeyUpdates(lab).set.SK).toEqual({
             S: 'BREED#LAB#NAME#rex',
         })
     })
@@ -237,7 +237,11 @@ describe('the change of a key that a nested match builds', () => {
     it('needs `breed` where the new `specie` reads it', () => {
         const _needsBreed = () =>
             // @ts-expect-error `breed` is a component of a dog
-            Creatures.keyUpdates({ tag: 'ANIMAL', specie: 'DOG', name: 'rex' })
+            Creatures.unsafeKeyUpdates({
+                tag: 'ANIMAL',
+                specie: 'DOG',
+                name: 'rex',
+            })
         expect(typeof _needsBreed).toBe('function')
     })
 

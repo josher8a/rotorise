@@ -228,7 +228,7 @@ describe('the variants of a tagged codec decide a constant that they all state',
                 ),
             },
         )
-        const patch = Pets.keyUpdates({ petId: 'p1' })
+        const patch = Pets.unsafeKeyUpdates({ petId: 'p1' })
         expect(Object.keys(patch.set)).toEqual(['PK'])
     })
 })

@@ -37,7 +37,7 @@ type Route = {
         attributes: never,
     ) => Record<string, unknown>
     readonly key: (name: string, attributes: never) => unknown
-    readonly keyUpdates: (changed: never) => {
+    readonly unsafeKeyUpdates: (changed: never) => {
         readonly set: Record<string, unknown>
     }
     readonly unsafeToEntry: (entity: never) => Record<string, unknown>
@@ -112,7 +112,9 @@ describe.each([
         })
         expect(Visits.key('GSI1SK', dog as never)).toBe(iso)
         expect(Visits.unsafeToEntry(dog as never).GSI1SK).toBe(iso)
-        expect(Visits.keyUpdates(dog as never).set.GSI1SK).toEqual({ S: iso })
+        expect(Visits.unsafeKeyUpdates(dog as never).set.GSI1SK).toEqual({
+            S: iso,
+        })
     })
 
     it('prints the stored text of each component, as the row holds it', () => {
@@ -215,7 +217,9 @@ describe('a key of one attribute at a path is the attribute that the codec write
                 Numbers.unsafeToEntry(entity(90) as never).GSI1SK as never,
             ),
         ).toEqual({ N: '90' })
-        expect(Numbers.keyUpdates(entity(90) as never).set.GSI1SK).toEqual({
+        expect(
+            Numbers.unsafeKeyUpdates(entity(90) as never).set.GSI1SK,
+        ).toEqual({
             N: '90',
         })
     })

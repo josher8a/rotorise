@@ -106,7 +106,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
         expect(Litters.unsafeKeys(['GSI1SK'], { weight: '1.5' })).toEqual({
             GSI1SK: { N: '1.5' },
         })
-        expect(Litters.keyUpdates({ weight: '2.25' }).set).toEqual({
+        expect(Litters.unsafeKeyUpdates({ weight: '2.25' }).set).toEqual({
             GSI1SK: { N: '2.25' },
         })
     })
@@ -146,7 +146,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
             expect(
                 Both.unsafeKeys(['GSI1SK'], { kind: 'DOG', weight: '1.5' }),
             ).toEqual({ GSI1SK: { N: '1.5' } })
-            expect(Both.keyUpdates({ weight: '2.25' }).set).toEqual({
+            expect(Both.unsafeKeyUpdates({ weight: '2.25' }).set).toEqual({
                 GSI1SK: { N: '2.25' },
             })
         })

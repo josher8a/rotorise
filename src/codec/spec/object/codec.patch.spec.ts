@@ -54,7 +54,7 @@ const change = {
 
 describe('the keys a change invalidates', () => {
     it('rebuilds exactly the three maintainAdoptionKeys rebuilds', () => {
-        const { set: keys } = Adoption.keyUpdates(change)
+        const { set: keys } = Adoption.unsafeKeyUpdates(change)
 
         expect(Object.keys(keys).sort()).toEqual(['GSI1SK', 'GSI2PK', 'GSI2SK'])
         expect(keys.GSI1SK).toEqual({
@@ -65,7 +65,7 @@ describe('the keys a change invalidates', () => {
     })
 
     it('leaves alone the keys the change does not touch', () => {
-        const { set: keys } = Adoption.keyUpdates(change)
+        const { set: keys } = Adoption.unsafeKeyUpdates(change)
         // PK/SK and GSI3 come from adoptionId, GSI1PK from userId — none are changing
         for (const untouched of ['PK', 'SK', 'GSI1PK', 'GSI3PK', 'GSI3SK']) {
             expect(keys).not.toHaveProperty(untouched)
@@ -73,7 +73,7 @@ describe('the keys a change invalidates', () => {
     })
 
     it('returns nothing when no key component changes', () => {
-        expect(Adoption.keyUpdates({ currentLegIndex: 1 })).toEqual({
+        expect(Adoption.unsafeKeyUpdates({ currentLegIndex: 1 })).toEqual({
             set: {},
             remove: [],
         })
@@ -87,7 +87,7 @@ describe('the keys a change invalidates', () => {
         // an UpdateItem is the two put together, by the caller who knows they want both
         expect({
             ...Adoption.codec.unsafeEncodePartial(change),
-            ...Adoption.keyUpdates(change).set,
+            ...Adoption.unsafeKeyUpdates(change).set,
         }).toEqual({
             status: { S: 'PACKING' },
             updatedAt: { S: '2026-08-26T00:00:00.000Z' },
@@ -105,20 +105,21 @@ describe('a component the change does not carry', () => {
         // GSI1SK is built from status *and* updatedAt; changing one alone cannot rebuild it.
         // A thunk, so this asserts the type and never runs — the runtime guard below is a backstop
         // for callers who reach this through a cast.
-        // @ts-expect-error 'updatedAt' has to be written in the change
-        const _incomplete = () => Adoption.keyUpdates({ status: 'CANCELED' })
+        const _incomplete = () =>
+            // @ts-expect-error 'updatedAt' has to be written in the change
+            Adoption.unsafeKeyUpdates({ status: 'CANCELED' })
         expect(typeof _incomplete).toBe('function')
     })
 
     it('is still refused at runtime, for a caller who cast past the type', () => {
-        const untyped = Adoption.keyUpdates as (c: object) => unknown
+        const untyped = Adoption.unsafeKeyUpdates as (c: object) => unknown
         expect(() => untyped({ status: 'CANCELED' })).toThrow(
             /'GSI1SK' is built from 'status', 'updatedAt'.*'updatedAt' is not given.*Write 'updatedAt' in the change/s,
         )
     })
 
     it('is built when the change writes every component of the key', () => {
-        const { set: keys } = Adoption.keyUpdates({
+        const { set: keys } = Adoption.unsafeKeyUpdates({
             status: 'CANCELED',
             updatedAt: '2026-08-26T00:00:00.000Z',
         })
@@ -132,11 +133,13 @@ describe('a component the change does not carry', () => {
         // 'userId' is a component of GSI1PK and not of GSI1SK, so it does not complete the block
         const _wrongAttribute = () =>
             // @ts-expect-error 'updatedAt' has to be written in the change
-            Adoption.keyUpdates({ status: 'CANCELED', userId: 'u1' })
+            Adoption.unsafeKeyUpdates({ status: 'CANCELED', userId: 'u1' })
         expect(typeof _wrongAttribute).toBe('function')
     })
 
     it('asks for nothing once the change writes the whole block', () => {
-        expect(Object.keys(Adoption.keyUpdates(change).set)).toHaveLength(3)
+        expect(Object.keys(Adoption.unsafeKeyUpdates(change).set)).toHaveLength(
+            3,
+        )
     })
 })

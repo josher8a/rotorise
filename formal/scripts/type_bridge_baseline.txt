@@ -73,6 +73,7 @@
 # either encodePartial refused 0 built 1
 # either fromItem refused 0 built 4
 # either keyCondition refused 0 built 7
+# either keyUpdates refused 8 built 1
 # either keys refused 0 built 6
 # either toEntry refused 0 built 31
 # either toItem refused 1 built 2
@@ -120,7 +121,6 @@ infer|refuse|83487729|T_plain_tagTf_sep.infer(ok).foreign:SK
 infer|refuse|83487729|T_plain_tagTf_sep.infer(sep).foreign:SK
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chGhost).call
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chStr).call
-keyUpdates|refuse|5e2a25bf|T_kennel_roles.keyUpdates(chWide).call
 key|accept|b04a5f18|T_plain_listOne.key(PK,nameOnly,d0).call
 key|accept|b04a5f18|T_plain_listOne.key(PK,nameOnly,partial).call
 key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,d0).call

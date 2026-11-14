@@ -2608,8 +2608,24 @@ export type TableEntryDefinition<
      * written path reads no value. A written path meets each component at the path, above it and
      * below it. The type refuses a name that the entity does not hold. A change whose type is a
      * union of object types is one of the options, so the type refuses it where it refuses one option.
+     *
+     * A refusal of the change is a value: a decided attribute written at another value, a change that
+     * cannot rebuild a touched key, and a table key that the change would rewrite give a `CodecError`
+     * of the kind `decided` or `rewrite`, with the `RotoriseError` of the step as its `cause`.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
+        changed: Exact<Partial<Entity>, Changed> &
+            ChangeRefusal<
+                Entity,
+                Schema,
+                Roles,
+                Changed,
+                DecidedValues<CodecSpec>
+            >,
+    ) => Result<KeyUpdate<AbsentKeyNames<Schema>>>
+
+    /** The same, throwing the error that `keyUpdates` returns. */
+    unsafeKeyUpdates: <const Changed extends Partial<Entity>>(
         changed: Exact<Partial<Entity>, Changed> &
             ChangeRefusal<
                 Entity,
@@ -4620,7 +4636,7 @@ export const tableEntry =
          * patch holds the attribute that `toItem` writes: the model prints each key at `KeyDef.mem`,
          * as `keyPartOf` reads `mem`.
          */
-        const keyUpdates = (
+        const updateKeys = (
             changed: Record<string, unknown>,
         ): KeyUpdate<string> => {
             // an entry list, so a key named `__proto__` is an own attribute of the result
@@ -4932,8 +4948,13 @@ export const tableEntry =
             })
         }
 
+        const keyUpdates = (changed: Record<string, unknown>) =>
+            returned(() => updateKeys(changed))
+
         const definition = {
-            keyUpdates,
+            keyUpdates: keyUpdates as never,
+            unsafeKeyUpdates: ((changed: Record<string, unknown>) =>
+                orThrow(keyUpdates(changed))) as never,
             keys: keysOf as never,
             unsafeKeys: ((
                 first: readonly string[] | Record<string, unknown>,

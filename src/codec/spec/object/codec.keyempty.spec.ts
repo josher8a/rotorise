@@ -69,9 +69,14 @@ describe('a full key of one attribute refuses the empty string, on every route',
             { PK: ['petId'], GSI1SK: 'nick' },
             { key: { partition: 'PK' } },
         )
-        expect(() => Indexed.keyUpdates({ nick: '' })).toThrow(
-            "cannot be rebuilt from this change: Key GSI1SK: the attribute 'nick' is empty",
-        )
+        {
+            const refused = Indexed.keyUpdates({ nick: '' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "cannot be rebuilt from this change: Key GSI1SK: the attribute 'nick' is empty",
+                )
+        }
     })
 
     it('refuses a condition on the sort key, and does not drop the condition', () => {

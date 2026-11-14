@@ -6,7 +6,7 @@
  * of them answers true for `constructor`, `toString` and `valueOf` at a record that holds none.
  */
 import { describe, expect, it } from 'vitest'
-import { tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 import {
     at as atOf,
     discriminatedUnion,
@@ -79,9 +79,9 @@ describe('an attribute named like a member of Object.prototype is data like any 
             PK: ['petId'],
             GSI1PK: ['valueOf'],
         } as never) as unknown as {
-            keyUpdates: (change: Record<string, unknown>) => unknown
+            unsafeKeyUpdates: (change: Record<string, unknown>) => unknown
         }
-        expect(Pets.keyUpdates({ valueOf: 'x' })).toEqual({
+        expect(Pets.unsafeKeyUpdates({ valueOf: 'x' })).toEqual({
             set: { GSI1PK: { S: 'VALUEOF#x' } },
             remove: [],
         })
@@ -129,9 +129,12 @@ describe('an attribute named like a member of Object.prototype is data like any 
                 } as never) as unknown as {
                     keyUpdates: (change: Record<string, unknown>) => unknown
                 }
-                expect(() => Pets.keyUpdates({ shelter: 's1' })).toThrow(
-                    'has to be rebuilt',
-                )
+                {
+                    const refused = Pets.keyUpdates({ shelter: 's1' })
+                    expect(refused).toBeInstanceOf(CodecError)
+                    if (refused instanceof CodecError)
+                        expect(refused.message).toContain('has to be rebuilt')
+                }
             })
         },
     )
