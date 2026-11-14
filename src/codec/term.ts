@@ -62,12 +62,10 @@ export type LiteralValue = string | DynamoNumber | boolean | Uint8Array
 /* ── the term ─────────────────────────────────────────────────────────────────────────── */
 
 /**
- * A nonempty list, which is what `NEFinset` buys the model at a literal.
- *
- * Two of `NEFinset`'s three guarantees are here: the element type, from the base that indexes
- * {@link Literal}, and non-emptiness, from the tuple's head. **Pairwise distinctness is not**, and
- * TypeScript cannot say it — so it stays a refusal at the constructor, with a test that pins it and
- * the reason written above the refusal.
+ * A nonempty list of the options of a union that a literal call names. The model holds one value in a
+ * literal, so a call of several values is a union, and the tuple head states that the call names one.
+ * **Pairwise distinctness is not here**, and TypeScript cannot say it, so it stays a refusal at the
+ * constructor, with a test that pins it and the reason written above the refusal.
  */
 export type NonEmpty<T> = readonly [T, ...T[]]
 

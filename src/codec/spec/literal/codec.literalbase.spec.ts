@@ -229,9 +229,10 @@ describe('what each base refuses', () => {
     })
 
     /**
-     * Homogeneity is free in the model — `NEFinset k.Carrier` — and is not free here, because a
-     * spread of a plain array (`string(...Object.values(Status))`) defeats any tuple-shaped
-     * signature. So it is a construction-time refusal, at the base the caller named.
+     * Homogeneity is free in the model, where a literal holds one value of `k.Carrier`, and is not
+     * free here, because a spread of a plain array (`string(...Object.values(Status))`) defeats
+     * any tuple-shaped signature. So it is a construction-time refusal, at the base the caller
+     * named.
      */
     it('refuses a value that is not of the base it was handed to', () => {
         expect(() => string('A', 1 as unknown as string)).toThrow(CodecError)
@@ -326,21 +327,21 @@ describe('what replaced the constructor that guessed', () => {
     })
 })
 
-describe("a literal's alternatives are a set", () => {
+describe("a literal's alternatives are distinct", () => {
     /**
      * **Section 8 case (c): a refusal, a test that reaches it, and the reason.**
      *
-     * The model's `ls` is a `NEFinset k.Carrier` and gets three guarantees from that type — the
-     * base indexes the alternatives, `n ≥ 1`, and no two are equal. `term.ts`'s `Literal` buys the
-     * first from a discriminated union over the base and the second from a tuple head.
-     * **TypeScript cannot say the third**, so it is a refusal at construction.
+     * A literal of the model holds one value, so a call of several values is a union of one-value
+     * literals. A repeat gives a union of two options that admits one value, and `constantOf` reads a
+     * union as a term that decides no constant. So `string('A', 'A')` would decide none, and
+     * `string('A')` decides one. **TypeScript cannot say that a tuple is distinct**, so the call
+     * refuses at construction.
      *
-     * It is not tidiness. `NEFinset` is a set, so `literal(k, {'A','A'})` and `literal(k, {'A'})`
-     * are one term in the model and would be two definitions here — and the second names a
-     * cardinality the first does not. A repeat makes a two-value literal that admits one value,
-     * and the constant would go unrecognised by everything that asks whether a literal decides.
+     * It is not tidiness. One set of values has one term, and the term decides the constant that
+     * the set names. The test reaches the refusal from `string` and from `binary`, asserts the
+     * positions that the message names, and asserts that two distinct values build.
      */
-    it('refuses a repeated alternative, which the model has no way to hold', () => {
+    it('refuses a repeated alternative, because a union of two equal options decides no constant', () => {
         expect(() => string('A', 'A')).toThrow(CodecError)
         expect(() => string('A', 'A')).toThrow(/positions 0 and 1/)
         // compared the way the base compares: bytes for `binary`, `===` otherwise

@@ -159,13 +159,13 @@ describe('a set of a literal, spelled at the base', () => {
 })
 
 /**
- * **A set of a literal names each value once, at each base.** A literal's alternatives are a set,
- * and a repeated value makes a two-value literal that admits one value, which stops the literal
- * reading as a constant. `string('dog', 'dog')` refuses, so `string.set('dog', 'dog')` refuses for
+ * **A set of a literal names each value once, at each base.** A call of several values is a union
+ * of one-value literals, and a repeated value makes a union of two options that admits one value
+ * and decides no constant. `string('dog', 'dog')` refuses, so `string.set('dog', 'dog')` refuses for
  * the same reason, and so does the set at every other base.
  */
 describe('a set of a literal refuses a repeated value, at each base', () => {
-    const repeated = /a literal's alternatives are a \*set\*/
+    const repeated = /a literal's alternatives are distinct/
     const one = orThrow(DynamoNumber.from('1'))
     it('refuses the repeat at string', () => {
         expect(() => string.set('dog', 'dog')).toThrow(repeated)

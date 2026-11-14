@@ -53,8 +53,9 @@ export const codecOfTerm = <T, A extends AttributeValue>(
  *
  * - **`ℓ` is non-empty.** Checked by each caller, because the message wants to name the
  *   constructor the caller actually wrote.
- * - **`ℓ` is homogeneous at the base.** Free in the model — `NEFinset k.Carrier` — and not free
- *   here, because a spread of a plain array defeats the type. So it is a construction-time refusal.
+ * - **`ℓ` is homogeneous at the base.** Free in the model, where a literal holds one value of
+ *   `k.Carrier`, and not free here, because a spread of a plain array defeats the type. So it is a
+ *   construction-time refusal.
  * - **`ℓ ⊆ D`** at `number`. The carrier `DynamoNumber` discharges it where the value is made.
  *
  * Each premise is decided when the codec is built, because `ℓ` is data this library owns.
@@ -127,19 +128,14 @@ export const setOf =
         })
 
 /**
- * The rule `(literal)`'s `ℓ`, checked: non-empty and pairwise distinct.
+ * The alternatives of a literal call, checked: non-empty and pairwise distinct.
  *
- * **The model gets three guarantees from a type and the host's type gives two.** `ls` is a
- * `NEFinset k.Carrier`, so the base indexes the alternatives, `n ≥ 1` holds, and no two are equal —
- * all three from `NEFinset`. `term.ts`'s {@link Literal} buys the first from a discriminated union
- * over the base and the second from a tuple head. **TypeScript cannot say the third**, so it is a
- * refusal at construction, and this is where it lives.
- *
- * Distinctness is not tidiness. `NEFinset` is a *set*, so `literal(k, {'A','A'})` and
- * `literal(k, {'A'})` are one term in the model and two definitions here — and the second names a
- * cardinality the first does not, which is what {@link constantOf} reads to answer whether a literal
- * has exactly one value. A repeated alternative makes a two-element `ls` that admits one value,
- * and the constant would go unrecognised.
+ * **A literal of the model holds one value**, `Term.literal k v`. A call of several values is a
+ * union of one-value literals, and `literalTermOf` builds that union. A repeated value gives a union
+ * of two options that admits one value. {@link constantOf} reads a union as a term that decides no
+ * constant, so `string('dog', 'dog')` would decide none where `string('dog')` decides one. The call
+ * refuses the repeat, so one set of values has one term. TypeScript cannot say distinctness of a
+ * tuple, so the refusal is at construction, and this is where it lives.
  *
  * Compared with {@link sameLiteral}, which compares the way the base compares: bytes for `binary`,
  * `===` otherwise.
@@ -161,7 +157,7 @@ export const someAlternatives = <T extends LiteralValue>(
             if (sameLiteral(one, other)) {
                 const at = i + 1 + after
                 throw new CodecError(
-                    `a literal's alternatives are a *set*, and \`${former}()\` names the same value at positions ${i} and ${at}; the model's \`NEFinset\` cannot hold it twice, and a repeat makes a two-value literal that admits one — which stops it reading as a constant`,
+                    `a literal's alternatives are distinct, and \`${former}()\` names the same value at positions ${i} and ${at}; a call of several values is a union of one-value literals, and a repeat makes a union of two options that admits one value and decides no constant`,
                 )
             }
         }

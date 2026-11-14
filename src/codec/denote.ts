@@ -1568,8 +1568,8 @@ export const denote = (def: Term): Pair => {
                 decode: (attribute) => decodeUnknown(attribute),
             }
         /**
-         * The rule `(literal)`, and it is **not** a sixth ground term: `literalCodec k ls` is
-         * `(baseCodec k).restrict (inL k ls)`, the base's pair narrowed to membership of `ℓ`. The
+         * The rule `(literal)`, and it is **not** a sixth ground term: `literalCodec k x` is
+         * `(baseCodec k).restrict (inL k x)`, the base's pair narrowed to membership of `x`. The
          * base is the index, so the row reaches it by denoting `{ kind: base }` — the four bases
          * are exactly four term kinds.
          *

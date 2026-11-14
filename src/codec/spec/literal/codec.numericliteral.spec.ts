@@ -258,8 +258,8 @@ describe('what mixing kinds would ask for', () => {
 
 describe('a literal with no alternatives', () => {
     /**
-     * `ℓ` non-empty, which the model now carries in the type (`NEFinset`) and this carries at the
-     * construction site.
+     * A call names at least one value, which the model carries in a literal of one value and this
+     * carries at the construction site.
      *
      * `literal()` typechecked — a rest parameter accepts zero arguments — and was not the codec it
      * looked like: the admission check was guarded by `allowed.length &&`, and a truthiness guard in

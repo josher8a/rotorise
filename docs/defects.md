@@ -338,6 +338,42 @@ the type, and pins the throw and the former that the message names, for each for
 
 ---
 
+## Known: the type of a literal former builds a call that repeats a value
+
+**Observation.** The run time refuses a literal call that names one value twice. A literal of the
+model holds one value, so a call of several values is a union of one-value literals. A repeat gives
+a union of two options that admits one value and decides no constant. The type of each former reads
+the values as a tuple and states no distinctness. Measured 2026-11-13 with `tsc --noEmit
+--noErrorTruncation` on TypeScript 7 and 6, and `npx vitest --run`, where `a` is a `Uint8Array` and
+`d1` is a `DynamoNumber`:
+
+    string('dog', 'dog')   number(1, 1)   decimal('1', '1')   boolean(true, true)
+    binary(a, a)   dynamoNumber(d1, d1)   and `.set` of each that has one
+      type checker: builds
+      runtime:      throws, a literal's alternatives are distinct, and `string()` names the same
+                    value at positions 0 and 1
+
+The mark of the term at the type level keeps both options:
+
+    string('dog', 'dog')   ["union", [LitT<"string", "dog">, LitT<"string", "dog">]]
+    number(1, 1)           FloatT<["union", [LitT<"number", "1">, LitT<"number", "1">]]>
+    boolean(true, true)    ["union", [LitT<"boolean", true>, LitT<"boolean", true>]]
+    binary(a, a)           ["union", LitT<"binary", string>[]]
+
+The type that reads the constant of a term gives `never` for `string('dog', 'dog')`, `number(1, 1)`
+and `decimal('1', '1')`, where the same type gives the pair of `'dog'` for `string('dog')`.
+
+**Effect.** The call builds in the type and throws at construction. `binary` and `dynamoNumber`
+have one type for every value, so the type cannot tell a repeat from two values.
+`decimal('1', '1.0')` does not build in the type: the spelling `'1.0'` is refused.
+
+**Pin.** `src/codec/spec/literal/codec.literalbase.spec.ts` pins the throw for `string` and
+`binary`, and the positions for `string`. The same file pins the former that the message names.
+`src/codec/spec/literal/codec.setbase.spec.ts` pins the throw of `.set` at each base. No test pins
+the mark of a repeat or the type that reads the constant.
+
+---
+
 ## Known: the type of discriminatedUnion reads a number tag as JS prints the number, where the run time reads the stored text
 
 **Observation.** A tag is the stored text of a literal, and the run time compares the stored text
