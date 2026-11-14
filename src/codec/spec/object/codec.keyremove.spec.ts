@@ -84,7 +84,7 @@ const expectAgreement = (
     update: { set: Record<string, unknown>; remove: readonly string[] },
     merged: Pet,
 ) => {
-    const entry: Record<string, unknown> = Pets.toEntry(merged)
+    const entry: Record<string, unknown> = Pets.unsafeToEntry(merged)
     for (const [name, value] of Object.entries(update.set)) {
         expect(value).toEqual({ S: entry[name] })
     }
@@ -126,7 +126,7 @@ describe('the change of a key that an attribute holds', () => {
     it('removes the key of a change that leaves the attribute undefined', () => {
         const update = Nicknames.keyUpdates({ nickname: undefined })
         expect(update).toEqual({ set: {}, remove: ['GSI1PK'] })
-        const entry: Record<string, unknown> = Nicknames.toEntry({
+        const entry: Record<string, unknown> = Nicknames.unsafeToEntry({
             petId: 'p1',
             nickname: undefined,
         })
@@ -147,7 +147,7 @@ describe('the type of `remove`', () => {
 })
 
 describe('the type of an entry holds a key that builds no value as optional', () => {
-    const rowOf = (pet: Pet) => Pets.toEntry(pet)
+    const rowOf = (pet: Pet) => Pets.unsafeToEntry(pet)
     const adoptedPet = { petId: 'p1', ...adopted } as const
     const dogPet = { petId: 'p1', ...availableDog } as const
 
@@ -166,7 +166,7 @@ describe('the type of an entry holds a key that builds no value as optional', ()
     })
 
     it('holds the key as optional with no value for a member that builds no value', () => {
-        const row = Pets.toEntry(adoptedPet)
+        const row = Pets.unsafeToEntry(adoptedPet)
         expectTypeOf(row.GSI1PK).toEqualTypeOf<undefined>()
         expect(row).not.toHaveProperty('GSI1PK')
     })
@@ -178,7 +178,7 @@ describe('the type of an entry holds a key that builds no value as optional', ()
     })
 
     it('holds a key that each member builds as required, beside the optional key', () => {
-        const row = Pets.toEntry(dogPet)
+        const row = Pets.unsafeToEntry(dogPet)
         expectTypeOf(row.GSI3PK).toEqualTypeOf<'PETID#p1'>()
         expectTypeOf(row.GSI2PK).toEqualTypeOf<undefined>()
         expect(row).toHaveProperty('GSI3PK', 'PETID#p1')

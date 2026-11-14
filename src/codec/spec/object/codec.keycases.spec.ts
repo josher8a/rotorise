@@ -83,7 +83,9 @@ const untypedEntry = (schema: object) =>
 describe('a grouped match', () => {
     it('gives the key of the ungrouped form for each literal of the group', () => {
         for (const handoff of handoffs) {
-            expect(Grouped.toEntry(handoff)).toEqual(Ungrouped.toEntry(handoff))
+            expect(Grouped.unsafeToEntry(handoff)).toEqual(
+                Ungrouped.unsafeToEntry(handoff),
+            )
         }
         const key = Grouped.key('GSI1PK', handoffs[1] as never)
         expect(key).toBe('ownerId#alice')
@@ -112,7 +114,9 @@ describe('a grouped match', () => {
 
     it('reads the entry back for each item of the group', () => {
         for (const handoff of handoffs) {
-            expect(Grouped.fromEntry(Grouped.toEntry(handoff))).toEqual(handoff)
+            expect(Grouped.fromEntry(Grouped.unsafeToEntry(handoff))).toEqual(
+                handoff,
+            )
         }
     })
 
@@ -198,11 +202,11 @@ describe('an order of the store', () => {
     it('gives the keys of the ungrouped specs for each status, and none for a settled order', () => {
         for (const status of ['PLACED', 'APPROVED', 'DELIVERED'] as const) {
             const order = { status, id: 'r1', updatedAt: 7 }
-            expect(GroupedOrder.toEntry(order)).toEqual(
-                UngroupedOrder.toEntry(order),
+            expect(GroupedOrder.unsafeToEntry(order)).toEqual(
+                UngroupedOrder.unsafeToEntry(order),
             )
         }
-        const pending = GroupedOrder.toEntry({
+        const pending = GroupedOrder.unsafeToEntry({
             status: 'PLACED',
             id: 'r1',
             updatedAt: 7,
@@ -210,7 +214,7 @@ describe('an order of the store', () => {
         expect(native.encode(pending.GSI3SK)).toEqual({ N: '7' })
         expect(pending.GSI2PK).toBe('STATUS#PLACED')
         expect(
-            GroupedOrder.toEntry({
+            GroupedOrder.unsafeToEntry({
                 status: 'APPROVED',
                 id: 'r1',
                 updatedAt: 7,

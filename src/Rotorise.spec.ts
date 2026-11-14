@@ -93,11 +93,11 @@ describe('Exact<> with discriminated unions', () => {
             },
         })
 
-        const entryA = table.toEntry({ base: 'x', a: 'A', type: 'A' })
+        const entryA = table.unsafeToEntry({ base: 'x', a: 'A', type: 'A' })
         attest(entryA.PK).equals('BASE#x')
         attest(entryA.SK).equals('A#A')
 
-        const entryB = table.toEntry({
+        const entryB = table.unsafeToEntry({
             base: 'y',
             b: 'B',
             type: 'B',
@@ -107,7 +107,7 @@ describe('Exact<> with discriminated unions', () => {
         attest(entryB.SK).equals('B#B')
 
         // excess property still rejected
-        table.toEntry({
+        table.unsafeToEntry({
             base: 'z',
             a: 'A',
             type: 'A',
@@ -293,9 +293,9 @@ describe('DynamoDB Utils', () => {
             z: 'never',
         } satisfies Entity
 
-        const testTableEntryObj = testTableEntry.toEntry(entity)
+        const testTableEntryObj = testTableEntry.unsafeToEntry(entity)
 
-        testTableEntry.toEntry({
+        testTableEntry.unsafeToEntry({
             a: 'a1',
             b: 1,
             c: true,

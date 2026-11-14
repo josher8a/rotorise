@@ -198,7 +198,7 @@ describe('an item of the entity is a call of key', () => {
         })
 
         it('keeps the type of toEntry for the item of an arm', () => {
-            const entry = Beds.toEntry({
+            const entry = Beds.unsafeToEntry({
                 petId: 'p',
                 meta: { status: 'IN' },
                 kennel: 'k',

@@ -56,7 +56,7 @@ describe('the type of a key component under an adapter of a caller', () => {
         const key = Pets.key('SK', { adopted: true })
         expectTypeOf(key).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
         expect(key).toBe('ADOPTED#Y')
-        const entry = Pets.toEntry({ petId: 'p1', adopted: false })
+        const entry = Pets.unsafeToEntry({ petId: 'p1', adopted: false })
         expectTypeOf(entry.SK).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
         expect(entry.SK).toBe('ADOPTED#N')
         expectTypeOf(Pets.infer.SK).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
@@ -122,7 +122,7 @@ describe('the type of a key component under an adapter of a caller', () => {
         const key = Single.key('SK', { adopted: true })
         expectTypeOf(key).toEqualTypeOf<'Y' | 'N'>()
         expect(key).toBe('Y')
-        const entry = Single.toEntry({ petId: 'p1', adopted: false })
+        const entry = Single.unsafeToEntry({ petId: 'p1', adopted: false })
         expectTypeOf(entry.SK).toEqualTypeOf<'Y' | 'N'>()
         expect(entry.SK).toBe('N')
         expect(Single.unsafeToItem({ petId: 'p1', adopted: false }).SK).toEqual(
@@ -136,7 +136,7 @@ describe('the type of a key component under an adapter of a caller', () => {
         )
         const at = new Date(0)
         expectTypeOf(Visits.key('SK', { at })).toBeString()
-        expect(Visits.toEntry({ petId: 'p1', at }).SK).toBe(
+        expect(Visits.unsafeToEntry({ petId: 'p1', at }).SK).toBe(
             '1970-01-01T00:00:00.000Z',
         )
     })
@@ -147,9 +147,9 @@ describe('the type of a key component under an adapter of a caller', () => {
             { codec: { petId: string, age: number } },
         )
         expectTypeOf(Aged.key('SK', { age: 3 })).toEqualTypeOf<3>()
-        expect(native.encode(Aged.toEntry({ petId: 'p1', age: 3 }).SK)).toEqual(
-            { N: '3' },
-        )
+        expect(
+            native.encode(Aged.unsafeToEntry({ petId: 'p1', age: 3 }).SK),
+        ).toEqual({ N: '3' })
     })
 
     it('prints the stored text of a held number at a path', () => {

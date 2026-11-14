@@ -144,13 +144,13 @@ describe('a nested key match', () => {
 
     it('reads the same entry back for each path of the case', () => {
         for (const item of [object, horse, lab, pug, cat]) {
-            const entry = Creatures.toEntry(item)
+            const entry = Creatures.unsafeToEntry(item)
             expect(Creatures.fromEntry(entry)).toEqual(item)
         }
     })
 
     it('reads a stale key of a path as the item, because a read never reads a key', () => {
-        const entry = { ...Creatures.toEntry(lab), SK: 'NAME#other' }
+        const entry = { ...Creatures.unsafeToEntry(lab), SK: 'NAME#other' }
         expect(Creatures.fromEntry(entry as never)).toEqual(lab)
     })
 })

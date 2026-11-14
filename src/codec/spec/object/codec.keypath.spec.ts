@@ -8,7 +8,7 @@
  * and holds no value.
  */
 import { describe, expect, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 
 /** The untyped builder of an entry: a stored or hostile item is data. */
 const untyped = (entry: { key: unknown }) =>
@@ -89,7 +89,7 @@ describe('a key component that reads a path', () => {
             expect(Pets.key('SK', { vaccine: { lastDose: '5' } })).toBe(
                 'LASTDOSE#5',
             )
-            expect(Pets.toEntry({ id: 'p' }).SK).toBe('LASTDOSE#0')
+            expect(Pets.unsafeToEntry({ id: 'p' }).SK).toBe('LASTDOSE#0')
         })
     })
 
@@ -119,12 +119,17 @@ describe('a key component that reads a path', () => {
         })
         expect(Docs.key('PK', { meta: { kind: 'b' } })).toBe('KIND#b')
         expect(Docs.key('SK', { meta: { a: 'x' } })).toBe('A#x')
-        expect(Docs.toEntry({ id: 'd', meta: { kind: 'a', a: 'x' } }).SK).toBe(
-            'A#x',
-        )
-        expect(() =>
-            Docs.toEntry({ id: 'd', meta: { kind: 'b', b: 'y' } }),
-        ).toThrow(/meta\.a/)
+        expect(
+            Docs.unsafeToEntry({ id: 'd', meta: { kind: 'a', a: 'x' } }).SK,
+        ).toBe('A#x')
+        expect(
+            (
+                Docs.toEntry({
+                    id: 'd',
+                    meta: { kind: 'b', b: 'y' },
+                }) as CodecError
+            ).message,
+        ).toMatch(/meta\.a/)
     })
 
     it('refuses a component with no default where an option lacks a name above the last name', () => {
@@ -149,7 +154,8 @@ describe('a key component that reads a path', () => {
             SK: [['meta.a', (a: string) => a, 'none']],
         })
         expect(
-            Defaulted.toEntry({ id: 'd', meta: { kind: 'b', b: 'y' } }).SK,
+            Defaulted.unsafeToEntry({ id: 'd', meta: { kind: 'b', b: 'y' } })
+                .SK,
         ).toBe('A#none')
         type Both = {
             id: string
@@ -207,7 +213,7 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', (x: string) => x]],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
-            expect(() => Pets.toEntry(absent)).toThrow(
+            expect((Pets.toEntry(absent) as CodecError).message).toMatch(
                 /Attribute vaccine\.lastDose not found/,
             )
         })
@@ -219,7 +225,7 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', { tag: 'DOSE' }]],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
-            expect(() => Pets.toEntry(absent)).toThrow(
+            expect((Pets.toEntry(absent) as CodecError).message).toMatch(
                 /Attribute vaccine\.lastDose not found/,
             )
         })
@@ -232,7 +238,7 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', (x: string) => x]],
             })
             const absent: Nullable = { id: 'p', vaccine: null }
-            expect(() => Pets.toEntry(absent)).toThrow(
+            expect((Pets.toEntry(absent) as CodecError).message).toMatch(
                 /Attribute vaccine\.lastDose not found/,
             )
         })
@@ -244,7 +250,7 @@ describe('a key component that reads a path', () => {
                 SK: [['chip.serial', (x: string | null) => x ?? 'NONE']],
             })
             const unchipped: Chipped = { id: 'p', chip: { serial: null } }
-            expect(Pets.toEntry(unchipped).SK).toBe('SERIAL#NONE')
+            expect(Pets.unsafeToEntry(unchipped).SK).toBe('SERIAL#NONE')
         })
 
         it('refuses a tag at a path whose value can be null, because a component with no transform does not print a null', () => {
@@ -255,7 +261,7 @@ describe('a key component that reads a path', () => {
                 SK: [['chip.serial', { tag: 'CHIP' }]],
             })
             const unchipped: Chipped = { id: 'p', chip: { serial: null } }
-            expect(() => Pets.toEntry(unchipped)).toThrow(
+            expect((Pets.toEntry(unchipped) as CodecError).message).toMatch(
                 /Attribute chip\.serial not found/,
             )
         })
@@ -266,7 +272,7 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', (x: string) => x, '0']],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
-            expect(Pets.toEntry(absent).SK).toBe('LASTDOSE#0')
+            expect(Pets.unsafeToEntry(absent).SK).toBe('LASTDOSE#0')
         })
     })
 
@@ -398,7 +404,7 @@ describe('a discriminator that reads a path', () => {
             { id: '3', tag: 'T2', n: 'v' },
         ] as const
         for (const item of items) {
-            expect(Things.fromEntry(Things.toEntry(item))).toEqual(item)
+            expect(Things.fromEntry(Things.unsafeToEntry(item))).toEqual(item)
         }
     })
 })
@@ -411,8 +417,11 @@ describe('the round trip of the entries that read a path', () => {
             GSI1PK: [['to.ownerId', { tag: 'ownerId' }]],
         })
         const item = { id: 'a', to: { ownerId: 'u', name: 'n' } }
-        expect(Transfers.fromEntry(Transfers.toEntry(item))).toEqual(item)
-        const entry = { ...Transfers.toEntry(item), GSI1PK: 'ownerId#other' }
+        expect(Transfers.fromEntry(Transfers.unsafeToEntry(item))).toEqual(item)
+        const entry = {
+            ...Transfers.unsafeToEntry(item),
+            GSI1PK: 'ownerId#other',
+        }
         expect(Transfers.fromEntry(entry as never)).toEqual(item)
     })
 })

@@ -297,7 +297,7 @@ describe('a key of one attribute at a path can be sparse, as at the top level', 
             GSI1SK: 'meta.note',
         })
         expect(Notes.key('GSI1SK', { meta: { note: 'x' } })).toBe('x')
-        expect(Notes.toEntry({ id: 'a' })).not.toHaveProperty('GSI1SK')
+        expect(Notes.unsafeToEntry({ id: 'a' })).not.toHaveProperty('GSI1SK')
     })
 })
 

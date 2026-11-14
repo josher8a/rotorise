@@ -5,7 +5,7 @@
  * default stands for an undefined value only, and each key value has one owner of its rule.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import { number, string, union } from '../../codec'
 
 /** The entry, without the types that a cast would otherwise ask for. */
@@ -138,9 +138,9 @@ describe('a sort condition reads the parts that print', () => {
 describe('a key value has one owner of its rule', () => {
     it('refuses a key value that is no S, N or B in an entry, as asKey refuses it', () => {
         const Pets = loose({ PK: ['id'], GSI1PK: 'flag' })
-        expect(() => Pets.toEntry({ flag: true, id: 'a' })).toThrow(
-            /cannot store as a key/,
-        )
+        expect(
+            (Pets.toEntry({ flag: true, id: 'a' }) as CodecError).message,
+        ).toMatch(/cannot store as a key/)
     })
 })
 

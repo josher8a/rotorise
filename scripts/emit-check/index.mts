@@ -174,6 +174,7 @@ export const structural = structuralEquals
 // the type holds must be published
 export const PetRowKey = PetRows.key('PK', { petId: 'p1' })
 export const PetRowEntry = PetRows.toEntry({ petId: 'p1', kind: 'CAT' })
+export const PetRowEntryTwin = PetRows.unsafeToEntry({ petId: 'p1', kind: 'CAT' })
 export const PetRowKeys = PetRows.keys(['PK'], { petId: 'p1', kind: 'CAT' })
 export const PetRowUpdate = PetRows.keyUpdates({ petId: 'p1' })
 export const PetRowPath = PetRows.path()
@@ -190,7 +191,8 @@ export const CodedPath = CodedPets.path()
 // with no row is an error here. The record of `CodedPets` holds one row for each form of a method.
 export const PetRowPins = {
     toEntry: PetRows.toEntry({ petId: 'p1', kind: 'CAT' }),
-    fromEntry: PetRows.fromEntry(PetRows.toEntry({ petId: 'p1', kind: 'CAT' })),
+    unsafeToEntry: PetRows.unsafeToEntry({ petId: 'p1', kind: 'CAT' }),
+    fromEntry: PetRows.fromEntry(PetRows.unsafeToEntry({ petId: 'p1', kind: 'CAT' })),
     key: {
         plain: PetRows.key('PK', { petId: 'p1' }),
         match: PetRows.key('SK', { petId: 'p1', kind: 'CAT' }),
@@ -202,7 +204,8 @@ export const PetRowPins = {
 } satisfies { [K in keyof typeof PetRows]: unknown }
 export const CodedPins = {
     toEntry: CodedPets.toEntry({ petId: 'p1', name: 'Rex' }),
-    fromEntry: CodedPets.fromEntry(CodedPets.toEntry({ petId: 'p1', name: 'Rex' })),
+    unsafeToEntry: CodedPets.unsafeToEntry({ petId: 'p1', name: 'Rex' }),
+    fromEntry: CodedPets.fromEntry(CodedPets.unsafeToEntry({ petId: 'p1', name: 'Rex' })),
     key: {
         plain: CodedPets.key('PK', { petId: 'p1' }),
         depth: CodedPets.key('PK', { petId: 'p1' }, { depth: 1 }),
@@ -225,7 +228,8 @@ export const CodedPins = {
 } satisfies { [K in keyof typeof CodedPets]: unknown }
 export const TaggedPins = {
     toEntry: TaggedPets.toEntry({ petId: 'p1', kind: 'CAT' }),
-    fromEntry: TaggedPets.fromEntry(TaggedPets.toEntry({ petId: 'p1', kind: 'CAT' })),
+    unsafeToEntry: TaggedPets.unsafeToEntry({ petId: 'p1', kind: 'CAT' }),
+    fromEntry: TaggedPets.fromEntry(TaggedPets.unsafeToEntry({ petId: 'p1', kind: 'CAT' })),
     key: TaggedPets.key('PK', { petId: 'p1' }),
     keyUpdates: TaggedPets.keyUpdates({ petId: 'p1' }),
     keys: TaggedPets.keys(['PK'], { petId: 'p1', kind: 'CAT' }),

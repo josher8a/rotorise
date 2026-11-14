@@ -138,8 +138,9 @@ const storedKennel = {
     age: { N: '3' },
 } as const
 export const kennelPins = {
-    toEntry: pinned<KennelEntry>()(Kennels.toEntry(kennel)),
-    fromEntry: pinned<Kennel>()(Kennels.fromEntry(Kennels.toEntry(kennel))),
+    toEntry: pinned<Result<KennelEntry>>()(Kennels.toEntry(kennel)),
+    unsafeToEntry: pinned<KennelEntry>()(Kennels.unsafeToEntry(kennel)),
+    fromEntry: pinned<Kennel>()(Kennels.fromEntry(Kennels.unsafeToEntry(kennel))),
     key: {
         plain: pinned<'PETID#p1'>()(Kennels.key('PK', ids)),
         ofOne: pinned<'s1'>()(Kennels.key('GSI1PK', shelter)),
@@ -214,7 +215,7 @@ export const petPins = {
                   petId: string
                   kind: 'CAT'
               }
-        >()(Pets.toEntry(value)),
+        >()(Pets.unsafeToEntry(value)),
     key: pinned<'PETID#p1'>()(Pets.key('PK', { petId: 'p1' })),
     keyOfEntity: pinned<`PETID#${string}`>()(Pets.key('PK', pet)),
     keyOfDog: pinned<'OWNERID#o1'>()(Pets.key('SK', dogPet)),

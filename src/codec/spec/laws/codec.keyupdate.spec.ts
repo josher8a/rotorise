@@ -104,7 +104,7 @@ const build = (): Run => {
                                       ),
                                   }
                         let table: {
-                            toEntry: (
+                            unsafeToEntry: (
                                 pet: Record<string, unknown>,
                             ) => Record<string, unknown>
                             unsafeToItem: (
@@ -157,7 +157,7 @@ const build = (): Run => {
                             keyOf: (pet) =>
                                 textOf(
                                     mode === 'none'
-                                        ? table.toEntry(pet).SK
+                                        ? table.unsafeToEntry(pet).SK
                                         : table.unsafeToItem(pet).SK,
                                 ),
                             patch: (part) => table.keyUpdates(part),

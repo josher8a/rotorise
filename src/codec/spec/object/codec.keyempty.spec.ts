@@ -10,7 +10,7 @@
  * present.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 
 type Pet = { petId: string; shelterId: string; nick: string }
 
@@ -54,7 +54,7 @@ describe('a full key of one attribute refuses the empty string, on every route',
         expect(() => Pets.keys(['SK'], unnamed)).toThrow(
             "the attribute 'nick' is empty",
         )
-        expect(() => Pets.toEntry(unnamed)).toThrow(
+        expect((Pets.toEntry(unnamed) as CodecError).message).toContain(
             "the attribute 'nick' is empty",
         )
     })
@@ -148,7 +148,7 @@ describe('the type of a key counts the segments that a print holds, and not the 
         const key = Hidden.key('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
         expect(key).toBe('#PETID#p1')
-        const entry = Hidden.toEntry(tagless).PK
+        const entry = Hidden.unsafeToEntry(tagless).PK
         expectTypeOf(entry).toEqualTypeOf<`#PETID#${string}`>()
         expect(entry).toBe('#PETID#p1')
     })

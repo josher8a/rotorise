@@ -34,29 +34,29 @@ const Animals = tableEntry<Dog | Cat>()({ PK: ['petId'] })
 
 describe('toEntry refuses an item whose value or name is wrong', () => {
     it('accepts an item that holds each name with the type of the entity', () => {
-        expect(Pets.toEntry({ petId: 'p', age: 3 }).PK).toBe('PETID#p')
-        expect(Animals.toEntry({ kind: 'cat', petId: 'p', lives: 9 }).PK).toBe(
-            'PETID#p',
-        )
+        expect(Pets.unsafeToEntry({ petId: 'p', age: 3 }).PK).toBe('PETID#p')
+        expect(
+            Animals.unsafeToEntry({ kind: 'cat', petId: 'p', lives: 9 }).PK,
+        ).toBe('PETID#p')
     })
 
     it('refuses a text where the entity holds a number', () => {
         const refused = () =>
             // @ts-expect-error the type of the value is wrong
-            Pets.toEntry({ petId: 'p', age: '3' })
+            Pets.unsafeToEntry({ petId: 'p', age: '3' })
         expect(refused).toBeTypeOf('function')
     })
 
     it('refuses an item that lacks a name of the entity', () => {
         const refused = () =>
             // @ts-expect-error the name age is missing
-            Pets.toEntry({ petId: 'p' })
+            Pets.unsafeToEntry({ petId: 'p' })
         expect(refused).toBeTypeOf('function')
     })
 
     it('refuses a wrong value below an object', () => {
         const refused = () =>
-            Visits.toEntry({
+            Visits.unsafeToEntry({
                 id: 'v',
                 // @ts-expect-error the type of the value below the object is wrong
                 owner: { name: 'a', age: '1' },
@@ -66,7 +66,7 @@ describe('toEntry refuses an item whose value or name is wrong', () => {
 
     it('refuses a missing name below an object', () => {
         const refused = () =>
-            Visits.toEntry({
+            Visits.unsafeToEntry({
                 id: 'v',
                 // @ts-expect-error the name age is missing below the object
                 owner: { name: 'a' },
@@ -77,21 +77,21 @@ describe('toEntry refuses an item whose value or name is wrong', () => {
     it('refuses a wrong value at an entry with a codec', () => {
         const refused = () =>
             // @ts-expect-error the type of the value is wrong
-            Coded.toEntry({ petId: 'p', age: '3' })
+            Coded.unsafeToEntry({ petId: 'p', age: '3' })
         expect(refused).toBeTypeOf('function')
     })
 
     it('refuses a missing name at an entry with a codec', () => {
         const refused = () =>
             // @ts-expect-error the name age is missing
-            Coded.toEntry({ petId: 'p' })
+            Coded.unsafeToEntry({ petId: 'p' })
         expect(refused).toBeTypeOf('function')
     })
 
     it('refuses a member of a union entity that lacks a name of that member', () => {
         const refused = () =>
             // @ts-expect-error the name bark is missing from the dog
-            Animals.toEntry({ kind: 'dog', petId: 'p' })
+            Animals.unsafeToEntry({ kind: 'dog', petId: 'p' })
         expect(refused).toBeTypeOf('function')
     })
 })

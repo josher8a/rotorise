@@ -9,11 +9,12 @@
  *   construct  The row is an `accept` row where the construction builds, and `toEntry` builds each
  *              plain item of the draw. A plain item is an item that the declared type alone fixes: each
  *              leaf is a text of one character or more with no separator, a number or a boolean. The
- *              row is a `refuse` row where the construction throws, or where `toEntry` throws for a
- *              plain item. A throw for another item moves no construct row: the host cannot state
+ *              row is a `refuse` row where the construction throws, or where `toEntry` gives an error value for
+ *              a plain item. A refusal of another item moves no construct row: the host cannot state
  *              the empty text or a text with the separator. A refuse row prints no method row.
  *   call       The call of a method, with the argument as a variable of the declared type, so no excess
- *              property check gives the verdict. An `accept` row where the run time gives a value.
+ *              property check gives the verdict. An `accept` row where the run time gives a value, and
+ *              an `either` row where it gives an error value.
  *   result     The value of the run time, assigned to the type of the result. An `accept` row.
  *   foreign    One value that the run time cannot give at that call, under `@ts-expect-error`. A key
  *              text with a label (`PETID#p1`): the text with `~` in front. A key that the run time does
@@ -1633,7 +1634,7 @@ const showRun = (o: Outcome, group: string) =>
 
 type Table = {
     readonly key: (name: string, item: object, config?: object) => unknown
-    readonly toEntry: (item: object) => Record<string, unknown>
+    readonly toEntry: (item: object) => unknown
     readonly fromEntry: (entry: object) => unknown
     readonly keyUpdates: (change: object) => unknown
     readonly keys: (item: object) => unknown
@@ -1754,7 +1755,7 @@ export const printPool = (parts: number, reverse: boolean) => {
         ) => Table
         const options = s.options ? ev(s.options) : undefined
         const made = attempt(() => make(ev(s.schema), options))
-        // The oracle of a construct row: the construction throws, or toEntry throws for a plain item.
+        // The oracle of a construct row: the construction throws, or toEntry refuses a plain item.
         const plainThrow = made.ok
             ? (s.items ?? [])
                   .map((name) => ({
@@ -1768,7 +1769,7 @@ export const printPool = (parts: number, reverse: boolean) => {
                           (made.value as Table).toEntry(i.value as object),
                       ),
                   }))
-                  .find((i) => !i.out.ok)
+                  .find((i) => !i.out.ok || i.out.value instanceof CodecError)
             : undefined
         const built: Outcome = plainThrow
             ? {
@@ -1891,6 +1892,17 @@ export const printPool = (parts: number, reverse: boolean) => {
                 axes,
             )
             if (!run.ok) continue
+            if (run.value instanceof CodecError) {
+                result(
+                    'toEntry',
+                    `${T}.toEntry(${name})`,
+                    c.v,
+                    c.id,
+                    run.value,
+                    axes,
+                )
+                continue
+            }
             const entry = run.value as Record<string, unknown>
             toEntryOf.set(name, entry)
             entryRows(
@@ -2197,7 +2209,7 @@ const GROUP_ROWS = {
     typing: 65,
     constructAccept: 103,
     constructRefuse: 63,
-    toEntry: 874,
+    toEntry: 905,
     fromEntry: 693,
     infer: 536,
     key: 1119,

@@ -879,7 +879,8 @@ TypeScript 7 and `npx vitest --run`:
 
     Pets.toEntry(blank)
       type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute name not found
+      runtime:      returns a CodecError, buildCompositeKey: Attribute name not found
+                    (unsafeToEntry throws it)
 
     Pets.key('SK', blank)
       type checker: builds
@@ -913,9 +914,9 @@ text. The rule is the same for a component that is a path, and for a key of one 
 
 **Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
 composite key whose plain component is the empty text. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 44 ids: 19 of key, 23 of toEntry and 2 of keys. Two
-of the 19 ids of key are the calls blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep, for the
-empty id below an optional object. toItem returns the refusal as a value, so the call is no id.
+formal/scripts/type_bridge_baseline.txt, holds 21 ids: 19 of key and 2 of keys. Two of the 19 ids of
+key are the calls blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep, for the empty id below an
+optional object. toItem and toEntry return the refusal as a value, so those calls are no id.
 
 ---
 
@@ -1293,8 +1294,8 @@ Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
 **Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the refusal of the run time for a
 complete key. No test pins the type. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 16 ids: 7 of key, 5 of toEntry, 3 of keyCondition and
-1 of keys. toItem returns the refusal as a value, so the call is no id.
+formal/scripts/type_bridge_baseline.txt, holds 11 ids: 7 of key, 3 of keyCondition and 1 of keys.
+toItem and toEntry return the refusal as a value, so those calls are no id.
 
 ---
 

@@ -88,7 +88,7 @@ describe('a key of one attribute states the stored text at each depth of a match
             { codec: Tagged },
         )
         const key = TwoLevels.key('SK', housed)
-        const stored = TwoLevels.toEntry(housed).SK
+        const stored = TwoLevels.unsafeToEntry(housed).SK
         expectTypeOf(key).toEqualTypeOf<'N' | 'Y' | undefined>()
         expectTypeOf(stored).toEqualTypeOf<typeof key>()
         expect(key).toBe('Y')

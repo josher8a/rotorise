@@ -82,7 +82,7 @@ describe('a key of one number attribute is N in every path that writes a row', (
     })
 
     it('toEntry holds the number as the key that a marshaller writes as N', () => {
-        const entry = Pets.toEntry({
+        const entry = Pets.unsafeToEntry({
             petId: 'p1',
             status: 'AVAILABLE',
             shelter: 's1',
@@ -105,7 +105,7 @@ describe('null gives no key in every path, as undefined does', () => {
     })
 
     it('toEntry omits the key of a null attribute arm', () => {
-        expect(Pets.toEntry(adopted)).not.toHaveProperty('GSI2PK')
+        expect(Pets.unsafeToEntry(adopted)).not.toHaveProperty('GSI2PK')
     })
 
     it('keyUpdates removes the key of a null attribute arm', () => {
@@ -201,7 +201,7 @@ describe('a key attribute of DynamoDB is S, N or B, at a path as at a name', () 
     })
 
     it('writes B in toItem with a codec, and keeps the bytes in toEntry with none', () => {
-        expect(Plain.toEntry(pet).GSI1PK).toBe(chip)
+        expect(Plain.unsafeToEntry(pet).GSI1PK).toBe(chip)
         expect(Coded.unsafeToItem(pet).GSI1PK).toEqual({ B: chip })
     })
 
@@ -235,12 +235,26 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
     })
 
     it('toEntry refuses an empty key, which a marshaller writes as a key that DynamoDB refuses', () => {
-        expect(() =>
-            Tags.toEntry({ tagId: new Uint8Array([1]), petId: 'p1', nick: '' }),
-        ).toThrow("Key SK: the attribute 'nick' is empty, so the key is empty.")
-        expect(() =>
-            Tags.toEntry({ tagId: new Uint8Array(), petId: 'p1', nick: 'Rex' }),
-        ).toThrow(
+        expect(
+            (
+                Tags.toEntry({
+                    tagId: new Uint8Array([1]),
+                    petId: 'p1',
+                    nick: '',
+                }) as CodecError
+            ).message,
+        ).toContain(
+            "Key SK: the attribute 'nick' is empty, so the key is empty.",
+        )
+        expect(
+            (
+                Tags.toEntry({
+                    tagId: new Uint8Array(),
+                    petId: 'p1',
+                    nick: 'Rex',
+                }) as CodecError
+            ).message,
+        ).toContain(
             "'PK' is built from a value that DynamoDB cannot store as a key",
         )
     })
@@ -307,7 +321,7 @@ describe('a key follows its attribute in every path that writes a row', () => {
     })
 
     it('toEntry holds the key that toItem writes for a held Date, and refuses nothing that toItem writes', () => {
-        expect(Born.toEntry({ petId: 'p1', bornAt: day }).SK).toBe(
+        expect(Born.unsafeToEntry({ petId: 'p1', bornAt: day }).SK).toBe(
             '2020-01-01T00:00:00.000Z',
         )
         const past = 2 ** 60
@@ -317,7 +331,7 @@ describe('a key follows its attribute in every path that writes a row', () => {
         ).toEqual({ N: String(past) })
         expect(
             native.encode(
-                Litters.toEntry({ litterId: 'l1', born: past, name: 'a' })
+                Litters.unsafeToEntry({ litterId: 'l1', born: past, name: 'a' })
                     .GSI1SK,
             ),
         ).toEqual({ N: String(past) })
@@ -369,7 +383,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
             readonly set: Record<string, unknown>
             readonly remove: readonly string[]
         }
-        readonly toEntry: (item: never) => Record<string, unknown>
+        readonly unsafeToEntry: (item: never) => Record<string, unknown>
         readonly toItem: (item: never) => unknown
     }
     type Priced =
@@ -815,7 +829,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
                     if (result instanceof Error) throw result
                     return result as Record<string, unknown>
                 })
-                const entered = said(() => entry.toEntry(entity))
+                const entered = said(() => entry.unsafeToEntry(entity))
                 const updated = said(() => entry.keyUpdates(entity))
                 const refusedBy = names.find(
                     (name) =>

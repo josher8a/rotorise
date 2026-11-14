@@ -32,7 +32,7 @@ describe('a key of one attribute at a path', () => {
         const key = Notes.key('SK', { meta: { note: 'x' } })
         expect(key).toBe('x')
         expectTypeOf(key).toEqualTypeOf<'x'>()
-        const entry = Notes.toEntry({
+        const entry = Notes.unsafeToEntry({
             id: 'a',
             meta: { note: 'x', grams: 1 },
         })

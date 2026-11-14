@@ -92,7 +92,7 @@ describe('tableEntry with a codec', () => {
     })
 
     it('still exposes the plain entry API', () => {
-        expect(Pet.toEntry(pet).PK).toBe('USERID#u1')
+        expect(Pet.unsafeToEntry(pet).PK).toBe('USERID#u1')
         expect(Pet.key('PK', { userId: 'u9' })).toBe('USERID#u9')
     })
 
@@ -114,7 +114,7 @@ describe('tableEntry with a codec', () => {
             { PK: ['userId'], SK: ['salt'] },
             { separator: '-' },
         )
-        expect(dashed.toEntry(pet).PK).toBe('USERID-u1')
+        expect(dashed.unsafeToEntry(pet).PK).toBe('USERID-u1')
     })
 
     it('takes the separator alongside a codec, and beside one', () => {
@@ -122,14 +122,14 @@ describe('tableEntry with a codec', () => {
             { PK: ['userId'], SK: ['salt'] },
             { codec: Pet.codec, separator: '-' },
         )
-        expect(dashed.toEntry(pet).PK).toBe('USERID-u1')
+        expect(dashed.unsafeToEntry(pet).PK).toBe('USERID-u1')
         expect(dashed.unsafeToItem(pet).PK).toEqual({ S: 'USERID-u1' })
 
         const sepOnly = tableEntry<Pet>()(
             { PK: ['userId'], SK: ['salt'] },
             { separator: '-' },
         )
-        expect(sepOnly.toEntry(pet).PK).toBe('USERID-u1')
+        expect(sepOnly.unsafeToEntry(pet).PK).toBe('USERID-u1')
     })
 
     /**
@@ -188,7 +188,7 @@ describe('the separator is a slot of the options, and the default is in the type
             { PK: ['petId'] },
             { codec: { petId: string } },
         )
-        const entry = Pets.toEntry({ petId: 'p1' } as const)
+        const entry = Pets.unsafeToEntry({ petId: 'p1' } as const)
         expect(entry.PK).toBe('PETID#p1')
         expectTypeOf(entry.PK).toEqualTypeOf<'PETID#p1'>()
     })
@@ -198,7 +198,7 @@ describe('the separator is a slot of the options, and the default is in the type
             { PK: ['petId'] },
             { separator: '-' },
         )
-        const entry = Pets.toEntry({ petId: 'p1' } as const)
+        const entry = Pets.unsafeToEntry({ petId: 'p1' } as const)
         expect(entry.PK).toBe('PETID-p1')
         expectTypeOf(entry.PK).toEqualTypeOf<'PETID-p1'>()
     })

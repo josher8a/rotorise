@@ -2515,8 +2515,17 @@ export type TableEntryDefinition<
      * that lacks a name of the entity. `toEntry` prints each key from the attributes of the item,
      * so a wrong value prints a key that `toItem` of the same entity never writes. `Exact` compares
      * the names at the top level only: a name in excess below an object compiles.
+     *
+     * A refusal of the item is a value: a key that cannot print, a name of a key that the item holds,
+     * and a numeral that the marshaller cannot write give a `CodecError`. The error of a key has the
+     * `RotoriseError` as its `cause`.
      */
     toEntry: <const ExactEntity extends Entity>(
+        item: Exact<Entity, ExactEntity>,
+    ) => Result<HeldEntry<ExactEntity, Schema, Separator, CodecSpec, CodecRest>>
+
+    /** The same, throwing the error that `toEntry` returns. */
+    unsafeToEntry: <const ExactEntity extends Entity>(
         item: Exact<Entity, ExactEntity>,
     ) => HeldEntry<ExactEntity, Schema, Separator, CodecSpec, CodecRest>
 
@@ -4814,6 +4823,9 @@ export const tableEntry =
             )
         }
 
+        const toEntry = (item: Record<string, unknown>) =>
+            returned(() => buildEntry(item))
+
         const definition = {
             keyUpdates,
             keys: (
@@ -4872,7 +4884,9 @@ export const tableEntry =
                     ...(sort === undefined ? {} : { sort }),
                 }
             },
-            toEntry: buildEntry as never,
+            toEntry: toEntry as never,
+            unsafeToEntry: ((item: Record<string, unknown>) =>
+                orThrow(toEntry(item))) as never,
             fromEntry: dropKeys as never,
             key: buildKey as never,
             infer: chainableNoOpProxy as never,

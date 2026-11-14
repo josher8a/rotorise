@@ -72,6 +72,7 @@
 #               another code for one refusal.
 # either encodePartial refused 0 built 1
 # either fromItem refused 0 built 4
+# either toEntry refused 0 built 31
 # either toItem refused 1 built 2
 construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
@@ -203,41 +204,13 @@ text|construct|refuse|9776bc42|kind_lacking.otherpath_spec_neg
 text|construct|refuse|dfb3f055|kind_lacking.nopath_spec_neg
 text|construct|refuse|fa506674|kind_optional.nopath_spec_neg
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blank).foreign:SK
-toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blankId).call
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blankNote).foreign:SK
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(nonote).foreign:SK
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(ok).foreign:SK
-toEntry|refuse|184b973a|T_plain_tagTf.toEntry(sep).call
-toEntry|refuse|2fa8f7f9|T_opt_pathAttr.toEntry(blankOwner).call
-toEntry|refuse|30bc3e95|T_plain_taglessTf.toEntry(blank).call
-toEntry|refuse|30bc3e95|T_plain_taglessTf.toEntry(sep).call
-toEntry|refuse|490e4ea0|T_plain_pkList.toEntry(blankId).call
-toEntry|refuse|4977ab43|T_plain_codecItem.toEntry(blank).call
-toEntry|refuse|4977ab43|T_plain_codecItem.toEntry(sep).call
-toEntry|refuse|7bb4c8d4|T_plain_indexKeys.toEntry(blank).call
-toEntry|refuse|7eecf917|T_plain_attrNote_sep.toEntry(blankId).call
-toEntry|refuse|7eecf917|T_plain_attrNote_sep.toEntry(blankNote).call
-toEntry|refuse|7f04b386|T_opt_pathAttr_sep.toEntry(blankOwner).call
 toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blank).foreign:SK
-toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blankId).call
 toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blankNote).foreign:SK
 toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(nonote).foreign:SK
 toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(ok).foreign:SK
 toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(sep).foreign:SK
-toEntry|refuse|afe107af|T_nest_pathPlain.toEntry(blankCode).call
-toEntry|refuse|b04a5f18|T_plain_listOne.toEntry(blank).call
-toEntry|refuse|b04a5f18|T_plain_listOne.toEntry(blankId).call
-toEntry|refuse|b04a5f18|T_plain_listOne.toEntry(sep).call
-toEntry|refuse|b688f70a|T_nest_pathTag.toEntry(blankCode).call
-toEntry|refuse|b869b9a6|T_plain_list2_sep.toEntry(blank).call
-toEntry|refuse|b869b9a6|T_plain_list2_sep.toEntry(blankId).call
-toEntry|refuse|b97df3e1|T_plain_attrName.toEntry(blank).call
-toEntry|refuse|b97df3e1|T_plain_attrName.toEntry(blankId).call
-toEntry|refuse|bf6ad666|T_plain_attrNote.toEntry(blankId).call
-toEntry|refuse|bf6ad666|T_plain_attrNote.toEntry(blankNote).call
-toEntry|refuse|d178e45a|T_plain_roleKeys.toEntry(blank).call
-toEntry|refuse|f1510f52|T_plain_list2.toEntry(blank).call
-toEntry|refuse|f1510f52|T_plain_list2.toEntry(blankId).call
-toEntry|refuse|f1510f52|T_plain_list2.toEntry(sep).call
 value|accept|51086640d5|extract({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0
 value|refuse|51086640d5|exclude({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0

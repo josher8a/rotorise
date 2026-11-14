@@ -11,7 +11,7 @@
  */
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { describe, expect, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import { decimal, number, string } from '../../codec'
 
@@ -35,7 +35,7 @@ const written = (row: unknown): AttributeMap => {
 
 describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it back', () => {
     it('holds a number that equals the numeral as a number, whatever its spelling', () => {
-        const entry = Measures.toEntry({ id: 'm1', value: 1e-7 })
+        const entry = Measures.unsafeToEntry({ id: 'm1', value: 1e-7 })
         expect(entry.SK).toBe(1e-7)
         expect(written(Measures.toItem({ id: 'm1', value: 1e-7 })).SK).toEqual({
             N: '0.0000001',
@@ -47,7 +47,7 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
 
     it('holds an integer outside the safe range as a bigint, which the SDK writes in full', () => {
         const past = 2 ** 53 + 2
-        const entry = Measures.toEntry({ id: 'm1', value: past })
+        const entry = Measures.unsafeToEntry({ id: 'm1', value: past })
         expect(entry.SK).toBe(9007199254740994n)
         expect(marshalled(entry.SK)).toEqual({ N: '9007199254740994' })
         expect(written(Measures.toItem({ id: 'm1', value: past })).SK).toEqual({
@@ -56,13 +56,13 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
         expect(unmarshall({ SK: marshalled(entry.SK) } as never).SK).toBe(
             9007199254740994n,
         )
-        const big = Measures.toEntry({ id: 'm1', value: 1e21 })
+        const big = Measures.unsafeToEntry({ id: 'm1', value: 1e21 })
         expect(big.SK).toBe(10n ** 21n)
         expect(marshalled(big.SK)).toEqual({ N: '1000000000000000000000' })
     })
 
     it('holds a number within the safe range as a number', () => {
-        const entry = Measures.toEntry({ id: 'm1', value: 3 })
+        const entry = Measures.unsafeToEntry({ id: 'm1', value: 3 })
         expect(entry.SK).toBe(3)
         expect(marshalled(entry.SK)).toEqual({ N: '3' })
     })
@@ -71,12 +71,14 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
         const numeral = '12345678901234567890.123'
         const row = written(Weights.toItem({ id: 'w1', weight: numeral }))
         expect(row.SK).toEqual({ N: numeral })
-        expect(() => Weights.toEntry({ id: 'w1', weight: numeral })).toThrow(
-            RotoriseError,
-        )
-        expect(() => Weights.toEntry({ id: 'w1', weight: numeral })).toThrow(
-            /Read the key from toItem/,
-        )
+        expect(
+            (Weights.toEntry({ id: 'w1', weight: numeral }) as CodecError)
+                .cause,
+        ).toBeInstanceOf(RotoriseError)
+        expect(
+            (Weights.toEntry({ id: 'w1', weight: numeral }) as CodecError)
+                .message,
+        ).toMatch(/Read the key from toItem/)
     })
 
     /**
@@ -88,8 +90,9 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
         expect(
             written(Weights.toItem({ id: 'w1', weight: numeral })).SK,
         ).toEqual({ N: numeral })
-        expect(() => Weights.toEntry({ id: 'w1', weight: numeral })).toThrow(
-            RotoriseError,
-        )
+        expect(
+            (Weights.toEntry({ id: 'w1', weight: numeral }) as CodecError)
+                .cause,
+        ).toBeInstanceOf(RotoriseError)
     })
 })

@@ -100,7 +100,7 @@ describe('an attribute named like a member of Object.prototype is data like any 
                         name: string,
                         item: Record<string, unknown>,
                     ) => unknown
-                    toEntry: (item: Record<string, unknown>) => unknown
+                    unsafeToEntry: (item: Record<string, unknown>) => unknown
                 }
 
             it('refuses a composite key when the pet lacks a component, as for any other name', () => {
@@ -113,7 +113,7 @@ describe('an attribute named like a member of Object.prototype is data like any 
             it('writes no key of one attribute when the pet lacks the attribute', () => {
                 const Pets = entity({ GSI1PK: name })
                 expect(Pets.key('GSI1PK', { petId: 'p1' })).toBeUndefined()
-                expect(Pets.toEntry({ petId: 'p1' })).toEqual({
+                expect(Pets.unsafeToEntry({ petId: 'p1' })).toEqual({
                     petId: 'p1',
                     PK: 'PETID#p1',
                 })

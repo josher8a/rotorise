@@ -8,7 +8,7 @@
  * codec writes as another member, at a name and at a path, in the type and at construction.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import {
     array,
     binary,
@@ -73,7 +73,9 @@ describe('a key component with no codec', () => {
             SK: [['meta.note', { tag: 'NOTE' }]],
         })
         const noted: Noted = { id: 'n', meta: { note: { text: 't' } } }
-        expect(() => Notes.toEntry(noted)).toThrow(/the key cannot print it/)
+        expect((Notes.toEntry(noted) as CodecError).message).toMatch(
+            /the key cannot print it/,
+        )
     })
 
     it('refuses an object at a path, and accepts text at a path', () => {
@@ -373,7 +375,7 @@ describe('a name of a key that holds a dot is a path', () => {
             { PK: ['petId'], GSI1SK: ['owner.name'] },
             { codec: codecOf },
         )
-        expect(None.toEntry(kennel).GSI1SK).toBe('NAME#bob')
+        expect(None.unsafeToEntry(kennel).GSI1SK).toBe('NAME#bob')
         expect(Coded.unsafeToItem(kennel).GSI1SK).toEqual({ S: 'NAME#bob' })
     })
 
@@ -429,9 +431,9 @@ describe('a name of a key that holds a dot is a path', () => {
             PK: ['petId'],
             SK: [['owner.name', (name: string) => name.toUpperCase(), '']],
         })
-        expect(Pets.toEntry({ petId: 'p1', owner: { name: 'bob' } }).SK).toBe(
-            'NAME#BOB',
-        )
+        expect(
+            Pets.unsafeToEntry({ petId: 'p1', owner: { name: 'bob' } }).SK,
+        ).toBe('NAME#BOB')
         tableEntry<Optional>()({
             PK: ['petId'],
             // @ts-expect-error the parameter is the string at the path, and not the number of the attribute
@@ -449,11 +451,11 @@ describe('a name of a key that holds a dot is a path', () => {
             PK: ['petId'],
             SK: ['owner.name'],
         })
-        expect(Pets.toEntry({ petId: 'p1', owner: { name: 'bob' } }).SK).toBe(
-            'NAME#bob',
-        )
         expect(
-            Pets.toEntry({
+            Pets.unsafeToEntry({ petId: 'p1', owner: { name: 'bob' } }).SK,
+        ).toBe('NAME#bob')
+        expect(
+            Pets.unsafeToEntry({
                 petId: 'p1',
                 'owner.name': undefined,
                 owner: { name: 'bob' },
@@ -519,7 +521,7 @@ describe('a name of a key that holds a dot is a path', () => {
             owner: { name: 'bob' },
         }
         expect(Pets.unsafeToItem(pet).GSI1SK).toEqual({ S: 'NAME#bob' })
-        expect(Pets.toEntry(pet).GSI1SK).toBe('NAME#bob')
+        expect(Pets.unsafeToEntry(pet).GSI1SK).toBe('NAME#bob')
         expect(Pets.keys(['GSI1SK'], pet)).toEqual({
             GSI1SK: { S: 'NAME#bob' },
         })
@@ -626,7 +628,7 @@ describe('a name of a key that holds a dot is a path', () => {
             GSI1PK: 'owner.name',
             GSI1SK: ['owner.name'],
         })
-        const entry = Pets.toEntry(kennel)
+        const entry = Pets.unsafeToEntry(kennel)
         expectTypeOf(entry.GSI1PK).toEqualTypeOf<string>()
         expectTypeOf(entry.GSI1SK).toEqualTypeOf<`NAME#${string}`>()
         expect(entry.GSI1PK).toBe('bob')

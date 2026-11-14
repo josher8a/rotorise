@@ -73,7 +73,7 @@ const entryOf = (spec: Spec, separator: string) => {
         options: { readonly separator: string },
     ) => {
         readonly key: (name: string, item: object, config?: object) => unknown
-        readonly toEntry: (item: object) => Record<string, unknown>
+        readonly toEntry: (item: object) => Record<string, unknown> | CodecError
         readonly fromEntry: (entry: object) => unknown
     }
     return make({ K: spec }, { separator })
@@ -787,13 +787,8 @@ describe('the derived key rows, against the model of a key', () => {
         for (const one of cases) {
             const entry = entryOf(one.spec, one.separator ?? '#')
             for (const item of itemsOf(one)) {
-                let written: Record<string, unknown>
-                try {
-                    written = entry.toEntry(item)
-                } catch (thrown) {
-                    if (thrown instanceof RotoriseError) continue
-                    throw thrown
-                }
+                const written = entry.toEntry(item)
+                if (written instanceof CodecError) continue
                 wrote++
                 const { K: _key, ...rest } = written
                 expect(entry.fromEntry(written), one.name).toEqual(rest)

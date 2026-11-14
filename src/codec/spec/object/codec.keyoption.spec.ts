@@ -8,7 +8,7 @@
  * construction, and the refusal names the discriminator.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 
 type Boarder = {
     petId: string
@@ -32,7 +32,7 @@ describe('an arm of a match for an option that holds two literals', () => {
                 spec: { IN: ['kennel', 'owner.id'], OUT: ['petId'] },
             },
         })
-        expect(Boarders.toEntry(boarder).SK).toBe('KENNEL#k1#ID#o1')
+        expect(Boarders.unsafeToEntry(boarder).SK).toBe('KENNEL#k1#ID#o1')
     })
 
     it('reads the attributes of the option, in the form with `cases`', () => {
@@ -46,7 +46,7 @@ describe('an arm of a match for an option that holds two literals', () => {
                 ],
             },
         })
-        expect(Boarders.toEntry(boarder).SK).toBe('KENNEL#k1')
+        expect(Boarders.unsafeToEntry(boarder).SK).toBe('KENNEL#k1')
     })
 
     it('reads the attributes of the option, in a match on a path', () => {
@@ -67,10 +67,10 @@ describe('an arm of a match for an option that holds two literals', () => {
             meta: { status: 'IN' },
             kennel: 'k1',
         }
-        expectTypeOf(Placeds.toEntry(placed).SK).toEqualTypeOf<
+        expectTypeOf(Placeds.unsafeToEntry(placed).SK).toEqualTypeOf<
             `KENNEL#${string}` | `PETID#${string}`
         >()
-        expect(Placeds.toEntry(placed).SK).toBe('KENNEL#k1')
+        expect(Placeds.unsafeToEntry(placed).SK).toBe('KENNEL#k1')
         const placedIn = {
             petId: 'p1',
             meta: { status: 'IN' },
@@ -120,7 +120,7 @@ describe('an arm of a match for an option that holds two literals', () => {
                 spec: { IN: ['kennel'], OUT: ['petId'] },
             },
         })
-        expect(Cages.toEntry(boarder).SK).toBe('KENNEL#k1')
+        expect(Cages.unsafeToEntry(boarder).SK).toBe('KENNEL#k1')
     })
 
     it('refuses a call of key with the discriminator alone, because the arm needs the attribute', () => {
@@ -156,7 +156,9 @@ describe('a discriminator that an item can lack', () => {
             },
         })
         const Pets = tableEntry<Optional>()({ PK: ['petId'] })
-        expect(() => Pets.toEntry({ petId: 'p4', kennel: 'k4' })).not.toThrow()
+        expect(() =>
+            Pets.unsafeToEntry({ petId: 'p4', kennel: 'k4' }),
+        ).not.toThrow()
     })
 
     it('is refused in the form with `cases`, and the error lands on the discriminator', () => {
@@ -192,8 +194,9 @@ describe('a discriminator that an item can lack', () => {
                 cases: [[['CAT'], ['kennel']]],
             },
         } as never)
-        expect(() => Strays.toEntry({ petId: 'p4', ownerId: 'u4' })).toThrow(
-            /Discriminator kind not found/,
-        )
+        expect(
+            (Strays.toEntry({ petId: 'p4', ownerId: 'u4' }) as CodecError)
+                .message,
+        ).toMatch(/Discriminator kind not found/)
     })
 })

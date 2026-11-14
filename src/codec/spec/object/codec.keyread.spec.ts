@@ -28,7 +28,7 @@ const user: User = { orgId: 'acme', id: '1', role: 'admin', email: 'a@b.c' }
 const read = Users.fromEntry as (entry: object) => unknown
 
 describe('a read of an entry', () => {
-    const entry = Users.toEntry(user)
+    const entry = Users.unsafeToEntry(user)
     const { GSI1PK: _a, GSI1SK: _b, ...absent } = entry
     const { email: _gone, ...unbuildable } = entry
     const stale = { ...entry, GSI1SK: 'EMAIL#other@b.c' }
@@ -78,7 +78,9 @@ describe('a key build', () => {
         expect(build).toThrow(RotoriseError)
         expect(build).toThrow(/orgId/)
         expect(build).not.toThrow(/secret/)
-        expect(() => Users.toEntry(bad)).toThrow(RotoriseError)
+        expect((Users.toEntry(bad) as CodecError).cause).toBeInstanceOf(
+            RotoriseError,
+        )
     })
 
     it('refuses a transform whose tag holds the separator', () => {

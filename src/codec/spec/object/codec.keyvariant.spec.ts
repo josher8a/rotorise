@@ -36,7 +36,7 @@ type Route = {
     readonly keyUpdates: (changed: never) => {
         readonly set: Record<string, unknown>
     }
-    readonly toEntry: (entity: never) => Record<string, unknown>
+    readonly unsafeToEntry: (entity: never) => Record<string, unknown>
 }
 /** An entry over a schema and a codec, which the type of a held tag need not admit. */
 const route = (schema: unknown, codec?: unknown): Route =>
@@ -107,7 +107,7 @@ describe.each([
             GSI1SK: { S: iso },
         })
         expect(Visits.key('GSI1SK', dog as never)).toBe(iso)
-        expect(Visits.toEntry(dog as never).GSI1SK).toBe(iso)
+        expect(Visits.unsafeToEntry(dog as never).GSI1SK).toBe(iso)
         expect(Visits.keyUpdates(dog as never).set.GSI1SK).toEqual({ S: iso })
     })
 
@@ -123,7 +123,7 @@ describe.each([
             SK: { S: 'KIND#D#CHIP#ff' },
         })
         expect(Chips.key('SK', dog as never)).toBe('KIND#D#CHIP#ff')
-        expect(Chips.toEntry(dog as never).SK).toBe('KIND#D#CHIP#ff')
+        expect(Chips.unsafeToEntry(dog as never).SK).toBe('KIND#D#CHIP#ff')
     })
 
     it('writes the stored literal of the variant, where the key is the discriminator', () => {
@@ -207,7 +207,9 @@ describe('a key of one attribute at a path is the attribute that the codec write
         })
         expect(Numbers.key('GSI1SK', entity(90) as never)).toBe(90)
         expect(
-            native.encode(Numbers.toEntry(entity(90) as never).GSI1SK as never),
+            native.encode(
+                Numbers.unsafeToEntry(entity(90) as never).GSI1SK as never,
+            ),
         ).toEqual({ N: '90' })
         expect(Numbers.keyUpdates(entity(90) as never).set.GSI1SK).toEqual({
             N: '90',
@@ -238,7 +240,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
         expect(Chips.keys(['GSI1SK'], entity(bytes) as never)).toEqual({
             GSI1SK: { B: bytes },
         })
-        expect(Chips.toEntry(entity(bytes) as never).GSI1SK).toBe(bytes)
+        expect(Chips.unsafeToEntry(entity(bytes) as never).GSI1SK).toBe(bytes)
     })
 
     it('is the member of the value, where the entry has no codec', () => {
@@ -247,7 +249,9 @@ describe('a key of one attribute at a path is the attribute that the codec write
             GSI1SK: { N: '90' },
         })
         expect(
-            native.encode(Bare.toEntry(entity(90) as never).GSI1SK as never),
+            native.encode(
+                Bare.unsafeToEntry(entity(90) as never).GSI1SK as never,
+            ),
         ).toEqual({ N: '90' })
     })
 })

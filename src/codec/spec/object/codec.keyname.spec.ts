@@ -21,7 +21,7 @@ describe('a component whose name is a number prints the number as its tag', () =
         // @ts-expect-error the tag is 0
         const other: typeof key = '~0#zero'
         expect(other).toBe('~0#zero')
-        const entry = Plain.toEntry(row).SK
+        const entry = Plain.unsafeToEntry(row).SK
         expectTypeOf(entry).toEqualTypeOf<`0#${string}`>()
         expect(entry).toBe('0#zero')
     })
