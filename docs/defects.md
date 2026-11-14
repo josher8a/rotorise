@@ -681,33 +681,6 @@ with the keys of the changed pet, for a key name with a `.` also.
 
 ---
 
-## Known: the type of a key with a component whose name is a number states no tag
-
-**Observation.** A component of a key is a name of the entity, and the type admits a name that is a
-number. The run time prints the tag of that name. The type of the key is a union of template
-literal types with no tag. Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and
-`npx vitest --run`:
-
-    const Rows = tableEntry<{ 0: string; petId: string }>()({ PK: ['petId'], SK: [0] })
-      type checker: builds
-      runtime:      builds
-
-    Rows.toEntry({ 0: 'zero', petId: 'p' }).SK
-      type checker: a union that holds `${string}#${string}`, `${string}#false` and
-                    `undefined#${bigint}`
-      runtime:      gives "0#zero"
-
-`Rows.key('SK', { 0: 'zero' })` gives the same type and the same text. A component whose name is a
-string gives a type with the tag, such as `` `PETID#${string}` ``.
-
-**Effect.** The type admits the text that the run time prints, and admits each other text with a
-`#`.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 4 ids: 1 of
-toEntry, 1 of infer and 2 of key.
-
----
-
 ## Known: the type of key with allowPartial refuses an argument that holds no component of the key, where the run time gives the empty string
 
 **Observation.** The type of `key` with `allowPartial` states each component as optional. A partial

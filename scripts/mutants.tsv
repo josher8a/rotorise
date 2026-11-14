@@ -182,3 +182,5 @@ p138_M2_match_literal_wide	src/Rotorise.ts	s/(: Arms\[V\] & ProjectPath<ExtractV
 p138_M3_match_item_without_arm_components	src/Rotorise.ts	s/^                    \? I$/                    ? unknown/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
 p140_L1_label_of_a_function_tag_is_wide	src/Rotorise.ts	s/^        \? \[Tag, Print<Value>\]$/        ? [string, Print<Value>]/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
 p141_A1_allowpartial_requires_the_first_component	src/Rotorise.ts	s/^                \? 0$/                ? 1/	node ./node_modules/typescript-7/bin/tsc --noEmit	is missing in type
+p142a_N1_number_name_transform_arm_is_wide	src/Rotorise.ts	s/^                infer Key extends number,$/                infer Key extends never,/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
+p142a_N2_number_name_plain_arm_is_wide	src/Rotorise.ts	s/^          : Spec extends keyof Entity & number$/          : Spec extends keyof Entity \& never/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.

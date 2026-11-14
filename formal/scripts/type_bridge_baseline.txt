@@ -99,7 +99,6 @@ exclude|refuse|e2198121e1|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|ea30057fc2|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|f45cbe8e82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|feb1120b66|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-infer|refuse|137363d8|T_numname_numList.infer(zero).foreign:SK
 infer|refuse|184b973a|T_plain_tagTf.infer(blank).foreign:SK
 infer|refuse|184b973a|T_plain_tagTf.infer(blankNote).foreign:SK
 infer|refuse|184b973a|T_plain_tagTf.infer(nonote).foreign:SK
@@ -133,8 +132,6 @@ key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,d0).call
 key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,partial).call
 key|accept|b869b9a6|T_plain_list2_sep.key(SK,sLit,narrow).result
 key|accept|f1510f52|T_plain_list2.key(SK,sLit,narrow).result
-key|refuse|137363d8|T_numname_numList.key(SK,zero,none).foreign
-key|refuse|137363d8|T_numname_numList.key(SK,zeroArg,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,blank,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,blank,partial).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,ok,none).foreign
@@ -200,7 +197,6 @@ text|construct|refuse|9333dbb0|kind_optional.armpath_spec_neg
 text|construct|refuse|9776bc42|kind_lacking.otherpath_spec_neg
 text|construct|refuse|dfb3f055|kind_lacking.nopath_spec_neg
 text|construct|refuse|fa506674|kind_optional.nopath_spec_neg
-toEntry|refuse|137363d8|T_numname_numList.toEntry(zero).foreign:SK
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blank).foreign:SK
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blankId).call
 toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blankNote).foreign:SK

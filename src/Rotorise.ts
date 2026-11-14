@@ -353,9 +353,37 @@ type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends [
             Printed<Entity[Spec] & joinable, Partial>,
             true extends Partial ? Absence<Entity[Spec], false> : 'never',
         ]
-      : true extends Partial
-        ? [Uppercase<Spec & string>, never, 'always']
-        : never
+      : Spec extends string
+        ? true extends Partial
+            ? [Uppercase<Spec>, never, 'always']
+            : never
+        : Spec extends [
+                infer Key extends number,
+                // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
+                (...key: any[]) => infer Value,
+                ...infer Rest,
+            ]
+          ? WithCase<
+                ExtractHelper<Uppercase<`${Key}`>, Value>,
+                true extends Partial
+                    ? Absence<
+                          Defaulted<
+                              Key extends keyof Entity ? Entity[Key] : never,
+                              Rest
+                          >,
+                          true
+                      >
+                    : 'never'
+            >
+          : Spec extends keyof Entity & number
+            ? [
+                  Uppercase<`${Spec}`>,
+                  Printed<Entity[Spec] & joinable, Partial>,
+                  true extends Partial ? Absence<Entity[Spec], false> : 'never',
+              ]
+            : true extends Partial
+              ? [Uppercase<Spec & string>, never, 'always']
+              : never
 
 type CompositeKeyStringBuilder<
     Entity,
