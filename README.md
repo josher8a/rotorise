@@ -49,10 +49,13 @@ The double-call `<Entity>()(schema)` is required because TypeScript does not sup
 
 ### `.key(keyName, attributes, config?)`
 
-Builds a specific key value from the given attributes.
-It throws a `RotoriseError` where a segment of a component holds the separator, because the key
-would read back as another list of segments. The message names the component, and never the value.
+Builds a specific key value from the given attributes. It returns a `Result`: the key, or a
+`CodecError` where a segment of a component holds the separator, because the key would read back as
+another list of segments. The message names the component, and never the value.
 A transform whose tag or value prints the separator is refused too, and `.toEntry(item)` returns that refusal as a value.
+`.unsafeKey(keyName, attributes, config?)` returns the key or throws that error. A key name that the
+schema does not declare, and a depth that is no non-negative integer, are refused by the type, so the
+call throws a `RotoriseError`.
 A component of an entry with a codec prints the stored text of the attribute: the `S` text or the `N` digits. An entry with no codec refuses a component that holds an object, in the type and at run time.
 
 ```ts
@@ -525,19 +528,16 @@ names no separator. A bare string as the second argument is refused.
 
 ## Error Handling
 
-The key builders throw `RotoriseError` (exported), so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. `toItem`, `toEntry`, `keys`, `keyCondition` and `keyUpdates` return a key that cannot be built as a `CodecError` too, and its `cause` is the `RotoriseError` of the key. The codec gives a `CodecError` with no `cause`. A key that cannot be built throws `RotoriseError` in `key`.
+`RotoriseError` (exported) is the error of a refusal at construction, so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. `toItem`, `toEntry`, `key`, `keys`, `keyCondition` and `keyUpdates` return a key that cannot be built as a `CodecError` too, and its `cause` is the `RotoriseError` of the key. The codec gives a `CodecError` with no `cause`. A call that the type refuses, such as a key name that the schema does not declare, throws `RotoriseError`.
 
-Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'refused'` otherwise. A `CodecError` that `toItem`, `toEntry`, `keys`, `keyCondition` or `keyUpdates` returns for a key has the kind of its `cause`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
+Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'refused'` otherwise. A `CodecError` that `toItem`, `toEntry`, `key`, `keys`, `keyCondition` or `keyUpdates` returns for a key has the kind of its `cause`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
 
 ```ts
 import { RotoriseError } from 'rotorise'
 
-try {
-  // a segment holds the separator
-  UserTable.key('PK', { orgId: 'acme#eu', id: '123' })
-} catch (e) {
-  if (e instanceof RotoriseError && e.kind === 'separator') { /* ... */ }
-}
+// a segment holds the separator
+const key = UserTable.key('PK', { orgId: 'acme#eu', id: '123' })
+if (key instanceof CodecError && key.kind === 'separator') { /* ... */ }
 ```
 
 ## Contributing

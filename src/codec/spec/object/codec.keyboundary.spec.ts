@@ -25,50 +25,60 @@ describe('a key with enforceBoundary', () => {
     const row = { a: '1', b: '2' }
 
     it('has no trailing separator on a full key with a tagless transform', () => {
-        expect(Mixed.key('K', row, { enforceBoundary: true })).toBe('1#B#2')
-        expect(Mixed.key('L', { a: '1' }, { enforceBoundary: true })).toBe('1')
+        expect(Mixed.unsafeKey('K', row, { enforceBoundary: true })).toBe(
+            '1#B#2',
+        )
+        expect(
+            Mixed.unsafeKey('L', { a: '1' }, { enforceBoundary: true }),
+        ).toBe('1')
     })
 
     it('has a trailing separator on a partial key with a tagless transform', () => {
         expect(
-            Mixed.key(
+            Mixed.unsafeKey(
                 'K',
                 { a: '1' },
                 { allowPartial: true, enforceBoundary: true },
             ),
         ).toBe('1#')
-        expect(Mixed.key('K', row, { depth: 1, enforceBoundary: true })).toBe(
-            '1#',
-        )
+        expect(
+            Mixed.unsafeKey('K', row, { depth: 1, enforceBoundary: true }),
+        ).toBe('1#')
     })
 
     it('leaves the key of a spec with no tagless transform as it was', () => {
-        expect(Mixed.key('M', row, { enforceBoundary: true })).toBe('T#1#B#2')
-        expect(Mixed.key('N', row, { enforceBoundary: true })).toBe('A#1#B#2')
-        expect(Mixed.key('N', row, { depth: 1, enforceBoundary: true })).toBe(
-            'A#1#',
+        expect(Mixed.unsafeKey('M', row, { enforceBoundary: true })).toBe(
+            'T#1#B#2',
         )
+        expect(Mixed.unsafeKey('N', row, { enforceBoundary: true })).toBe(
+            'A#1#B#2',
+        )
+        expect(
+            Mixed.unsafeKey('N', row, { depth: 1, enforceBoundary: true }),
+        ).toBe('A#1#')
     })
 
     it('adds nothing where the option is absent', () => {
-        expect(Mixed.key('K', row)).toBe('1#B#2')
-        expect(Mixed.key('K', row, { depth: 1 })).toBe('1')
+        expect(Mixed.unsafeKey('K', row)).toBe('1#B#2')
+        expect(Mixed.unsafeKey('K', row, { depth: 1 })).toBe('1')
     })
     it('reads the same option in the type of the key', () => {
         const as = { a: '1', b: '2' } as const
-        const full: 'A#1#B#2' = Mixed.key('N', as, { enforceBoundary: true })
-        const cut: 'A#1#' = Mixed.key('N', as, {
+        const full: 'A#1#B#2' = Mixed.unsafeKey('N', as, {
+            enforceBoundary: true,
+        })
+        const cut: 'A#1#' = Mixed.unsafeKey('N', as, {
             depth: 1,
             enforceBoundary: true,
         })
-        const plain: 'A#1' = Mixed.key('N', as, { depth: 1 })
-        const partial: 'A#1#' | 'A#1#B#2' = Mixed.key('N', as, {
+        const plain: 'A#1' = Mixed.unsafeKey('N', as, { depth: 1 })
+        const partial: 'A#1#' | 'A#1#B#2' = Mixed.unsafeKey('N', as, {
             allowPartial: true,
             enforceBoundary: true,
         })
         // a key that stops before the last component ends with the separator, and a full key does not
         // @ts-expect-error the key stops before the last component, so the separator ends it
-        const wrong: 'A#1' = Mixed.key('N', as, {
+        const wrong: 'A#1' = Mixed.unsafeKey('N', as, {
             depth: 1,
             enforceBoundary: true,
         })
@@ -88,8 +98,10 @@ describe('a key of a path component with enforceBoundary', () => {
     const as = { a: { x: '1' }, b: '2' } as const
 
     it('ends a full key with no separator, and a cut key with the separator, in the type and at run time', () => {
-        const full: 'X#1#B#2' = Paths.key('P', as, { enforceBoundary: true })
-        const cut: 'X#1#' = Paths.key('P', as, {
+        const full: 'X#1#B#2' = Paths.unsafeKey('P', as, {
+            enforceBoundary: true,
+        })
+        const cut: 'X#1#' = Paths.unsafeKey('P', as, {
             depth: 1,
             enforceBoundary: true,
         })

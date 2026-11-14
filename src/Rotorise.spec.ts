@@ -124,21 +124,22 @@ describe('DynamoDB Utils', () => {
         })
         const depth = 2 as number
         // a depth of two requires the first two components
-        expect(Transformed.key('PK', { a: 'x', b: 1 }, { depth: 2 })).toBe(
-            'A#x#B#1',
-        )
+        expect(
+            Transformed.unsafeKey('PK', { a: 'x', b: 1 }, { depth: 2 }),
+        ).toBe('A#x#B#1')
         // allowPartial reads the components that the call gives, and stops at the first absent one
-        expect(Transformed.key('PK', { a: 'x' }, { allowPartial: true })).toBe(
-            'A#x',
-        )
-        // @ts-expect-error a depth of two requires the second component
-        const shallow = () => Transformed.key('PK', { a: 'x' }, { depth: 2 })
+        expect(
+            Transformed.unsafeKey('PK', { a: 'x' }, { allowPartial: true }),
+        ).toBe('A#x')
+        const shallow = () =>
+            // @ts-expect-error a depth of two requires the second component
+            Transformed.unsafeKey('PK', { a: 'x' }, { depth: 2 })
         expect(shallow).toThrow(/Attribute b not found/)
         // @ts-expect-error a depth that is no literal says no component count
-        const loose = () => Transformed.key('PK', { a: 'x' }, { depth })
+        const loose = () => Transformed.unsafeKey('PK', { a: 'x' }, { depth })
         expect(loose).toThrow(/Attribute b not found/)
         // a partial key of no component is the empty prefix: the type builds the call
-        expect(Transformed.key('PK', {}, { allowPartial: true })).toBe('')
+        expect(Transformed.unsafeKey('PK', {}, { allowPartial: true })).toBe('')
 
         // 8939 -> 9878: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
@@ -157,11 +158,17 @@ describe('DynamoDB Utils', () => {
             { PK: ['a', 'b', 'c'] },
             { separator: '-' },
         )
-        attest<`A#${string}#B#${number}#C#${boolean}`>(Pets.key('PK', full))
-        attest<`A-${string}-B-${number}-C-${boolean}`>(Dashed.key('PK', full))
-        attest<`A-${string}-B-${number}`>(Dashed.key('PK', full, { depth: 2 }))
+        attest<`A#${string}#B#${number}#C#${boolean}`>(
+            Pets.unsafeKey('PK', full),
+        )
+        attest<`A-${string}-B-${number}-C-${boolean}`>(
+            Dashed.unsafeKey('PK', full),
+        )
+        attest<`A-${string}-B-${number}`>(
+            Dashed.unsafeKey('PK', full, { depth: 2 }),
+        )
         attest<'' | `A-${string}-B-${number}-C-${boolean}`>(
-            Dashed.key('PK', full, { depth: 3, allowPartial: true }),
+            Dashed.unsafeKey('PK', full, { depth: 3, allowPartial: true }),
         )
 
         const Variants = tableEntry<Union>()({ PK: ['a', 'b'] })
@@ -169,7 +176,7 @@ describe('DynamoDB Utils', () => {
             | { a: 'a1'; b: 1 }
             | { a: 'a2'; b: 2 }
         attest<`A#${'a1'}#B#${1}` | `A#${'a2'}#B#${2}`>(
-            Variants.key('PK', either),
+            Variants.unsafeKey('PK', either),
         )
 
         const Partial = tableEntry<Union>()({ PK: ['a', 'b', 'c'] })
@@ -177,14 +184,17 @@ describe('DynamoDB Utils', () => {
             | { a: 'a1'; b: 1; c: true }
             | { a: 'a2'; b: 2; c: false }
         attest<'A#a1#B#1#C#true' | 'A#a2#B#2#C#false'>(
-            Partial.key('PK', partial, { depth: 3, allowPartial: true }),
+            Partial.unsafeKey('PK', partial, { depth: 3, allowPartial: true }),
         )
 
         const Transform = tableEntry<Union>()({
             PK: ['a', 'b', ['c', (_c: boolean) => 'TRANSFORM' as const]],
         })
         attest<'A#a1#B#1#C#TRANSFORM' | 'A#a2#B#2#C#TRANSFORM'>(
-            Transform.key('PK', partial, { depth: 3, allowPartial: true }),
+            Transform.unsafeKey('PK', partial, {
+                depth: 3,
+                allowPartial: true,
+            }),
         )
 
         const Tagged = tableEntry<Union>()({
@@ -201,7 +211,7 @@ describe('DynamoDB Utils', () => {
             ],
         })
         attest<'A#a1#B#1#TAG#TRANSFORM' | 'A#a2#B#2#TAG#TRANSFORM'>(
-            Tagged.key('PK', partial, { depth: 3, allowPartial: true }),
+            Tagged.unsafeKey('PK', partial, { depth: 3, allowPartial: true }),
         )
 
         const Valued = tableEntry<Union>()({
@@ -212,7 +222,7 @@ describe('DynamoDB Utils', () => {
             ],
         })
         attest<'A#a1#B#1#TRANSFORM' | 'A#a2#B#2#TRANSFORM'>(
-            Valued.key('PK', partial, { depth: 3, allowPartial: true }),
+            Valued.unsafeKey('PK', partial, { depth: 3, allowPartial: true }),
         )
 
         // 23005 -> 25224: the builder of the key type reads the case of each component (can be
@@ -256,7 +266,7 @@ describe('DynamoDB Utils', () => {
         attest<entries>(testTableEntry.infer)
 
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'PK',
                 {
                     a: 'a1',
@@ -271,7 +281,7 @@ describe('DynamoDB Utils', () => {
         ).toBe('A-a1-B-1')
 
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'PK',
                 {
                     a: 'a1',
@@ -316,7 +326,7 @@ describe('DynamoDB Utils', () => {
 
         expect(fromEntry).toEqual(entity)
 
-        const key = testTableEntry.key(
+        const key = testTableEntry.unsafeKey(
             'PK',
             {
                 a: 'a1',
@@ -332,7 +342,7 @@ describe('DynamoDB Utils', () => {
 
         expect(key).toBe('A-a1-B-1')
 
-        const keyDefaults = testTableEntry.key('PK', {
+        const keyDefaults = testTableEntry.unsafeKey('PK', {
             a: 'a1',
             b: 1,
             c: true,
@@ -346,7 +356,7 @@ describe('DynamoDB Utils', () => {
         expect(testTableEntry.path().PK.toString()).toBe('PK')
 
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'SK',
                 {
                     b: 1,
@@ -355,7 +365,7 @@ describe('DynamoDB Utils', () => {
             ),
         ).toBe(1)
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'SK',
                 {
                     b: 1,
@@ -366,7 +376,7 @@ describe('DynamoDB Utils', () => {
         ).toBe(1)
 
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'SK',
                 {
                     b: 1,
@@ -726,7 +736,7 @@ describe('DynamoDB Utils', () => {
         attest<entries>(testTableEntry.infer)
 
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'PK',
                 {
                     a: 'a1',
@@ -739,7 +749,7 @@ describe('DynamoDB Utils', () => {
             ),
         ).toBe('A-a1-B-1-C-VERDADERO')
         expect(
-            testTableEntry.key('PK', {
+            testTableEntry.unsafeKey('PK', {
                 a: 'a2',
                 b: 2,
                 c: 0,
@@ -747,17 +757,17 @@ describe('DynamoDB Utils', () => {
         ).toBe('A-a2-B-2-C-FALSO')
 
         expect(
-            testTableEntry.key('SK', {
+            testTableEntry.unsafeKey('SK', {
                 b: 2,
             }),
         ).toBe(2)
 
         expect(
-            testTableEntry.key('SK', {
+            testTableEntry.unsafeKey('SK', {
                 b: 1n,
             }),
         ).toBe(1n)
-        void testTableEntry.key(
+        void testTableEntry.unsafeKey(
             'GSI1SK',
             {
                 a: 'a1',
@@ -769,19 +779,19 @@ describe('DynamoDB Utils', () => {
             },
         )
 
-        void testTableEntry.key('GSI1PK', {
+        void testTableEntry.unsafeKey('GSI1PK', {
             z: 'never', // required to discriminate
             b: 1n,
         })
         expect(
-            testTableEntry.key('GSI1PK', {
+            testTableEntry.unsafeKey('GSI1PK', {
                 z: 'never', // required to discriminate
                 b: 1n,
             }),
         ).toBe(1n)
 
         expect(
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'GSI1SK',
                 {
                     a: 'a1',
@@ -795,7 +805,7 @@ describe('DynamoDB Utils', () => {
         ).toBe('A-a1-B-1')
 
         expect(
-            testTableEntry.key('GSI1SK', {
+            testTableEntry.unsafeKey('GSI1SK', {
                 a: 'a1',
                 b: 1n,
                 c: true,
@@ -803,7 +813,7 @@ describe('DynamoDB Utils', () => {
         ).toBe('A-a1-B-1-NEW_TAG-VERDADERO')
 
         expect(
-            testTableEntry.key('GSI1SK', {
+            testTableEntry.unsafeKey('GSI1SK', {
                 a: 'a2',
                 b: 2,
                 // z: 'never',
@@ -811,7 +821,7 @@ describe('DynamoDB Utils', () => {
         ).toBe('B-2')
 
         expect(
-            testTableEntry.key('GSI2PK', {
+            testTableEntry.unsafeKey('GSI2PK', {
                 a: 'a2',
                 b: 2,
                 // z: 'never',
@@ -819,7 +829,7 @@ describe('DynamoDB Utils', () => {
         ).toBe(2)
 
         expect(
-            testTableEntry.key('GSI2PK', {
+            testTableEntry.unsafeKey('GSI2PK', {
                 a: 'a1',
             }),
         ).toBeUndefined()
@@ -985,7 +995,7 @@ describe('DynamoDB Utils', () => {
             >
         >(null as any as RealEntry)
 
-        void (RealEntry.key(
+        void (RealEntry.unsafeKey(
             'PK',
             {
                 id1: 'client',
@@ -996,7 +1006,7 @@ describe('DynamoDB Utils', () => {
             },
         ) satisfies 'ID1#client#USER#user' | 'ID1#client')
 
-        void (RealEntry.key(
+        void (RealEntry.unsafeKey(
             'PK',
             {
                 id1: 'client',
@@ -1007,19 +1017,19 @@ describe('DynamoDB Utils', () => {
             },
         ) satisfies 'ID1#client#USER#user')
 
-        void (RealEntry.key('GSI1SK', {
+        void (RealEntry.unsafeKey('GSI1SK', {
             type: 'TypeA',
             tag: 'A',
         }) satisfies 'TYPE#TypeA')
 
         // @ts-expect-error
-        const expect_key2_ = RealEntry.key('GSI1SK', {
+        const expect_key2_ = RealEntry.unsafeKey('GSI1SK', {
             type: 'TypeA',
             tag: 'A',
             // biome-ignore lint/complexity/noBannedTypes: test case
         } as {})
 
-        void (RealEntry.key(
+        void (RealEntry.unsafeKey(
             'PK',
             {
                 id1: 'client',
@@ -1031,7 +1041,7 @@ describe('DynamoDB Utils', () => {
             },
         ) satisfies 'ID1#client')
 
-        const expect_key_depth_partial_discriminator = RealEntry.key(
+        const expect_key_depth_partial_discriminator = RealEntry.unsafeKey(
             'SK',
             { tag: 'A', id2: 'yolo' },
             { allowPartial: true, depth: 2 },
@@ -1039,7 +1049,7 @@ describe('DynamoDB Utils', () => {
 
         attest<'TAG#A#ID2#yolo'>(expect_key_depth_partial_discriminator)
 
-        void (RealEntry.key(
+        void (RealEntry.unsafeKey(
             'SK',
             { tag: 'A', id2: 'yolo' },
             { depth: 2 },
@@ -1111,14 +1121,14 @@ describe('DynamoDB Utils', () => {
         attest<entries>(testTableEntry.infer)
 
         expect(
-            testTableEntry.key('SK', {
+            testTableEntry.unsafeKey('SK', {
                 c: 0,
                 z: undefined,
             }),
         ).toBe('C-0-Z-DEFAULT')
 
         expect(
-            testTableEntry.key('SK', {
+            testTableEntry.unsafeKey('SK', {
                 c: 0,
                 z: 'never',
             }),
@@ -1126,7 +1136,7 @@ describe('DynamoDB Utils', () => {
 
         expect(
             // on partial no transform if missing
-            testTableEntry.key(
+            testTableEntry.unsafeKey(
                 'PK',
                 {
                     c: 0,
@@ -1243,7 +1253,7 @@ describe('DynamoDB Utils', () => {
 
         // Uses the actual value when present
         expect(
-            table.key('PK', {
+            table.unsafeKey('PK', {
                 data: { id: 'real-id' },
                 key: 'k1',
             }),
@@ -1251,7 +1261,7 @@ describe('DynamoDB Utils', () => {
 
         // Falls back to default when data is undefined
         expect(
-            table.key('PK', {
+            table.unsafeKey('PK', {
                 data: undefined,
                 key: 'k1',
             }),
@@ -1327,14 +1337,14 @@ describe('DynamoDB Utils', () => {
 
         // PK only needs w
         expect(
-            Entry.key('PK', {
+            Entry.unsafeKey('PK', {
                 a: { w: 'w1' },
             }),
         ).toBe('W#w1')
 
         // SK needs w AND x (intersected from both transform params)
         expect(
-            Entry.key('SK', {
+            Entry.unsafeKey('SK', {
                 a: { w: 'w1', x: 'x1' },
                 b: 'b1',
             }),
@@ -1342,40 +1352,40 @@ describe('DynamoDB Utils', () => {
 
         // GSI1PK only needs w
         expect(
-            Entry.key('GSI1PK', {
+            Entry.unsafeKey('GSI1PK', {
                 a: { w: 'w1' },
             }),
         ).toBe('W#w1')
 
         // GSI1SK only needs b
         expect(
-            Entry.key('GSI1SK', {
+            Entry.unsafeKey('GSI1SK', {
                 b: 'b1',
             }),
         ).toBe('B_VAL#b1')
 
         // SK requires both w and x on a
-        Entry.key('SK', {
+        Entry.unsafeKey('SK', {
             // @ts-expect-error - missing w
             a: { x: 'x1' },
             b: 'b1',
         })
 
         // SK requires both w and x on a
-        Entry.key('SK', {
+        Entry.unsafeKey('SK', {
             // @ts-expect-error - missing x
             a: { w: 'w1' },
             b: 'b1',
         })
 
         // PK requires w on a
-        Entry.key('PK', {
+        Entry.unsafeKey('PK', {
             // @ts-expect-error - empty object missing w
             a: {},
         })
 
         // PK requires w on a, not x
-        Entry.key('PK', {
+        Entry.unsafeKey('PK', {
             // @ts-expect-error - x does not exist on Pick<A, 'w'>
             a: { x: 'x1' },
         })
@@ -1421,7 +1431,7 @@ describe('DynamoDB Utils', () => {
             ],
         })
 
-        expect(table.key('PK', { id: 'x', data: undefined })).toBe(
+        expect(table.unsafeKey('PK', { id: 'x', data: undefined })).toBe(
             'ID#x#DATA#legacy',
         )
     })

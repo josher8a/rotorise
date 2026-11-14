@@ -65,7 +65,7 @@ describe('a key of one attribute states the stored text at each depth of a match
             },
             { codec: Tagged },
         )
-        const key = OneLevel.key('SK', housed)
+        const key = OneLevel.unsafeKey('SK', housed)
         expectTypeOf(key).toEqualTypeOf<'N' | 'Y'>()
         expect(key).toBe('Y')
     })
@@ -87,7 +87,7 @@ describe('a key of one attribute states the stored text at each depth of a match
             },
             { codec: Tagged },
         )
-        const key = TwoLevels.key('SK', housed)
+        const key = TwoLevels.unsafeKey('SK', housed)
         const stored = TwoLevels.unsafeToEntry(housed).SK
         expectTypeOf(key).toEqualTypeOf<'N' | 'Y' | undefined>()
         expectTypeOf(stored).toEqualTypeOf<typeof key>()
@@ -123,7 +123,7 @@ describe('a key of one attribute states the stored text at each depth of a match
             status: 'IN',
             weight: 5,
         }
-        const key = Plain.key('SK', weighed)
+        const key = Plain.unsafeKey('SK', weighed)
         expectTypeOf(key).toEqualTypeOf<number | undefined>()
         expect(key).toBe(5)
     })

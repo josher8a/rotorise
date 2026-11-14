@@ -7,7 +7,7 @@
  * map from a literal to an arm, so each key is the key of the ungrouped form.
  */
 import { describe, expect, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import { native } from '../../native'
 
 type OwnerId = string
@@ -76,6 +76,7 @@ const untypedEntry = (schema: object) =>
     (
         tableEntry as unknown as () => (schema: object) => {
             key: (name: string, item: object) => unknown
+            unsafeKey: (name: string, item: object) => unknown
             toEntry: (item: object) => unknown
         }
     )()(schema)
@@ -87,9 +88,11 @@ describe('a grouped match', () => {
                 Ungrouped.unsafeToEntry(handoff),
             )
         }
-        const key = Grouped.key('GSI1PK', handoffs[1] as never)
+        const key = Grouped.unsafeKey('GSI1PK', handoffs[1] as never)
         expect(key).toBe('ownerId#alice')
-        expect(Grouped.key('GSI2PK', handoffs[3] as never)).toBe('ownerId#bob')
+        expect(Grouped.unsafeKey('GSI2PK', handoffs[3] as never)).toBe(
+            'ownerId#bob',
+        )
     })
 
     it('gives no key at a `null` case that groups literals', () => {
@@ -107,9 +110,9 @@ describe('a grouped match', () => {
                 ],
             },
         })
-        expect(none.key('SK', { s: 'A', id: 'x' })).toBeUndefined()
-        expect(none.key('SK', { s: 'B', id: 'x' })).toBeUndefined()
-        expect(none.key('SK', { s: 'C', id: 'x' })).toBe('ID#x')
+        expect(none.unsafeKey('SK', { s: 'A', id: 'x' })).toBeUndefined()
+        expect(none.unsafeKey('SK', { s: 'B', id: 'x' })).toBeUndefined()
+        expect(none.unsafeKey('SK', { s: 'C', id: 'x' })).toBe('ID#x')
     })
 
     it('reads the entry back for each item of the group', () => {
@@ -146,8 +149,9 @@ describe('a grouped match', () => {
                 cases: [[['A', 'B'], ['id']]],
             },
         })
-        const run = () => entry.key('SK', { type: 'secret-value', id: 'x' })
-        expect(run).toThrow(RotoriseError)
+        const run = () =>
+            entry.unsafeKey('SK', { type: 'secret-value', id: 'x' })
+        expect(run).toThrow(CodecError)
         expect(run).toThrow(/Discriminator value of type not found/)
         expect(run).not.toThrow(/secret-value/)
     })
@@ -159,11 +163,18 @@ describe('a grouped match', () => {
                 cases: [[['__proto__', 'constructor'], ['id']]],
             },
         })
-        expect(entry.key('SK', { type: '__proto__', id: 'x' })).toBe('ID#x')
-        expect(entry.key('SK', { type: 'constructor', id: 'x' })).toBe('ID#x')
-        expect(() => entry.key('SK', { type: 'toString', id: 'x' })).toThrow(
-            RotoriseError,
+        expect(entry.unsafeKey('SK', { type: '__proto__', id: 'x' })).toBe(
+            'ID#x',
         )
+        expect(entry.unsafeKey('SK', { type: 'constructor', id: 'x' })).toBe(
+            'ID#x',
+        )
+        {
+            const refused = entry.key('SK', { type: 'toString', id: 'x' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
     })
 })
 
@@ -298,13 +309,17 @@ describe('the construction of a grouped match', () => {
             },
         })
         expect(
-            Pets.key('SK', { tag: 'ANIMAL', specie: 'DOG', name: 'rex' }),
+            Pets.unsafeKey('SK', { tag: 'ANIMAL', specie: 'DOG', name: 'rex' }),
         ).toBe('NAME#rex')
         expect(
-            Pets.key('SK', { tag: 'ANIMAL', specie: 'CAT', name: 'tom' }),
+            Pets.unsafeKey('SK', { tag: 'ANIMAL', specie: 'CAT', name: 'tom' }),
         ).toBeUndefined()
         expect(
-            Pets.key('SK', { tag: 'ANIMAL', specie: 'HORSE', name: 'bolt' }),
+            Pets.unsafeKey('SK', {
+                tag: 'ANIMAL',
+                specie: 'HORSE',
+                name: 'bolt',
+            }),
         ).toBeUndefined()
     })
 
@@ -427,9 +442,12 @@ describe('the type of a grouped match', () => {
     })
 
     it('gives the key type of the ungrouped form', () => {
-        const key = Grouped.key('GSI1PK', { type: 'INTAKE', to: alice })
+        const key = Grouped.unsafeKey('GSI1PK', { type: 'INTAKE', to: alice })
         key satisfies string | undefined
-        const ungrouped = Ungrouped.key('GSI1PK', { type: 'INTAKE', to: alice })
+        const ungrouped = Ungrouped.unsafeKey('GSI1PK', {
+            type: 'INTAKE',
+            to: alice,
+        })
         const same: typeof key = ungrouped
         expect(same).toBe('ownerId#alice')
     })
@@ -449,8 +467,10 @@ describe('the type of a grouped match', () => {
                 ],
             },
         })
-        expect(Events.key('SK', { meta: { kind: 'A' } })).toBe('KIND#A')
-        expect(Events.key('SK', { meta: { kind: 'C', c: 'x' } })).toBe('c#x')
+        expect(Events.unsafeKey('SK', { meta: { kind: 'A' } })).toBe('KIND#A')
+        expect(Events.unsafeKey('SK', { meta: { kind: 'C', c: 'x' } })).toBe(
+            'c#x',
+        )
     })
 
     it('refuses a path that an option of its group does not hold, under a path discriminator', () => {

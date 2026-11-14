@@ -37,6 +37,7 @@ type Route = {
         attributes: never,
     ) => Record<string, unknown>
     readonly key: (name: string, attributes: never) => unknown
+    readonly unsafeKey: (name: string, attributes: never) => unknown
     readonly unsafeKeyUpdates: (changed: never) => {
         readonly set: Record<string, unknown>
     }
@@ -110,7 +111,7 @@ describe.each([
         expect(Visits.unsafeKeys(['GSI1SK'], dog as never)).toEqual({
             GSI1SK: { S: iso },
         })
-        expect(Visits.key('GSI1SK', dog as never)).toBe(iso)
+        expect(Visits.unsafeKey('GSI1SK', dog as never)).toBe(iso)
         expect(Visits.unsafeToEntry(dog as never).GSI1SK).toBe(iso)
         expect(Visits.unsafeKeyUpdates(dog as never).set.GSI1SK).toEqual({
             S: iso,
@@ -128,7 +129,7 @@ describe.each([
         expect(Chips.unsafeKeys(['SK'], dog as never)).toEqual({
             SK: { S: 'KIND#D#CHIP#ff' },
         })
-        expect(Chips.key('SK', dog as never)).toBe('KIND#D#CHIP#ff')
+        expect(Chips.unsafeKey('SK', dog as never)).toBe('KIND#D#CHIP#ff')
         expect(Chips.unsafeToEntry(dog as never).SK).toBe('KIND#D#CHIP#ff')
     })
 
@@ -211,7 +212,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
         expect(Numbers.unsafeKeys(['GSI1SK'], entity(90) as never)).toEqual({
             GSI1SK: { N: '90' },
         })
-        expect(Numbers.key('GSI1SK', entity(90) as never)).toBe(90)
+        expect(Numbers.unsafeKey('GSI1SK', entity(90) as never)).toBe(90)
         expect(
             native.encode(
                 Numbers.unsafeToEntry(entity(90) as never).GSI1SK as never,
@@ -236,7 +237,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
         expect(Chips.unsafeKeys(['GSI1SK'], entity(255) as never)).toEqual({
             GSI1SK: { S: 'ff' },
         })
-        expect(Chips.key('GSI1SK', entity(255) as never)).toBe('ff')
+        expect(Chips.unsafeKey('GSI1SK', entity(255) as never)).toBe('ff')
     })
 
     it('is B for a binary, on each route', () => {

@@ -11,7 +11,7 @@
  * the prototype names no arm. An error names the discriminator and holds no attribute value.
  */
 import { describe, expect, it } from 'vitest'
-import { keyComponents, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, keyComponents, tableEntry } from '../../../Rotorise'
 
 type Creature =
     | { tag: 'OBJECT'; id: string; name: string }
@@ -64,7 +64,7 @@ const lab = {
 const pug = { ...lab, id: 'd2', breed: 'PUG', name: 'mo' } as const
 
 /** The untyped builder: a stored or hostile item is data, and the type refuses what it can. */
-const build = Creatures.key as unknown as (
+const build = Creatures.unsafeKey as unknown as (
     name: 'SK',
     item: object,
     config?: object,
@@ -72,15 +72,15 @@ const build = Creatures.key as unknown as (
 
 describe('a nested key match', () => {
     it('gives the key of the arm that the path of literals selects', () => {
-        expect(Creatures.key('SK', object)).toBe('NAME#lamp')
-        expect(Creatures.key('SK', horse)).toBe('ID#h1#NAME#bolt')
-        expect(Creatures.key('SK', lab)).toBe('BREED#LAB#NAME#rex')
-        const typed: 'BREED#LAB#NAME#rex' = Creatures.key('SK', lab)
+        expect(Creatures.unsafeKey('SK', object)).toBe('NAME#lamp')
+        expect(Creatures.unsafeKey('SK', horse)).toBe('ID#h1#NAME#bolt')
+        expect(Creatures.unsafeKey('SK', lab)).toBe('BREED#LAB#NAME#rex')
+        const typed: 'BREED#LAB#NAME#rex' = Creatures.unsafeKey('SK', lab)
         expect(typed).toBe('BREED#LAB#NAME#rex')
     })
 
     it('reads the attribute of an arm that names one as a raw copy, with no join', () => {
-        expect(Creatures.key('SK', pug)).toBe('mo')
+        expect(Creatures.unsafeKey('SK', pug)).toBe('mo')
     })
 
     it('reads no `specie` under `OBJECT`', () => {
@@ -90,12 +90,12 @@ describe('a nested key match', () => {
     it('refuses a dog with no `breed`, and names the discriminator', () => {
         const { breed: _breed, ...dog } = lab
         const run = () => build('SK', dog)
-        expect(run).toThrow(RotoriseError)
+        expect(run).toThrow(CodecError)
         expect(run).toThrow(/Discriminator breed not found/)
     })
 
     it('gives no key at a `null` arm below the first level', () => {
-        expect(Creatures.key('SK', cat)).toBeUndefined()
+        expect(Creatures.unsafeKey('SK', cat)).toBeUndefined()
     })
 
     it('refuses a literal that names a property of the prototype, at each level', () => {
@@ -106,17 +106,17 @@ describe('a nested key match', () => {
             'hasOwnProperty',
         ]) {
             expect(() => build('SK', { tag: name }), `tag ${name}`).toThrow(
-                RotoriseError,
+                CodecError,
             )
             expect(
                 () => build('SK', { tag: 'ANIMAL', specie: name }),
                 `specie ${name}`,
-            ).toThrow(RotoriseError)
+            ).toThrow(CodecError)
             expect(
                 () =>
                     build('SK', { tag: 'ANIMAL', specie: 'DOG', breed: name }),
                 `breed ${name}`,
-            ).toThrow(RotoriseError)
+            ).toThrow(CodecError)
         }
     })
 
@@ -134,7 +134,7 @@ describe('a nested key match', () => {
             try {
                 build('SK', item)
             } catch (thrown) {
-                if (!(thrown instanceof RotoriseError)) throw thrown
+                if (!(thrown instanceof CodecError)) throw thrown
                 message = thrown.message
             }
             expect(message).not.toBe('')

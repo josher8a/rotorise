@@ -72,6 +72,7 @@
 #               another code for one refusal.
 # either encodePartial refused 0 built 1
 # either fromItem refused 0 built 4
+# either key refused 123 built 37
 # either keyCondition refused 0 built 7
 # either keyUpdates refused 8 built 1
 # either keys refused 0 built 6
@@ -131,44 +132,10 @@ key|refuse|184b973a|T_plain_tagTf.key(SK,blank,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,blank,partial).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,ok,none).foreign
 key|refuse|184b973a|T_plain_tagTf.key(SK,ok,partial).foreign
-key|refuse|2fa8f7f9|T_opt_pathAttr.key(SK,blankOwner,none).call
-key|refuse|30bc3e95|T_plain_taglessTf.key(SK,blank,none).call
-key|refuse|490e4ea0|T_plain_pkList.key(PK,blankId,bnd).call
-key|refuse|490e4ea0|T_plain_pkList.key(PK,blankId,none).call
-key|refuse|7eecf917|T_plain_attrNote_sep.key(SK,blankNote,none).call
-key|refuse|7f04b386|T_opt_pathAttr_sep.key(SK,blankOwner,none).call
 key|refuse|83487729|T_plain_tagTf_sep.key(SK,blank,none).foreign
 key|refuse|83487729|T_plain_tagTf_sep.key(SK,blank,partial).foreign
 key|refuse|83487729|T_plain_tagTf_sep.key(SK,ok,none).foreign
 key|refuse|83487729|T_plain_tagTf_sep.key(SK,ok,partial).foreign
-key|refuse|afe107af|T_nest_pathPlain.key(SK,blankCode,none).call
-key|refuse|b04a5f18|T_plain_listOne.key(SK,blank,none).call
-key|refuse|b04a5f18|T_plain_listOne.key(SK,sep,none).call
-key|refuse|b04a5f18|T_plain_listOne.key(SK,sep,partial).call
-key|refuse|b688f70a|T_nest_pathTag.key(SK,blankCode,none).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,any).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,bnd).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,maybe).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,blank,none).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sFirst,any).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sFirst,maybe).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sLit,any).call
-key|refuse|b869b9a6|T_plain_list2_sep.key(SK,sLit,maybe).call
-key|refuse|b97df3e1|T_plain_attrName.key(SK,blank,none).call
-key|refuse|bf6ad666|T_plain_attrNote.key(SK,blankNote,none).call
-key|refuse|f1510f52|T_plain_list2.key(SK,blank,any).call
-key|refuse|f1510f52|T_plain_list2.key(SK,blank,bnd).call
-key|refuse|f1510f52|T_plain_list2.key(SK,blank,maybe).call
-key|refuse|f1510f52|T_plain_list2.key(SK,blank,none).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sFirst,any).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sFirst,maybe).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sLit,any).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sLit,maybe).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sep,any).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sep,bnd).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sep,maybe).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sep,none).call
-key|refuse|f1510f52|T_plain_list2.key(SK,sep,partial).call
 meet|refuse|26fd3c2238|meet(m0_l, m0_r)
 path|accept|d255ceca7a|at(narrow(at(C.p482_w, ["r", "op"]), object({ x: string })), [])
 site|construct|refuse|0dc91cde|kind_mixed.nopath_spec_neg

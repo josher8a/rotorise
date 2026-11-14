@@ -18,22 +18,22 @@ describe('an item of the entity is a call of key', () => {
         it('takes an item whose object is absent, because the run time gives undefined there', () => {
             const owned: Owned = { petId: 'p1', owner: { id: 'o1' } }
             const unowned: Owned = { petId: 'p2' }
-            expect(Owners.key('SK', owned)).toBe('o1')
-            expect(Owners.key('SK', unowned)).toBeUndefined()
-            expect(Owners.key('SK', {})).toBeUndefined()
+            expect(Owners.unsafeKey('SK', owned)).toBe('o1')
+            expect(Owners.unsafeKey('SK', unowned)).toBeUndefined()
+            expect(Owners.unsafeKey('SK', {})).toBeUndefined()
         })
 
         it('refuses a value of another type at the path', () => {
             // @ts-expect-error `owner.id` is a string
-            expect(Owners.key('SK', { owner: { id: 5 } })).toBe(5)
+            expect(Owners.unsafeKey('SK', { owner: { id: 5 } })).toBe(5)
         })
 
         it('keeps the type of the key for a given object', () => {
             expectTypeOf(
-                Owners.key('SK', { owner: { id: 'o' } }),
+                Owners.unsafeKey('SK', { owner: { id: 'o' } }),
             ).toEqualTypeOf<'o'>()
             expectTypeOf(
-                Owners.key('SK', { petId: 'p', owner: { id: 'o' } }),
+                Owners.unsafeKey('SK', { petId: 'p', owner: { id: 'o' } }),
             ).toEqualTypeOf<'o'>()
         })
     })
@@ -49,10 +49,10 @@ describe('an item of the entity is a call of key', () => {
         const second: Doc = { id: 'd2', meta: { kind: 'b', b: 'y' } }
 
         it('takes an item of each option, because the run time gives undefined for the option that lacks the name', () => {
-            expect(Docs.key('SK', first)).toBe('x')
-            expect(Docs.key('SK', second)).toBeUndefined()
+            expect(Docs.unsafeKey('SK', first)).toBe('x')
+            expect(Docs.unsafeKey('SK', second)).toBeUndefined()
             expect(
-                Docs.key('SK', { id: 'd', meta: { kind: 'a', a: 'x' } }),
+                Docs.unsafeKey('SK', { id: 'd', meta: { kind: 'a', a: 'x' } }),
             ).toBe('x')
         })
 
@@ -69,8 +69,8 @@ describe('an item of the entity is a call of key', () => {
                 meta: { kind: 'a', a: { id: 'x' } },
             }
             const lacking: Nested = { id: 'n2', meta: { kind: 'b', b: 'y' } }
-            expect(Nests.key('SK', kept)).toBe('x')
-            expect(Nests.key('SK', lacking)).toBeUndefined()
+            expect(Nests.unsafeKey('SK', kept)).toBe('x')
+            expect(Nests.unsafeKey('SK', lacking)).toBeUndefined()
         })
 
         it('refuses a value of another type at the path, and an argument with no component', () => {
@@ -87,7 +87,7 @@ describe('an item of the entity is a call of key', () => {
 
         it('keeps the type of the key for a given option', () => {
             expectTypeOf(
-                Docs.key('SK', { id: 'd', meta: { kind: 'a', a: 'x' } }),
+                Docs.unsafeKey('SK', { id: 'd', meta: { kind: 'a', a: 'x' } }),
             ).toEqualTypeOf<'x'>()
         })
     })
@@ -108,26 +108,26 @@ describe('an item of the entity is a call of key', () => {
             const visit: Visit = { id: 'v1', owner: { id: 'x', n: 1 } }
             const kept: Stay = { id: 's1', stay: { n: 3 } }
             const absent: Stay = { id: 's2' }
-            expect(Visits.key('SK', visit)).toBe('ID#x#N#1')
-            expect(Stays.key('SK', kept)).toBe('N#3')
-            expect(Stays.key('SK', absent)).toBe('N#0')
+            expect(Visits.unsafeKey('SK', visit)).toBe('ID#x#N#1')
+            expect(Stays.unsafeKey('SK', kept)).toBe('N#3')
+            expect(Stays.unsafeKey('SK', absent)).toBe('N#0')
         })
 
         it('refuses a value of another type at the path of the list and of the transform', () => {
             // @ts-expect-error `owner.n` is a number
-            const list = Visits.key('SK', { owner: { id: 'x', n: 'z' } })
+            const list = Visits.unsafeKey('SK', { owner: { id: 'x', n: 'z' } })
             expect(list).toBe('ID#x#N#z')
             // @ts-expect-error the transform reads a number
-            const transform = Stays.key('SK', { stay: { n: 'z' } })
+            const transform = Stays.unsafeKey('SK', { stay: { n: 'z' } })
             expect(transform).toBe('N#z')
         })
 
         it('keeps the type of the key, with and without allowPartial', () => {
             expectTypeOf(
-                Visits.key('SK', { owner: { id: 'x', n: 1 } }),
+                Visits.unsafeKey('SK', { owner: { id: 'x', n: 1 } }),
             ).toEqualTypeOf<'ID#x#N#1'>()
             expectTypeOf(
-                Visits.key(
+                Visits.unsafeKey(
                     'SK',
                     { owner: { id: 'x', n: 1 } },
                     { allowPartial: true },
@@ -149,7 +149,7 @@ describe('an item of the entity is a call of key', () => {
                 spec: { IN: ['kennel'], OUT: ['petId'] },
             },
         })
-        const bed = Beds.key
+        const bed = Beds.unsafeKey
         const placed: Placed = {
             petId: 'p1',
             meta: { status: 'IN' },
@@ -157,21 +157,21 @@ describe('an item of the entity is a call of key', () => {
         }
 
         it('takes an item of the declared type, and the run time selects the arm by the value', () => {
-            expect(Beds.key('SK', placed)).toBe('KENNEL#k1')
-            expect(Beds.key('SK', { ...placed, meta: { status: 'OUT' } })).toBe(
-                'PETID#p1',
-            )
+            expect(Beds.unsafeKey('SK', placed)).toBe('KENNEL#k1')
+            expect(
+                Beds.unsafeKey('SK', { ...placed, meta: { status: 'OUT' } }),
+            ).toBe('PETID#p1')
         })
 
         it('keeps the arm of a literal: the type states the components of that arm', () => {
             expectTypeOf(
-                Beds.key('SK', { meta: { status: 'IN' }, kennel: 'k' }),
+                Beds.unsafeKey('SK', { meta: { status: 'IN' }, kennel: 'k' }),
             ).toEqualTypeOf<'KENNEL#k'>()
             expectTypeOf(
-                Beds.key('SK', { meta: { status: 'OUT' }, petId: 'p' }),
+                Beds.unsafeKey('SK', { meta: { status: 'OUT' }, petId: 'p' }),
             ).toEqualTypeOf<'PETID#p'>()
             expectTypeOf(
-                Beds.key('SK', {
+                Beds.unsafeKey('SK', {
                     meta: { status: 'IN' },
                     kennel: 'k',
                     petId: 'p',

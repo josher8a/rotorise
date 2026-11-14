@@ -115,11 +115,13 @@ describe('a default stands for an undefined value only', () => {
     })
 
     it('gives the transform a null value, which the type of the transform admits', () => {
-        expect(Pets.key('GSI1SK', { nickname: null })).toBe('NICKNAME#NONE')
+        expect(Pets.unsafeKey('GSI1SK', { nickname: null })).toBe(
+            'NICKNAME#NONE',
+        )
     })
 
     it('gives the default where the value is undefined', () => {
-        expect(Pets.key('GSI1SK', {})).toBe('NICKNAME#ANON')
+        expect(Pets.unsafeKey('GSI1SK', {})).toBe('NICKNAME#ANON')
     })
 })
 
@@ -165,9 +167,12 @@ describe('a sort condition reads the parts that print', () => {
 describe('a key value has one owner of its rule', () => {
     it('refuses a key value that is no S, N or B in an entry, as asKey refuses it', () => {
         const Pets = loose({ PK: ['id'], GSI1PK: 'flag' })
-        expect(
-            (Pets.toEntry({ flag: true, id: 'a' }) as CodecError).message,
-        ).toMatch(/cannot store as a key/)
+        {
+            const refused = Pets.toEntry({ flag: true, id: 'a' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/cannot store as a key/)
+        }
     })
 })
 

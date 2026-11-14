@@ -53,7 +53,7 @@ const Pets = tableEntry<Pet>()(
 
 describe('the type of a key component under an adapter of a caller', () => {
     it('names the stored literal on key, toEntry, infer and fromEntry, as the run time prints it', () => {
-        const key = Pets.key('SK', { adopted: true })
+        const key = Pets.unsafeKey('SK', { adopted: true })
         expectTypeOf(key).toEqualTypeOf<'ADOPTED#Y' | 'ADOPTED#N'>()
         expect(key).toBe('ADOPTED#Y')
         const entry = Pets.unsafeToEntry({ petId: 'p1', adopted: false })
@@ -73,7 +73,7 @@ describe('the type of a key component under an adapter of a caller', () => {
 
     it('prints a plain field as its value, beside the adapter', () => {
         expectTypeOf(
-            Pets.key('PK', { petId: 'p1' }),
+            Pets.unsafeKey('PK', { petId: 'p1' }),
         ).toEqualTypeOf<'PETID#p1'>()
     })
 
@@ -82,7 +82,7 @@ describe('the type of a key component under an adapter of a caller', () => {
             { PK: ['petId'], SK: ['at'] },
             { codec: { petId: string, at: Born } },
         )
-        const key = Visits.key('SK', { at: new Date(0) })
+        const key = Visits.unsafeKey('SK', { at: new Date(0) })
         expectTypeOf(key).toEqualTypeOf<`AT#${string}`>()
         expect(key).toBe('AT#1970-01-01T00:00:00.000Z')
     })
@@ -109,7 +109,7 @@ describe('the type of a key component under an adapter of a caller', () => {
                 ),
             },
         )
-        expectTypeOf(Both.key('SK', { adopted: true })).toEqualTypeOf<
+        expectTypeOf(Both.unsafeKey('SK', { adopted: true })).toEqualTypeOf<
             'ADOPTED#Y' | 'ADOPTED#N'
         >()
     })
@@ -119,7 +119,7 @@ describe('the type of a key component under an adapter of a caller', () => {
             { PK: ['petId'], SK: 'adopted' },
             { codec: { petId: string, adopted: Adopted } },
         )
-        const key = Single.key('SK', { adopted: true })
+        const key = Single.unsafeKey('SK', { adopted: true })
         expectTypeOf(key).toEqualTypeOf<'Y' | 'N'>()
         expect(key).toBe('Y')
         const entry = Single.unsafeToEntry({ petId: 'p1', adopted: false })
@@ -135,7 +135,7 @@ describe('the type of a key component under an adapter of a caller', () => {
             { codec: { petId: string, at: Born } },
         )
         const at = new Date(0)
-        expectTypeOf(Visits.key('SK', { at })).toBeString()
+        expectTypeOf(Visits.unsafeKey('SK', { at })).toBeString()
         expect(Visits.unsafeToEntry({ petId: 'p1', at }).SK).toBe(
             '1970-01-01T00:00:00.000Z',
         )
@@ -146,7 +146,7 @@ describe('the type of a key component under an adapter of a caller', () => {
             { PK: ['petId'], SK: 'age' },
             { codec: { petId: string, age: number } },
         )
-        expectTypeOf(Aged.key('SK', { age: 3 })).toEqualTypeOf<3>()
+        expectTypeOf(Aged.unsafeKey('SK', { age: 3 })).toEqualTypeOf<3>()
         expect(
             native.encode(Aged.unsafeToEntry({ petId: 'p1', age: 3 }).SK),
         ).toEqual({ N: '3' })
@@ -165,7 +165,7 @@ describe('the type of a key component under an adapter of a caller', () => {
             { PK: ['petId'], SK: ['chip.code'] },
             { codec: { petId: string, chip: object({ code: Hex }) } },
         )
-        const key = Chipped.key('SK', { chip: { code: 255 } })
+        const key = Chipped.unsafeKey('SK', { chip: { code: 255 } })
         expectTypeOf(key).toEqualTypeOf<`CODE#${string}`>()
         expect(key).toBe('CODE#ff')
         const row = Chipped.unsafeToItem({ petId: 'p1', chip: { code: 255 } })
@@ -175,7 +175,7 @@ describe('the type of a key component under an adapter of a caller', () => {
     it('leaves the entry with no codec as it was', () => {
         const Plain = tableEntry<Pet>()({ PK: ['petId'], SK: ['adopted'] })
         expectTypeOf(
-            Plain.key('SK', { adopted: true }),
+            Plain.unsafeKey('SK', { adopted: true }),
         ).toEqualTypeOf<'ADOPTED#true'>()
     })
 })

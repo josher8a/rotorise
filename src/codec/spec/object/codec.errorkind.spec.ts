@@ -129,8 +129,9 @@ describe('a refusal of the key builder', () => {
             const value = run()
             if (value instanceof CodecError) return value.kind
         } catch (thrown) {
-            expect(thrown).toBeInstanceOf(RotoriseError)
-            return (thrown as RotoriseError).kind
+            if (thrown instanceof CodecError || thrown instanceof RotoriseError)
+                return thrown.kind
+            return expect.unreachable()
         }
         return expect.unreachable()
     }
@@ -142,7 +143,7 @@ describe('a refusal of the key builder', () => {
             status: 'OPEN',
             updatedAt: 'now',
         } as const
-        expect(kindOf(() => Adoptions.key('PK', item))).toBe('separator')
+        expect(kindOf(() => Adoptions.unsafeKey('PK', item))).toBe('separator')
     })
 
     it('a change to a table key is a rewrite refusal, because DynamoDB cannot update a key attribute', () => {

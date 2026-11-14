@@ -46,32 +46,38 @@ describe('the label of a component whose transform function gives the tag', () =
     })
 
     it('states the label where the function returns the tag with `as const`, and refuses a text with another label', () => {
-        const key = () => Literal.key('SK', rex)
-        expectTypeOf(Literal.key('SK', rex)).toEqualTypeOf<`T#${string}`>()
+        const key = () => Literal.unsafeKey('SK', rex)
+        expectTypeOf(
+            Literal.unsafeKey('SK', rex),
+        ).toEqualTypeOf<`T#${string}`>()
         // @ts-expect-error the label is `T`
         const other: ReturnType<typeof key> = '~T#rex'
-        expect(Literal.key('SK', rex)).toBe('T#rex')
+        expect(Literal.unsafeKey('SK', rex)).toBe('T#rex')
         expect(other).toBe('~T#rex')
     })
 
     it('states the label where the function declares a return type that holds the tag', () => {
-        expectTypeOf(Declared.key('SK', rex)).toEqualTypeOf<`T#${string}`>()
-        expect(Declared.key('SK', rex)).toBe('T#rex')
+        expectTypeOf(
+            Declared.unsafeKey('SK', rex),
+        ).toEqualTypeOf<`T#${string}`>()
+        expect(Declared.unsafeKey('SK', rex)).toBe('T#rex')
     })
 
     it('states the text with no label where the function returns the tag as a string, as the run time prints the label', () => {
-        const key = () => Wide.key('SK', rex)
-        expectTypeOf(Wide.key('SK', rex)).toEqualTypeOf<`${string}#${string}`>()
+        const key = () => Wide.unsafeKey('SK', rex)
+        expectTypeOf(
+            Wide.unsafeKey('SK', rex),
+        ).toEqualTypeOf<`${string}#${string}`>()
         const other: ReturnType<typeof key> = '~T#rex'
-        expect(Wide.key('SK', rex)).toBe('T#rex')
+        expect(Wide.unsafeKey('SK', rex)).toBe('T#rex')
         expect(other).toBe('~T#rex')
     })
 
     it('states the union of the labels where the function returns one of two tags with `as const`', () => {
-        expectTypeOf(Either.key('SK', rex)).toEqualTypeOf<
+        expectTypeOf(Either.unsafeKey('SK', rex)).toEqualTypeOf<
             `N#${string}` | `P#${string}`
         >()
-        expect(Either.key('SK', rex)).toBe('P#rex')
-        expect(Either.key('SK', { ...rex, name: 'bea' })).toBe('N#bea')
+        expect(Either.unsafeKey('SK', rex)).toBe('P#rex')
+        expect(Either.unsafeKey('SK', { ...rex, name: 'bea' })).toBe('N#bea')
     })
 })

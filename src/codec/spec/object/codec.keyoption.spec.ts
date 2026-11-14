@@ -76,8 +76,10 @@ describe('an arm of a match for an option that holds two literals', () => {
             meta: { status: 'IN' },
             kennel: 'k1',
         } as const
-        expectTypeOf(Placeds.key('SK', placedIn)).toEqualTypeOf<'KENNEL#k1'>()
-        expect(Placeds.key('SK', placedIn)).toBe('KENNEL#k1')
+        expectTypeOf(
+            Placeds.unsafeKey('SK', placedIn),
+        ).toEqualTypeOf<'KENNEL#k1'>()
+        expect(Placeds.unsafeKey('SK', placedIn)).toBe('KENNEL#k1')
     })
 
     it('reads only the options that hold the literal, in a match on a path', () => {
@@ -96,11 +98,11 @@ describe('an arm of a match for an option that holds two literals', () => {
             meta: { kind: 'CAT' },
             kennel: 'k1',
         } as const
-        expectTypeOf(Patheds.key('SK', cat)).toEqualTypeOf<'KENNEL#k1'>()
-        expect(Patheds.key('SK', cat)).toBe('KENNEL#k1')
+        expectTypeOf(Patheds.unsafeKey('SK', cat)).toEqualTypeOf<'KENNEL#k1'>()
+        expect(Patheds.unsafeKey('SK', cat)).toBe('KENNEL#k1')
         const bare = { meta: { kind: 'CAT' } } as const
         // @ts-expect-error the arm CAT reads `kennel`, and the argument holds none
-        const refused = () => Patheds.key('SK', bare)
+        const refused = () => Patheds.unsafeKey('SK', bare)
         expect(refused).toThrow(/Attribute kennel not found/)
     })
 
@@ -133,7 +135,7 @@ describe('an arm of a match for an option that holds two literals', () => {
         })
         const tagOnly: { status: 'IN' } = { status: 'IN' }
         // @ts-expect-error the arm IN reads `kennel`, and the argument holds none
-        const refused = () => Boarders.key('SK', tagOnly)
+        const refused = () => Boarders.unsafeKey('SK', tagOnly)
         expect(refused).toThrow(/Attribute kennel not found/)
     })
 })
@@ -194,9 +196,11 @@ describe('a discriminator that an item can lack', () => {
                 cases: [[['CAT'], ['kennel']]],
             },
         } as never)
-        expect(
-            (Strays.toEntry({ petId: 'p4', ownerId: 'u4' }) as CodecError)
-                .message,
-        ).toMatch(/Discriminator kind not found/)
+        {
+            const refused = Strays.toEntry({ petId: 'p4', ownerId: 'u4' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/Discriminator kind not found/)
+        }
     })
 })

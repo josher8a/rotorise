@@ -11,8 +11,8 @@ import { describe, expect, it } from 'vitest'
 import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 
 /** The untyped builder of an entry: a stored or hostile item is data. */
-const untyped = (entry: { key: unknown }) =>
-    entry.key as unknown as (
+const untyped = (entry: { unsafeKey: unknown }) =>
+    entry.unsafeKey as unknown as (
         name: string,
         item: object,
         config?: object,
@@ -31,12 +31,12 @@ describe('a key component that reads a path', () => {
                 GSI1PK: [['to.ownerId', { tag: 'ownerId' }]],
                 GSI2PK: [['from.ownerId', { tag: 'ownerId' }]],
             })
-            const key = Transfers.key('GSI1PK', { to: { ownerId: 'u1' } })
+            const key = Transfers.unsafeKey('GSI1PK', { to: { ownerId: 'u1' } })
             key satisfies 'ownerId#u1'
             expect(key).toBe('ownerId#u1')
-            expect(Transfers.key('GSI2PK', { from: { ownerId: 'u2' } })).toBe(
-                'ownerId#u2',
-            )
+            expect(
+                Transfers.unsafeKey('GSI2PK', { from: { ownerId: 'u2' } }),
+            ).toBe('ownerId#u2')
         })
 
         it('prints the tag of a path that names a collar', () => {
@@ -48,7 +48,7 @@ describe('a key component that reads a path', () => {
                 PK: ['storeId', ['collar.tagId', { tag: 'collar' }]],
             })
             expect(
-                Pets.key('PK', {
+                Pets.unsafeKey('PK', {
                     storeId: 's1',
                     collar: { tagId: 'c1' },
                 }),
@@ -63,7 +63,7 @@ describe('a key component that reads a path', () => {
             const Listings = tableEntry<Listing>()({
                 GSI1SK: [['price.amount', { tag: 'PRICE' }]],
             })
-            const key = Listings.key('GSI1SK', {
+            const key = Listings.unsafeKey('GSI1SK', {
                 price: { amount: 1.5 },
             })
             expect(key).toBe('PRICE#1.5')
@@ -75,7 +75,7 @@ describe('a key component that reads a path', () => {
                 PK: ['pet.species', 'pet.id'],
             })
             expect(
-                Reviews.key('PK', { pet: { species: 'dog', id: '42' } }),
+                Reviews.unsafeKey('PK', { pet: { species: 'dog', id: '42' } }),
             ).toBe('SPECIES#dog#ID#42')
         })
 
@@ -86,7 +86,7 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', (x: string) => x, '0']],
             })
             expect(untyped(Pets)('SK', { id: 'p' })).toBe('LASTDOSE#0')
-            expect(Pets.key('SK', { vaccine: { lastDose: '5' } })).toBe(
+            expect(Pets.unsafeKey('SK', { vaccine: { lastDose: '5' } })).toBe(
                 'LASTDOSE#5',
             )
             expect(Pets.unsafeToEntry({ id: 'p' }).SK).toBe('LASTDOSE#0')
@@ -98,12 +98,12 @@ describe('a key component that reads a path', () => {
         const Transfers = tableEntry<Transfer>()({
             GSI1PK: ['to.ownerId'],
         })
-        expect(Transfers.key('GSI1PK', { to: { ownerId: 'u1' } })).toBe(
+        expect(Transfers.unsafeKey('GSI1PK', { to: { ownerId: 'u1' } })).toBe(
             'OWNERID#u1',
         )
         const _lacks = () =>
             // @ts-expect-error the path `to.ownerId` is required
-            Transfers.key('GSI1PK', { to: { name: 'n' } })
+            Transfers.unsafeKey('GSI1PK', { to: { name: 'n' } })
         expect(typeof _lacks).toBe('function')
     })
 
@@ -117,19 +117,20 @@ describe('a key component that reads a path', () => {
             // @ts-expect-error `meta.a` can be absent: the option `b` lacks `a`
             SK: ['meta.a'],
         })
-        expect(Docs.key('PK', { meta: { kind: 'b' } })).toBe('KIND#b')
-        expect(Docs.key('SK', { meta: { a: 'x' } })).toBe('A#x')
+        expect(Docs.unsafeKey('PK', { meta: { kind: 'b' } })).toBe('KIND#b')
+        expect(Docs.unsafeKey('SK', { meta: { a: 'x' } })).toBe('A#x')
         expect(
             Docs.unsafeToEntry({ id: 'd', meta: { kind: 'a', a: 'x' } }).SK,
         ).toBe('A#x')
-        expect(
-            (
-                Docs.toEntry({
-                    id: 'd',
-                    meta: { kind: 'b', b: 'y' },
-                }) as CodecError
-            ).message,
-        ).toMatch(/meta\.a/)
+        {
+            const refused = Docs.toEntry({
+                id: 'd',
+                meta: { kind: 'b', b: 'y' },
+            })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/meta\.a/)
+        }
     })
 
     it('refuses a component with no default where an option lacks a name above the last name', () => {
@@ -162,7 +163,7 @@ describe('a key component that reads a path', () => {
             meta: { kind: 'a'; a: string } | { kind: 'b'; a: string; b: string }
         }
         const Shared = tableEntry<Both>()({ PK: ['meta.kind'], SK: ['meta.a'] })
-        expect(Shared.key('SK', { meta: { a: 'x' } })).toBe('A#x')
+        expect(Shared.unsafeKey('SK', { meta: { a: 'x' } })).toBe('A#x')
     })
 
     describe('the parameter of the transform of a path', () => {
@@ -185,7 +186,7 @@ describe('a key component that reads a path', () => {
             const Transfers = tableEntry<Transfer>()({
                 PK: [['to.ownerId', (x: string) => x]],
             })
-            expect(Transfers.key('PK', { to: { ownerId: 'u' } })).toBe(
+            expect(Transfers.unsafeKey('PK', { to: { ownerId: 'u' } })).toBe(
                 'OWNERID#u',
             )
         })
@@ -213,9 +214,14 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', (x: string) => x]],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
-            expect((Pets.toEntry(absent) as CodecError).message).toMatch(
-                /Attribute vaccine\.lastDose not found/,
-            )
+            {
+                const refused = Pets.toEntry(absent)
+                expect(refused).toBeInstanceOf(CodecError)
+                if (refused instanceof CodecError)
+                    expect(refused.message).toMatch(
+                        /Attribute vaccine\.lastDose not found/,
+                    )
+            }
         })
 
         it('refuses a tag at a path whose value can be absent, because a tag has no slot for a default', () => {
@@ -225,9 +231,14 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', { tag: 'DOSE' }]],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
-            expect((Pets.toEntry(absent) as CodecError).message).toMatch(
-                /Attribute vaccine\.lastDose not found/,
-            )
+            {
+                const refused = Pets.toEntry(absent)
+                expect(refused).toBeInstanceOf(CodecError)
+                if (refused instanceof CodecError)
+                    expect(refused.message).toMatch(
+                        /Attribute vaccine\.lastDose not found/,
+                    )
+            }
         })
 
         it('refuses a transform at a path under a null parent where no default is given', () => {
@@ -238,9 +249,14 @@ describe('a key component that reads a path', () => {
                 SK: [['vaccine.lastDose', (x: string) => x]],
             })
             const absent: Nullable = { id: 'p', vaccine: null }
-            expect((Pets.toEntry(absent) as CodecError).message).toMatch(
-                /Attribute vaccine\.lastDose not found/,
-            )
+            {
+                const refused = Pets.toEntry(absent)
+                expect(refused).toBeInstanceOf(CodecError)
+                if (refused instanceof CodecError)
+                    expect(refused.message).toMatch(
+                        /Attribute vaccine\.lastDose not found/,
+                    )
+            }
         })
 
         it('accepts a transform at a path whose value can be null where no default is given, because a null is a value that the transform reads', () => {
@@ -261,9 +277,14 @@ describe('a key component that reads a path', () => {
                 SK: [['chip.serial', { tag: 'CHIP' }]],
             })
             const unchipped: Chipped = { id: 'p', chip: { serial: null } }
-            expect((Pets.toEntry(unchipped) as CodecError).message).toMatch(
-                /Attribute chip\.serial not found/,
-            )
+            {
+                const refused = Pets.toEntry(unchipped)
+                expect(refused).toBeInstanceOf(CodecError)
+                if (refused instanceof CodecError)
+                    expect(refused.message).toMatch(
+                        /Attribute chip\.serial not found/,
+                    )
+            }
         })
 
         it('accepts a transform at a path that can be absent where a default is given, and prints the default', () => {
@@ -302,7 +323,7 @@ describe('a key component that reads a path', () => {
         })
         const secret = 'secret-value'
         const run = () => untyped(Transfers)('PK', { id: secret, to: {} })
-        expect(run).toThrow(RotoriseError)
+        expect(run).toThrow(CodecError)
         expect(run).toThrow(/Attribute to\.ownerId not found/)
         expect(run).not.toThrow(new RegExp(secret))
         expect(
@@ -327,10 +348,10 @@ describe('a key component that reads a path', () => {
     it('reads a name with a `.` as a path, and never as the attribute whose own name holds the `.`', () => {
         type Odd = { 'a.b': string; a: { b: string } }
         const Odds = tableEntry<Odd>()({ PK: ['a.b'] })
-        expect(Odds.key('PK', { a: { b: 'nested' } })).toBe('B#nested')
+        expect(Odds.unsafeKey('PK', { a: { b: 'nested' } })).toBe('B#nested')
         // the type refuses the name of the attribute, and the run time finds no value at the path
         // @ts-expect-error a key of 'a.b' reads the path, so the call gives the object at 'a'
-        const flat = () => Odds.key('PK', { 'a.b': 'flat' })
+        const flat = () => Odds.unsafeKey('PK', { 'a.b': 'flat' })
         expect(flat).toThrow(/Attribute a\.b not found/)
     })
 })
@@ -357,10 +378,10 @@ describe('a discriminator that reads a path', () => {
 
     it('selects the arm by the value at the path, at depth two', () => {
         const dog = { tag: 'T1', meta: { kind: 'dog', breed: 'pug' } } as const
-        expect(Things.key('SK', dog)).toBe('BREED#pug')
+        expect(Things.unsafeKey('SK', dog)).toBe('BREED#pug')
         const cat = { tag: 'T1', meta: { kind: 'cat' } } as const
-        expect(Things.key('SK', cat)).toBeUndefined()
-        expect(Things.key('SK', { tag: 'T2', n: 'v' })).toBe('N#v')
+        expect(Things.unsafeKey('SK', cat)).toBeUndefined()
+        expect(Things.unsafeKey('SK', { tag: 'T2', n: 'v' })).toBe('N#v')
     })
 
     it('refuses an absent segment of the path, and a literal that names no arm, with no value in the error', () => {
@@ -376,7 +397,7 @@ describe('a discriminator that reads a path', () => {
             new RegExp(secret),
         )
         expect(run({ tag: 'T1', meta: { kind: 'constructor' } })).toThrow(
-            RotoriseError,
+            CodecError,
         )
     })
 

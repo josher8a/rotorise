@@ -101,7 +101,7 @@ describe('null gives no key in every path, as undefined does', () => {
     } as const
 
     it('key gives no key for a null attribute arm', () => {
-        expect(Pets.key('GSI2PK', adopted)).toBeUndefined()
+        expect(Pets.unsafeKey('GSI2PK', adopted)).toBeUndefined()
     })
 
     it('toEntry omits the key of a null attribute arm', () => {
@@ -261,28 +261,30 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
     })
 
     it('toEntry refuses an empty key, which a marshaller writes as a key that DynamoDB refuses', () => {
-        expect(
-            (
-                Tags.toEntry({
-                    tagId: new Uint8Array([1]),
-                    petId: 'p1',
-                    nick: '',
-                }) as CodecError
-            ).message,
-        ).toContain(
-            "Key SK: the attribute 'nick' is empty, so the key is empty.",
-        )
-        expect(
-            (
-                Tags.toEntry({
-                    tagId: new Uint8Array(),
-                    petId: 'p1',
-                    nick: 'Rex',
-                }) as CodecError
-            ).message,
-        ).toContain(
-            "'PK' is built from a value that DynamoDB cannot store as a key",
-        )
+        {
+            const refused = Tags.toEntry({
+                tagId: new Uint8Array([1]),
+                petId: 'p1',
+                nick: '',
+            })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "Key SK: the attribute 'nick' is empty, so the key is empty.",
+                )
+        }
+        {
+            const refused = Tags.toEntry({
+                tagId: new Uint8Array(),
+                petId: 'p1',
+                nick: 'Rex',
+            })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "'PK' is built from a value that DynamoDB cannot store as a key",
+                )
+        }
     })
 
     it('toItem returns the refusal of an empty key, where the item has no key that DynamoDB stores', () => {
@@ -292,7 +294,8 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
             nick: '',
         })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).cause).toBeInstanceOf(RotoriseError)
+        if (refused instanceof CodecError)
+            expect(refused.cause).toBeInstanceOf(RotoriseError)
     })
 })
 
@@ -311,9 +314,10 @@ describe('a key has the one member that construction decided', () => {
         const past = new Uint8Array([1]) as never
         const refused = Mixed.toItem({ id: past, name: 'x' })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toContain(
-            "'PK' is built from a value that DynamoDB cannot store as a key",
-        )
+        if (refused instanceof CodecError)
+            expect(refused.message).toContain(
+                "'PK' is built from a value that DynamoDB cannot store as a key",
+            )
     })
 })
 

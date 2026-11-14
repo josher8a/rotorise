@@ -142,15 +142,27 @@ export const kennelPins = {
     unsafeToEntry: pinned<KennelEntry>()(Kennels.unsafeToEntry(kennel)),
     fromEntry: pinned<Kennel>()(Kennels.fromEntry(Kennels.unsafeToEntry(kennel))),
     key: {
-        plain: pinned<'PETID#p1'>()(Kennels.key('PK', ids)),
-        ofOne: pinned<'s1'>()(Kennels.key('GSI1PK', shelter)),
-        ofEntity: pinned<`NAME#${string}`>()(Kennels.key('SK', kennel)),
-        depth: pinned<`NAME#${string}`>()(Kennels.key('SK', kennel, { depth: 1 })),
-        partial: pinned<'' | `NAME#${string}`>()(
+        plain: pinned<Result<'PETID#p1'>>()(Kennels.key('PK', ids)),
+        ofOne: pinned<Result<'s1'>>()(Kennels.key('GSI1PK', shelter)),
+        ofEntity: pinned<Result<`NAME#${string}`>>()(Kennels.key('SK', kennel)),
+        depth: pinned<Result<`NAME#${string}`>>()(Kennels.key('SK', kennel, { depth: 1 })),
+        partial: pinned<Result<'' | `NAME#${string}`>>()(
             Kennels.key('SK', kennel, { allowPartial: true }),
         ),
-        boundary: pinned<'' | `NAME#${string}`>()(
+        boundary: pinned<Result<'' | `NAME#${string}`>>()(
             Kennels.key('SK', kennel, { allowPartial: true, enforceBoundary: true }),
+        ),
+    },
+    unsafeKey: {
+        plain: pinned<'PETID#p1'>()(Kennels.unsafeKey('PK', ids)),
+        ofOne: pinned<'s1'>()(Kennels.unsafeKey('GSI1PK', shelter)),
+        ofEntity: pinned<`NAME#${string}`>()(Kennels.unsafeKey('SK', kennel)),
+        depth: pinned<`NAME#${string}`>()(Kennels.unsafeKey('SK', kennel, { depth: 1 })),
+        partial: pinned<'' | `NAME#${string}`>()(
+            Kennels.unsafeKey('SK', kennel, { allowPartial: true }),
+        ),
+        boundary: pinned<'' | `NAME#${string}`>()(
+            Kennels.unsafeKey('SK', kennel, { allowPartial: true, enforceBoundary: true }),
         ),
     },
     keyUpdates: pinned<Result<{ set: Values; remove: readonly 'GSI1PK'[] }>>()(
@@ -234,10 +246,10 @@ export const petPins = {
                   kind: 'CAT'
               }
         >()(Pets.unsafeToEntry(value)),
-    key: pinned<'PETID#p1'>()(Pets.key('PK', { petId: 'p1' })),
-    keyOfEntity: pinned<`PETID#${string}`>()(Pets.key('PK', pet)),
-    keyOfDog: pinned<'OWNERID#o1'>()(Pets.key('SK', dogPet)),
-    keyOfCat: pinned<undefined>()(Pets.key('SK', catPet)),
+    key: pinned<'PETID#p1'>()(Pets.unsafeKey('PK', { petId: 'p1' })),
+    keyOfEntity: pinned<`PETID#${string}`>()(Pets.unsafeKey('PK', pet)),
+    keyOfDog: pinned<'OWNERID#o1'>()(Pets.unsafeKey('SK', dogPet)),
+    keyOfCat: pinned<undefined>()(Pets.unsafeKey('SK', catPet)),
     keyUpdates: pinned<{ set: Values; remove: readonly 'SK'[] }>()(
         Pets.unsafeKeyUpdates({ kind: 'DOG', ownerId: 'o2' }),
     ),

@@ -501,19 +501,20 @@ refusal, because a refusal is an intersection with the parameter. Measured 2026-
     const maybe = undefined as { depth: 1 } | undefined
     Pets.key('SK', { shelterId: 's' }, maybe)
       type checker: builds, with the type "SHELTERID#s"
-      runtime:      throws, Attribute petId not found
+      runtime:      returns a CodecError, Attribute petId not found
 
     const anyDepth: any = undefined
     Pets.key('SK', { shelterId: 's' }, { depth: anyDepth })
       type checker: builds
-      runtime:      throws, Attribute petId not found
+      runtime:      returns a CodecError, Attribute petId not found
 
-**Effect.** Each call builds in the type with no second component, and throws where the value is
-undefined at run time. The type of the first call is the key of depth 1, and the run time builds
-the whole key.
+**Effect.** Each call builds in the type with no second component, and the result holds the error
+where the value is undefined at run time. The type of the first call is the key of depth 1, and a
+call with the whole argument builds the whole key at run time, which the type does not state.
 
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 8 ids of
-the group key for the two forms, 4 of them on a table with the option separator.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds no id of
+this cause: the 8 ids of the group key fell, because a call that the run time refuses gives a
+value that the type states. The pool draws no call with the whole argument and an undefined slot.
 src/codec/spec/object/codec.keydepth.spec.ts pins the refusal of an optional slot, of `number`, and
 of two literals at one slot.
 
@@ -868,60 +869,6 @@ no text.
 
 ---
 
-## Known: the type of a full key admits a plain component whose value is the empty text, where the run time throws
-
-**Observation.** The run time reads a plain component whose value is the empty text as an absent
-component, and a full key refuses an absent component. The type of the component is `string`. The
-host has no type for a text of one character or more. Measured 2026-11-12 with `tsc --noEmit` on
-TypeScript 7 and `npx vitest --run`:
-
-    type Pet = { petId: string; name: string }
-    const Pets = tableEntry<Pet>()({ PK: ['petId'], SK: ['name'] })
-    const blank: Pet = { petId: 'p1', name: '' }
-
-    Pets.toEntry(blank)
-      type checker: builds
-      runtime:      returns a CodecError, buildCompositeKey: Attribute name not found
-                    (unsafeToEntry throws it)
-
-    Pets.key('SK', blank)
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute name not found
-
-    Pets.key('PK', { petId: '' })
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute petId not found
-
-    type Housed = { petId: string; shelter: { code: string } }
-    const Homes = tableEntry<Housed>()({ PK: ['petId'], SK: ['shelter.code'] })
-
-    Homes.key('SK', { petId: 'p1', shelter: { code: '' } })
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute shelter.code not found
-
-A key of one attribute at a path below an optional object has the same rule. Measured 2026-11-14
-with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Owned = { petId: string; owner?: { id: string } }
-    const Owners = tableEntry<Owned>()({ PK: ['petId'], SK: 'owner.id' })
-
-    Owners.key('SK', { petId: 'p1', owner: { id: '' } })
-      type checker: builds
-      runtime:      throws, Key SK: the attribute 'owner.id' is empty, so the key is empty.
-                    Give 'owner.id' a value, or leave it out.
-
-**Effect.** The call compiles, and the run time throws. The text of the throw says that the
-attribute is not found, or that it is empty, where the item holds the attribute with the empty
-text. The rule is the same for a component that is a path, and for a key of one attribute at a path.
-
-**Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
-composite key whose plain component is the empty text. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 19 ids, all of key. Two of them are the calls
-blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep, for the empty id below an optional object.
-toItem, toEntry, keys and keyCondition return the refusal as a value, so those calls are no id.
-
----
-
 ## Known: the refusal of a union codec with no discriminator lands on the key, where the key reads a held codec
 
 **Observation.** An item codec that is a `union` with no discriminator cannot name the option of an
@@ -1269,35 +1216,6 @@ with `lake env lean` on a scratch file that imports `Calculus.Bridge.KeyRows`:
 give no key, and the term adds no check.
 
 **Pin.** None.
-
----
-
-## Known: the type of a full key admits a text that holds the separator, where the run time throws
-
-**Observation.** A key whose component prints the separator does not read back as its components,
-and the run time refuses the key. The type of the component is `string`, which holds each text.
-Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Pet = { petId: string; shelterId: string; name: string; note?: string }
-    const Pets = tableEntry<Pet>()({ PK: ['petId'], SK: ['name'] })
-    const rex: Pet = { petId: 'p1', shelterId: 's1', name: 'rex' }
-    const split: Pet = { petId: 'p1', shelterId: 's1', name: 'a#b' }
-
-    Pets.key('SK', split)
-      type checker: builds
-      runtime:      throws, buildCompositeKey: the print of name holds the separator, so the key
-                    cannot be read back
-
-    Pets.key('SK', rex)
-      type checker: builds
-      runtime:      gives "NAME#rex"
-
-**Effect.** The call compiles, and the run time throws for a value of the declared type.
-
-**Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the refusal of the run time for a
-complete key. No test pins the type. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 7 ids, all of key. toItem, toEntry, keys and
-keyCondition return the refusal as a value, so those calls are no id.
 
 ---
 

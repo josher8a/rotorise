@@ -71,14 +71,18 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
         const numeral = '12345678901234567890.123'
         const row = written(Weights.toItem({ id: 'w1', weight: numeral }))
         expect(row.SK).toEqual({ N: numeral })
-        expect(
-            (Weights.toEntry({ id: 'w1', weight: numeral }) as CodecError)
-                .cause,
-        ).toBeInstanceOf(RotoriseError)
-        expect(
-            (Weights.toEntry({ id: 'w1', weight: numeral }) as CodecError)
-                .message,
-        ).toMatch(/Read the key from toItem/)
+        {
+            const refused = Weights.toEntry({ id: 'w1', weight: numeral })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
+        {
+            const refused = Weights.toEntry({ id: 'w1', weight: numeral })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/Read the key from toItem/)
+        }
     })
 
     /**
@@ -90,9 +94,11 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
         expect(
             written(Weights.toItem({ id: 'w1', weight: numeral })).SK,
         ).toEqual({ N: numeral })
-        expect(
-            (Weights.toEntry({ id: 'w1', weight: numeral }) as CodecError)
-                .cause,
-        ).toBeInstanceOf(RotoriseError)
+        {
+            const refused = Weights.toEntry({ id: 'w1', weight: numeral })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
     })
 })

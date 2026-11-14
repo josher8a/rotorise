@@ -28,11 +28,14 @@ describe('toEntry returns the refusal of an item as a value', () => {
     it('returns the refusal of an empty key, with and without a codec, and names the attribute', () => {
         const check = (refused: unknown) => {
             expect(refused).toBeInstanceOf(CodecError)
-            expect((refused as CodecError).kind).toBe('refused')
-            expect((refused as CodecError).cause).toBeInstanceOf(RotoriseError)
-            expect((refused as CodecError).message).toContain(
-                "the attribute 'nick' is empty",
-            )
+            if (refused instanceof CodecError)
+                expect(refused.kind).toBe('refused')
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "the attribute 'nick' is empty",
+                )
         }
         check(Pets.toEntry({ ...rex, nick: '' }))
         check(Coded.toEntry({ ...rex, nick: '' }))
@@ -41,15 +44,17 @@ describe('toEntry returns the refusal of an item as a value', () => {
     it('returns the refusal of a separator in a key part with the kind separator', () => {
         const refused = Pets.toEntry({ ...rex, petId: 'a#b' })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).kind).toBe('separator')
+        if (refused instanceof CodecError)
+            expect(refused.kind).toBe('separator')
     })
 
     it('returns the refusal of an entity that holds the name of a key', () => {
         const refused = Pets.toEntry({ ...rex, PK: 'stale' } as never)
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toMatch(
-            /^'PK' is a key of the schema, and the entity holds an attribute of that name/,
-        )
+        if (refused instanceof CodecError)
+            expect(refused.message).toMatch(
+                /^'PK' is a key of the schema, and the entity holds an attribute of that name/,
+            )
     })
 
     it('returns the refusal of a numeral that the marshaller cannot write, and points to toItem', () => {
@@ -58,9 +63,8 @@ describe('toEntry returns the refusal of an item as a value', () => {
             weight: '12345678901234567890.123',
         })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toContain(
-            'Read the key from toItem',
-        )
+        if (refused instanceof CodecError)
+            expect(refused.message).toContain('Read the key from toItem')
     })
 
     it('never throws for an item of the declared type', () => {
@@ -99,12 +103,18 @@ describe('unsafeToEntry throws what toEntry returns', () => {
             { ...rex, petId: 'a#b' },
             { ...rex, PK: 'stale' } as never,
         ]) {
-            const returned = Pets.toEntry(given) as CodecError
+            const returned = Pets.toEntry(given)
             const thrown = thrownBy(() => Pets.unsafeToEntry(given))
+            expect(returned).toBeInstanceOf(CodecError)
             expect(thrown).toBeInstanceOf(CodecError)
-            expect((thrown as CodecError).kind).toBe(returned.kind)
-            expect((thrown as CodecError).reason).toBe(returned.reason)
-            expect((thrown as CodecError).cause).toBeInstanceOf(RotoriseError)
+            if (
+                returned instanceof CodecError &&
+                thrown instanceof CodecError
+            ) {
+                expect(thrown.kind).toBe(returned.kind)
+                expect(thrown.reason).toBe(returned.reason)
+                expect(thrown.cause).toBeInstanceOf(RotoriseError)
+            }
         }
     })
 

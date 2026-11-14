@@ -17,30 +17,36 @@ const Pets = tableEntry<Pet>()({ SK: ['shelterId', 'petId'] })
 describe('a depth is a non-negative integer', () => {
     it('keeps that many components', () => {
         expect(
-            Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth: 1 }),
+            Pets.unsafeKey('SK', { shelterId: 's', petId: 'p' }, { depth: 1 }),
         ).toBe('SHELTERID#s')
         expectTypeOf(
-            Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth: 1 }),
+            Pets.unsafeKey('SK', { shelterId: 's', petId: 'p' }, { depth: 1 }),
         ).toEqualTypeOf<'SHELTERID#s'>()
     })
 
     it('keeps the whole key where the depth is above the count', () => {
         expect(
-            Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth: 9 }),
+            Pets.unsafeKey('SK', { shelterId: 's', petId: 'p' }, { depth: 9 }),
         ).toBe('SHELTERID#s#PETID#p')
     })
 
     it('keeps no component at a depth of 0, and the key is the empty prefix, with or without the boundary', () => {
         const attributes = { shelterId: 's', petId: 'p' }
-        expect(Pets.key('SK', attributes, { depth: 0 })).toBe('')
+        expect(Pets.unsafeKey('SK', attributes, { depth: 0 })).toBe('')
         expect(
-            Pets.key('SK', attributes, { depth: 0, enforceBoundary: true }),
+            Pets.unsafeKey('SK', attributes, {
+                depth: 0,
+                enforceBoundary: true,
+            }),
         ).toBe('')
         expectTypeOf(
-            Pets.key('SK', attributes, { depth: 0, enforceBoundary: true }),
+            Pets.unsafeKey('SK', attributes, {
+                depth: 0,
+                enforceBoundary: true,
+            }),
         ).toEqualTypeOf<''>()
         expectTypeOf(
-            Pets.key('SK', attributes, { depth: 0 }),
+            Pets.unsafeKey('SK', attributes, { depth: 0 }),
         ).toEqualTypeOf<''>()
     })
 
@@ -66,11 +72,19 @@ describe('a depth is a non-negative integer', () => {
         const depth: number = 1
         const refused = () => {
             // @ts-expect-error a number does not say how many components the key keeps
-            void Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth })
-            // @ts-expect-error a negative depth keeps no component
-            void Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth: -1 })
-            // @ts-expect-error a fraction keeps no whole number of components
-            void Pets.key('SK', { shelterId: 's', petId: 'p' }, { depth: 1.5 })
+            void Pets.unsafeKey('SK', { shelterId: 's', petId: 'p' }, { depth })
+            void Pets.unsafeKey(
+                'SK',
+                { shelterId: 's', petId: 'p' },
+                // @ts-expect-error a negative depth keeps no component
+                { depth: -1 },
+            )
+            void Pets.unsafeKey(
+                'SK',
+                { shelterId: 's', petId: 'p' },
+                // @ts-expect-error a fraction keeps no whole number of components
+                { depth: 1.5 },
+            )
         }
         expect(typeof refused).toBe('function')
     })
@@ -87,15 +101,24 @@ describe('a slot of the config states one literal, or nothing', () => {
 
     it('refuses a boolean enforceBoundary, because the two values build two keys', () => {
         const build = (flag: boolean) =>
-            // @ts-expect-error a boolean does not say whether the key ends with the separator
-            Pets.key('SK', attributes, { depth: 1, enforceBoundary: flag })
+            Pets.unsafeKey('SK', attributes, {
+                depth: 1,
+                // @ts-expect-error a boolean does not say whether the key ends with the separator
+                enforceBoundary: flag,
+            })
         expect(build(true)).toBe('SHELTERID#s#')
         expect(build(false)).toBe('SHELTERID#s')
         expectTypeOf(
-            Pets.key('SK', attributes, { depth: 1, enforceBoundary: true }),
+            Pets.unsafeKey('SK', attributes, {
+                depth: 1,
+                enforceBoundary: true,
+            }),
         ).toEqualTypeOf<'SHELTERID#s#'>()
         expectTypeOf(
-            Pets.key('SK', attributes, { depth: 1, enforceBoundary: false }),
+            Pets.unsafeKey('SK', attributes, {
+                depth: 1,
+                enforceBoundary: false,
+            }),
         ).toEqualTypeOf<'SHELTERID#s'>()
     })
 
@@ -103,18 +126,18 @@ describe('a slot of the config states one literal, or nothing', () => {
         const partial = { shelterId: 's', petId: lacking } as const
         const build = (flag: boolean) =>
             // @ts-expect-error a boolean does not say whether the key stops at an empty component
-            Pets.key('SK', partial, { allowPartial: flag })
+            Pets.unsafeKey('SK', partial, { allowPartial: flag })
         expect(build(true)).toBe('SHELTERID#s')
         expect(() => build(false)).toThrow(/Attribute petId not found/)
         expectTypeOf(
-            Pets.key('SK', partial, { allowPartial: true }),
+            Pets.unsafeKey('SK', partial, { allowPartial: true }),
         ).toEqualTypeOf<'SHELTERID#s' | `SHELTERID#s#PETID#${string}`>()
     })
 
     it('refuses a depth that is a number or undefined, because no depth builds the whole key', () => {
         const build = (depth?: number) =>
             // @ts-expect-error an optional depth does not say how many components the key keeps
-            Pets.key('SK', { shelterId: 's' }, { depth })
+            Pets.unsafeKey('SK', { shelterId: 's' }, { depth })
         expect(build(1)).toBe('SHELTERID#s')
         expect(() => build()).toThrow(/Attribute petId not found/)
     })
@@ -122,14 +145,14 @@ describe('a slot of the config states one literal, or nothing', () => {
     it('refuses an optional literal depth, because an absent depth keeps the whole key', () => {
         const config: { depth?: 1 } = {}
         // @ts-expect-error a depth that can be absent does not say how many components the key keeps
-        const build = () => Pets.key('SK', { shelterId: 's' }, config)
+        const build = () => Pets.unsafeKey('SK', { shelterId: 's' }, config)
         expect(build).toThrow(/Attribute petId not found/)
     })
 
     it('refuses two literal depths, because the boundary follows one depth', () => {
         const build = (depth: 1 | 2) =>
             // @ts-expect-error two depths do not say whether the key stops before the last component
-            Pets.key('SK', attributes, { depth, enforceBoundary: true })
+            Pets.unsafeKey('SK', attributes, { depth, enforceBoundary: true })
         expect(build(1)).toBe('SHELTERID#s#')
         expect(build(2)).toBe('SHELTERID#s#PETID#p')
     })
@@ -178,13 +201,13 @@ describe('a slot of the config states one literal, or nothing', () => {
     })
 
     it('accepts a depth of undefined alone, a config with no slot, and no config', () => {
-        expect(Pets.key('SK', attributes, { depth: undefined })).toBe(
+        expect(Pets.unsafeKey('SK', attributes, { depth: undefined })).toBe(
             'SHELTERID#s#PETID#p',
         )
-        expect(Pets.key('SK', attributes, {})).toBe('SHELTERID#s#PETID#p')
-        expect(Pets.key('SK', attributes)).toBe('SHELTERID#s#PETID#p')
+        expect(Pets.unsafeKey('SK', attributes, {})).toBe('SHELTERID#s#PETID#p')
+        expect(Pets.unsafeKey('SK', attributes)).toBe('SHELTERID#s#PETID#p')
         expectTypeOf(
-            Pets.key('SK', attributes, { depth: undefined }),
+            Pets.unsafeKey('SK', attributes, { depth: undefined }),
         ).toEqualTypeOf<'SHELTERID#s#PETID#p'>()
     })
 })

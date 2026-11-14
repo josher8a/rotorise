@@ -76,9 +76,12 @@ describe('a key component with no codec', () => {
             SK: [['meta.note', { tag: 'NOTE' }]],
         })
         const noted: Noted = { id: 'n', meta: { note: { text: 't' } } }
-        expect((Notes.toEntry(noted) as CodecError).message).toMatch(
-            /the key cannot print it/,
-        )
+        {
+            const refused = Notes.toEntry(noted)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/the key cannot print it/)
+        }
     })
 
     it('refuses an object at a path, and accepts text at a path', () => {
@@ -87,13 +90,18 @@ describe('a key component with no codec', () => {
             // @ts-expect-error a Date at a path has no text of its own
             SK: ['owner.born'],
         })
-        expect(() =>
-            Born_.key('SK', {
+        {
+            const refused = Born_.key('SK', {
                 owner: { name: 'a', born: new Date(0) },
-            } as never),
-        ).toThrow(/is an object/)
+            } as never)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/is an object/)
+        }
         const Named = tableEntry<Owner>()({ PK: ['id'], SK: ['owner.name'] })
-        expect(Named.key('SK', { owner: { name: 'Rex' } })).toBe('NAME#Rex')
+        expect(Named.unsafeKey('SK', { owner: { name: 'Rex' } })).toBe(
+            'NAME#Rex',
+        )
     })
 
     it('refuses an object in an arm of a match, and in an arm of the cases form', () => {
@@ -178,7 +186,7 @@ describe('a key component with a codec', () => {
             { PK: ['id'], SK: ['age'] },
             { codec: { id: string, age: number } },
         )
-        expect(Aged.key('SK', { age: 3 })).toBe('AGE#3')
+        expect(Aged.unsafeKey('SK', { age: 3 })).toBe('AGE#3')
     })
 
     it('prints the stored text of a held value at a path, as it does at a name', () => {
@@ -192,7 +200,7 @@ describe('a key component with a codec', () => {
             },
         )
         const born = new Date(0)
-        const key = Held.key('SK', { owner: { born } })
+        const key = Held.unsafeKey('SK', { owner: { born } })
         expectTypeOf(key).toEqualTypeOf<`BORN#${string}`>()
         expect(key).toBe('BORN#1970-01-01T00:00:00.000Z')
         const row = Held.unsafeToItem({ id: 'p1', owner: { name: 'a', born } })
@@ -657,17 +665,19 @@ describe('a name of a key that holds a dot is a path', () => {
             GSI1PK: 'owner.name',
             GSI1SK: ['owner.name'],
         })
-        expect(Pets.key('GSI1PK', { owner: { name: 'bob' } })).toBe('bob')
-        expect(Pets.key('GSI1SK', { owner: { name: 'bob' } })).toBe('NAME#bob')
+        expect(Pets.unsafeKey('GSI1PK', { owner: { name: 'bob' } })).toBe('bob')
+        expect(Pets.unsafeKey('GSI1SK', { owner: { name: 'bob' } })).toBe(
+            'NAME#bob',
+        )
         // @ts-expect-error a key of one attribute at 'owner.name' reads the path, and the run time reads no value at the whole name
-        const one = Pets.key('GSI1PK', { 'owner.name': 7 })
+        const one = Pets.unsafeKey('GSI1PK', { 'owner.name': 7 })
         expect(one).toBeUndefined()
         // @ts-expect-error a list that holds 'owner.name' reads the path, and the run time finds no value at the path
-        const list = () => Pets.key('GSI1SK', { 'owner.name': 7 })
+        const list = () => Pets.unsafeKey('GSI1SK', { 'owner.name': 7 })
         expect(list).toThrow(/Attribute owner\.name not found/)
         // the attribute of the whole name is no input of the key: the type states nothing of its value, and the run time does not read it
         expect(
-            Pets.key('GSI1SK', {
+            Pets.unsafeKey('GSI1SK', {
                 owner: { name: 'bob' },
                 'owner.name': 'any text',
             }),
@@ -685,12 +695,12 @@ describe('a name of a key that holds a dot is a path', () => {
             'owner.name': 7,
             owner: { name: 'bob' },
         } as const
-        expectTypeOf(Pets.key('GSI1PK', both)).toEqualTypeOf<'bob'>()
-        expect(Pets.key('GSI1PK', both)).toBe('bob')
-        expectTypeOf(Pets.key('GSI1PK', kennel)).toEqualTypeOf<string>()
-        expect(Pets.key('GSI1PK', kennel)).toBe('bob')
-        expectTypeOf(Pets.key('GSI1SK', both)).toEqualTypeOf<'NAME#bob'>()
-        expect(Pets.key('GSI1SK', kennel)).toBe('NAME#bob')
+        expectTypeOf(Pets.unsafeKey('GSI1PK', both)).toEqualTypeOf<'bob'>()
+        expect(Pets.unsafeKey('GSI1PK', both)).toBe('bob')
+        expectTypeOf(Pets.unsafeKey('GSI1PK', kennel)).toEqualTypeOf<string>()
+        expect(Pets.unsafeKey('GSI1PK', kennel)).toBe('bob')
+        expectTypeOf(Pets.unsafeKey('GSI1SK', both)).toEqualTypeOf<'NAME#bob'>()
+        expect(Pets.unsafeKey('GSI1SK', kennel)).toBe('NAME#bob')
     })
 
     it('gives the type and the text at the path to the arm of a match that is one name with a `.`, where the attributes hold both names', () => {
@@ -717,7 +727,7 @@ describe('a name of a key that holds a dot is a path', () => {
             'owner.name': 7,
             owner: { kind: 'P', name: 'bob' },
         } as const
-        expectTypeOf(Pets.key('GSI1PK', both)).toEqualTypeOf<'bob'>()
-        expect(Pets.key('GSI1PK', both)).toBe('bob')
+        expectTypeOf(Pets.unsafeKey('GSI1PK', both)).toEqualTypeOf<'bob'>()
+        expect(Pets.unsafeKey('GSI1PK', both)).toBe('bob')
     })
 })

@@ -37,17 +37,34 @@ const unnamed = { petId: 'p1', shelterId: 's1', nick: '' }
 
 describe('a full key of one attribute refuses the empty string, on every route', () => {
     it('refuses in key, and names the key and the attribute', () => {
-        expect(() => Pets.key('SK', unnamed)).toThrow(RotoriseError)
-        expect(() => Pets.key('SK', unnamed)).toThrow(
-            "Key SK: the attribute 'nick' is empty",
-        )
+        {
+            const refused = Pets.key('SK', unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
+        {
+            const refused = Pets.key('SK', unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "Key SK: the attribute 'nick' is empty",
+                )
+        }
     })
 
     it('refuses in key under allowPartial, because one attribute has no part', () => {
-        expect(() =>
+        {
             // @ts-expect-error the type gives a key of one attribute no config, and a caller with no type passes one
-            Pets.key('SK', unnamed, { allowPartial: true }),
-        ).toThrow("the attribute 'nick' is empty")
+            const refused: unknown = Pets.key('SK', unnamed, {
+                allowPartial: true,
+            })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "the attribute 'nick' is empty",
+                )
+        }
     })
 
     it('refuses in keys and in toEntry', () => {
@@ -59,9 +76,14 @@ describe('a full key of one attribute refuses the empty string, on every route',
                     "the attribute 'nick' is empty",
                 )
         }
-        expect((Pets.toEntry(unnamed) as CodecError).message).toContain(
-            "the attribute 'nick' is empty",
-        )
+        {
+            const refused = Pets.toEntry(unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "the attribute 'nick' is empty",
+                )
+        }
     })
 
     it('refuses in keyUpdates, on a key that is not a key of the table', () => {
@@ -93,56 +115,73 @@ describe('a full key of one attribute refuses the empty string, on every route',
 
 describe('a full key of a list of components prints the name of a tagged component', () => {
     it('prints the name of a component whose transform prints the empty string', () => {
-        expect(Pets.key('GSI2SK', unnamed)).toBe('PETID#')
+        expect(Pets.unsafeKey('GSI2SK', unnamed)).toBe('PETID#')
     })
 })
 
 describe('a full key whose print is the empty text refuses, as a key of one attribute does', () => {
     it('refuses where one component prints a value with no tag and the value is empty', () => {
-        expect(() => Pets.key('GSI3SK', unnamed)).toThrow(RotoriseError)
-        expect(() => Pets.key('GSI3SK', unnamed)).toThrow(
-            'Key GSI3SK: the print of the components is empty',
-        )
+        {
+            const refused = Pets.key('GSI3SK', unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
+        {
+            const refused = Pets.key('GSI3SK', unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    'Key GSI3SK: the print of the components is empty',
+                )
+        }
     })
 
     it('gives the empty prefix where the same print is a partial key', () => {
-        expect(Pets.key('GSI3SK', unnamed, { depth: 0 })).toBe('')
+        expect(Pets.unsafeKey('GSI3SK', unnamed, { depth: 0 })).toBe('')
     })
 })
 
 describe('a partial key may be the empty string, because it is a begins_with prefix', () => {
     it('is empty at a depth of 0', () => {
-        expect(Pets.key('PK', unnamed, { depth: 0 })).toBe('')
+        expect(Pets.unsafeKey('PK', unnamed, { depth: 0 })).toBe('')
     })
 
     it('is empty under allowPartial where no part is present, and the type builds the call', () => {
-        const key = Pets.key('PK', {}, { allowPartial: true })
+        const key = Pets.unsafeKey('PK', {}, { allowPartial: true })
         expectTypeOf(key).toEqualTypeOf<''>()
         expect(key).toBe('')
     })
 
     it('is the prefix of the first part where only the first part is present', () => {
         const Two = tableEntry<Pet>()({ PK: ['petId', 'shelterId'] })
-        const key = Two.key('PK', { petId: 'p1' }, { allowPartial: true })
+        const key = Two.unsafeKey('PK', { petId: 'p1' }, { allowPartial: true })
         expectTypeOf(key).toEqualTypeOf<'PETID#p1'>()
         expect(key).toBe('PETID#p1')
     })
 
     it('is empty where only the second part is present, because the builder stops at the first absent part', () => {
         const Two = tableEntry<Pet>()({ PK: ['petId', 'shelterId'] })
-        const key = Two.key('PK', { shelterId: 's1' }, { allowPartial: true })
+        const key = Two.unsafeKey(
+            'PK',
+            { shelterId: 's1' },
+            { allowPartial: true },
+        )
         expectTypeOf(key).toEqualTypeOf<''>()
         expect(key).toBe('')
     })
 
     it('refuses a part of another type, as a full key does', () => {
-        // @ts-expect-error petId is a string
-        const key = () => Pets.key('PK', { petId: 5 }, { allowPartial: true })
+        const key = () =>
+            // @ts-expect-error petId is a string
+            Pets.unsafeKey('PK', { petId: 5 }, { allowPartial: true })
         expect(key()).toBe('PETID#5')
     })
 
     it('is not empty where a part is present', () => {
-        expect(Pets.key('PK', unnamed, { allowPartial: true })).toBe('PETID#p1')
+        expect(Pets.unsafeKey('PK', unnamed, { allowPartial: true })).toBe(
+            'PETID#p1',
+        )
     })
 })
 
@@ -160,7 +199,7 @@ describe('the type of a key counts the segments that a print holds, and not the 
         const Hidden = tableEntry<Tagless>()({
             PK: [['nick', hidden], 'petId'],
         })
-        const key = Hidden.key('PK', tagless)
+        const key = Hidden.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
         expect(key).toBe('#PETID#p1')
         const entry = Hidden.unsafeToEntry(tagless).PK
@@ -172,24 +211,24 @@ describe('the type of a key counts the segments that a print holds, and not the 
         const Hidden = tableEntry<Tagless>()({
             PK: [['nick', hidden], ['shelterId', hidden], 'petId'],
         })
-        const key = Hidden.key('PK', tagless)
+        const key = Hidden.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`##PETID#${string}`>()
         expect(key).toBe('##PETID#p1')
     })
 
     it('holds both prints where the value is a literal or null, and the run time gives each', () => {
         const Vip = tableEntry<Tagless>()({ PK: [['nick', vip], 'petId'] })
-        const key = Vip.key('PK', tagless)
+        const key = Vip.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<
             `VIP#PETID#${string}` | `#PETID#${string}`
         >()
         expect(key).toBe('VIP#PETID#p1')
-        expect(Vip.key('PK', quiet)).toBe('#PETID#p1')
+        expect(Vip.unsafeKey('PK', quiet)).toBe('#PETID#p1')
     })
 
     it('keeps the separator where the value is the empty text', () => {
         const Blank = tableEntry<Tagless>()({ PK: [['nick', blank], 'petId'] })
-        const key = Blank.key('PK', tagless)
+        const key = Blank.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
         expect(key).toBe('#PETID#p1')
     })
@@ -198,7 +237,7 @@ describe('the type of a key counts the segments that a print holds, and not the 
         const Hidden = tableEntry<Tagless>()({
             PK: ['petId', ['nick', hidden]],
         })
-        const key = Hidden.key('PK', tagless)
+        const key = Hidden.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`PETID#${string}#`>()
         expect(key).toBe('PETID#p1#')
     })

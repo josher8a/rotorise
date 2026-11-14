@@ -67,7 +67,7 @@ describe('Rotorise Performance Baseline', () => {
     })
 
     it('measures instantiation count for key generation', () => {
-        userSchema.key('PK', { orgId: '123', id: '456' })
+        userSchema.unsafeKey('PK', { orgId: '123', id: '456' })
         // 3751 -> 3823: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
@@ -76,10 +76,13 @@ describe('Rotorise Performance Baseline', () => {
 
     it('verifies type outputs with snapshots', () => {
         attest(
-            userSchema.key('PK', { orgId: '123', id: '456' }),
+            userSchema.unsafeKey('PK', { orgId: '123', id: '456' }),
         ).type.toString.snap('`ORGID#${string}#ID#${string}`')
+        attest(
+            userSchema.unsafeKey('SK', { role: 'admin' }),
+        ).type.toString.snap('"ROLE#admin"')
         attest(userSchema.key('SK', { role: 'admin' })).type.toString.snap(
-            '"ROLE#admin"',
+            'Result<"ROLE#admin">',
         )
     })
 

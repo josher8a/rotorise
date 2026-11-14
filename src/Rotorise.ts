@@ -2551,14 +2551,37 @@ export type TableEntryDefinition<
     /**
      * Generates a specific key for the given entity attributes.
      * Supports partial keys and depth limiting for query operations.
-     * Throws a `RotoriseError` that names the component where a segment of its print holds the
-     * separator, because the key would read back as another list of segments.
+     * Returns a `CodecError` that names the component where a segment of its print holds the
+     * separator, because the key would read back as another list of segments. A key name that the
+     * schema does not declare, and a depth that is no non-negative integer, are refused by the type,
+     * so the call is broken and throws a `RotoriseError`.
      *
      * @param key The name of the key to generate (e.g., 'PK', 'GSIPK').
      * @param attributes the object containing the values needed to build the key.
      * @param config Optional configuration for partial keys or depth limiting.
      */
     key: <
+        const Key extends keyof Schema,
+        const Config extends SpecConfig<Spec>,
+        const Attributes extends OptimizedAttributes<Entity, Spec, Config_>,
+        Spec = Schema[Key],
+        Config_ extends SpecConfigShape = [SpecConfigShape] extends [Config]
+            ? {
+                  depth?: undefined
+                  allowPartial?: undefined
+                  enforceBoundary?: boolean
+              }
+            : Config,
+    >(
+        key: Key,
+        attributes: Attributes,
+        config?: Config & ConfigRefusal<Config>,
+    ) => Result<
+        OptimizedBuiltKey<Attributes, Spec, Separator, Config_, CodecSpec>
+    >
+
+    /** The same, throwing the error that `key` returns. */
+    unsafeKey: <
         const Key extends keyof Schema,
         const Config extends SpecConfig<Spec>,
         const Attributes extends OptimizedAttributes<Entity, Spec, Config_>,
@@ -4951,6 +4974,38 @@ export const tableEntry =
         const keyUpdates = (changed: Record<string, unknown>) =>
             returned(() => updateKeys(changed))
 
+        /**
+         * One key of the entry. A name that the schema does not declare, and a depth that is no
+         * non-negative integer, are refused by the type, so the call is broken and throws. Every other
+         * refusal is a value.
+         */
+        const keyValue = (
+            name: string,
+            attributes: Record<string, unknown>,
+            config?: { depth?: number },
+        ): Result<string | undefined> => {
+            if (!keyNames.includes(name)) {
+                throw new RotoriseError(`Key ${name} not found in schema`)
+            }
+            if (
+                config?.depth !== undefined &&
+                (!Number.isInteger(config.depth) || config.depth < 0)
+            ) {
+                throw new RotoriseError(
+                    `Key ${name}: depth is a non-negative integer`,
+                )
+            }
+            return returned(() =>
+                (
+                    buildKey as unknown as (
+                        name: string,
+                        attributes: Record<string, unknown>,
+                        config?: object,
+                    ) => string | undefined
+                )(name, attributes, config),
+            )
+        }
+
         const definition = {
             keyUpdates: keyUpdates as never,
             unsafeKeyUpdates: ((changed: Record<string, unknown>) =>
@@ -4969,7 +5024,12 @@ export const tableEntry =
             unsafeToEntry: ((item: Record<string, unknown>) =>
                 orThrow(toEntry(item))) as never,
             fromEntry: dropKeys as never,
-            key: buildKey as never,
+            key: keyValue as never,
+            unsafeKey: ((
+                name: string,
+                attributes: Record<string, unknown>,
+                config?: object,
+            ) => orThrow(keyValue(name, attributes, config))) as never,
             infer: chainableNoOpProxy as never,
             path: () => pathBuilder() as never,
         }

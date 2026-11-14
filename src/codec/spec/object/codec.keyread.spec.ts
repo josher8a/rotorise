@@ -74,21 +74,24 @@ describe('a read of a stored item', () => {
 describe('a key build', () => {
     it('refuses a value that holds the separator, and the message holds no value', () => {
         const bad = { ...user, orgId: 'a#secret' }
-        const build = () => Users.key('PK', bad)
-        expect(build).toThrow(RotoriseError)
+        const build = () => Users.unsafeKey('PK', bad)
+        expect(build).toThrow(CodecError)
         expect(build).toThrow(/orgId/)
         expect(build).not.toThrow(/secret/)
-        expect((Users.toEntry(bad) as CodecError).cause).toBeInstanceOf(
-            RotoriseError,
-        )
+        {
+            const refused = Users.toEntry(bad)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
     })
 
     it('refuses a transform whose tag holds the separator', () => {
         const Tagged = tableEntry<User>()({
             PK: [['orgId', (x: string) => ({ tag: 'T#X', value: x })]],
         })
-        const build = () => Tagged.key('PK', { orgId: 'acme' })
-        expect(build).toThrow(RotoriseError)
+        const build = () => Tagged.unsafeKey('PK', { orgId: 'acme' })
+        expect(build).toThrow(CodecError)
         expect(build).toThrow(/tag of orgId/)
         expect(build).not.toThrow(/acme/)
     })
@@ -97,7 +100,12 @@ describe('a key build', () => {
         const Prefixed = tableEntry<User>()({
             PK: [['orgId', (x: string) => `ORG#${x}`]],
         })
-        expect(() => Prefixed.key('PK', { orgId: 'acme' })).toThrow(/orgId/)
+        {
+            const refused = Prefixed.key('PK', { orgId: 'acme' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/orgId/)
+        }
     })
 
     it('refuses a separator of more than one character, which reads two lists as one key', () => {
@@ -111,8 +119,8 @@ describe('a key build', () => {
     })
 
     it('does not read a component that a depth cuts off', () => {
-        expect(Users.key('PK', { ...user, id: 'a#b' }, { depth: 1 })).toBe(
-            'ORGID#acme',
-        )
+        expect(
+            Users.unsafeKey('PK', { ...user, id: 'a#b' }, { depth: 1 }),
+        ).toBe('ORGID#acme')
     })
 })

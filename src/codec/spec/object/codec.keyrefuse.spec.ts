@@ -196,12 +196,15 @@ describe('the type of key() at an attribute arm', () => {
     })
 
     it('admits undefined and not the discriminator literal at a null attribute', () => {
-        const key = Pets.key('GSI2PK', { status: 'ADOPTED', owner: null })
+        const key = Pets.unsafeKey('GSI2PK', { status: 'ADOPTED', owner: null })
         expectTypeOf(key).toEqualTypeOf<undefined>()
     })
 
     it('is the value of the attribute that the spec names', () => {
-        const key = Pets.key('GSI2PK', { status: 'ADOPTED', owner: 'ann' })
+        const key = Pets.unsafeKey('GSI2PK', {
+            status: 'ADOPTED',
+            owner: 'ann',
+        })
         expectTypeOf(key).toEqualTypeOf<'ann'>()
     })
 })

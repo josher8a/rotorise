@@ -57,7 +57,7 @@ describe('a component under a refine prints the text of its field', () => {
             { PK: ['petId'] },
             { codec: { petId: refine(string, isPetId), name: string } },
         )
-        const key = Pets.key('PK', { petId: 'p1' })
+        const key = Pets.unsafeKey('PK', { petId: 'p1' })
         expect(key).toBe('PETID#p1')
         expectTypeOf(key).toEqualTypeOf<'PETID#p1'>()
         // `fromEntry` drops each key attribute, whatever its text
@@ -76,8 +76,10 @@ describe('a component under a refine prints the text of its field', () => {
                 },
             },
         )
-        expect(Pets.key('SK', { kind: 'dog' })).toBe('KIND#D')
-        expectTypeOf(Pets.key('SK', { kind: 'dog' })).toEqualTypeOf<'KIND#D'>()
+        expect(Pets.unsafeKey('SK', { kind: 'dog' })).toBe('KIND#D')
+        expectTypeOf(
+            Pets.unsafeKey('SK', { kind: 'dog' }),
+        ).toEqualTypeOf<'KIND#D'>()
     })
 })
 
@@ -87,10 +89,10 @@ describe('a variant under a tag prints the stored text of the variant that the c
             { PK: ['petId'], SK: 'kind' },
             { codec },
         )
-        const cat = Pets.key('SK', { kind: 'cat' })
+        const cat = Pets.unsafeKey('SK', { kind: 'cat' })
         expect(cat).toBe('cat')
         expectTypeOf(cat).toEqualTypeOf<'cat'>()
-        const dog = Pets.key('SK', { kind: 'dog' })
+        const dog = Pets.unsafeKey('SK', { kind: 'dog' })
         expect(dog).toBe('D')
         expectTypeOf(dog).toEqualTypeOf<'D'>()
     })
@@ -100,10 +102,12 @@ describe('a variant under a tag prints the stored text of the variant that the c
             { PK: ['petId'], SK: ['kind'] },
             { codec },
         )
-        expect(Pets.key('SK', { kind: 'dog' })).toBe('KIND#D')
-        expectTypeOf(Pets.key('SK', { kind: 'dog' })).toEqualTypeOf<'KIND#D'>()
+        expect(Pets.unsafeKey('SK', { kind: 'dog' })).toBe('KIND#D')
         expectTypeOf(
-            Pets.key('SK', { kind: 'cat' }),
+            Pets.unsafeKey('SK', { kind: 'dog' }),
+        ).toEqualTypeOf<'KIND#D'>()
+        expectTypeOf(
+            Pets.unsafeKey('SK', { kind: 'cat' }),
         ).toEqualTypeOf<'KIND#cat'>()
     })
 
@@ -112,10 +116,10 @@ describe('a variant under a tag prints the stored text of the variant that the c
             { PK: ['petId'], SK: ['adopted'] },
             { codec },
         )
-        expectTypeOf(Adoption.key('SK', { adopted: true })).toEqualTypeOf<
+        expectTypeOf(Adoption.unsafeKey('SK', { adopted: true })).toEqualTypeOf<
             'ADOPTED#Y' | 'ADOPTED#N'
         >()
-        expect(Adoption.key('SK', { adopted: true })).toBe('ADOPTED#Y')
+        expect(Adoption.unsafeKey('SK', { adopted: true })).toBe('ADOPTED#Y')
     })
 })
 
@@ -125,7 +129,7 @@ describe('a DynamoNumber component prints its digits', () => {
             { PK: ['id'], SK: ['price'] },
             { codec: { id: string, price: dynamoNumber } },
         )
-        const key = Prices.key('SK', {
+        const key = Prices.unsafeKey('SK', {
             price: orThrow(DynamoNumber.from('1.5')),
         })
         expect(key).toBe('PRICE#1.5')

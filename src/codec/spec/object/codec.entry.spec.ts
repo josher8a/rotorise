@@ -93,7 +93,7 @@ describe('tableEntry with a codec', () => {
 
     it('still exposes the plain entry API', () => {
         expect(Pet.unsafeToEntry(pet).PK).toBe('USERID#u1')
-        expect(Pet.key('PK', { userId: 'u9' })).toBe('USERID#u9')
+        expect(Pet.unsafeKey('PK', { userId: 'u9' })).toBe('USERID#u9')
     })
 
     it('omits the codec methods when no spec is given', () => {

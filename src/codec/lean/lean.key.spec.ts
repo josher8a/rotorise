@@ -83,26 +83,18 @@ const entryOf = (spec: Spec, separator: string) => {
 const builderOf = (spec: Spec, separator: string) =>
     entryOf(spec, separator).key
 
-/** What the builder gave: a key, no key, or a throw of the library. */
+/** What the builder gave: a key, no key, or the refusal of a key as a value. */
 const hostOutcome = (
     run: ReturnType<typeof builderOf>,
     item: Item,
     config: Config,
 ): KeyOutcome => {
-    try {
-        const key = run('K', item, config)
-        if (key === undefined || key === null) return { kind: 'nothing' }
-        if (typeof key !== 'string')
-            throw new Error('the builder gave a non-key')
-        return { kind: 'key', key }
-    } catch (thrown) {
-        if (thrown instanceof RotoriseError) {
-            return {
-                kind: thrown.kind === 'separator' ? 'separator' : 'refused',
-            }
-        }
-        throw thrown
-    }
+    const key = run('K', item, config)
+    if (key instanceof CodecError)
+        return { kind: key.kind === 'separator' ? 'separator' : 'refused' }
+    if (key === undefined || key === null) return { kind: 'nothing' }
+    if (typeof key !== 'string') throw new Error('the builder gave a non-key')
+    return { kind: 'key', key }
 }
 
 /** The string that `Array.prototype.join` writes for a value. */

@@ -66,7 +66,7 @@ describe('the member of a key of one attribute at a path is the member that the 
             { PK: ['id'], SK: 'meta.at' },
             { codec: { id: string, meta: object({ at: isoAt }) } },
         )
-        expect(Visits.key('SK', { meta: { at: new Date(0) } })).toBe(
+        expect(Visits.unsafeKey('SK', { meta: { at: new Date(0) } })).toBe(
             '1970-01-01T00:00:00.000Z',
         )
     })
@@ -103,7 +103,7 @@ describe('a path goes below each field that the codec walks at run time, and the
                 },
             },
         )
-        expect(Notes.key('SK', { meta: { note: 'n' } })).toBe('NOTE#n')
+        expect(Notes.unsafeKey('SK', { meta: { note: 'n' } })).toBe('NOTE#n')
     })
 
     it('goes below a union of objects', () => {
@@ -119,7 +119,7 @@ describe('a path goes below each field that the codec walks at run time, and the
                 },
             },
         )
-        expect(Notes.key('SK', { meta: { a: 'z' } })).toBe('A#z')
+        expect(Notes.unsafeKey('SK', { meta: { a: 'z' } })).toBe('A#z')
     })
 
     it('goes below a discriminated union, with no refine over it', () => {
@@ -138,7 +138,7 @@ describe('a path goes below each field that the codec walks at run time, and the
                 },
             },
         )
-        expect(Notes.key('SK', { meta: { kind: 'a', note: 'n' } })).toBe(
+        expect(Notes.unsafeKey('SK', { meta: { kind: 'a', note: 'n' } })).toBe(
             'NOTE#n',
         )
     })
@@ -162,7 +162,7 @@ describe('a path goes below each field that the codec walks at run time, and the
         )
         // `at` walks below the ref, so construction builds the key that the type refuses
         expect(
-            Visits.key('SK', { home: { kind: 'flat', ownerId: 'o1' } }),
+            Visits.unsafeKey('SK', { home: { kind: 'flat', ownerId: 'o1' } }),
         ).toBe('OWNERID#o1')
     })
 })
@@ -224,8 +224,10 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
             { codec: { petId: string, at: optional(isoAt) } },
         )
         const at = new Date(0)
-        expect(Visits.key('GSI2SK', { at })).toBe('1970-01-01T00:00:00.000Z')
-        expectTypeOf(Visits.key('GSI2SK', { at })).toEqualTypeOf<string>()
+        expect(Visits.unsafeKey('GSI2SK', { at })).toBe(
+            '1970-01-01T00:00:00.000Z',
+        )
+        expectTypeOf(Visits.unsafeKey('GSI2SK', { at })).toEqualTypeOf<string>()
     })
 
     it('types the absent value of an undefinable caller adapter, as the run time gives it', () => {
@@ -234,7 +236,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
             { codec: { petId: string, at: undefinable(isoAt) } },
         )
         const at = undefined as Date | undefined
-        const key = Visits.key('GSI2SK', { at })
+        const key = Visits.unsafeKey('GSI2SK', { at })
         expect(key).toBeUndefined()
         expectTypeOf(key).toEqualTypeOf<string | undefined>()
     })
@@ -249,7 +251,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
                 },
             },
         )
-        const key = Chipped.key('SK', { chip: { code: 255 } })
+        const key = Chipped.unsafeKey('SK', { chip: { code: 255 } })
         expect(key).toBe('CODE#ff')
         expectTypeOf(key).toEqualTypeOf<`CODE#${string}`>()
     })
@@ -259,7 +261,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
             { PK: ['id'], GSI1SK: 'meta.at' },
             { codec: { id: string, meta: optional(object({ at: isoAt })) } },
         )
-        const key = Visits.key('GSI1SK', { meta: { at: new Date(0) } })
+        const key = Visits.unsafeKey('GSI1SK', { meta: { at: new Date(0) } })
         expect(key).toBe('1970-01-01T00:00:00.000Z')
         expectTypeOf(key).toEqualTypeOf<string>()
     })
@@ -270,7 +272,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
             { codec: { id: string, price: dynamoNumber } },
         )
         const price = orThrow(DynamoNumber.from('1.5'))
-        const key = Prices.key('SK', { price })
+        const key = Prices.unsafeKey('SK', { price })
         expect(key).toBe(price)
         expectTypeOf(key).toEqualTypeOf<typeof price>()
     })
@@ -284,7 +286,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
             { codec: { id: string, meta: object({ price: dynamoNumber }) } },
         )
         const price = orThrow(DynamoNumber.from('1.5'))
-        const key = Prices.key('SK', { meta: { price } })
+        const key = Prices.unsafeKey('SK', { meta: { price } })
         expect(key).toBe(price)
         expectTypeOf(key).toEqualTypeOf<typeof price>()
     })
@@ -296,7 +298,7 @@ describe('a key of one attribute at a path can be sparse, as at the top level', 
             PK: ['id'],
             GSI1SK: 'meta.note',
         })
-        expect(Notes.key('GSI1SK', { meta: { note: 'x' } })).toBe('x')
+        expect(Notes.unsafeKey('GSI1SK', { meta: { note: 'x' } })).toBe('x')
         expect(Notes.unsafeToEntry({ id: 'a' })).not.toHaveProperty('GSI1SK')
     })
 })

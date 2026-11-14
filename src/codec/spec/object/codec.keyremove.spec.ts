@@ -175,7 +175,7 @@ describe('the type of an entry holds a key that builds no value as optional', ()
     })
 
     it('gives the key that a null arm builds the type undefined, as the row holds no such key', () => {
-        const key = Pets.key('GSI1PK', adoptedPet)
+        const key = Pets.unsafeKey('GSI1PK', adoptedPet)
         expectTypeOf(key).toEqualTypeOf<undefined>()
         expect(key).toBeUndefined()
     })

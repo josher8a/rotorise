@@ -2213,7 +2213,7 @@ const GROUP_ROWS = {
     toEntry: 905,
     fromEntry: 693,
     infer: 536,
-    key: 1119,
+    key: 1279,
     keyUpdates: 96,
     keys: 18,
     keyCondition: 32,

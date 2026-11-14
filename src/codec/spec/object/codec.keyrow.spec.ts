@@ -67,18 +67,27 @@ describe('a key that builds no value', () => {
     it('is refused, as a value, by toItem where the write of the codec holds the name of the key', () => {
         const refused = Pets.toItem(stale)
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toMatch(
-            /^'GSI1PK' is a key of the schema, and the write of the codec holds an attribute of that name/,
-        )
+        if (refused instanceof CodecError)
+            expect(refused.message).toMatch(
+                /^'GSI1PK' is a key of the schema, and the write of the codec holds an attribute of that name/,
+            )
     })
 
     it('is refused by toEntry for the same entity', () => {
-        expect((Pets.toEntry(stale) as CodecError).cause).toBeInstanceOf(
-            RotoriseError,
-        )
-        expect((Pets.toEntry(stale) as CodecError).message).toMatch(
-            /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
-        )
+        {
+            const refused = Pets.toEntry(stale)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
+        {
+            const refused = Pets.toEntry(stale)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
+                )
+        }
     })
 })
 
@@ -92,15 +101,17 @@ describe('a key that cannot print', () => {
         try {
             run()
         } catch (thrown) {
-            expect(thrown).toBeInstanceOf(RotoriseError)
-            return (thrown as RotoriseError).kind
+            if (thrown instanceof CodecError || thrown instanceof RotoriseError)
+                return thrown.kind
+            return expect.unreachable()
         }
         return expect.unreachable()
     }
 
     it('refuses an absent part before it tests the separator of a part that precedes it', () => {
         // species holds the separator and petId is absent: the print stops at the absent part
-        const run = () => Pets.key('GSI1SK', { species: 'CAT#1' } as never)
+        const run = () =>
+            Pets.unsafeKey('GSI1SK', { species: 'CAT#1' } as never)
         expect(kindOf(run)).toBe('refused')
         expect(run).toThrow(/Attribute petId not found/)
     })
@@ -108,7 +119,7 @@ describe('a key that cannot print', () => {
     it('refuses the separator of a part that is printed, once the print has stopped at the absent part', () => {
         expect(
             kindOf(() =>
-                Pets.key('GSI1SK', { species: 'CAT#1' } as never, {
+                Pets.unsafeKey('GSI1SK', { species: 'CAT#1' } as never, {
                     allowPartial: true,
                 }),
             ),
@@ -117,7 +128,9 @@ describe('a key that cannot print', () => {
 
     it('refuses the separator of a complete key', () => {
         expect(
-            kindOf(() => Pets.key('GSI1SK', { species: 'CAT#1', petId: 'p1' })),
+            kindOf(() =>
+                Pets.unsafeKey('GSI1SK', { species: 'CAT#1', petId: 'p1' }),
+            ),
         ).toBe('separator')
     })
 })
@@ -155,11 +168,13 @@ describe('a discriminator that holds null', () => {
         },
     } as never) as unknown as {
         key: (name: string, item: object) => unknown
+        unsafeKey: (name: string, item: object) => unknown
     }
 
     it('selects no arm, as an absent discriminator selects none', () => {
-        const run = () => Pets.key('GSI1PK', { petId: 'p1', status: null })
-        expect(run).toThrow(RotoriseError)
+        const run = () =>
+            Pets.unsafeKey('GSI1PK', { petId: 'p1', status: null })
+        expect(run).toThrow(CodecError)
         expect(run).toThrow(/Discriminator status not found in the attributes/)
     })
 })
@@ -237,26 +252,42 @@ describe('an entity that holds the name of a key', () => {
 
     it('is refused by toEntry where the codec is closed, as toItem refuses it', () => {
         expect(closed.toItem(stale)).toBeInstanceOf(CodecError)
-        expect((closed.toEntry(stale) as CodecError).cause).toBeInstanceOf(
-            RotoriseError,
-        )
-        expect((closed.toEntry(stale) as CodecError).message).toMatch(
-            /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
-        )
+        {
+            const refused = closed.toEntry(stale)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
+        {
+            const refused = closed.toEntry(stale)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
+                )
+        }
     })
 
     it('is refused by toEntry where the entry has no codec, so the entity value is not lost', () => {
-        expect((bare.toEntry(stale) as CodecError).message).toMatch(
-            /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
-        )
+        {
+            const refused = bare.toEntry(stale)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /^'GSI1PK' is a key of the schema, and the entity holds an attribute of that name/,
+                )
+        }
     })
 
     it('is refused by toEntry where the open entry refuses the value, as toItem refuses it', () => {
         const number = { petId: 'p1', status: 'AVAILABLE', GSI1PK: 42 }
         expect(open.toItem(number)).toBeInstanceOf(CodecError)
-        expect((open.toEntry(number) as CodecError).cause).toBeInstanceOf(
-            RotoriseError,
-        )
+        {
+            const refused = open.toEntry(number)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
     })
 
     it('holds no attribute at the name of a key that builds no value, where the entity holds undefined', () => {

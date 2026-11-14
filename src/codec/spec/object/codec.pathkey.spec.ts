@@ -29,7 +29,7 @@ const meta = object({ note: string, grams: number })
 describe('a key of one attribute at a path', () => {
     it('prints the value at the path, in an entry with no codec', () => {
         const Notes = tableEntry<Noted>()({ PK: ['id'], SK: 'meta.note' })
-        const key = Notes.key('SK', { meta: { note: 'x' } })
+        const key = Notes.unsafeKey('SK', { meta: { note: 'x' } })
         expect(key).toBe('x')
         expectTypeOf(key).toEqualTypeOf<'x'>()
         const entry = Notes.unsafeToEntry({
@@ -45,7 +45,7 @@ describe('a key of one attribute at a path', () => {
             { PK: ['id'], SK: 'meta.grams' },
             { codec: { id: string, meta } },
         )
-        const key = Notes.key('SK', { meta: { grams: 90 } })
+        const key = Notes.unsafeKey('SK', { meta: { grams: 90 } })
         expect(key).toBe(90)
         expectTypeOf(key).toEqualTypeOf<90>()
         // the row member is the one that the codec writes at the path
@@ -62,7 +62,7 @@ describe('a key of one attribute at a path', () => {
             { PK: ['id'], SK: 'meta.grams' },
             { codec: { id: string, meta: object({ grams: Hexed }) } },
         )
-        const key = Notes.key('SK', { meta: { grams: 255 } })
+        const key = Notes.unsafeKey('SK', { meta: { grams: 255 } })
         expect(key).toBe('ff')
         expectTypeOf(key).toEqualTypeOf<string>()
     })

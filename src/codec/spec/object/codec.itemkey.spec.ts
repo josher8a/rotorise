@@ -27,19 +27,20 @@ describe('toItem returns the refusal of a key as a value', () => {
     it('returns the refusal of an empty key, and names the attribute', () => {
         const refused = Pets.toItem({ ...rex, nick: '' })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).kind).toBe('refused')
-        expect((refused as CodecError).message).toContain(
-            "the attribute 'nick' is empty",
-        )
+        if (refused instanceof CodecError) expect(refused.kind).toBe('refused')
+        if (refused instanceof CodecError)
+            expect(refused.message).toContain("the attribute 'nick' is empty")
     })
 
     it('returns the refusal of a separator in a key part with the kind separator', () => {
         const refused = Pets.toItem({ ...rex, petId: 'a#b' })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).kind).toBe('separator')
-        expect((refused as CodecError).message).toContain(
-            'the print of petId holds the separator',
-        )
+        if (refused instanceof CodecError)
+            expect(refused.kind).toBe('separator')
+        if (refused instanceof CodecError)
+            expect(refused.message).toContain(
+                'the print of petId holds the separator',
+            )
     })
 
     it('returns the refusal of a write that holds the name of a key, where the codec is open', () => {
@@ -58,9 +59,10 @@ describe('toItem returns the refusal of a key as a value', () => {
         }
         const refused = Open.toItem({ petId: 'p1', PK: 'stale' })
         expect(refused).toBeInstanceOf(CodecError)
-        expect((refused as CodecError).message).toMatch(
-            /^'PK' is a key of the schema, and the write of the codec holds an attribute of that name/,
-        )
+        if (refused instanceof CodecError)
+            expect(refused.message).toMatch(
+                /^'PK' is a key of the schema, and the write of the codec holds an attribute of that name/,
+            )
     })
 
     it('never throws for an item of the declared type', () => {
@@ -74,13 +76,14 @@ describe('toItem returns the refusal of a key as a value', () => {
     })
 
     it('tells a refusal of a key from a refusal of the codec by the cause', () => {
-        const ofKey = Pets.toItem({ ...rex, nick: '' }) as CodecError
+        const ofKey = Pets.toItem({ ...rex, nick: '' })
         // a caller without the type passes a number where the codec writes a string
-        const ofCodec = Pets.toItem({ ...rex, nick: 5 as never }) as CodecError
+        const ofCodec = Pets.toItem({ ...rex, nick: 5 as never })
         expect(ofKey).toBeInstanceOf(CodecError)
         expect(ofCodec).toBeInstanceOf(CodecError)
-        expect(ofKey.cause).toBeInstanceOf(RotoriseError)
-        expect(ofCodec.cause).toBeUndefined()
+        if (ofKey instanceof CodecError)
+            expect(ofKey.cause).toBeInstanceOf(RotoriseError)
+        if (ofCodec instanceof CodecError) expect(ofCodec.cause).toBeUndefined()
     })
 })
 
@@ -100,11 +103,17 @@ describe('unsafeToItem throws what toItem returns', () => {
             { ...rex, petId: 'a#b' },
             { ...rex, nick: 5 as never },
         ]) {
-            const returned = Pets.toItem(given) as CodecError
+            const returned = Pets.toItem(given)
             const thrown = thrownBy(() => Pets.unsafeToItem(given))
+            expect(returned).toBeInstanceOf(CodecError)
             expect(thrown).toBeInstanceOf(CodecError)
-            expect((thrown as CodecError).kind).toBe(returned.kind)
-            expect((thrown as CodecError).reason).toBe(returned.reason)
+            if (
+                returned instanceof CodecError &&
+                thrown instanceof CodecError
+            ) {
+                expect(thrown.kind).toBe(returned.kind)
+                expect(thrown.reason).toBe(returned.reason)
+            }
         }
     })
 

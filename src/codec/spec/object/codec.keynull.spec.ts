@@ -23,7 +23,7 @@ describe('a key component that a transform leaves empty', () => {
                 ],
             ],
         })
-        const key = Pets.key('GSI1PK', { petId: 'p1', collar: 'NONE' })
+        const key = Pets.unsafeKey('GSI1PK', { petId: 'p1', collar: 'NONE' })
         expectTypeOf(key).toEqualTypeOf<
             'PETID#p1#COLLAR#' | 'PETID#p1#COLLAR#red'
         >()
@@ -42,7 +42,7 @@ describe('a key component that a transform leaves empty', () => {
                 ],
             ],
         })
-        const key = Pets.key('GSI1PK', { petId: 'p1', collar: 'NONE' })
+        const key = Pets.unsafeKey('GSI1PK', { petId: 'p1', collar: 'NONE' })
         expectTypeOf(key).toEqualTypeOf<
             'PETID#p1#COLLAR#' | 'PETID#p1#COLLAR#red'
         >()

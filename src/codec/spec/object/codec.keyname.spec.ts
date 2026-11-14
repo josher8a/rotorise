@@ -15,7 +15,7 @@ const row: Rows = { 0: 'zero', petId: 'p1' }
 describe('a component whose name is a number prints the number as its tag', () => {
     it('is the tag of a list of one component, in key and in toEntry', () => {
         const Plain = tableEntry<Rows>()({ PK: ['petId'], SK: [0] })
-        const key = Plain.key('SK', row)
+        const key = Plain.unsafeKey('SK', row)
         expectTypeOf(key).toEqualTypeOf<`0#${string}`>()
         expect(key).toBe('0#zero')
         // @ts-expect-error the tag is 0
@@ -28,7 +28,7 @@ describe('a component whose name is a number prints the number as its tag', () =
 
     it('is the tag of the first component of a composite key, before the name of a string component', () => {
         const Composite = tableEntry<Rows>()({ PK: [0, 'petId'] })
-        const key = Composite.key('PK', row)
+        const key = Composite.unsafeKey('PK', row)
         expectTypeOf(key).toEqualTypeOf<`0#${string}#PETID#${string}`>()
         expect(key).toBe('0#zero#PETID#p1')
         // @ts-expect-error the tag is 0
@@ -41,7 +41,7 @@ describe('a component whose name is a number prints the number as its tag', () =
             { PK: ['petId'], SK: [0] },
             { separator: '|' },
         )
-        const key = Barred.key('SK', row)
+        const key = Barred.unsafeKey('SK', row)
         expectTypeOf(key).toEqualTypeOf<`0|${string}`>()
         expect(key).toBe('0|zero')
         // @ts-expect-error the tag is 0
@@ -54,7 +54,7 @@ describe('a component whose name is a number prints the number as its tag', () =
             PK: ['petId'],
             SK: [[0, (value: string) => value]],
         })
-        const key = Transformed.key('SK', row)
+        const key = Transformed.unsafeKey('SK', row)
         expectTypeOf(key).toEqualTypeOf<`0#${string}`>()
         expect(key).toBe('0#zero')
         // @ts-expect-error the tag is 0
