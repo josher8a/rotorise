@@ -44,14 +44,16 @@ describe('the codec decides a component, so no caller passes it', () => {
     )
 
     it('builds the partition key from the attributes without the constant, as keyUpdates does', () => {
-        expect(Pets.keyCondition({ petId: 'p1', createdAt: '2026' })).toEqual({
+        expect(
+            Pets.unsafeKeyCondition({ petId: 'p1', createdAt: '2026' }),
+        ).toEqual({
             partition: { name: 'PK', value: { S: 'TAG#PET#PETID#p1' } },
             sort: { name: 'SK', equals: { S: 'TAG#PET#CREATEDAT#2026' } },
         })
     })
 
     it('gives the prefix of the decided component where the attributes give no other part of the sort key', () => {
-        expect(Pets.keyCondition({ petId: 'p1' }).sort).toEqual({
+        expect(Pets.unsafeKeyCondition({ petId: 'p1' }).sort).toEqual({
             name: 'SK',
             beginsWith: { S: 'TAG#PET#' },
         })
@@ -59,25 +61,44 @@ describe('the codec decides a component, so no caller passes it', () => {
 
     it('refuses a value other than the constant in keys and in keyCondition, as keyUpdates refuses it', () => {
         const other = { TAG: 'OTHER', petId: 'p1', createdAt: 'c' } as never
-        expect(() => Pets.keys(other)).toThrow(
-            /'TAG' is decided by the codec as 'PET'/,
-        )
-        expect(() => Pets.keyCondition(other)).toThrow(
-            /'TAG' is decided by the codec as 'PET'/,
-        )
+        {
+            const refused = Pets.keys(other)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /'TAG' is decided by the codec as 'PET'/,
+                )
+        }
+        {
+            const refused = Pets.keyCondition(other)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /'TAG' is decided by the codec as 'PET'/,
+                )
+        }
         expect(() => Pets.keyUpdates(other)).toThrow(
             /'TAG' is decided by the codec as 'PET'/,
         )
-        expect(Pets.keys({ TAG: 'PET', petId: 'p1', createdAt: 'c' })).toEqual({
+        expect(
+            Pets.unsafeKeys({ TAG: 'PET', petId: 'p1', createdAt: 'c' }),
+        ).toEqual({
             PK: { S: 'TAG#PET#PETID#p1' },
             SK: { S: 'TAG#PET#CREATEDAT#c' },
         })
     })
 
     it('reads the key of keys over the decided values, and names the component that is still absent', () => {
-        expect(() => Pets.keys({ petId: 'p1' })).toThrow(/createdAt not found/)
+        {
+            const refused = Pets.keys({ petId: 'p1' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(/createdAt not found/)
+        }
         // the call above compiles: the type of keys asks for no constant
-        expectTypeOf(Pets.keys({ petId: 'p1', createdAt: '2026' })).toBeObject()
+        expectTypeOf(
+            Pets.unsafeKeys({ petId: 'p1', createdAt: '2026' }),
+        ).toBeObject()
     })
 })
 
@@ -121,7 +142,7 @@ describe('a sort condition reads the parts that print', () => {
     )
 
     it('gives no sort condition where the only given component is empty, because an empty value does not print', () => {
-        const condition = Pets.keyCondition('GSI1', {
+        const condition = Pets.unsafeKeyCondition('GSI1', {
             shelterId: 's1',
             status: '',
         })
@@ -130,7 +151,8 @@ describe('a sort condition reads the parts that print', () => {
 
     it('gives equals where the only given component has a transform and a null value, because the transform prints', () => {
         expect(
-            Pets.keyCondition('GSI2', { shelterId: 's1', nickname: null }).sort,
+            Pets.unsafeKeyCondition('GSI2', { shelterId: 's1', nickname: null })
+                .sort,
         ).toEqual({ name: 'GSI2SK', equals: { S: 'NICKNAME#NONE' } })
     })
 })

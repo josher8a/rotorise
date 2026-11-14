@@ -141,7 +141,7 @@ describe('a block that holds a component of a table key', () => {
 
 describe('the Key of a request', () => {
     it('builds just the table keys, replacing a hand-written entryKeys', () => {
-        expect(Adoption.keys({ adoptionId: 'q1' })).toEqual({
+        expect(Adoption.unsafeKeys({ adoptionId: 'q1' })).toEqual({
             PK: { S: 'ADOPTIONID#q1' },
             SK: { S: 'ADOPTIONID#q1' },
         })
@@ -150,10 +150,10 @@ describe('the Key of a request', () => {
     it('has no no-names form when the schema never said which keys those are', () => {
         const Unmarked = tableEntry<Adoption>()({ PK: ['adoptionId'] })
         // @ts-expect-error the schema does not say which keys address the table
-        const _noTableKeys = () => Unmarked.keys({ adoptionId: 'q1' })
+        const _noTableKeys = () => Unmarked.unsafeKeys({ adoptionId: 'q1' })
         expect(typeof _noTableKeys).toBe('function')
         // naming them still works, because that asks nothing of the schema
-        expect(Unmarked.keys(['PK'], { adoptionId: 'q1' })).toEqual({
+        expect(Unmarked.unsafeKeys(['PK'], { adoptionId: 'q1' })).toEqual({
             PK: { S: 'ADOPTIONID#q1' },
         })
     })
@@ -183,9 +183,9 @@ describe('the key option names the keys of the table', () => {
             { SK: ['species'], GSI1PK: ['shelterId'], PK: ['petId'] },
             { key: { partition: 'PK', sort: 'SK' } },
         )
-        expect(Object.keys(Pets.keys({ petId: 'p1', species: 'CAT' }))).toEqual(
-            ['PK', 'SK'],
-        )
+        expect(
+            Object.keys(Pets.unsafeKeys({ petId: 'p1', species: 'CAT' })),
+        ).toEqual(['PK', 'SK'])
     })
 
     it('refuses a role that names no key of the schema', () => {

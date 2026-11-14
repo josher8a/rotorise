@@ -68,7 +68,7 @@ describe('tableEntry with a codec', () => {
 
     it('builds an encoded Key, replacing getKeys', () => {
         expect(
-            Pet.keys(['PK', 'SK'], {
+            Pet.unsafeKeys(['PK', 'SK'], {
                 userId: 'u1',
                 TAG: 'PET',
                 salt: 's1',

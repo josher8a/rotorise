@@ -76,7 +76,7 @@ describe('a key of one number attribute is N in every path that writes a row', (
     })
 
     it('keys writes N', () => {
-        expect(Pets.keys(['GSI1SK'], { age: 3 })).toEqual({
+        expect(Pets.unsafeKeys(['GSI1SK'], { age: 3 })).toEqual({
             GSI1SK: { N: '3' },
         })
     })
@@ -129,9 +129,14 @@ describe('null gives no key in every path, as undefined does', () => {
 
 describe('keys refuses a key that the attributes do not build', () => {
     it('refuses a key of a null attribute, and names the key', () => {
-        expect(() => Pets.keys(['GSI2PK'], { status: 'ADOPTED' })).toThrow(
-            "'GSI2PK' gives no key for these attributes",
-        )
+        {
+            const refused = Pets.keys(['GSI2PK'], { status: 'ADOPTED' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "'GSI2PK' gives no key for these attributes",
+                )
+        }
     })
 })
 
@@ -139,12 +144,12 @@ describe('a key value that the store refuses is refused', () => {
     it('refuses a number that DynamoDB cannot store, and names the key and not the value', () => {
         const refusal = (() => {
             try {
-                Pets.keys(['GSI1SK'], { age: Number.NaN })
+                Pets.unsafeKeys(['GSI1SK'], { age: Number.NaN })
             } catch (error) {
                 return error
             }
         })()
-        expect(refusal).toBeInstanceOf(RotoriseError)
+        expect(refusal).toBeInstanceOf(CodecError)
         expect(String(refusal)).toContain("'GSI1SK'")
         expect(String(refusal)).not.toContain('NaN')
     })
@@ -168,7 +173,7 @@ describe('a key of one Uint8Array attribute is B in every path that writes a row
     })
 
     it('keys writes B', () => {
-        expect(Tags.keys(['PK', 'SK'], { tagId, nick: 'Rex' })).toEqual({
+        expect(Tags.unsafeKeys(['PK', 'SK'], { tagId, nick: 'Rex' })).toEqual({
             PK: { B: tagId },
             SK: { S: 'Rex' },
         })
@@ -176,7 +181,7 @@ describe('a key of one Uint8Array attribute is B in every path that writes a row
 
     it('a key with no codec writes B for a Uint8Array', () => {
         const Chips = tableEntry<{ chip: Uint8Array }>()({ GSI1PK: 'chip' })
-        expect(Chips.keys(['GSI1PK'], { chip: tagId })).toEqual({
+        expect(Chips.unsafeKeys(['GSI1PK'], { chip: tagId })).toEqual({
             GSI1PK: { B: tagId },
         })
     })
@@ -196,8 +201,12 @@ describe('a key attribute of DynamoDB is S, N or B, at a path as at a name', () 
     )
 
     it('writes B in keys, with a codec and with none', () => {
-        expect(Plain.keys(['GSI1PK'], pet)).toEqual({ GSI1PK: { B: chip } })
-        expect(Coded.keys(['GSI1PK'], pet)).toEqual({ GSI1PK: { B: chip } })
+        expect(Plain.unsafeKeys(['GSI1PK'], pet)).toEqual({
+            GSI1PK: { B: chip },
+        })
+        expect(Coded.unsafeKeys(['GSI1PK'], pet)).toEqual({
+            GSI1PK: { B: chip },
+        })
     })
 
     it('writes B in toItem with a codec, and keeps the bytes in toEntry with none', () => {
@@ -217,15 +226,25 @@ describe('a key attribute of DynamoDB is S, N or B, at a path as at a name', () 
 
 describe('DynamoDB refuses an empty key value, so the run time refuses it', () => {
     it('refuses an empty string key, and names the key and not the value', () => {
-        expect(() => Tags.keys(['SK'], { nick: '' })).toThrow(
-            "Key SK: the attribute 'nick' is empty, so the key is empty.",
-        )
+        {
+            const refused = Tags.keys(['SK'], { nick: '' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "Key SK: the attribute 'nick' is empty, so the key is empty.",
+                )
+        }
     })
 
     it('refuses an empty Uint8Array key', () => {
-        expect(() => Tags.keys(['PK'], { tagId: new Uint8Array() })).toThrow(
-            "'PK' is built from a value that DynamoDB cannot store as a key",
-        )
+        {
+            const refused = Tags.keys(['PK'], { tagId: new Uint8Array() })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "'PK' is built from a value that DynamoDB cannot store as a key",
+                )
+        }
     })
 
     it('keyUpdates refuses an empty key, where the update writes a key that DynamoDB refuses', () => {
@@ -315,7 +334,7 @@ describe('a key follows its attribute in every path that writes a row', () => {
     it('toItem writes the key that the codec writes for a held Date, as keys does', () => {
         const written = Born.unsafeToItem({ petId: 'p1', bornAt: day })
         expect(written.SK).toEqual({ S: '2020-01-01T00:00:00.000Z' })
-        expect(Born.keys(['SK'], { bornAt: day })).toEqual({
+        expect(Born.unsafeKeys(['SK'], { bornAt: day })).toEqual({
             SK: { S: '2020-01-01T00:00:00.000Z' },
         })
     })
@@ -375,7 +394,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
     })
     type Route = {
         readonly codec: unknown
-        readonly keys: (
+        readonly unsafeKeys: (
             names: readonly string[],
             attributes: never,
         ) => Record<string, unknown>
@@ -821,7 +840,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
                 const keyed = Object.fromEntries(
                     names.map((name) => [
                         name,
-                        said(() => entry.keys([name], entity)[name]),
+                        said(() => entry.unsafeKeys([name], entity)[name]),
                     ]),
                 )
                 const written = said(() => {
@@ -997,13 +1016,21 @@ describe('a key attribute that the variant of the entity lacks is read with no c
 
     it('refuses the key of a CAT that carries a Date, where DOG would write the text of the Date', () => {
         expect(
-            Absent.keys(['GSI1SK'], { kind: 'DOG', at: new Date(0) } as never),
+            Absent.unsafeKeys(['GSI1SK'], {
+                kind: 'DOG',
+                at: new Date(0),
+            } as never),
         ).toEqual({
             GSI1SK: { S: '1970-01-01T00:00:00.000Z' },
         })
-        expect(() => Absent.keys(['GSI1SK'], stray)).toThrow(
-            /built from a value that DynamoDB cannot store as a key/,
-        )
+        {
+            const refused = Absent.keys(['GSI1SK'], stray)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /built from a value that DynamoDB cannot store as a key/,
+                )
+        }
     })
 })
 
@@ -1033,7 +1060,7 @@ describe('a key component is the stored text of its attribute, over generated en
     type Route = {
         readonly codec: unknown
         readonly toItem: (item: never) => unknown
-        readonly keys: (
+        readonly unsafeKeys: (
             names: readonly string[],
             attributes: never,
         ) => Record<string, { S?: string }>
@@ -1098,7 +1125,7 @@ describe('a key component is the stored text of its attribute, over generated en
                 const expected = fields
                     .flatMap((field) => [field.toUpperCase(), text(field)])
                     .join('#')
-                const printed = entry.keys([key], entity as never)[key]?.S
+                const printed = entry.unsafeKeys([key], entity as never)[key]?.S
                 if (printed === expected) count.agree++
                 else
                     failures.push(

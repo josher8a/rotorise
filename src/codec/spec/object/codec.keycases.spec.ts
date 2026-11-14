@@ -317,7 +317,7 @@ describe('the construction of a grouped match', () => {
             },
             { key: { partition: 'PK' } },
         )
-        expect(Marked.keys({ s: 'A', id: 'x' })).toEqual({
+        expect(Marked.unsafeKeys({ s: 'A', id: 'x' })).toEqual({
             PK: { S: 'ID#x' },
         })
     })

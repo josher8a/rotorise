@@ -47,7 +47,7 @@ const Born = held(string, day, {
 describe('a key component with no codec', () => {
     it('accepts text and a number, and refuses an object in the type and at run time', () => {
         const Plain = tableEntry<Walk>()({ PK: ['id'], SK: ['id', 'n'] })
-        expect(Plain.keys(['SK'], { id: 'a', n: 1 } as Walk)).toEqual({
+        expect(Plain.unsafeKeys(['SK'], { id: 'a', n: 1 } as Walk)).toEqual({
             SK: { S: 'ID#a#N#1' },
         })
         const Dated = tableEntry<Walk>()({
@@ -55,9 +55,12 @@ describe('a key component with no codec', () => {
             // @ts-expect-error a Date has no text of its own
             SK: ['at'],
         })
-        expect(() => Dated.keys(['SK'], { at: new Date(0) } as Walk)).toThrow(
-            RotoriseError,
-        )
+        {
+            const refused = Dated.keys(['SK'], { at: new Date(0) } as Walk)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
         tableEntry<Walk>()({
             PK: ['id'],
             // @ts-expect-error bytes have no text of their own
@@ -522,7 +525,7 @@ describe('a name of a key that holds a dot is a path', () => {
         }
         expect(Pets.unsafeToItem(pet).GSI1SK).toEqual({ S: 'NAME#bob' })
         expect(Pets.unsafeToEntry(pet).GSI1SK).toBe('NAME#bob')
-        expect(Pets.keys(['GSI1SK'], pet)).toEqual({
+        expect(Pets.unsafeKeys(['GSI1SK'], pet)).toEqual({
             GSI1SK: { S: 'NAME#bob' },
         })
         expect(Pets.keyUpdates({ owner: { name: 'bea' } })).toEqual({

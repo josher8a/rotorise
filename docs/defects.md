@@ -914,9 +914,9 @@ text. The rule is the same for a component that is a path, and for a key of one 
 
 **Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
 composite key whose plain component is the empty text. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 21 ids: 19 of key and 2 of keys. Two of the 19 ids of
-key are the calls blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep, for the empty id below an
-optional object. toItem and toEntry return the refusal as a value, so those calls are no id.
+formal/scripts/type_bridge_baseline.txt, holds 19 ids, all of key. Two of them are the calls
+blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep, for the empty id below an optional object.
+toItem, toEntry, keys and keyCondition return the refusal as a value, so those calls are no id.
 
 ---
 
@@ -1294,8 +1294,8 @@ Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
 **Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the refusal of the run time for a
 complete key. No test pins the type. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 11 ids: 7 of key, 3 of keyCondition and 1 of keys.
-toItem and toEntry return the refusal as a value, so those calls are no id.
+formal/scripts/type_bridge_baseline.txt, holds 7 ids, all of key. toItem, toEntry, keys and
+keyCondition return the refusal as a value, so those calls are no id.
 
 ---
 
@@ -1361,56 +1361,6 @@ draws tagTf and tagTf_sep of the entry pool, which write the function with a wid
 tagTfConst and tagTfConst_sep write the tag with `as const` and hold no id.
 `src/codec/spec/object/codec.keylabel.spec.ts` pins the label of a literal tag, the text with no
 label of a wide tag, and the union of two tags.
-
----
-
-## Known: the type of keys and of keyCondition admits an argument that holds no component of a key, where the run time throws
-
-**Observation.** The parameter of keys and of keyCondition is a partial entity with any other name.
-The run time builds the key of the table from each component of the key, and the partition of an
-index from each component of the partition. The argument can lack a component, and the type does not
-read the components. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Pet = { petId: string; shelterId: string; name: string }
-    const Pets = tableEntry<Pet>()(
-        { PK: ['petId'], SK: ['shelterId', 'name'], GSI1PK: ['shelterId'] },
-        { key: { partition: 'PK', sort: 'SK' }, indexes: { Shelter: { partition: 'GSI1PK' } } },
-    )
-    const full: Pet = { petId: 'p1', shelterId: 's1', name: 'rex' }
-    const first: { petId: string } = { petId: 'p1' }
-    const empty: Partial<Pet> = {}
-
-    Pets.keys(full)
-      type checker: builds
-      runtime:      gives { PK: { S: 'PETID#p1' }, SK: { S: 'SHELTERID#s1#NAME#rex' } }
-
-    Pets.keys(first)
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute shelterId not found
-
-    Pets.keys(empty)
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute petId not found
-
-    Pets.keyCondition(empty)
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute petId not found
-
-    Pets.keyCondition('Shelter', first)
-      type checker: builds
-      runtime:      throws, buildCompositeKey: Attribute shelterId not found
-
-    Pets.keyCondition(first)
-      type checker: builds
-      runtime:      gives { partition: { name: 'PK', value: { S: 'PETID#p1' } } }
-
-**Effect.** The call compiles, and the run time throws for an argument of the declared type. The
-type of the result is the same for each argument. The method keys builds each key that it names in
-full, the sort key too, and the method keyCondition refuses a hole in the sort. Measured 2026-11-14
-with `npx vitest --run`.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 7 ids: 3 of
-the group keys and 4 of the group keyCondition. src/codec/lean/lean.entry.spec.ts draws each call.
 
 ---
 

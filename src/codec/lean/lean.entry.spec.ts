@@ -2214,8 +2214,8 @@ const GROUP_ROWS = {
     infer: 536,
     key: 1119,
     keyUpdates: 87,
-    keys: 12,
-    keyCondition: 25,
+    keys: 18,
+    keyCondition: 32,
     toItem: 10,
     fromItem: 12,
     encodePartial: 8,
@@ -2442,9 +2442,9 @@ describe('the pool of the entry methods', () => {
             const verdict = (text: string) =>
                 pool().rows.find((r) => textOf(r) === text)?.expect
             expect(verdict('T_plain_roleKeys.keys(ok).call')).toBe('accept')
-            expect(verdict('T_plain_roleKeys.keys(none).call')).toBe('refuse')
+            expect(verdict('T_plain_roleKeys.keys(none).call')).toBe('either')
             expect(verdict('T_plain_roleKeys.keys(pidOnly).call')).toBe(
-                'refuse',
+                'either',
             )
             expect(verdict('T_plain_roleKeys.keyCondition(pidOnly).call')).toBe(
                 'accept',
@@ -2454,7 +2454,7 @@ describe('the pool of the entry methods', () => {
             )
             expect(
                 verdict('T_plain_indexKeys.keyCondition(G1,none).call'),
-            ).toBe('refuse')
+            ).toBe('either')
         },
     )
 

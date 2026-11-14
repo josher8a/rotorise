@@ -8,7 +8,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { KeyCondition } from '../../../Rotorise'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 
 type Pet = {
     petId: string
@@ -38,7 +38,7 @@ const Pets = tableEntry<Pet>()(
 
 describe('a query on the table reads the keys that the key option names', () => {
     it('gives the partition key and the whole sort key, and names no index', () => {
-        const condition = Pets.keyCondition({ petId: 'p1' })
+        const condition = Pets.unsafeKeyCondition({ petId: 'p1' })
         expect(condition).toEqual({
             partition: { name: 'PK', value: { S: 'PETID#p1' } },
             sort: { name: 'SK', equals: { S: 'PETID#p1' } },
@@ -50,7 +50,7 @@ describe('a query on the table reads the keys that the key option names', () => 
 describe('a query on an index reads the keys that the index names', () => {
     it('gives equals where the attributes give the whole sort key', () => {
         expect(
-            Pets.keyCondition('GSI1', {
+            Pets.unsafeKeyCondition('GSI1', {
                 shelterId: 's1',
                 status: 'AVAILABLE',
                 updatedAt: '2026',
@@ -68,13 +68,15 @@ describe('a query on an index reads the keys that the index names', () => {
     it('gives beginsWith with the boundary where the attributes give a leading part of the sort key', () => {
         // the boundary keeps STATUS#AVAILABLE from selecting STATUS#AVAILABLE_SOON
         expect(
-            Pets.keyCondition('GSI1', { shelterId: 's1', status: 'AVAILABLE' })
-                .sort,
+            Pets.unsafeKeyCondition('GSI1', {
+                shelterId: 's1',
+                status: 'AVAILABLE',
+            }).sort,
         ).toEqual({ name: 'GSI1SK', beginsWith: { S: 'STATUS#AVAILABLE#' } })
     })
 
     it('gives no sort condition where the attributes hold no component of the sort key', () => {
-        const condition = Pets.keyCondition('GSI1', { shelterId: 's1' })
+        const condition = Pets.unsafeKeyCondition('GSI1', { shelterId: 's1' })
         expect(condition).toEqual({
             index: 'GSI1',
             partition: { name: 'GSI1PK', value: { S: 'SHELTERID#s1' } },
@@ -83,13 +85,13 @@ describe('a query on an index reads the keys that the index names', () => {
 
     it('a sort key of one number attribute is an N condition, so the query orders by number', () => {
         expect(
-            Pets.keyCondition('GSI2', { shelterId: 's1', age: 3 }).sort,
+            Pets.unsafeKeyCondition('GSI2', { shelterId: 's1', age: 3 }).sort,
         ).toEqual({ name: 'GSI2SK', equals: { N: '3' } })
     })
 
     it('an index with no sort key gives no sort condition', () => {
         expect(
-            Pets.keyCondition('BY_SHELTER', { shelterId: 's1', age: 3 }),
+            Pets.unsafeKeyCondition('BY_SHELTER', { shelterId: 's1', age: 3 }),
         ).toEqual({
             index: 'BY_SHELTER',
             partition: { name: 'GSI1PK', value: { S: 'SHELTERID#s1' } },
@@ -97,14 +99,15 @@ describe('a query on an index reads the keys that the index names', () => {
     })
 
     it('the type carries the index and the names of its keys', () => {
-        const condition = Pets.keyCondition('GSI1', { shelterId: 's1' })
+        const condition = Pets.unsafeKeyCondition('GSI1', { shelterId: 's1' })
         expectTypeOf(condition.index).toEqualTypeOf<'GSI1'>()
         expectTypeOf(condition.partition.name).toEqualTypeOf<'GSI1PK'>()
         expectTypeOf(
-            Pets.keyCondition('BY_SHELTER', { shelterId: 's1' }),
+            Pets.unsafeKeyCondition('BY_SHELTER', { shelterId: 's1' }),
         ).not.toHaveProperty('sort')
-        // @ts-expect-error the indexes option declares no such index
-        const _unknown = () => Pets.keyCondition('GSI9', { shelterId: 's1' })
+        const _unknown = () =>
+            // @ts-expect-error the indexes option declares no such index
+            Pets.unsafeKeyCondition('GSI9', { shelterId: 's1' })
         expect(typeof _unknown).toBe('function')
     })
 })
@@ -114,34 +117,45 @@ describe('one adapter reads the condition of every query', () => {
         const sortOf = (condition: KeyCondition) => condition.sort
         expect(
             sortOf(
-                Pets.keyCondition('GSI1', {
+                Pets.unsafeKeyCondition('GSI1', {
                     shelterId: 's1',
                     status: 'ADOPTED',
                 }),
             ),
         ).toEqual({ name: 'GSI1SK', beginsWith: { S: 'STATUS#ADOPTED#' } })
         expect(
-            sortOf(Pets.keyCondition('BY_SHELTER', { shelterId: 's1' })),
+            sortOf(Pets.unsafeKeyCondition('BY_SHELTER', { shelterId: 's1' })),
         ).toBe(undefined)
     })
 })
 
 describe('a query that selects no partition or no prefix is refused', () => {
     it('refuses a partition key that lacks a component, because a query reads one whole partition', () => {
-        expect(() =>
-            Pets.keyCondition('GSI1', { status: 'AVAILABLE' }),
-        ).toThrow(RotoriseError)
+        {
+            const refused = Pets.keyCondition('GSI1', { status: 'AVAILABLE' })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
     })
 
     it('refuses a later sort component without the first, because no prefix selects it', () => {
-        expect(() =>
-            Pets.keyCondition('GSI1', { shelterId: 's1', updatedAt: '2026' }),
-        ).toThrow("'GSI1SK' gives no key and no prefix for these attributes")
+        {
+            const refused = Pets.keyCondition('GSI1', {
+                shelterId: 's1',
+                updatedAt: '2026',
+            })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "'GSI1SK' gives no key and no prefix for these attributes",
+                )
+        }
     })
 
     it('refuses a sort component that follows an absent component, because the prefix would drop it', () => {
         expect(() =>
-            Pets.keyCondition('GSI1', {
+            Pets.unsafeKeyCondition('GSI1', {
                 shelterId: 's1',
                 status: 'AVAILABLE',
             }),
@@ -155,16 +169,23 @@ describe('a query that selects no partition or no prefix is refused', () => {
             { PK: ['petId'], SK: ['year', 'month', 'day'] },
             { key: { partition: 'PK', sort: 'SK' } },
         )
-        expect(() =>
-            Visits.keyCondition({ petId: 'p1', year: '2026', day: '05' }),
-        ).toThrow(
-            "'SK' gets 'day' and lacks 'month' before it, so the condition would drop 'day'",
-        )
+        {
+            const refused = Visits.keyCondition({
+                petId: 'p1',
+                year: '2026',
+                day: '05',
+            })
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "'SK' gets 'day' and lacks 'month' before it, so the condition would drop 'day'",
+                )
+        }
     })
 
     it('keeps the prefix where the components that print lead the list', () => {
         expect(
-            Pets.keyCondition('GSI1', {
+            Pets.unsafeKeyCondition('GSI1', {
                 shelterId: 's1',
                 status: 'AVAILABLE',
             }).sort,
@@ -220,11 +241,14 @@ describe('a null discriminator on the sort key', () => {
             SK: { discriminator: 'status', spec: { A: ['name'], B: ['name'] } },
         } as never,
         { key: { partition: 'PK', sort: 'SK' } } as never,
-    ) as unknown as { keyCondition: (given: object) => unknown }
+    ) as unknown as {
+        keyCondition: (given: object) => unknown
+        unsafeKeyCondition: (given: object) => unknown
+    }
 
     it('gives the condition that an absent discriminator gives, because a null is no value', () => {
-        expect(Entries.keyCondition({ petId: 'p1', status: null })).toEqual(
-            Entries.keyCondition({ petId: 'p1' }),
-        )
+        expect(
+            Entries.unsafeKeyCondition({ petId: 'p1', status: null }),
+        ).toEqual(Entries.unsafeKeyCondition({ petId: 'p1' }))
     })
 })

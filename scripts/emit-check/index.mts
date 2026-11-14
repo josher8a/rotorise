@@ -199,6 +199,7 @@ export const PetRowPins = {
     },
     keyUpdates: PetRows.keyUpdates({ petId: 'p1' }),
     keys: PetRows.keys(['PK'], { petId: 'p1', kind: 'CAT' }),
+    unsafeKeys: PetRows.unsafeKeys(['PK'], { petId: 'p1', kind: 'CAT' }),
     infer: PetRows.infer,
     path: PetRows.path(),
 } satisfies { [K in keyof typeof PetRows]: unknown }
@@ -217,7 +218,12 @@ export const CodedPins = {
         names: CodedPets.keys(['PK'], { petId: 'p1', name: 'Rex' }),
         attributes: CodedPets.keys({ petId: 'p1', name: 'Rex' }),
     },
+    unsafeKeys: {
+        names: CodedPets.unsafeKeys(['PK'], { petId: 'p1', name: 'Rex' }),
+        attributes: CodedPets.unsafeKeys({ petId: 'p1', name: 'Rex' }),
+    },
     keyCondition: CodedPets.keyCondition({ petId: 'p1' }),
+    unsafeKeyCondition: CodedPets.unsafeKeyCondition({ petId: 'p1' }),
     infer: CodedPets.infer,
     path: CodedPets.path(),
     toItem: CodedPets.toItem({ petId: 'p1', name: 'Rex' }),
@@ -233,6 +239,7 @@ export const TaggedPins = {
     key: TaggedPets.key('PK', { petId: 'p1' }),
     keyUpdates: TaggedPets.keyUpdates({ petId: 'p1' }),
     keys: TaggedPets.keys(['PK'], { petId: 'p1', kind: 'CAT' }),
+    unsafeKeys: TaggedPets.unsafeKeys(['PK'], { petId: 'p1', kind: 'CAT' }),
     infer: TaggedPets.infer,
     path: TaggedPets.path(),
     toItem: TaggedPets.toItem({ petId: 'p1', kind: 'CAT' }),

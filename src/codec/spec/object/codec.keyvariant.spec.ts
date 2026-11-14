@@ -10,7 +10,7 @@
  * alone, so the specs reach it through an entry that the type does not check.
  */
 import { describe, expect, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import {
     binary,
     discriminatedUnion,
@@ -29,6 +29,10 @@ import type { StandardSchemaV1 } from '../../standard'
 type Route = {
     readonly unsafeToItem: (entity: never) => Record<string, unknown>
     readonly keys: (
+        names: readonly string[],
+        attributes: never,
+    ) => Record<string, unknown>
+    readonly unsafeKeys: (
         names: readonly string[],
         attributes: never,
     ) => Record<string, unknown>
@@ -103,7 +107,7 @@ describe.each([
         const Visits = route({ PK: ['petId'], GSI1SK: 'at' }, codec())
         const row = Visits.unsafeToItem(dog as never)
         expect(row.GSI1SK).toEqual({ S: iso })
-        expect(Visits.keys(['GSI1SK'], dog as never)).toEqual({
+        expect(Visits.unsafeKeys(['GSI1SK'], dog as never)).toEqual({
             GSI1SK: { S: iso },
         })
         expect(Visits.key('GSI1SK', dog as never)).toBe(iso)
@@ -119,7 +123,7 @@ describe.each([
         expect(Chips.unsafeToItem(cat as never).SK).toEqual({
             S: 'KIND#cat#CHIP#ff',
         })
-        expect(Chips.keys(['SK'], dog as never)).toEqual({
+        expect(Chips.unsafeKeys(['SK'], dog as never)).toEqual({
             SK: { S: 'KIND#D#CHIP#ff' },
         })
         expect(Chips.key('SK', dog as never)).toBe('KIND#D#CHIP#ff')
@@ -129,10 +133,10 @@ describe.each([
     it('writes the stored literal of the variant, where the key is the discriminator', () => {
         const Kinds = route({ PK: ['petId'], GSI1PK: 'kind' }, codec())
         expect(Kinds.unsafeToItem(dog as never).GSI1PK).toEqual({ S: 'D' })
-        expect(Kinds.keys(['GSI1PK'], dog as never)).toEqual({
+        expect(Kinds.unsafeKeys(['GSI1PK'], dog as never)).toEqual({
             GSI1PK: { S: 'D' },
         })
-        expect(Kinds.keys(['GSI1PK'], cat as never)).toEqual({
+        expect(Kinds.unsafeKeys(['GSI1PK'], cat as never)).toEqual({
             GSI1PK: { S: 'cat' },
         })
     })
@@ -161,11 +165,11 @@ describe('a key of a variant that holds its field in a rest, under a held tag', 
         ).toEqual({
             S: 'KIND#D#CHIP#ff',
         })
-        expect(Chips.keys(['SK'], { kind: 'dog', chip: 255 } as never)).toEqual(
-            {
-                SK: { S: 'KIND#D#CHIP#ff' },
-            },
-        )
+        expect(
+            Chips.unsafeKeys(['SK'], { kind: 'dog', chip: 255 } as never),
+        ).toEqual({
+            SK: { S: 'KIND#D#CHIP#ff' },
+        })
     })
 })
 
@@ -180,7 +184,7 @@ describe('a key on the discriminator of a tagged entry', () => {
                 ]),
             ),
         )
-        expect(Kinds.keys(['GSI1PK'], { kind: 'DOG' } as never)).toEqual({
+        expect(Kinds.unsafeKeys(['GSI1PK'], { kind: 'DOG' } as never)).toEqual({
             GSI1PK: { S: 'DOG' },
         })
         expect(
@@ -202,7 +206,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
         expect(Numbers.unsafeToItem(entity(90) as never).GSI1SK).toEqual({
             N: '90',
         })
-        expect(Numbers.keys(['GSI1SK'], entity(90) as never)).toEqual({
+        expect(Numbers.unsafeKeys(['GSI1SK'], entity(90) as never)).toEqual({
             GSI1SK: { N: '90' },
         })
         expect(Numbers.key('GSI1SK', entity(90) as never)).toBe(90)
@@ -218,14 +222,14 @@ describe('a key of one attribute at a path is the attribute that the codec write
 
     it('is S for a string, and S for a number that a caller writes as a string', () => {
         const Names = entryOf(string)
-        expect(Names.keys(['GSI1SK'], entity('abc') as never)).toEqual({
+        expect(Names.unsafeKeys(['GSI1SK'], entity('abc') as never)).toEqual({
             GSI1SK: { S: 'abc' },
         })
         const Chips = entryOf(hex)
         expect(Chips.unsafeToItem(entity(255) as never).GSI1SK).toEqual({
             S: 'ff',
         })
-        expect(Chips.keys(['GSI1SK'], entity(255) as never)).toEqual({
+        expect(Chips.unsafeKeys(['GSI1SK'], entity(255) as never)).toEqual({
             GSI1SK: { S: 'ff' },
         })
         expect(Chips.key('GSI1SK', entity(255) as never)).toBe('ff')
@@ -237,7 +241,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
         expect(Chips.unsafeToItem(entity(bytes) as never).GSI1SK).toEqual({
             B: bytes,
         })
-        expect(Chips.keys(['GSI1SK'], entity(bytes) as never)).toEqual({
+        expect(Chips.unsafeKeys(['GSI1SK'], entity(bytes) as never)).toEqual({
             GSI1SK: { B: bytes },
         })
         expect(Chips.unsafeToEntry(entity(bytes) as never).GSI1SK).toBe(bytes)
@@ -245,7 +249,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
 
     it('is the member of the value, where the entry has no codec', () => {
         const Bare = route({ PK: ['litterId'], GSI1SK: 'body.v' })
-        expect(Bare.keys(['GSI1SK'], entity(90) as never)).toEqual({
+        expect(Bare.unsafeKeys(['GSI1SK'], entity(90) as never)).toEqual({
             GSI1SK: { N: '90' },
         })
         expect(
@@ -276,12 +280,27 @@ describe('a path that variants declare differently refuses on use with the reaso
             ),
         )
         const dogNote = { kind: 'DOG', meta: { note: 'a' } } as never
-        expect(() => Notes.keys(['SK'], dogNote)).toThrow(RotoriseError)
-        expect(() => Notes.keys(['SK'], dogNote)).toThrow(
-            /declared differently in different variants/,
-        )
-        expect(() => Notes.keys(['SK'], dogNote)).toThrow(
-            /^'meta\.note' is a component of a key, and the codec cannot address that path/,
-        )
+        {
+            const refused = Notes.keys(['SK'], dogNote)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.cause).toBeInstanceOf(RotoriseError)
+        }
+        {
+            const refused = Notes.keys(['SK'], dogNote)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /declared differently in different variants/,
+                )
+        }
+        {
+            const refused = Notes.keys(['SK'], dogNote)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toMatch(
+                    /^'meta\.note' is a component of a key, and the codec cannot address that path/,
+                )
+        }
     })
 })

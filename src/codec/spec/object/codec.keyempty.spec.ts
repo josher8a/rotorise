@@ -51,9 +51,14 @@ describe('a full key of one attribute refuses the empty string, on every route',
     })
 
     it('refuses in keys and in toEntry', () => {
-        expect(() => Pets.keys(['SK'], unnamed)).toThrow(
-            "the attribute 'nick' is empty",
-        )
+        {
+            const refused = Pets.keys(['SK'], unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "the attribute 'nick' is empty",
+                )
+        }
         expect((Pets.toEntry(unnamed) as CodecError).message).toContain(
             "the attribute 'nick' is empty",
         )
@@ -70,9 +75,14 @@ describe('a full key of one attribute refuses the empty string, on every route',
     })
 
     it('refuses a condition on the sort key, and does not drop the condition', () => {
-        expect(() => Pets.keyCondition('GSI1', unnamed)).toThrow(
-            "the attribute 'nick' is empty",
-        )
+        {
+            const refused = Pets.keyCondition('GSI1', unnamed)
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain(
+                    "the attribute 'nick' is empty",
+                )
+        }
     })
 })
 

@@ -82,7 +82,7 @@ describe('a key of one attribute is refused at construction where the attribute 
             },
         })
         expect(
-            Pets.keys(['GSI1PK'], { status: 'ADOPTED', owner: 'ann' }),
+            Pets.unsafeKeys(['GSI1PK'], { status: 'ADOPTED', owner: 'ann' }),
         ).toEqual({ GSI1PK: { S: 'ann' } })
     })
 })
@@ -103,7 +103,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
     })
 
     it('writes N in keys, and in keyUpdates, as toItem does', () => {
-        expect(Litters.keys(['GSI1SK'], { weight: '1.5' })).toEqual({
+        expect(Litters.unsafeKeys(['GSI1SK'], { weight: '1.5' })).toEqual({
             GSI1SK: { N: '1.5' },
         })
         expect(Litters.keyUpdates({ weight: '2.25' }).set).toEqual({
@@ -144,7 +144,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
             if (isError(written)) return expect.unreachable()
             expect(written.GSI1SK).toEqual({ N: '1.5' })
             expect(
-                Both.keys(['GSI1SK'], { kind: 'DOG', weight: '1.5' }),
+                Both.unsafeKeys(['GSI1SK'], { kind: 'DOG', weight: '1.5' }),
             ).toEqual({ GSI1SK: { N: '1.5' } })
             expect(Both.keyUpdates({ weight: '2.25' }).set).toEqual({
                 GSI1SK: { N: '2.25' },
@@ -176,7 +176,9 @@ describe('the codec decides the member of a key of one top-level attribute', () 
             },
         })
         expect(
-            Weighed.keys(['GSI1SK'], { body: { kind: 'DOG', grams: 90 } }),
+            Weighed.unsafeKeys(['GSI1SK'], {
+                body: { kind: 'DOG', grams: 90 },
+            }),
         ).toEqual({ GSI1SK: { N: '90' } })
     })
 })

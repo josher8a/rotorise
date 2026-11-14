@@ -898,12 +898,14 @@ const conditionEntryOf = (names: readonly string[], separator: string) => {
         schema: unknown,
         options: unknown,
     ) => {
-        readonly keyCondition: (attributes: object) => {
-            readonly sort?: {
-                readonly equals?: { readonly S: string }
-                readonly beginsWith?: { readonly S: string }
-            }
-        }
+        readonly keyCondition: (attributes: object) =>
+            | {
+                  readonly sort?: {
+                      readonly equals?: { readonly S: string }
+                      readonly beginsWith?: { readonly S: string }
+                  }
+              }
+            | CodecError
     }
     return make(
         { PK: ['pk'], K: names },
@@ -922,18 +924,14 @@ const conditionOutcome = (
     run: ReturnType<typeof conditionEntryOf>,
     attributes: object,
 ): ConditionOutcome => {
-    try {
-        const { sort } = run.keyCondition(attributes)
-        if (sort === undefined) return { kind: 'nothing' }
-        if (sort.equals !== undefined)
-            return { kind: 'equals', key: sort.equals.S }
-        if (sort.beginsWith !== undefined)
-            return { kind: 'prefix', key: sort.beginsWith.S }
-        throw new Error('the condition holds no key')
-    } catch (thrown) {
-        if (thrown instanceof RotoriseError) return { kind: 'refused' }
-        throw thrown
-    }
+    const condition = run.keyCondition(attributes)
+    if (condition instanceof CodecError) return { kind: 'refused' }
+    const { sort } = condition
+    if (sort === undefined) return { kind: 'nothing' }
+    if (sort.equals !== undefined) return { kind: 'equals', key: sort.equals.S }
+    if (sort.beginsWith !== undefined)
+        return { kind: 'prefix', key: sort.beginsWith.S }
+    throw new Error('the condition holds no key')
 }
 
 /** The rows of the pool: each presence of the parts, with an absent part missing or empty. */

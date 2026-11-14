@@ -119,8 +119,10 @@ const user = UserTable.fromEntry(item)
 
 Builds the named keys as DynamoDB attributes, which is the shape of the `Key` of a request.
 Without `names`, it builds the keys that the `key` option names, the partition key first.
-It throws a `RotoriseError` where the attributes build no value for a named key, because a request
-cannot address an item with a key that does not exist.
+It returns a `Result`: the keys, or a `CodecError` where the attributes build no value for a named
+key, because a request cannot address an item with a key that does not exist. `.unsafeKeys(...)`
+returns the keys or throws that error. A name that the schema does not declare is refused by the
+type, so the call throws a `RotoriseError`.
 
 ```ts
 import { tableEntry } from 'rotorise'
@@ -143,10 +145,12 @@ PetTable.keys(['GSI1SK'], { age: 3 })
 
 Builds the condition of a query as names and encoded values. Without `index`, it reads the keys
 that the `key` option names. With `index`, it reads the keys of that index, and the result carries
-the name of the index.
+the name of the index. It returns a `Result`: the condition, or a `CodecError`.
+`.unsafeKeyCondition(...)` returns the condition or throws that error. An index that the options
+do not declare is refused by the type, so the call throws a `RotoriseError`.
 
 - The attributes give every component of the partition key. A query reads one whole partition, so
-  a missing component throws a `RotoriseError`.
+  a missing component gives a `CodecError`.
 - Where the attributes give the whole sort key, the sort condition is `equals`.
 - Where the attributes give a leading part of a list sort key, the sort condition is `beginsWith`,
   with a trailing separator. The separator keeps `STATUS#AVAILABLE` from selecting
@@ -197,7 +201,7 @@ const toBrushless = ({ partition, sort }: Condition) => ({
   }),
 })
 
-const condition = PetTable.keyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
+const condition = PetTable.unsafeKeyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
 const register = Register.make()
 KeyCondition.build(toBrushless(condition), register)
 // => '#GSI1PK = :GSI1PK AND begins_with(#GSI1SK, :GSI1SK)', and `IndexName` is `condition.index`
@@ -492,9 +496,9 @@ before `'9'`.
 - The type refuses a key of one attribute that is none of `S`, `N` and `B`, such as a boolean.
 - One key name has one member, so the type refuses a match whose arms give `S` and `N`.
 - `null` and `undefined` give no key in every method.
-- DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `keys` and `keyUpdates`
-  throw a `RotoriseError` for one. `toEntry` and `toItem` return a `CodecError` that holds the
-  `RotoriseError` as its `cause`. The message names the key and not the value.
+- DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `keyUpdates`
+  throws a `RotoriseError` for one. `keys`, `keyCondition`, `toEntry` and `toItem` return a
+  `CodecError` that holds the `RotoriseError` as its `cause`. The message names the key and not the value.
   `key` and `keyCondition` refuse an empty full key too, also where a transform prints the empty
   string at a component. A partial key, which is a call with
   `allowPartial` or with a `depth` below the count of components, may be the empty string.
@@ -520,9 +524,9 @@ names no separator. A bare string as the second argument is refused.
 
 ## Error Handling
 
-The key builders throw `RotoriseError` (exported), so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. `toItem` and `toEntry` return a key that cannot be built as a `CodecError` too, and its `cause` is the `RotoriseError` of the key. The codec gives a `CodecError` with no `cause`. A key that cannot be built throws `RotoriseError` in every other method.
+The key builders throw `RotoriseError` (exported), so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. `toItem`, `toEntry`, `keys` and `keyCondition` return a key that cannot be built as a `CodecError` too, and its `cause` is the `RotoriseError` of the key. The codec gives a `CodecError` with no `cause`. A key that cannot be built throws `RotoriseError` in every other method.
 
-Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'refused'` otherwise. A `CodecError` that `toItem` or `toEntry` returns for a key has the kind of its `cause`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
+Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'refused'` otherwise. A `CodecError` that `toItem`, `toEntry`, `keys` or `keyCondition` returns for a key has the kind of its `cause`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
 
 ```ts
 import { RotoriseError } from 'rotorise'

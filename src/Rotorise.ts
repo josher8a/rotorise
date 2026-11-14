@@ -2625,8 +2625,19 @@ export type TableEntryDefinition<
      *
      * `key` gives one key's value, because that is what a query condition holds. `keys` gives an
      * item, because that is what a request's `Key` holds — the plural is not only about how many.
+     *
+     * A refusal of the attributes is a value: a key that cannot print, a decided attribute that the
+     * call writes at another value, and a key that the attributes give no value for are a
+     * `CodecError`. A name that the schema does not declare is refused by the type, so the call
+     * throws a `RotoriseError`.
      */
     keys(
+        names: readonly (keyof Schema)[],
+        attributes: Partial<Entity> & Record<string, unknown>,
+    ): Result<AttributeMap>
+
+    /** The same, throwing the error that `keys` returns. */
+    unsafeKeys(
         names: readonly (keyof Schema)[],
         attributes: Partial<Entity> & Record<string, unknown>,
     ): AttributeMap
@@ -2667,6 +2678,11 @@ export type TableEntryDefinition<
                */
               keys(
                   attributes: Partial<Entity> & Record<string, unknown>,
+              ): Result<AttributeMap>
+
+              /** The same, throwing the error that `keys` returns. */
+              unsafeKeys(
+                  attributes: Partial<Entity> & Record<string, unknown>,
               ): AttributeMap
 
               /**
@@ -2675,6 +2691,11 @@ export type TableEntryDefinition<
                * for `beginsWith`, or none of it for no sort condition.
                */
               keyCondition(
+                  attributes: Partial<Entity> & Record<string, unknown>,
+              ): Result<KeyCondition<Extract<Roles, KeyRoles>>>
+
+              /** The same, throwing the error that `keyCondition` returns. */
+              unsafeKeyCondition(
                   attributes: Partial<Entity> & Record<string, unknown>,
               ): KeyCondition<Extract<Roles, KeyRoles>>
           }) &
@@ -2686,6 +2707,12 @@ export type TableEntryDefinition<
                * rules of the condition on the table.
                */
               keyCondition<const Index extends keyof Indexes & string>(
+                  index: Index,
+                  attributes: Partial<Entity> & Record<string, unknown>,
+              ): Result<KeyCondition<Extract<Indexes[Index], KeyRoles>, Index>>
+
+              /** The same, throwing the error that `keyCondition` returns. */
+              unsafeKeyCondition<const Index extends keyof Indexes & string>(
                   index: Index,
                   attributes: Partial<Entity> & Record<string, unknown>,
               ): KeyCondition<Extract<Indexes[Index], KeyRoles>, Index>
@@ -4826,51 +4853,70 @@ export const tableEntry =
         const toEntry = (item: Record<string, unknown>) =>
             returned(() => buildEntry(item))
 
-        const definition = {
-            keyUpdates,
-            keys: (
-                first: readonly string[] | Record<string, unknown>,
-                second?: Record<string, unknown>,
-            ): AttributeMap => {
-                const [names, given] = Array.isArray(first)
-                    ? [first, second as Record<string, unknown>]
-                    : [tableKeyNames, first as Record<string, unknown>]
+        /**
+         * The keys of the names, as the AttributeMap of a request. A name that the schema does not
+         * declare, and the form with no names where the entry has no `key` option, are refused by the
+         * type, so they are a broken call and throw. Every other refusal is a value.
+         */
+        const keysOf = (
+            first: readonly string[] | Record<string, unknown>,
+            second?: Record<string, unknown>,
+        ): Result<AttributeMap> => {
+            const [names, given] = Array.isArray(first)
+                ? [first, second as Record<string, unknown>]
+                : [tableKeyNames, first as Record<string, unknown>]
+            if (!Array.isArray(first) && names.length === 0) {
+                throw new RotoriseError(
+                    'the entry declares no `key` option, so the schema does not say which keys address the table',
+                )
+            }
+            const unknown = names.find((name) => !keyNames.includes(name))
+            if (unknown !== undefined) {
+                throw new RotoriseError(`Key ${unknown} not found in schema`)
+            }
+            return returned(() => {
                 // the codec decides a component, so no caller passes it
                 const attributes = overDecided(given)
-
                 if (names.length === 0) {
                     throw new RotoriseError(
-                        'the entry declares no `key` option, so the schema does not say which keys address the table',
+                        'the call names no key, so the schema does not say which keys address the table',
                     )
                 }
-
                 return Object.fromEntries(
                     names.map((name) => [name, address(name, attributes)]),
                 )
-            },
-            keyCondition: (
-                first: string | Record<string, unknown>,
-                second?: Record<string, unknown>,
-            ): KeyCondition => {
-                const [index, passed] =
-                    typeof first === 'string'
-                        ? [first, second ?? {}]
-                        : [undefined, first]
+            })
+        }
+
+        /**
+         * The condition of a query. An index that the options do not declare, and the table form where
+         * the entry has no `key` option, are refused by the type, so they are a broken call and throw.
+         * Every other refusal is a value.
+         */
+        const keyConditionOf = (
+            first: string | Record<string, unknown>,
+            second?: Record<string, unknown>,
+        ): Result<KeyCondition> => {
+            const [index, passed] =
+                typeof first === 'string'
+                    ? [first, second ?? {}]
+                    : [undefined, first]
+            const given =
+                index === undefined
+                    ? roles
+                    : indexes !== undefined && Object.hasOwn(indexes, index)
+                      ? indexes[index]
+                      : undefined
+            if (given === undefined) {
+                throw new RotoriseError(
+                    index === undefined
+                        ? 'the entry declares no `key` option, so the schema does not say which keys address the table'
+                        : `the indexes option declares no index '${index}'`,
+                )
+            }
+            return returned(() => {
                 // the codec decides a component, so no caller passes it
                 const attributes = overDecided(passed)
-                const given =
-                    index === undefined
-                        ? roles
-                        : indexes !== undefined && Object.hasOwn(indexes, index)
-                          ? indexes[index]
-                          : undefined
-                if (given === undefined) {
-                    throw new RotoriseError(
-                        index === undefined
-                            ? 'the entry declares no `key` option, so the schema does not say which keys address the table'
-                            : `the indexes option declares no index '${index}'`,
-                    )
-                }
                 const sort =
                     given.sort === undefined
                         ? undefined
@@ -4883,7 +4929,21 @@ export const tableEntry =
                     },
                     ...(sort === undefined ? {} : { sort }),
                 }
-            },
+            })
+        }
+
+        const definition = {
+            keyUpdates,
+            keys: keysOf as never,
+            unsafeKeys: ((
+                first: readonly string[] | Record<string, unknown>,
+                second?: Record<string, unknown>,
+            ) => orThrow(keysOf(first, second))) as never,
+            keyCondition: keyConditionOf as never,
+            unsafeKeyCondition: ((
+                first: string | Record<string, unknown>,
+                second?: Record<string, unknown>,
+            ) => orThrow(keyConditionOf(first, second))) as never,
             toEntry: toEntry as never,
             unsafeToEntry: ((item: Record<string, unknown>) =>
                 orThrow(toEntry(item))) as never,

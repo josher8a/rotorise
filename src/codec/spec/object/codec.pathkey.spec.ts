@@ -49,7 +49,9 @@ describe('a key of one attribute at a path', () => {
         expect(key).toBe(90)
         expectTypeOf(key).toEqualTypeOf<90>()
         // the row member is the one that the codec writes at the path
-        expect(Notes.keys(['SK'], { meta: { note: 'n', grams: 90 } })).toEqual({
+        expect(
+            Notes.unsafeKeys(['SK'], { meta: { note: 'n', grams: 90 } }),
+        ).toEqual({
             SK: { N: '90' },
         })
     })

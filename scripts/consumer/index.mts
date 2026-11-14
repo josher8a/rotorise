@@ -157,19 +157,34 @@ export const kennelPins = {
         Kennels.keyUpdates(older),
     ),
     keys: {
-        names: pinned<Values>()(Kennels.keys(['PK', 'SK'], kennel)),
-        attributes: pinned<Values>()(Kennels.keys(kennel)),
+        names: pinned<Result<Values>>()(Kennels.keys(['PK', 'SK'], kennel)),
+        attributes: pinned<Result<Values>>()(Kennels.keys(kennel)),
     },
     keyCondition: {
+        attributes: pinned<Result<{
+            readonly partition: { readonly name: 'PK'; readonly value: Member }
+            readonly sort?: Sort<'SK'>
+        }>>()(Kennels.keyCondition(ids)),
+        index: pinned<Result<{
+            readonly index: 'GSI1'
+            readonly partition: { readonly name: 'GSI1PK'; readonly value: Member }
+            readonly sort?: Sort<'GSI1SK'>
+        }>>()(Kennels.keyCondition('GSI1', shelter)),
+    },
+    unsafeKeys: {
+        names: pinned<Values>()(Kennels.unsafeKeys(['PK', 'SK'], kennel)),
+        attributes: pinned<Values>()(Kennels.unsafeKeys(kennel)),
+    },
+    unsafeKeyCondition: {
         attributes: pinned<{
             readonly partition: { readonly name: 'PK'; readonly value: Member }
             readonly sort?: Sort<'SK'>
-        }>()(Kennels.keyCondition(ids)),
+        }>()(Kennels.unsafeKeyCondition(ids)),
         index: pinned<{
             readonly index: 'GSI1'
             readonly partition: { readonly name: 'GSI1PK'; readonly value: Member }
             readonly sort?: Sort<'GSI1SK'>
-        }>()(Kennels.keyCondition('GSI1', shelter)),
+        }>()(Kennels.unsafeKeyCondition('GSI1', shelter)),
     },
     infer: pinned<KennelEntry>()(Kennels.infer),
     path: [
