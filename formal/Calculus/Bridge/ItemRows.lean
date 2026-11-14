@@ -7,11 +7,14 @@ import Calculus.Dynamo.Alg.KeyItem
 The emitter runs the item writer of `src/` on an entry of plain keys and an item. A row holds the
 keys of the entry, each with its name, its member (a string or a number) and its key spec as a tree,
 the value of the item as a map of attributes, the separator, and what the host did: it refused a key
-by a throw, or it wrote the attribute of each key name at a member, or wrote none where the key is
+by an error value, or it wrote the attribute of each key name at a member, or wrote none where the key is
 absent. A plain component of a leaf is a `Part.named` with the name of the attribute and a label that
 the emitter gives as text. The model evaluates the part at the item, so the empty rule and the read of
-a path are in the model, and the host gives only the outcome. A refusal as a returned value is outside the rows: the emitter skips that row, and a test
-counts the rows that a throw refuses, so a move of the channel fails that test.
+a path are in the model, and the host gives only the outcome. The host method toItem returns each
+refusal as a value.
+A refusal of a key has the error of the key as its cause, and the emitter reads it as a refused row. A
+refusal of the codec has no cause: the model states no write that the codec refuses, so the emitter
+skips that item. A test counts the rows that a key refuses, so a move of the channel fails that test.
 
 The comparator reads `DerivedItem.keyPartOf` over `DerivedItem.itemOf` of the value of the row, at
 the member of each key. The model refuses where one key is refused. Otherwise it gives, for each key

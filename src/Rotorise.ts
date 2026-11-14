@@ -2698,7 +2698,9 @@ type EntryCodecMethods<
 > = {
     /**
      * Entity to a complete item, or why it could not be written: keys computed by the schema,
-     * attributes encoded by the codec.
+     * attributes encoded by the codec. A refusal of the codec and a refusal of a key are both
+     * values. The error of a key has the `RotoriseError` as its `cause`, and the error of the codec
+     * has none.
      *
      * Typed attribute by attribute, which is what makes this the shape to diff in review: the
      * declared attributes come from the codec and the computed keys from the schema.
@@ -3338,6 +3340,23 @@ const heldKey = (
     throw new RotoriseError(
         `'${name}' holds a number that the AWS SDK marshaller cannot write: it is no integer, and no JS number holds it exactly. Read the key from toItem, which writes it as the attribute that it is.`,
     )
+}
+
+/**
+ * The refusal of a key as a value. The builder of a key throws a `RotoriseError`, and a method that
+ * returns a `Result` gives it back as a `CodecError` of the same kind and message. The `cause` is the
+ * `RotoriseError`, which tells a refusal of a key from a refusal of the codec: the codec gives a
+ * `CodecError` with no cause. A throw of another class is a broken invariant and propagates. This is
+ * a throw that serves as control flow, and the last step of the change of channel replaces it.
+ */
+const returned = <T>(run: () => T): Result<T> => {
+    try {
+        return run()
+    } catch (error) {
+        if (error instanceof RotoriseError)
+            return new CodecError(error.message, error.kind, { cause: error })
+        throw error
+    }
 }
 
 /** The refusal of a key value that DynamoDB cannot store. It names the key and holds no value. */
@@ -4869,10 +4888,12 @@ export const tableEntry =
                     const held = holdsKeyName(written, 'the write of the codec')
                     return held !== undefined
                         ? new CodecError(held)
-                        : joinRow(
-                              written,
-                              keyPart(item, (name, value) =>
-                                  carried(name, item, value, written),
+                        : returned(() =>
+                              joinRow(
+                                  written,
+                                  keyPart(item, (name, value) =>
+                                      carried(name, item, value, written),
+                                  ),
                               ),
                           )
                 },

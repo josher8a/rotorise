@@ -15,6 +15,13 @@ codecs file. The script maps each error to its row:
   unused (TS2578), or a bare `refuse`
   row with no error on its line
 
+An `either` row is a call whose run-time outcome is an error value. The type may refuse the call, which
+is stricter than the run time and sound, or build it, and then the `result` row holds the error value
+in the type of the result. No `either` row is a disagreement. The script counts the rows where the type
+refuses the call and the rows where it builds, for each group, and compares the two counts with the
+header of the baseline (`# either <group> refused <n> built <m>`). A move of a count fails, so a refusal
+of the type that is lost in silence cannot pass. `--accept` rewrites the count lines.
+
 A row with `after` reads the result of other rows: `after` is an id or a list of ids. Where one of
 those rows disagrees, the type of the result is not the type of the run time, and the script reads
 no verdict at the row. The script follows no chain, so a row names each row that it reads.
@@ -121,6 +128,7 @@ def disagreements(rows, errors, hard):
     bare = {(r["file"], r["line"]): r for r in rows if r.get("bare")}
     first = {}
     failing = set()
+    refused = set()
     for file, line, col, code, message in errors:
         if (file, line) in bare:
             first[(file, line)] = min(col, first.get((file, line), col))
@@ -135,10 +143,25 @@ def disagreements(rows, errors, hard):
         if row is not None and row["expect"] == "accept":
             failing.add(row["id"])
             continue
+        if row is not None and row["expect"] == "either":
+            refused.add(row["id"])
+            continue
         hard.append(f"{file}({line},{col}): {code}: an error at no row: {message}")
     failing |= {r["id"] for key, r in bare.items() if key not in first}
     unread = {r["id"] for r in rows if any(a in failing for a in as_list(r.get("after")))}
-    return failing - unread, first
+    return failing - unread, first, refused
+
+
+def either_counts(rows, refused):
+    """For each group, the `either` rows where the type refuses the call and where it builds the call."""
+    counts = {}
+    for r in rows:
+        if r["expect"] != "either":
+            continue
+        group = r["id"].split("|", 1)[0]
+        no, yes = counts.get(group, (0, 0))
+        counts[group] = (no + 1, yes) if r["id"] in refused else (no, yes + 1)
+    return counts
 
 
 def bare_sites(rows, failing, first):
@@ -222,16 +245,22 @@ def as_list(after):
     return [] if after is None else [after] if isinstance(after, str) else list(after)
 
 
+EITHER = re.compile(r"^# either (\S+) refused (\d+) built (\d+)$")
+
+
 def load_baseline():
     if not os.path.exists(BASELINE):
-        return [], set()
-    header, ids = [], set()
+        return [], set(), {}
+    header, ids, pinned = [], set(), {}
     for line in open(BASELINE, encoding="utf-8").read().splitlines():
-        if line.startswith("#"):
+        m = EITHER.match(line)
+        if m:
+            pinned[m[1]] = (int(m[2]), int(m[3]))
+        elif line.startswith("#"):
             header.append(line)
         elif line:
             ids.add(line)
-    return header, ids
+    return header, ids, pinned
 
 
 def summary(ids):
@@ -260,13 +289,15 @@ def main():
         if code not in (0, 1, 2):
             hard.append(f"{program}: tsc exit {code}")
         errors.update(parse(directory, program, output, hard))
-    failing, first = disagreements(rows, sorted(errors), hard)
+    failing, first, refused = disagreements(rows, sorted(errors), hard)
+    either = either_counts(rows, refused)
     failing |= site_ids(rows, failing, hard)
     failing |= bare_sites(rows, failing, first)
-    header, baseline = load_baseline()
+    header, baseline, pinned = load_baseline()
     new = sorted(failing - baseline)
     fallen = baseline - failing
     print(f"rows {len(rows)}, disagreements {len(failing)}: {summary(failing)}")
+    print("either rows: " + (", ".join(f"{g} refused {no} built {yes}" for g, (no, yes) in sorted(either.items())) or "none"))
     for line in hard:
         print(f"HARD  {line}")
     if hard:
@@ -274,15 +305,22 @@ def main():
     if "--accept" in sys.argv:
         with open(BASELINE, "w", encoding="utf-8") as out:
             out.write("".join(f"{h}\n" for h in header))
+            out.write("".join(f"# either {g} refused {no} built {yes}\n" for g, (no, yes) in sorted(either.items())))
             out.write("".join(f"{i}\n" for i in sorted(failing)))
         print(f"baseline rewritten: {len(new)} new, {len(fallen)} fallen")
         return 0
+    moved = sorted(g for g in set(either) | set(pinned) if either.get(g, (0, 0)) != pinned.get(g, (0, 0)))
+    for g in moved:
+        print(f"EITHER {g}: refused {either.get(g, (0, 0))[0]} built {either.get(g, (0, 0))[1]}, baseline refused {pinned.get(g, (0, 0))[0]} built {pinned.get(g, (0, 0))[1]}")
     for i in new:
         print(f"NEW   {i}")
     if fallen:
         print(f"{len(fallen)} id(s) of the baseline no longer fail: run --accept to drop them")
     if new:
         print(f"{len(new)} new disagreement(s): {summary(new)}")
+        return 1
+    if moved:
+        print(f"{len(moved)} count(s) of either rows moved: run --accept after you read the move")
         return 1
     return 0
 

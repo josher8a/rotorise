@@ -6,7 +6,14 @@
  * files — which is what keeps that site out of the package's public surface. See {@link build}.
  */
 
-type CodecErrorKind = 'refused' | 'vacant' | 'someVariants' | 'ambiguous'
+type CodecErrorKind =
+    | 'refused'
+    | 'vacant'
+    | 'someVariants'
+    | 'ambiguous'
+    | 'separator'
+    | 'decided'
+    | 'rewrite'
 
 /**
  * The stack of a copy. Where the stack of the original starts with the header of the original, the
@@ -41,9 +48,11 @@ export class CodecError extends Error {
 
     /**
      * What kind of refusal this is, for a reader that has to tell one refusal from another. `refused`
-     * is any refusal that no reader tells apart. The other three are the decisions of `at` that
-     * are no codec: no codec stands at the path, some variants declare it only, or the variants
-     * declare it differently.
+     * is any refusal that no reader tells apart. `vacant`, `someVariants` and `ambiguous` are the
+     * decisions of `at` that are no codec: no codec stands at the path, some variants declare it
+     * only, or the variants declare it differently. `separator`, `decided` and `rewrite` are the
+     * refusals of a key: a part that holds the separator, a change that writes a decided
+     * attribute at another value, and a change that cannot rebuild a touched key.
      */
     readonly kind: CodecErrorKind
 

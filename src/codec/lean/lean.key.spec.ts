@@ -18,7 +18,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../attribute'
-import { decimal, number, object, optional, string } from '../codec'
+import { CodecError, decimal, number, object, optional, string } from '../codec'
 import {
     type AttrText,
     type ConditionOutcome,
@@ -1169,7 +1169,7 @@ const writtenAt = (
 }
 
 /**
- * The rows that a throw of `toItem` refuses: the separator, the empty value, a lacking component, the
+ * The rows that a refusal of a key in `toItem` gives: the separator, the empty value, a lacking component, the
  * empty value of `sparse`, and the empty component of the composite key of `composite`.
  */
 const REFUSED_ITEM_ROWS = 5
@@ -1216,21 +1216,31 @@ const itemRows = (): ItemRow[] => {
                               },
                 },
             }))
-            let outcome: ItemOutcome
-            try {
-                const result = entry.toItem(draw)
-                if (result instanceof Error) continue
-                const row = result as AttributeMap
-                outcome = {
-                    kind: 'written',
-                    attributes: one.keys.map(
-                        (key) => [key.name, writtenAt(row, key.name)] as const,
-                    ),
-                }
-            } catch (thrown) {
-                if (!(thrown instanceof RotoriseError)) throw thrown
-                outcome = { kind: 'refused' }
-            }
+            // a refusal of a key is a value with the `RotoriseError` as its cause. The model has no row
+            // for a write that the codec refuses, and the pool draws none, so a refusal with no cause is
+            // a defect of the draw
+            const result = entry.toItem(draw)
+            if (
+                result instanceof CodecError &&
+                !(result.cause instanceof RotoriseError)
+            )
+                throw new Error('the pool drew an item that the codec refuses')
+            const outcome: ItemOutcome =
+                result instanceof CodecError
+                    ? { kind: 'refused' }
+                    : {
+                          kind: 'written',
+                          attributes: one.keys.map(
+                              (key) =>
+                                  [
+                                      key.name,
+                                      writtenAt(
+                                          result as AttributeMap,
+                                          key.name,
+                                      ),
+                                  ] as const,
+                          ),
+                      }
             const row: ItemRow = {
                 name: `${one.name}_${rows.length}`,
                 keys,

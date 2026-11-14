@@ -157,6 +157,7 @@ type Spec = {
     readonly items?: readonly string[] // the items of toEntry, fromEntry and infer
     readonly changes?: readonly string[]
     readonly calls?: readonly string[] // the methods that have no other loop: keys, keyCondition, toItem, fromItem, encodePartial
+    readonly refused?: readonly string[] // arguments of toItem that the type refuses and the codec refuses as a value
     readonly args?: readonly string[] // the arguments of keys and keyCondition: Partial<Entity>, so a prefix or none is drawn
     readonly patches?: readonly string[] // the changes that encodePartial reads
     readonly at?: string // construct: the text of the element where the error must start
@@ -342,6 +343,7 @@ add({
                 "{ key: { partition: 'PK', sort: 'SK' }, codec: { petId: string, shelterId: string, name: string, note: optional(string) } }",
             items: ['ok', 'nonote', 'blank', 'sep'],
             args: ['ok', 'blank', 'none'],
+            refused: ['none'],
             patches: ['chNote', 'chName', 'chNone', 'chGhost'],
             calls: ['keys', 'toItem', 'fromItem', 'encodePartial'],
         },
@@ -1587,7 +1589,7 @@ const SEPARATED = [
 type Row = {
     id: string
     group: string
-    expect: 'accept' | 'refuse'
+    expect: 'accept' | 'refuse' | 'either'
     file: string
     line: number
     after?: string[]
@@ -1682,7 +1684,7 @@ export const printPool = (parts: number, reverse: boolean) => {
         const emit = (line: string) => out.push(line)
         const row = (
             group: string,
-            expect: 'accept' | 'refuse',
+            expect: 'accept' | 'refuse' | 'either',
             text: string,
             line: string,
             axes: Record<string, string>,
@@ -1799,7 +1801,11 @@ export const printPool = (parts: number, reverse: boolean) => {
             const v = `c_${hash}_${n++}`
             const id = row(
                 group,
-                run.ok ? 'accept' : 'refuse',
+                !run.ok
+                    ? 'refuse'
+                    : run.value instanceof CodecError
+                      ? 'either'
+                      : 'accept',
                 `${text}.call`,
                 `export const ${v} = ${expr}`,
                 axes,
@@ -1995,6 +2001,7 @@ export const printPool = (parts: number, reverse: boolean) => {
                     )
                     if (!run.ok) continue
                     result('key', text, c.v, c.id, run.value, axes)
+                    if (run.value instanceof CodecError) continue
                     if (
                         typeof run.value === 'string'
                             ? !LAB.test(run.value)
@@ -2021,7 +2028,9 @@ export const printPool = (parts: number, reverse: boolean) => {
                     ? (s.patches ?? [])
                     : method === 'keys' || method.startsWith('keyCondition')
                       ? (s.args ?? [])
-                      : (s.items ?? [])
+                      : method === 'toItem'
+                        ? [...(s.items ?? []), ...(s.refused ?? [])]
+                        : (s.items ?? [])
             if (method === 'keyConditionIndex') {
                 for (const index of s.indexes ?? [])
                     for (const name of names) {
@@ -2062,7 +2071,10 @@ export const printPool = (parts: number, reverse: boolean) => {
                 if (method === 'fromItem') {
                     // the stored items: the item that toItem writes for the arg, and the empty item
                     const written = attempt(() => table.toItem(value))
-                    const stored = written.ok ? [[name, written.value]] : []
+                    const stored =
+                        written.ok && !(written.value instanceof CodecError)
+                            ? [[name, written.value]]
+                            : []
                     for (const [label, item] of [...stored, ['empty', {}]] as [
                         string,
                         object,
@@ -2192,7 +2204,7 @@ const GROUP_ROWS = {
     keyUpdates: 87,
     keys: 12,
     keyCondition: 25,
-    toItem: 6,
+    toItem: 10,
     fromItem: 12,
     encodePartial: 8,
 }
@@ -2358,38 +2370,24 @@ describe('the pool of the entry methods', () => {
     )
 
     it(
-        'gives a toItem call that throws for a key component with no text a refuse row, as the owner ruled',
-        { timeout: LONG },
-        () => {
-            const toItem = pool().rows.filter((r) => r.group === 'toItem')
-            const verdict = (name: string) =>
-                toItem.find(
-                    (r) =>
-                        textOf(r) === `T_plain_codecItem.toItem(${name}).call`,
-                )?.expect
-            expect(verdict('ok')).toBe('accept')
-            expect(verdict('blank')).toBe('refuse')
-            expect(verdict('sep')).toBe('refuse')
-        },
-    )
-
-    it(
-        'gives an error value of fromItem an accept call row, and the result row builds a CodecError',
+        'gives each error value of fromItem and of toItem the verdict either, and the result row builds a CodecError',
         { timeout: LONG },
         () => {
             const rows = pool().rows
-            const call = rows.find(
-                (r) =>
-                    textOf(r) === 'T_plain_codecItem.fromItem(ok,empty).call',
+            const find = (text: string) => rows.find((r) => textOf(r) === text)
+            for (const text of [
+                'T_plain_codecItem.fromItem(ok,empty)',
+                'T_plain_codecItem.toItem(blank)',
+                'T_plain_codecItem.toItem(sep)',
+                'T_plain_codecItem.toItem(none)',
+            ]) {
+                expect(find(`${text}.call`)?.expect, text).toBe('either')
+                expect(find(`${text}.result`)?.expect, text).toBe('accept')
+            }
+            // a call that gives a value is an accept row, and a call that throws is a refuse row
+            expect(find('T_plain_codecItem.toItem(ok).call')?.expect).toBe(
+                'accept',
             )
-            expect(call?.expect).toBe('accept')
-            expect(
-                rows.some(
-                    (r) =>
-                        textOf(r) ===
-                        'T_plain_codecItem.fromItem(ok,empty).result',
-                ),
-            ).toBe(true)
             expect(pool().files[0]?.join('\n')).toContain('= new CodecError(')
         },
     )

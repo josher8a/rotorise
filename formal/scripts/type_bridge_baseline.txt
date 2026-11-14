@@ -1,11 +1,15 @@
 # The rows of the type bridge where the type checker disagrees with the run time.
-# `scripts/type_bridge.py` prints this set and fails on an id that is not here.
+# `scripts/type_bridge.py` prints this set and fails on an id that is not here. It also fails where a
+# count of the `either` rows below differs from the count of the run.
 # An id that leaves the output is a fall and passes. To re-baseline, run
 # `python3 scripts/type_bridge.py --accept`, which writes the output over this file's id rows.
 #
 # An id is the group, the verdict of the run time, a hash of the Lean print of the root, and
 # the text of the check. An `accept` id is a place where the type refuses what the run time
-# accepts. A `refuse` id is a place where the type accepts what the run time refuses.
+# accepts. A `refuse` id is a place where the type accepts what the run time refuses. An `either` row is
+# a call whose outcome is an error value: it has no id, because the type may refuse the call or build it.
+# The lines `# either <group> refused <n> built <m>` count those rows, for the calls that the type
+# refuses and for the calls that it builds. A refusal of the type that disappears moves a count.
 #
 #   call         the clause of an `extract` or an `exclude` on a union of objects.
 #   extract      one member of the union under a clause that the run time accepts: the run
@@ -47,10 +51,10 @@
 #
 #   keys           `keys` of an entry that holds the option `key`.
 #   keyCondition   `keyCondition` of the table, and of an index named by the option `indexes`.
-#   toItem         `toItem` of an entry that holds a codec. The owner ruled that `toItem` throws where the
-#                  builder of a key refuses a component, so a `refuse` row of this group records the ruling
-#                  and is no defect of the type: the type of the result is `Result`.
-#   fromItem       `fromItem` on a stored item. An error value is an `accept` row, and its `result` row
+#   toItem         `toItem` of an entry that holds a codec. A refusal of a key and a refusal of the codec are
+#                  error values, so such a call is an `either` row, and its `result` row assigns a
+#                  `CodecError` to the type of the result.
+#   fromItem       `fromItem` on a stored item. An error value is an `either` row, and its `result` row
 #                  assigns a `CodecError` to the type of the result.
 #   encodePartial  `encodePartial` of the codec of an entry, on a change.
 #
@@ -66,6 +70,9 @@
 #   text|<id>   the message holds a rule text of the library, and the text lacks the rule that the row
 #               states in `rule`. A plain compiler message is no fact, because TypeScript 6 and 7 give
 #               another code for one refusal.
+# either encodePartial refused 0 built 1
+# either fromItem refused 0 built 4
+# either toItem refused 1 built 2
 construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
 construct|accept|158dae9a|nest.pathTagDefault
@@ -232,7 +239,5 @@ toEntry|refuse|d178e45a|T_plain_roleKeys.toEntry(blank).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(blank).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(blankId).call
 toEntry|refuse|f1510f52|T_plain_list2.toEntry(sep).call
-toItem|refuse|4977ab43|T_plain_codecItem.toItem(blank).call
-toItem|refuse|4977ab43|T_plain_codecItem.toItem(sep).call
 value|accept|51086640d5|extract({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0
 value|refuse|51086640d5|exclude({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0

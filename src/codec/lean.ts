@@ -2582,6 +2582,14 @@ const reach = (
     return at(reached, run)
 }
 
+/** The kind of a decision of `at`. The three kinds of a key refusal are no decision, so they are `refused`. */
+const decision = (
+    kind: CodecError['kind'],
+): 'refused' | 'vacant' | 'someVariants' | 'ambiguous' =>
+    kind === 'separator' || kind === 'decided' || kind === 'rewrite'
+        ? 'refused'
+        : kind
+
 /**
  * **The decision of `at` at a path under {@link wrapped}.** A throw of the call is a refusal at the
  * call. A codec whose term the root does not reach is a refusal on use, and its message names the
@@ -2605,7 +2613,8 @@ export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
     const refusal = reached.decode({ NULL: true })
     const preconditions = preconditionsOf(reached)
     return {
-        kind: refusal instanceof CodecError ? refusal.kind : 'refused',
+        kind:
+            refusal instanceof CodecError ? decision(refusal.kind) : 'refused',
         preconditions,
     }
 }
