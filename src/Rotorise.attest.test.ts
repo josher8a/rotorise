@@ -172,6 +172,18 @@ describe('a path that the type does not see', () => {
         )
     })
 
+    it('names the name that the entity lacks for a path that no option holds, because the read of a path is empty there', () => {
+        attest(() =>
+            tableEntry<{ id: string; to: { ownerId: string } }>()({
+                PK: ['id'],
+                // @ts-expect-error `to.zz` is no path of the entity
+                GSI1SK: ['to.zz'],
+            }),
+        ).type.errors.snap(
+            "Type '\"to.zz\"' is not assignable to type '\"to.zz\" & ErrorMessage<\"'to.zz' is no name or path of the entity\">'.Type 'string' is not assignable to type 'ErrorMessage<\"'to.zz' is no name or path of the entity\">'.",
+        )
+    })
+
     it('names the member rule for an object at a path of an entry with no codec, because no codec has a gap', () => {
         attest(() =>
             tableEntry<{ id: string; meta: { note: { text: string } } }>()({

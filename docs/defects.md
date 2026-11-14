@@ -546,37 +546,6 @@ the group construct, one for each table with a default beside an options object.
 
 ---
 
-## Known: the type of a key admits a path into a union of objects where one option lacks the name
-
-**Observation.** The type refuses a component with no default where the value at the path can be
-absent. The type of a path into a union of objects is the type at the options that hold the name.
-An option that lacks the name adds no undefined, so the refusal does not see the option. Measured
-2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Doc = { id: string; meta: { kind: 'a'; a: string } | { kind: 'b'; b: string } }
-    const Docs = tableEntry<Doc>()({ PK: ['id'], SK: ['meta.a'] })
-      type checker: builds
-      runtime:      builds
-
-    Docs.toEntry(doc).SK   // doc: Doc
-      type checker: `A#${string}`
-
-    Docs.toEntry({ id: 'd1', meta: { kind: 'a', a: 'x' } })
-      runtime:      gives the SK "A#x"
-
-    Docs.toEntry({ id: 'd1', meta: { kind: 'b', b: 'x' } })
-      runtime:      throws, Attribute meta.a not found
-
-**Effect.** The entry builds, the type of the key states a text for each item of the entity, and
-`toEntry(item)` throws for each item of the option that lacks the name.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 4 ids: 1 of
-the group construct, 1 of toEntry, 1 of infer and 1 of fromEntry.
-src/codec/spec/object/codec.keypath.spec.ts pins the refusal of a path whose value can be absent,
-for an optional name and no union.
-
----
-
 ## Known: a key element that two rules refuse prints `never` at the head of the error
 
 **Observation.** A refusal of a key element is an intersection of the element with a message. Two
@@ -1006,47 +975,25 @@ TypeScript 7 and `npx vitest --run`:
       type checker: builds
       runtime:      throws, buildCompositeKey: Attribute shelter.code not found
 
-**Effect.** The call compiles, and the run time throws. The text of the throw says that the
-attribute is not found, where the item holds the attribute with the empty text. The rule is the
-same for a component that is a path.
-
-**Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
-composite key whose plain component is the empty text.
-
----
-
-## Known: the type of key refuses an entity whose key of one path lies below an optional object, where the run time gives the key
-
-**Observation.** For a key of one path, the parameter of `key` states each object above the last
-name as required, and states the last name with undefined. An entity whose object can be absent
-does not fit the parameter. The run time reads the path, and gives undefined where the object is
-absent. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+A key of one attribute at a path below an optional object has the same rule. Measured 2026-11-14
+with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
     type Owned = { petId: string; owner?: { id: string } }
     const Owners = tableEntry<Owned>()({ PK: ['petId'], SK: 'owner.id' })
-    const owned: Owned = { petId: 'p1', owner: { id: 'o1' } }
-    const unowned: Owned = { petId: 'p2' }
 
-    Owners.key('SK', owned)
-      type checker: refused, 'Owned' is not assignable to '{ owner: { id: string | undefined } }'
-      runtime:      gives "o1"
-
-    Owners.key('SK', unowned)
-      type checker: refused, with the same text
-      runtime:      gives undefined
-
-    Owners.key('SK', { owner: { id: 'o1' } })
+    Owners.key('SK', { petId: 'p1', owner: { id: '' } })
       type checker: builds
+      runtime:      throws, Key SK: the attribute 'owner.id' is empty, so the key is empty.
+                    Give 'owner.id' a value, or leave it out.
 
-    Owners.toEntry(owned)
-      type checker: builds
-      runtime:      gives the SK "o1"
+**Effect.** The call compiles, and the run time throws. The text of the throw says that the
+attribute is not found, or that it is empty, where the item holds the attribute with the empty
+text. The rule is the same for a component that is a path, and for a key of one attribute at a path.
 
-**Effect.** A caller that holds an item of the entity cannot pass the item to `key` with no cast.
-An object literal that holds the object compiles.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 4 ids of
-the group key.
+**Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
+composite key whose plain component is the empty text. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key for the empty id below an
+optional object: the calls blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep.
 
 ---
 
@@ -1456,84 +1403,6 @@ the type, and a text with another label fits the type also.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 26 ids: 9
 of toEntry, 9 of infer and 8 of key. Each is a foreign text with another label.
-
----
-
-## Known: the type of key refuses an item of the entity for a key of one path through a union where one option lacks the name, where the run time gives the key
-
-**Observation.** For a key of one path, the parameter of `key` states the object above the last
-name with that name as required. An entity whose object is a union, where one option lacks the
-name, does not fit the parameter. The run time reads the path, and gives undefined where the
-option lacks the name. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
-`npx vitest --run`:
-
-    type Doc = { id: string; meta: { kind: 'a'; a: string } | { kind: 'b'; b: string } }
-    const Docs = tableEntry<Doc>()({ PK: ['id'], SK: 'meta.a' })
-    const first: Doc = { id: 'd1', meta: { kind: 'a', a: 'x' } }
-    const second: Doc = { id: 'd2', meta: { kind: 'b', b: 'y' } }
-
-    Docs.key('SK', first)
-      type checker: refused, 'Doc' is not assignable to '{ meta: { a: string; }; }'
-      runtime:      gives "x"
-
-    Docs.key('SK', second)
-      type checker: refused, with the same text
-      runtime:      gives undefined
-
-    Docs.toEntry(first)
-      runtime:      gives the SK "x"
-
-    Docs.toEntry(second)
-      runtime:      writes no SK
-
-The type checker of the two calls of toEntry is not measured.
-
-**Effect.** A caller that holds an item of the entity cannot pass the item to `key` with no cast.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 10 ids of
-the group key.
-
----
-
-## Known: the type of key refuses an item whose option holds two literals at the path of a match, where the run time gives the key
-
-**Observation.** The parameter of `key` for a match on a path is a union with one object type for each
-literal, and the literal stands at the nested path. The host decomposes an argument over a union by a
-property of the top level only. An argument whose value at the path is a union of literals fits no
-member. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Placed = { petId: string; meta: { status: 'IN' | 'OUT' }; kennel: string }
-    const Placeds = tableEntry<Placed>()({
-        PK: ['petId'],
-        SK: { discriminator: 'meta.status', spec: { IN: ['kennel'], OUT: ['petId'] } },
-    })
-    const placed: Placed = { petId: 'p1', meta: { status: 'IN' }, kennel: 'k1' }
-
-    Placeds.key('SK', placed)
-      type checker: refused, Argument of type 'Placed' is not assignable to parameter of type
-                    '{ kennel: string; meta: { status: "IN"; }; } | { meta: { status: "OUT"; }; petId: string; }'
-      runtime:      gives "KENNEL#k1"
-
-    Placeds.toEntry(placed).SK, Placeds.infer and Placeds.fromEntry(stored)
-      type checker: build, with the type `KENNEL#${string}` | `PETID#${string}` for the key
-
-    type Plain = { petId: string; status: 'IN' | 'OUT'; kennel: string }
-    Plains.key('SK', plain)   // the discriminator at the top level, plain: Plain
-      type checker: builds
-
-The host has the same limit without the library. A function of the parameter
-`{ a: { k: 'I' }; n: string } | { a: { k: 'O' }; m: string }` refuses
-`{ a: { k: 'I' | 'O' }; n: string; m: string }`, and a function of the parameter
-`{ k: 'I'; n: string } | { k: 'O'; m: string }` accepts `{ k: 'I' | 'O'; n: string; m: string }`.
-A constant of the literal type, `{ meta: { status: 'IN' }, ... } as const`, fits the member of its literal.
-Before the pass that moved the arm of a match to the options that can hold its literal, the table
-was refused at construction, and the call was refused with a parameter of no attribute.
-
-**Effect.** A caller with an item of the declared type of the entity cannot call `key` for a match on
-a path where one option holds two literals. A cast or a constant of the literal type passes.
-
-**Pin.** `src/codec/lean/lean.entry.spec.ts` draws the tables of the kind dpathdouble, and the
-baseline of `formal/scripts/type_bridge_baseline.txt` holds 14 ids of the calls of `key` on them.
 
 ---
 

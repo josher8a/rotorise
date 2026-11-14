@@ -95,7 +95,8 @@ type DeepPick<
 > = (
     Paths extends string
         ? (
-              x: AtPath<
+              x: ProjectPath<
+                  Entity,
                   Paths,
                   TransformOverride<Spec, Paths, ValueAt<Entity, Paths>>,
                   Optional
@@ -650,26 +651,54 @@ type DefaultOf<T> = T extends Record<string, unknown> ? Partial<T> : T
 /** The tag of a component, which prints in place of the name. */
 type TagOptions = { readonly tag: string }
 
+declare const lacksName: unique symbol
+/** Marks an option of an object type that holds no value at the name. */
+type LacksName = typeof lacksName
+
 /**
- * The value at a name or at a path, through objects and unions of objects. A name with a `.` is a
- * path: the type never reads an attribute whose own name holds a `.`. An option that lacks a name
- * adds nothing. An optional name above the value adds `undefined`.
+ * The read of a path with a mark where an option of an object type lacks the name. A name that no
+ * option holds reads `never` at the end, so the mark never reaches a caller. An option that is no
+ * object holds no name, and the codec owns the refusal of a path below such an option.
  */
-type ValueAt<E, P extends string> = E extends unknown
+type ReadAt<E, P extends string> = E extends unknown
     ? P extends `${infer Head}.${infer Tail}`
         ? Head extends keyof E
             ?
-                  | ValueAt<NonNullable<E[Head]>, Tail>
+                  | ReadAt<NonNullable<E[Head]>, Tail>
                   | (null extends E[Head]
                         ? undefined
                         : undefined extends E[Head]
                           ? undefined
                           : never)
-            : never
+            : E extends object
+              ? LacksName
+              : never
         : P extends keyof E
           ? E[P]
-          : never
+          : E extends object
+            ? LacksName
+            : never
     : never
+
+/**
+ * The value at a name or at a path, through objects and unions of objects, as the run time reads
+ * it. A name with a `.` is a path: the type never reads an attribute whose own name holds a `.`.
+ * An option that lacks a name, and an optional name above the value, each add `undefined`. A path
+ * that no option holds is `never`. A name with no `.` takes the cheap read.
+ */
+type ValueAt<E, P extends string> = P extends `${string}.${string}`
+    ? ReadAt<E, P> extends infer R
+        ? [R] extends [LacksName]
+            ? never
+            : R extends LacksName
+              ? undefined
+              : R
+        : never
+    : E extends unknown
+      ? P extends keyof E
+          ? E[P]
+          : never
+      : never
 
 /**
  * The value of a key name. `ValueAt` reads a name that is a string: an attribute, or the value at
@@ -693,21 +722,57 @@ type PathText<Entity, Spec extends string, CodecSpec> = Replace<
 
 /** The attributes of a call for a key of one attribute at a path: the object that holds the value, for each option. */
 type PathAttributes<Entity, P extends string> = Entity extends unknown
-    ? AtPath<P, ValueAt<Entity, P>>
+    ? ProjectPath<Entity, P>
     : never
 
-/** The object that holds one value at a path. */
-type AtPath<
+/**
+ * The projection of an object onto one path: the names above the value keep the marks and the
+ * unions of the entity, so an item of the entity fits. `Leaf` replaces the value at the path.
+ * With `Opt`, each name on the path is optional and holds `undefined`. An option that lacks a name
+ * holds `undefined` there. The intersection with `object` keeps the option out of the weak type
+ * check, which refuses an option that shares no name with the target.
+ */
+type ProjectPath<
+    E,
     P extends string,
+    Leaf = never,
+    Opt extends boolean = false,
+> = E extends unknown
+    ? P extends `${infer Head}.${infer Tail}`
+        ? Head extends keyof E
+            ? Opt extends true
+                ? {
+                      [K in Head]?:
+                          | ProjectHop<E[K], Tail, Leaf, Opt>
+                          | undefined
+                  }
+                : PickHop<E, Head, Tail, Leaf>
+            : { [K in Head]?: undefined } & object
+        : P extends keyof E
+          ? Opt extends true
+              ? {
+                    [K in P]?:
+                        | ([Leaf] extends [never] ? E[K] : Leaf)
+                        | undefined
+                }
+              : PickLeaf<E, P, Leaf>
+          : { [K in P]?: undefined } & object
+    : never
+/** The name above the value, with the mark of the name in the entity. */
+type PickHop<E, H extends keyof E, Tail extends string, Leaf> = {
+    [K in H]: ProjectHop<E[K], Tail, Leaf, false>
+}
+/** The name that holds the value, with the mark of the name in the entity. */
+type PickLeaf<E, H extends keyof E, Leaf> = {
+    [K in H]: [Leaf] extends [never] ? E[K] : Leaf
+}
+/** The value of a name above the path: an object is projected, and `null` and `undefined` stay. */
+type ProjectHop<
     V,
-    Optional extends boolean = false,
-> = P extends `${infer Head}.${infer Tail}`
-    ? Optional extends true
-        ? { [K in Head]?: AtPath<Tail, V, true> | undefined }
-        : { [K in Head]: AtPath<Tail, V> }
-    : Optional extends true
-      ? { [K in P]?: V | undefined }
-      : { [K in P]: V }
+    Tail extends string,
+    Leaf,
+    Opt extends boolean,
+> = V extends object ? ProjectPath<V, Tail, Leaf, Opt> : V
 
 /**
  * Any path: names joined by `.`.
@@ -2109,22 +2174,43 @@ type SpecConfigShape = {
     enforceBoundary?: boolean | undefined
 }
 
-/** A variant of a match on a path: the options that hold the literal at the path. */
-type ProcessPathVariant<
+/** The arm of a literal of a match on a path: what the arm reads, from the options that can hold the literal. */
+type PathArm<
     Entity,
     K extends string,
     V extends PropertyKey,
     Spec extends DiscriminatedSchemaShape,
     Config extends SpecConfigShape,
     VariantSpec = Spec['spec'][V & keyof Spec['spec']],
-> = [
-    VariantSpec extends null | undefined
-        ? unknown
-        : ProcessSpecType<ExtractVariant<Entity, K, V>, VariantSpec, Config>,
-] extends [infer Processed]
-    ? [Processed] extends [never]
-        ? AtPath<K, V>
-        : Processed & AtPath<K, V>
+> = VariantSpec extends null | undefined
+    ? unknown
+    : ProcessSpecType<ExtractVariant<Entity, K, V>, VariantSpec, Config>
+
+/**
+ * The call of a match on a path: the arm of one literal, with the literal at the path, or an item
+ * of the entity. An item holds a value of the declared type at the path, and the components of
+ * every arm, so the run time selects the arm by the value.
+ */
+type PathCall<
+    Entity,
+    K extends string,
+    Spec extends DiscriminatedSchemaShape,
+    Config extends SpecConfigShape,
+> = {
+    [V in keyof Spec['spec']]: PathArm<Entity, K, V, Spec, Config>
+} extends infer Arms
+    ?
+          | {
+                [V in keyof Arms]: [Arms[V]] extends [never]
+                    ? ProjectPath<ExtractVariant<Entity, K, V>, K, V>
+                    : Arms[V] & ProjectPath<ExtractVariant<Entity, K, V>, K, V>
+            }[keyof Arms]
+          | (ProjectPath<Entity, K> &
+                ({
+                    [V in keyof Arms]: (x: Arms[V]) => void
+                }[keyof Arms] extends (x: infer I) => void
+                    ? I
+                    : never))
     : never
 
 /**
@@ -2175,15 +2261,12 @@ type OptimizedAttributes<Entity, Spec, Config extends SpecConfigShape> = show<
     Spec extends DiscriminatedSchemaShape
         ? Spec['discriminator'] extends `${string}.${string}`
             ? {
-                  [K in Spec['discriminator']]: {
-                      [V in keyof Spec['spec']]: ProcessPathVariant<
-                          Entity,
-                          K,
-                          V,
-                          Spec,
-                          Config
-                      >
-                  }[keyof Spec['spec']]
+                  [K in Spec['discriminator']]: PathCall<
+                      Entity,
+                      K,
+                      Spec,
+                      Config
+                  >
               }[Spec['discriminator']]
             : {
                   [K in Spec['discriminator']]: {

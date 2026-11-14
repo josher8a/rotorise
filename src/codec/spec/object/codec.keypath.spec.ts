@@ -107,17 +107,56 @@ describe('a key component that reads a path', () => {
         expect(typeof _lacks).toBe('function')
     })
 
-    it('reads a path through the options of a union that hold it', () => {
+    it('refuses a component with no default whose path goes through an option that lacks the name, because the builder throws for that option', () => {
         type Doc = {
             id: string
             meta: { kind: 'a'; a: string } | { kind: 'b'; b: string }
         }
         const Docs = tableEntry<Doc>()({
             PK: ['meta.kind'],
+            // @ts-expect-error `meta.a` can be absent: the option `b` lacks `a`
             SK: ['meta.a'],
         })
-        expect(Docs.key('SK', { meta: { a: 'x' } })).toBe('A#x')
         expect(Docs.key('PK', { meta: { kind: 'b' } })).toBe('KIND#b')
+        expect(Docs.key('SK', { meta: { a: 'x' } })).toBe('A#x')
+        expect(Docs.toEntry({ id: 'd', meta: { kind: 'a', a: 'x' } }).SK).toBe(
+            'A#x',
+        )
+        expect(() =>
+            Docs.toEntry({ id: 'd', meta: { kind: 'b', b: 'y' } }),
+        ).toThrow(/meta\.a/)
+    })
+
+    it('refuses a component with no default where an option lacks a name above the last name', () => {
+        type Nested = {
+            id: string
+            meta: { kind: 'a'; a: { id: string } } | { kind: 'b'; b: string }
+        }
+        tableEntry<Nested>()({
+            PK: ['id'],
+            // @ts-expect-error `meta.a.id` can be absent: the option `b` lacks `a`
+            SK: ['meta.a.id'],
+        })
+    })
+
+    it('accepts a path through a union where a default stands, or where each option holds the name', () => {
+        type Doc = {
+            id: string
+            meta: { kind: 'a'; a: string } | { kind: 'b'; b: string }
+        }
+        const Defaulted = tableEntry<Doc>()({
+            PK: ['id'],
+            SK: [['meta.a', (a: string) => a, 'none']],
+        })
+        expect(
+            Defaulted.toEntry({ id: 'd', meta: { kind: 'b', b: 'y' } }).SK,
+        ).toBe('A#none')
+        type Both = {
+            id: string
+            meta: { kind: 'a'; a: string } | { kind: 'b'; a: string; b: string }
+        }
+        const Shared = tableEntry<Both>()({ PK: ['meta.kind'], SK: ['meta.a'] })
+        expect(Shared.key('SK', { meta: { a: 'x' } })).toBe('A#x')
     })
 
     describe('the parameter of the transform of a path', () => {
