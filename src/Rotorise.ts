@@ -2384,13 +2384,21 @@ type OptimizedBuiltKey<
                                   null,
                                   undefined
                               >
-                            : ProcessKey<
-                                  Entity,
-                                  Arm,
-                                  Separator,
-                                  Config,
-                                  CodecSpec
-                              >
+                            : Arm extends DiscriminatedSchemaShape
+                              ? OptimizedBuiltKey<
+                                    Entity,
+                                    Arm,
+                                    Separator,
+                                    Config,
+                                    CodecSpec
+                                >
+                              : ProcessKey<
+                                    Entity,
+                                    Arm,
+                                    Separator,
+                                    Config,
+                                    CodecSpec
+                                >
                         : never
                     : ProcessKey<Entity, Spec, Separator, Config, CodecSpec>
       >
