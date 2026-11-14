@@ -730,7 +730,9 @@ empty prefix with `depth: 0`.
 **Pin.** `src/Rotorise.spec.ts` pins the refusal of the type checker for the first call, with an
 expected error. `src/codec/spec/object/codec.keyempty.spec.ts` pins the empty string of the run
 time for the first call, behind a cast. `src/codec/spec/object/codec.keydepth.spec.ts` pins the
-empty string of `depth: 0`.
+empty string of `depth: 0`. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 9 ids of the group key for a call with
+`allowPartial`.
 
 ---
 
@@ -992,8 +994,9 @@ text. The rule is the same for a component that is a path, and for a key of one 
 
 **Pin.** `src/codec/lean/lean.key.spec.ts` pins the refusal of the run time against the model, for a
 composite key whose plain component is the empty text. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key for the empty id below an
-optional object: the calls blankOwner of T_opt_pathAttr and of T_opt_pathAttr_sep.
+formal/scripts/type_bridge_baseline.txt, holds 45 ids: 19 of key, 23 of toEntry, 2 of keys and 1 of
+toItem. Two of the 19 ids of key are the calls blankOwner of T_opt_pathAttr and of
+T_opt_pathAttr_sep, for the empty id below an optional object.
 
 ---
 
@@ -1250,7 +1253,8 @@ the write to that path. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 
 patch that changes no key, and no error.
 
 **Pin.** `src/codec/spec/object/codec.entryexact.spec.ts` pins the refusal of the type. None for
-the run time.
+the run time. The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 1 id
+of the group keyUpdates.
 
 ---
 
@@ -1369,7 +1373,9 @@ Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 **Effect.** The call compiles, and the run time throws for a value of the declared type.
 
 **Pin.** `src/codec/spec/object/codec.keyrow.spec.ts` pins the refusal of the run time for a
-complete key. None for the type.
+complete key. No test pins the type. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 17 ids: 7 of key, 5 of toEntry, 3 of keyCondition, 1
+of keys and 1 of toItem.
 
 ---
 
@@ -1398,11 +1404,43 @@ entry above:
       type checker: builds, and the type of the key is `NAME#${string}`
       runtime:      gives "NAME#rex"
 
-**Effect.** The type of the key is wider than the value. Each value that the run time gives fits
-the type, and a text with another label fits the type also.
+The constraint of the schema gives the return expression of the function no contextual type. The
+function arms of the union of the constraint have different parameter types, and TypeScript gives a
+union a contextual signature only where the signatures are the same apart from the return type. So
+the literal `'T'` widens to `string` before the type of the key reads the tag. A function whose
+return type holds the tag as a literal gives the label. Measured 2026-11-14 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`, with the type Pet and the item rex above:
+
+    const Literal = tableEntry<Pet>()({
+        PK: ['petId'],
+        SK: [['name', (name: string) => ({ tag: 'T', value: name }) as const]],
+    })
+
+    Literal.key('SK', rex)
+      type checker: builds, and the type of the key is `T#${string}`
+      runtime:      gives "T#rex"
+
+    const literal = () => Literal.key('SK', rex)
+    const stranger: ReturnType<typeof literal> = '~T#rex'
+      type checker: refused
+
+    SK: [['name', (name: string): { tag: 'T'; value: string } => ({ tag: 'T', value: name })]]
+      type checker: builds, and the type of the key is `T#${string}`
+
+    SK: [['name', (name: string) => ({ tag: name === 'rex' ? 'P' : 'N', value: name }) as const]]
+      type checker: builds, and the type of the key is `N#${string}` | `P#${string}`
+      runtime:      gives "P#rex" for rex
+
+**Effect.** The type of the key is wider than the value for a function that returns the tag as a
+string. Each value that the run time gives fits the type, and a text with another label fits the
+type also. A function with a literal tag gives the label.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 26 ids: 9
-of toEntry, 9 of infer and 8 of key. Each is a foreign text with another label.
+of toEntry, 9 of infer and 8 of key. Each is a foreign text with another label. The ids are the
+draws tagTf and tagTf_sep of the entry pool, which write the function with a wide tag. The draws
+tagTfConst and tagTfConst_sep write the tag with `as const` and hold no id.
+`src/codec/spec/object/codec.keylabel.spec.ts` pins the label of a literal tag, the text with no
+label of a wide tag, and the union of two tags.
 
 ---
 
@@ -1476,7 +1514,8 @@ the type refuses the argument. The empty object compiles. Measured 2026-11-12 wi
 **Effect.** The first call does not compile, and the run time gives the key.
 
 **Pin.** `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty text of `depth: 0` at run
-time. None for the refusal.
+time. No test pins the refusal. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key for the refusal.
 
 ---
 
@@ -1501,4 +1540,5 @@ TypeScript 6 refuses the first call at the same line with the code TS2322.
 
 **Effect.** The first call does not compile, and the run time builds the entry and prints the tag.
 
-**Pin.** None for a name of the top level.
+**Pin.** No test pins a name of the top level. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 1 id of the group construct, for that name.

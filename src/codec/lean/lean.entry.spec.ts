@@ -397,6 +397,16 @@ add({
             items: PLAIN_ITEMS,
         },
         {
+            id: 'tagTfConst',
+            form: 'transform-literal',
+            codec: 'none',
+            schema: "{ PK: ['petId'], SK: [['name', (n: string) => ({ tag: 'T', value: n }) as const]] }",
+            keys: ['SK'],
+            keyArgs: ['ok'],
+            configs: ['none'],
+            items: ['ok', 'nonote'],
+        },
+        {
             id: 'taglessTf',
             form: 'transform',
             codec: 'none',
@@ -1533,6 +1543,7 @@ const SEPARATED = [
     'pathList',
     'pathDefault',
     'tagTf',
+    'tagTfConst',
     'defaultFn',
     'nopath_spec_pos',
     'nopath_cases_pos',
@@ -2172,12 +2183,12 @@ const LONG = 120_000
 const TYPING_ROWS = 65
 const GROUP_ROWS = {
     typing: 65,
-    constructAccept: 101,
+    constructAccept: 103,
     constructRefuse: 63,
-    toEntry: 858,
-    fromEntry: 681,
-    infer: 524,
-    key: 1113,
+    toEntry: 874,
+    fromEntry: 693,
+    infer: 536,
+    key: 1119,
     keyUpdates: 87,
     keys: 12,
     keyCondition: 25,
@@ -2400,6 +2411,7 @@ describe('the pool of the entry methods', () => {
                     'plain.defaultFn_sep',
                     'plain.list2_sep',
                     'plain.tagTf_sep',
+                    'plain.tagTfConst_sep',
                     'opt.pathAttr_sep',
                     'opt.pathDefault_sep',
                     'kind_single.nopath_spec_pos_sep',
@@ -2529,6 +2541,44 @@ describe('the pool of the entry methods', () => {
             expect(construct('kind_single.nopath_cases_neg')?.at).toBe(
                 "'ownerId'",
             )
+        },
+    )
+
+    it(
+        'draws a transform function that keeps the tag literal, and the type refuses each foreign text of it',
+        { timeout: LONG },
+        () => {
+            const rows = pool().rows.filter(
+                (r) =>
+                    textOf(r).startsWith('T_plain_tagTfConst') ||
+                    textOf(r).startsWith('plain.tagTfConst'),
+            )
+            const count = (group: string, verdict: string) =>
+                rows.filter((r) => r.group === group && r.expect === verdict)
+                    .length
+            expect({
+                construct: count('construct', 'accept'),
+                keyCall: count('key', 'accept'),
+                keyForeign: count('key', 'refuse'),
+                toEntry: count('toEntry', 'accept'),
+                toEntryForeign: count('toEntry', 'refuse'),
+                infer: count('infer', 'accept'),
+                inferForeign: count('infer', 'refuse'),
+            }).toEqual({
+                construct: 2,
+                keyCall: 4,
+                keyForeign: 2,
+                toEntry: 8,
+                toEntryForeign: 8,
+                infer: 4,
+                inferForeign: 8,
+            })
+            // a refuse row of these draws is a foreign text: the draws hold no other refusal
+            expect(
+                rows
+                    .filter((r) => r.expect === 'refuse')
+                    .every((r) => textOf(r).includes('.foreign')),
+            ).toBe(true)
         },
     )
 
