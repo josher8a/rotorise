@@ -127,7 +127,7 @@ describe('DynamoDB Utils', () => {
         expect(Transformed.key('PK', { a: 'x', b: 1 }, { depth: 2 })).toBe(
             'A#x#B#1',
         )
-        // allowPartial keeps the first component required
+        // allowPartial reads the components that the call gives, and stops at the first absent one
         expect(Transformed.key('PK', { a: 'x' }, { allowPartial: true })).toBe(
             'A#x',
         )
@@ -137,10 +137,8 @@ describe('DynamoDB Utils', () => {
         // @ts-expect-error a depth that is no literal says no component count
         const loose = () => Transformed.key('PK', { a: 'x' }, { depth })
         expect(loose).toThrow(/Attribute b not found/)
-        // A thunk, so this asserts the type and never runs.
-        // @ts-expect-error allowPartial still requires the first component
-        const _none = () => Transformed.key('PK', {}, { allowPartial: true })
-        expect(typeof _none).toBe('function')
+        // a partial key of no component is the empty prefix: the type builds the call
+        expect(Transformed.key('PK', {}, { allowPartial: true })).toBe('')
 
         // 8939 -> 9878: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also

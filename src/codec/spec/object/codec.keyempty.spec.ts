@@ -100,8 +100,30 @@ describe('a partial key may be the empty string, because it is a begins_with pre
         expect(Pets.key('PK', unnamed, { depth: 0 })).toBe('')
     })
 
-    it('is empty under allowPartial where the first part is absent', () => {
-        expect(Pets.key('PK', {} as never, { allowPartial: true })).toBe('')
+    it('is empty under allowPartial where no part is present, and the type builds the call', () => {
+        const key = Pets.key('PK', {}, { allowPartial: true })
+        expectTypeOf(key).toEqualTypeOf<''>()
+        expect(key).toBe('')
+    })
+
+    it('is the prefix of the first part where only the first part is present', () => {
+        const Two = tableEntry<Pet>()({ PK: ['petId', 'shelterId'] })
+        const key = Two.key('PK', { petId: 'p1' }, { allowPartial: true })
+        expectTypeOf(key).toEqualTypeOf<'PETID#p1'>()
+        expect(key).toBe('PETID#p1')
+    })
+
+    it('is empty where only the second part is present, because the builder stops at the first absent part', () => {
+        const Two = tableEntry<Pet>()({ PK: ['petId', 'shelterId'] })
+        const key = Two.key('PK', { shelterId: 's1' }, { allowPartial: true })
+        expectTypeOf(key).toEqualTypeOf<''>()
+        expect(key).toBe('')
+    })
+
+    it('refuses a part of another type, as a full key does', () => {
+        // @ts-expect-error petId is a string
+        const key = () => Pets.key('PK', { petId: 5 }, { allowPartial: true })
+        expect(key()).toBe('PETID#5')
     })
 
     it('is not empty where a part is present', () => {

@@ -708,31 +708,35 @@ toEntry, 1 of infer and 2 of key.
 
 ---
 
-## Known: the type of key refuses a partial key of no component, where the run time gives the empty string
+## Known: the type of key with allowPartial refuses an argument that holds no component of the key, where the run time gives the empty string
 
-**Observation.** The type of `key` with `allowPartial` requires the first component of the key
-below. The run time gives the empty string for a partial key of no component.
-Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+**Observation.** The type of `key` with `allowPartial` states each component as optional. A partial
+key of no component, and of the first component, compile. An argument of a declared type that holds
+another name only has no property in common with the parameter, and the weak type check of the
+compiler refuses the argument. The run time gives the empty string for each argument. Measured
+2026-11-14 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
     const Pets = tableEntry<{ shelterId: string; petId: string }>()({ PK: ['shelterId', 'petId'] })
+    const nameOnly: { name: string } = { name: 'rex' }
 
     Pets.key('PK', {}, { allowPartial: true })
-      type checker: refused, Property 'shelterId' is missing
-      runtime:      gives ""
-
-    Pets.key('PK', {}, { depth: 0 })
       type checker: builds, with the type ""
       runtime:      gives ""
 
-**Effect.** The first call does not compile, and the run time gives the key. A caller writes the
-empty prefix with `depth: 0`.
+    Pets.key('PK', nameOnly, { allowPartial: true })
+      type checker: refused, '{ name: string; }' has no properties in common with
+                    '{ petId?: string | undefined; shelterId?: string | undefined; }'
+      runtime:      gives ""
 
-**Pin.** `src/Rotorise.spec.ts` pins the refusal of the type checker for the first call, with an
-expected error. `src/codec/spec/object/codec.keyempty.spec.ts` pins the empty string of the run
-time for the first call, behind a cast. `src/codec/spec/object/codec.keydepth.spec.ts` pins the
-empty string of `depth: 0`. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 9 ids of the group key for a call with
-`allowPartial`.
+**Effect.** The second call does not compile, and the run time gives the key. A caller writes the
+empty prefix with `{}`.
+
+**Pin.** `src/Rotorise.spec.ts` and `src/codec/spec/object/codec.keyempty.spec.ts` pin the empty
+string of a partial key of no component, with the type of the call, and the refusal of a part of
+another type. `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty string of `depth: 0`.
+No test pins the refusal of the weak type check. The baseline of the type bridge,
+formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key: the calls nameOnly and pidOnly
+of T_plain_listOne with `allowPartial`.
 
 ---
 
@@ -1485,7 +1489,9 @@ read the components. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
       runtime:      gives { partition: { name: 'PK', value: { S: 'PETID#p1' } } }
 
 **Effect.** The call compiles, and the run time throws for an argument of the declared type. The
-type of the result is the same for each argument.
+type of the result is the same for each argument. The method keys builds each key that it names in
+full, the sort key too, and the method keyCondition refuses a hole in the sort. Measured 2026-11-14
+with `npx vitest --run`.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 7 ids: 3 of
 the group keys and 4 of the group keyCondition. src/codec/lean/lean.entry.spec.ts draws each call.
@@ -1497,7 +1503,7 @@ the group keys and 4 of the group keyCondition. src/codec/lean/lean.entry.spec.t
 **Observation.** A key of depth 0 reads no component, and the run time gives the empty text for
 each argument. The parameter of `key` at depth 0 states each component as optional. An argument of
 a declared type that holds another name only has no property in common with the parameter, and
-the type refuses the argument. The empty object compiles. Measured 2026-11-12 with
+the type refuses the argument. The empty object compiles. Measured 2026-11-14 with
 `tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the entry Pets above:
 
     const nameOnly: { name: string } = { name: 'rex' }

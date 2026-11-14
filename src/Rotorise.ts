@@ -2109,7 +2109,7 @@ type ProcessSpecType<
             Entity,
             Spec,
             Config['allowPartial'] extends true
-                ? 1
+                ? 0
                 : Extract<Config['depth'], number>
         >
       : Spec extends null | undefined

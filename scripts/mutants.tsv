@@ -181,3 +181,4 @@ p138_M1_match_item_member_removed	src/Rotorise.ts	s/^(          \| \()ProjectPat
 p138_M2_match_literal_wide	src/Rotorise.ts	s/(: Arms\[V\] & ProjectPath<ExtractVariant<Entity, K, V>, K,) V>/\1 never>/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
 p138_M3_match_item_without_arm_components	src/Rotorise.ts	s/^                    \? I$/                    ? unknown/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
 p140_L1_label_of_a_function_tag_is_wide	src/Rotorise.ts	s/^        \? \[Tag, Print<Value>\]$/        ? [string, Print<Value>]/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
+p141_A1_allowpartial_requires_the_first_component	src/Rotorise.ts	s/^                \? 0$/                ? 1/	node ./node_modules/typescript-7/bin/tsc --noEmit	is missing in type
