@@ -382,9 +382,7 @@ type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends [
                   Printed<Entity[Spec] & joinable, Partial>,
                   true extends Partial ? Absence<Entity[Spec], false> : 'never',
               ]
-            : true extends Partial
-              ? [Uppercase<Spec & string>, never, 'always']
-              : never
+            : never
 
 type CompositeKeyStringBuilder<
     Entity,
