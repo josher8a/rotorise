@@ -26,6 +26,7 @@ import {
     andThen,
     at,
     CodecError,
+    failed,
     item as itemOf,
     object,
     orThrow,
@@ -1589,13 +1590,13 @@ type FullKeySpec<Entity> =
     | PathMatch
     | CasesMatch
 
-type RotoriseErrorKind = 'refused' | 'separator' | 'decided' | 'rewrite'
+type RotoriseErrorKind = 'refused'
 
 export class RotoriseError extends Error {
     /**
-     * What kind of refusal this is. `refused` is any refusal that no reader tells apart. A key
-     * part that holds the separator, a change that writes a decided attribute at another value,
-     * and a change that cannot rewrite a touched key each have a kind.
+     * What kind of refusal this is. `refused` is the one kind of a refusal at construction and of a
+     * broken call. The refusal of a key is a `CodecError` value, and it has the kinds `key`,
+     * `separator`, `decided` and `rewrite`.
      */
     readonly kind: RotoriseErrorKind
 
@@ -1928,7 +1929,7 @@ const key =
             value: unknown,
             attributes: Record<string, unknown>,
             alone?: boolean,
-        ) => unknown,
+        ) => Result<unknown>,
         /** How a key name reads a value at the carrier of the call: an item, or the given item of an update. */
         read: KeyNameReader = valueAt,
     ) => {
@@ -1945,20 +1946,21 @@ const key =
             key: Key,
             attributes: Attributes,
             config?: Config,
-        ): string | undefined => {
+        ): Result<string | undefined> => {
             // a full key is not empty, whether the key is one attribute or a print of components. A
             // partial key can be empty. The error names the key and holds no value.
-            const nonEmpty = (text: unknown, full: boolean, what: string) => {
-                if (full && text === '') {
-                    throw new RotoriseError(`Key ${key.toString()}: ${what}`)
-                }
-            }
+            const nonEmpty = (
+                text: unknown,
+                full: boolean,
+                what: string,
+            ): CodecError | undefined =>
+                full && text === ''
+                    ? keyRefusal(`Key ${key.toString()}: ${what}`)
+                    : undefined
             const case_ = schema[key]
 
             if (case_ === undefined) {
-                throw new RotoriseError(
-                    `Key ${key.toString()} not found in schema`,
-                )
+                return keyRefusal(`Key ${key.toString()} not found in schema`)
             }
             const arm = select(
                 case_,
@@ -1967,7 +1969,7 @@ const key =
             )
             if (arm.kind === 'missing') {
                 // an error names the discriminator and holds no value
-                throw new RotoriseError(
+                return keyRefusal(
                     arm.named
                         ? `Discriminator value of ${arm.discriminator} not found in the spec`
                         : `Discriminator ${arm.discriminator} not found in the attributes`,
@@ -1989,11 +1991,13 @@ const key =
                               attributes as Record<string, unknown>,
                               true,
                           )
-                nonEmpty(
+                if (failed(stored)) return stored
+                const empty = nonEmpty(
                     stored,
                     true,
                     `the attribute '${arm.name}' is empty, so the key is empty. Give '${arm.name}' a value, or leave it out.`,
                 )
+                if (empty !== undefined) return empty
                 return stored as never
             }
 
@@ -2004,7 +2008,7 @@ const key =
                 // a depth that keeps no whole number of components has no key to print. The error
                 // names the key and holds no value.
                 if (!Number.isInteger(config.depth) || config.depth < 0) {
-                    throw new RotoriseError(
+                    return keyRefusal(
                         `Key ${key.toString()}: depth is a non-negative integer`,
                     )
                 }
@@ -2015,13 +2019,17 @@ const key =
 
             // An object has no text of its own, so the key cannot print it. The refusal names the
             // component, and never the value.
-            const push = (component: string, segment: joinable) => {
+            const push = (
+                component: string,
+                segment: joinable,
+            ): CodecError | undefined => {
                 if (typeof segment === 'object' && segment !== null) {
-                    throw new RotoriseError(
+                    return keyRefusal(
                         `buildCompositeKey: the value of ${component} is an object, so the key cannot print it. Give the attribute a codec that writes text or a number.`,
                     )
                 }
                 segments.push({ component, segment })
+                return undefined
             }
 
             for (const [at, part] of parts(
@@ -2031,7 +2039,7 @@ const key =
             ).entries()) {
                 if (part === undefined) {
                     if (config?.allowPartial) break
-                    throw new RotoriseError(
+                    return keyRefusal(
                         `buildCompositeKey: Attribute ${componentName(structure[at])} not found`,
                     )
                 }
@@ -2045,30 +2053,38 @@ const key =
                         typeof transformed === 'object' &&
                         transformed !== null
                     ) {
-                        if (transformed.tag !== undefined)
-                            push(`the tag of ${path}`, transformed.tag)
-                        push(path, transformed.value)
+                        const refusedTag =
+                            transformed.tag === undefined
+                                ? undefined
+                                : push(`the tag of ${path}`, transformed.tag)
+                        if (refusedTag !== undefined) return refusedTag
+                        const refusedValue = push(path, transformed.value)
+                        if (refusedValue !== undefined) return refusedValue
                     } else {
-                        push(`the name ${path}`, name)
-                        push(path, transformed)
+                        const refusedName = push(`the name ${path}`, name)
+                        if (refusedName !== undefined) return refusedName
+                        const refusedValue = push(path, transformed)
+                        if (refusedValue !== undefined) return refusedValue
                     }
                 } else {
-                    push(
+                    const refusedLabel = push(
                         tag === undefined
                             ? `the name ${path}`
                             : `the tag of ${path}`,
                         tag ?? name,
                     )
-                    push(
-                        path,
-                        (text === undefined
+                    if (refusedLabel !== undefined) return refusedLabel
+                    const stored =
+                        text === undefined
                             ? value
                             : text(
                                   path,
                                   value,
                                   attributes as Record<string, unknown>,
-                              )) as joinable,
-                    )
+                              )
+                    if (failed(stored)) return stored
+                    const refusedValue = push(path, stored as joinable)
+                    if (refusedValue !== undefined) return refusedValue
                 }
                 printed++
             }
@@ -2088,7 +2104,7 @@ const key =
                     segment !== null &&
                     String(segment).includes(separator)
                 ) {
-                    throw new RotoriseError(
+                    return keyRefusal(
                         `buildCompositeKey: the print of ${component} holds the separator, so the key cannot be read back. Remove the separator from the value, or choose another separator.`,
                         'separator',
                     )
@@ -2104,11 +2120,12 @@ const key =
             }
 
             const built = composite.join(separator)
-            nonEmpty(
+            const empty = nonEmpty(
                 built,
                 printed === fullLength,
                 'the print of the components is empty, so the key is empty. Give a component a value, or leave the key out.',
             )
+            if (empty !== undefined) return empty
             return built as never
         }
     }
@@ -2518,7 +2535,7 @@ export type TableEntryDefinition<
      *
      * A refusal of the item is a value: a key that cannot print, a name of a key that the item holds,
      * and a numeral that the marshaller cannot write give a `CodecError`. The error of a key has the
-     * `RotoriseError` as its `cause`.
+     * kind `key`, `separator`, `decided` or `rewrite`.
      */
     toEntry: <const ExactEntity extends Entity>(
         item: Exact<Entity, ExactEntity>,
@@ -2634,7 +2651,7 @@ export type TableEntryDefinition<
      *
      * A refusal of the change is a value: a decided attribute written at another value, a change that
      * cannot rebuild a touched key, and a table key that the change would rewrite give a `CodecError`
-     * of the kind `decided` or `rewrite`, with the `RotoriseError` of the step as its `cause`.
+     * of the kind `decided` or `rewrite`, or of the kind `key` or `separator` that the step keeps.
      */
     keyUpdates: <const Changed extends Partial<Entity>>(
         changed: Exact<Partial<Entity>, Changed> &
@@ -2774,8 +2791,8 @@ type EntryCodecMethods<
     /**
      * Entity to a complete item, or why it could not be written: keys computed by the schema,
      * attributes encoded by the codec. A refusal of the codec and a refusal of a key are both
-     * values. The error of a key has the `RotoriseError` as its `cause`, and the error of the codec
-     * has none.
+     * values. The error of a key has the kind `key`, `separator`, `decided` or `rewrite`, and the
+     * error of the codec has another kind.
      *
      * Typed attribute by attribute, which is what makes this the shape to diff in review: the
      * declared attributes come from the codec and the computed keys from the schema.
@@ -3375,7 +3392,7 @@ type AgreedAttributes<Variants> = {
  * a `Uint8Array` is `B`, so an `N` sort key orders by number. `native` writes the value, so a value
  * that the store refuses is refused here too. The refusal names the key and never the value.
  */
-const asKey = (name: string, value: unknown): Carrying<KeyMember> =>
+const asKey = (name: string, value: unknown): Result<Carrying<KeyMember>> =>
     keyOfAttribute(name, native.encode(value))
 
 /**
@@ -3401,7 +3418,7 @@ const refuseBareSeparator = (): never => {
 const heldKey = (
     name: string,
     key: Carrying<KeyMember>,
-): string | number | bigint | Uint8Array => {
+): Result<string | number | bigint | Uint8Array> => {
     if ('S' in key) return key.S
     if ('B' in key) return key.B
     const numeral = key.N
@@ -3412,31 +3429,25 @@ const heldKey = (
             return held
     }
     if (/^-?\d+$/.test(numeral)) return BigInt(numeral)
-    throw new RotoriseError(
+    return keyRefusal(
         `'${name}' holds a number that the AWS SDK marshaller cannot write: it is no integer, and no JS number holds it exactly. Read the key from toItem, which writes it as the attribute that it is.`,
     )
 }
 
 /**
- * The refusal of a key as a value. The builder of a key throws a `RotoriseError`, and a method that
- * returns a `Result` gives it back as a `CodecError` of the same kind and message. The `cause` is the
- * `RotoriseError`, which tells a refusal of a key from a refusal of the codec: the codec gives a
- * `CodecError` with no cause. A throw of another class is a broken invariant and propagates. This is
- * a throw that serves as control flow, and the last step of the change of channel replaces it.
+ * The refusal of a key, as a value. The kind `key` marks a refusal of a key that no other kind
+ * names, and `separator`, `decided` and `rewrite` mark the refusals that have their own kind. The
+ * codec gives a refusal of another kind, so a reader tells a refusal of a key from a refusal of the
+ * codec by the kind.
  */
-const returned = <T>(run: () => T): Result<T> => {
-    try {
-        return run()
-    } catch (error) {
-        if (error instanceof RotoriseError)
-            return new CodecError(error.message, error.kind, { cause: error })
-        throw error
-    }
-}
+const keyRefusal = (
+    message: string,
+    kind: CodecError['kind'] = 'key',
+): CodecError => new CodecError(message, kind)
 
 /** The refusal of a key value that DynamoDB cannot store. It names the key and holds no value. */
-const notAKey = (name: string): RotoriseError =>
-    new RotoriseError(
+const notAKey = (name: string): CodecError =>
+    keyRefusal(
         `'${name}' is built from a value that DynamoDB cannot store as a key. A key is a non-empty string, a number, or a non-empty Uint8Array.`,
     )
 
@@ -3474,7 +3485,7 @@ const keyAttribute = (
 const keyOfAttribute = (
     name: string,
     written: AttributeValue | CodecError,
-): Carrying<KeyMember> => {
+): Result<Carrying<KeyMember>> => {
     if (!(written instanceof CodecError)) {
         const member = memberOf(written)
         if (member === 'S' && typeof written.S === 'string' && written.S !== '')
@@ -3488,7 +3499,7 @@ const keyOfAttribute = (
         )
             return carrying('B', written.B)
     }
-    throw notAKey(name)
+    return notAKey(name)
 }
 
 /**
@@ -4093,7 +4104,11 @@ export const tableEntry =
             sep,
             (path, value, given, alone) =>
                 storedText(path, value, given, alone),
-        ) as (name: never, attributes: never, config?: never) => unknown
+        ) as (
+            name: never,
+            attributes: never,
+            config?: never,
+        ) => Result<string | undefined>
 
         /** The builder of an update: it reads the given item by the written name first, as `given` of the model does. */
         const buildGiven = key()(
@@ -4102,7 +4117,11 @@ export const tableEntry =
             (path, value, given, alone) =>
                 storedText(path, value, given, alone),
             givenAt,
-        ) as (name: never, attributes: never, config?: never) => unknown
+        ) as (
+            name: never,
+            attributes: never,
+            config?: never,
+        ) => Result<string | undefined>
 
         /**
          * A built codec carries its own options; a spec takes the defaults.
@@ -4250,7 +4269,7 @@ export const tableEntry =
                 ofTable: boolean
                 components: ReadonlySet<string>
             },
-        ): RotoriseError => {
+        ): CodecError => {
             const block = blockOf(changed, given)
             const touched = [...step.components].filter(touchedBy(changed))
             const givenNames = Object.keys(given)
@@ -4269,13 +4288,13 @@ export const tableEntry =
                     relatedToAny(c, block),
                 )
                 if (held.length === 0) continue
-                return new RotoriseError(
+                return keyRefusal(
                     `${head} The keys tie ${step.ofTable ? 'it' : 'the change'} to ${quoted(block)}, and the block holds ${quoted(held)} of '${key.name}'. A table key freezes its block, because rewriting the block would move the item and DynamoDB cannot update a key attribute. Write the new item and delete the old one.`,
                     'rewrite',
                 )
             }
             const needed = [...block].filter((c) => !holdsPath(c, givenNames))
-            return new RotoriseError(
+            return keyRefusal(
                 `${head} The keys tie ${quoted(block)} together. Write ${quoted(needed)} in the change.`,
                 'rewrite',
             )
@@ -4322,8 +4341,8 @@ export const tableEntry =
 
         const pathSlots = new Map<string, ObjectSlot | undefined>()
         /** The refusal of a path that the codec cannot address, with the reason of `at`. */
-        const pathRefusal = (path: string, error: CodecError): RotoriseError =>
-            new RotoriseError(
+        const pathRefusal = (path: string, error: CodecError): CodecError =>
+            keyRefusal(
                 `'${path}' is a component of a key, and the codec cannot address that path, so the key cannot print the stored text. ${error.message}${slotsAt(path).length > 0 ? ` The codec declares an attribute of that name, but ${dotIsPath}.` : ''}`,
             )
         /**
@@ -4331,9 +4350,7 @@ export const tableEntry =
          * that the codec cannot address, with the reason of `at`. The located codec of `at` is that
          * codec.
          */
-        const pathAt = (
-            path: string,
-        ): ObjectSlot | RotoriseError | undefined => {
+        const pathAt = (path: string): ObjectSlot | CodecError | undefined => {
             // an entry without a codec states no slot
             if (attributes === undefined) return undefined
             if (pathSlots.has(path)) return pathSlots.get(path)
@@ -4356,12 +4373,6 @@ export const tableEntry =
             if (address instanceof CodecError && address.kind === 'refused')
                 return refused(address)
             pathSlots.set(path, found)
-            return found
-        }
-        /** The codec at a path. A key cannot print the stored text at a path that is refused. */
-        const pathSlot = (path: string): ObjectSlot | undefined => {
-            const found = pathAt(path)
-            if (found instanceof RotoriseError) throw found
             return found
         }
 
@@ -4411,10 +4422,19 @@ export const tableEntry =
         const componentSlots = (
             name: string,
             item?: Record<string, unknown>,
-        ): ObjectSlot[] => {
+        ): Result<ObjectSlot[]> => {
             if (!name.includes('.')) return fieldSlots(name, item)
-            const slot = pathSlot(name)
+            // a key cannot print the stored text at a path that is refused
+            const slot = pathAt(name)
+            if (failed(slot)) return slot
             return slot === undefined ? [] : [slot]
+        }
+
+        /** The slots of a component at construction, where a path that the codec cannot address is refused. */
+        const slotsAtConstruction = (name: string): ObjectSlot[] => {
+            const slots = componentSlots(name)
+            if (failed(slots)) throw new RotoriseError(slots.message)
+            return slots
         }
 
         /**
@@ -4427,15 +4447,16 @@ export const tableEntry =
             value: unknown,
             item: Record<string, unknown>,
             alone = false,
-        ): unknown => {
+        ): Result<unknown> => {
             if (attributes === undefined) return value
             const slots = componentSlots(path, item)
+            if (failed(slots)) return slots
             if (slots.length === 0) return value
             const written = keyAttribute(slots, value)
             // a path that variants declare differently, or only some of them, refuses on use with the
             // reason of `at`
             if (written instanceof CodecError && written.kind !== 'refused')
-                throw pathRefusal(path, written)
+                return pathRefusal(path, written)
             if (alone) {
                 // a key of one attribute under no adapter of a caller holds the value, which the type says
                 if (
@@ -4461,7 +4482,7 @@ export const tableEntry =
                 if (memberOf(written) === 'N' && typeof written.N === 'string')
                     return written.N
             }
-            throw new RotoriseError(
+            return keyRefusal(
                 `'${path}' is a component of a key, and the codec writes no text or number for the value, so the key cannot print it.`,
             )
         }
@@ -4527,7 +4548,7 @@ export const tableEntry =
                             typeof transform === 'function'
                         )
                             continue
-                        const slots = componentSlots(field)
+                        const slots = slotsAtConstruction(field)
                         oneCodec(name, field, slots)
                         for (const slot of slots) {
                             const stored = storedAt(slot)
@@ -4544,7 +4565,7 @@ export const tableEntry =
                 } else if (typeof value === 'string') {
                     // a slot of two members is one field stored as two types. A second slot of the
                     // field is another variant. A path has the one slot of the codec at the path
-                    const written = componentSlots(value)
+                    const written = slotsAtConstruction(value)
                     oneCodec(name, value, written)
                     for (const [at, slot] of written.entries()) {
                         const stored = storedAt(slot)
@@ -4607,16 +4628,20 @@ export const tableEntry =
             value: unknown,
             written?: AttributeMap,
             read: KeyNameReader = valueAt,
-        ): Carrying<KeyMember> => {
+        ): Result<Carrying<KeyMember>> => {
             const selected = select(expanded[name], item, read)
             // a list of components and a `null` arm read no attribute of the codec
             if (attributes === undefined || selected.kind !== 'attr')
                 return asKey(name, value)
             const field = selected.name
             // a name with a `.` is a path, so the attribute that the codec wrote under the name is no reading
-            const encoded: AttributeValue | CodecError | undefined =
-                (field.includes('.') ? undefined : written?.[field]) ??
-                keyAttribute(componentSlots(field, item), read(item, field))
+            let encoded: AttributeValue | CodecError | undefined =
+                field.includes('.') ? undefined : written?.[field]
+            if (encoded === undefined) {
+                const slots = componentSlots(field, item)
+                if (failed(slots)) return slots
+                encoded = keyAttribute(slots, read(item, field))
+            }
             if (encoded === undefined) return asKey(name, value)
             const stored = keyMembers.get(name)
             // the member is decided at construction, so a write at another member is no key
@@ -4625,7 +4650,7 @@ export const tableEntry =
                 !(encoded instanceof CodecError) &&
                 memberOf(encoded) !== stored
             )
-                throw notAKey(name)
+                return notAKey(name)
             return keyOfAttribute(name, encoded)
         }
 
@@ -4636,13 +4661,13 @@ export const tableEntry =
          */
         const overDecided = (
             given: Record<string, unknown>,
-        ): Record<string, unknown> => {
+        ): Result<Record<string, unknown>> => {
             for (const name of Object.keys(decided)) {
                 if (
                     Object.hasOwn(given, name) &&
                     !sameConstant(given[name], decided[name])
                 ) {
-                    throw new RotoriseError(
+                    return keyRefusal(
                         `'${name}' is decided by the codec as '${String(decided[name])}', and this change writes another value. The codec admits one value, so write '${String(decided[name])}' or leave '${name}' out.`,
                         'decided',
                     )
@@ -4661,11 +4686,12 @@ export const tableEntry =
          */
         const updateKeys = (
             changed: Record<string, unknown>,
-        ): KeyUpdate<string> => {
+        ): Result<KeyUpdate<string>> => {
             // an entry list, so a key named `__proto__` is an own attribute of the result
             const set: [string, AttributeValue][] = []
             const remove: string[] = []
             const given = overDecided(changed)
+            if (failed(given)) return given
             const touched = touchedBy(changed)
 
             for (const key of keys) {
@@ -4693,44 +4719,35 @@ export const tableEntry =
                 if (!touches) continue
 
                 if (key.ofTable || lacks) {
-                    throw refusal(changed, given, {
+                    return refusal(changed, given, {
                         key: key.name,
                         ofTable: key.ofTable,
                         components,
                     })
                 }
 
-                const step = ((): [string, AttributeValue] | undefined => {
-                    try {
-                        const built = buildGiven(
-                            key.name as never,
-                            given as never,
-                        )
-                        return built === undefined
-                            ? undefined
-                            : [
-                                  key.name,
-                                  carried(
-                                      key.name,
-                                      given,
-                                      built,
-                                      undefined,
-                                      givenAt,
-                                  ),
-                              ]
-                    } catch (error) {
-                        // the step names the key that refused, and keeps the kind of the refusal,
-                        // whether the builder or the carrier refused
-                        if (!(error instanceof RotoriseError)) throw error
-                        throw new RotoriseError(
-                            `'${key.name}' cannot be rebuilt from this change: ${error.message}`,
-                            error.kind,
-                            { cause: error },
-                        )
-                    }
-                })()
-                if (step === undefined) remove.push(key.name)
-                else set.push(step)
+                // the step names the key that refused, and keeps the kind of the refusal, whether
+                // the builder or the carrier refused
+                const stepRefusal = (error: CodecError) =>
+                    keyRefusal(
+                        `'${key.name}' cannot be rebuilt from this change: ${error.message}`,
+                        error.kind,
+                    )
+                const built = buildGiven(key.name as never, given as never)
+                if (failed(built)) return stepRefusal(built)
+                if (built === undefined) {
+                    remove.push(key.name)
+                    continue
+                }
+                const value = carried(
+                    key.name,
+                    given,
+                    built,
+                    undefined,
+                    givenAt,
+                )
+                if (failed(value)) return stepRefusal(value)
+                set.push([key.name, value])
             }
 
             return { set: Object.fromEntries(set), remove }
@@ -4743,10 +4760,11 @@ export const tableEntry =
         const address = (
             name: string,
             attributes: Record<string, unknown>,
-        ): Carrying<KeyMember> => {
+        ): Result<Carrying<KeyMember>> => {
             const built = buildKey(name as never, attributes as never)
+            if (failed(built)) return built
             if (built === undefined) {
-                throw new RotoriseError(
+                return keyRefusal(
                     `'${name}' gives no key for these attributes, so it cannot address the item`,
                 )
             }
@@ -4762,13 +4780,13 @@ export const tableEntry =
             name: string,
             components: readonly unknown[],
             printed: readonly (Part | undefined)[],
-        ): void => {
+        ): CodecError | undefined => {
             const absent = printed.indexOf(undefined)
             const later = printed.findIndex(
                 (part, at) => at > absent && part !== undefined,
             )
-            if (absent < 0 || later < 0) return
-            throw new RotoriseError(
+            if (absent < 0 || later < 0) return undefined
+            return keyRefusal(
                 `'${name}' gets '${componentName(components[later])}' and lacks '${componentName(components[absent])}' before it, so the condition would drop '${componentName(components[later])}' and select more items than the attributes name. Give '${componentName(components[absent])}' or leave '${componentName(components[later])}' out.`,
             )
         }
@@ -4784,7 +4802,7 @@ export const tableEntry =
         const sortCondition = (
             name: string,
             attributes: Record<string, unknown>,
-        ): SortCondition | undefined => {
+        ): Result<SortCondition | undefined> => {
             const arm = select(expanded[name], attributes, valueAt)
             const components =
                 arm.kind === 'leaf'
@@ -4809,15 +4827,18 @@ export const tableEntry =
                 attributes as never,
                 { allowPartial: true, enforceBoundary: true } as never,
             )
+            if (failed(built)) return built
             if (built === undefined || printed[0] === undefined) {
-                throw new RotoriseError(
+                return keyRefusal(
                     `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
                 )
             }
-            refuseGap(name, components, printed)
-            return printed.every((part) => part !== undefined)
-                ? { name, equals: carried(name, attributes, built) }
-                : { name, beginsWith: carrying('S', String(built)) }
+            const gap = refuseGap(name, components, printed)
+            if (gap !== undefined) return gap
+            if (!printed.every((part) => part !== undefined))
+                return { name, beginsWith: carrying('S', String(built)) }
+            const equals = carried(name, attributes, built)
+            return failed(equals) ? equals : { name, equals }
         }
 
         const dropKeys = fromEntry(expanded)
@@ -4836,16 +4857,19 @@ export const tableEntry =
          */
         const keyPart = <V>(
             item: Record<string, unknown>,
-            carry: (name: string, value: unknown) => V,
-        ): Record<string, V> =>
-            Object.fromEntries(
-                keyNames.flatMap((name) => {
-                    const value = buildKey(name as never, item as never)
-                    return value === undefined
-                        ? []
-                        : [[name, carry(name, value)] as const]
-                }),
-            )
+            carry: (name: string, value: unknown) => Result<V>,
+        ): Result<Record<string, V>> => {
+            const entries: (readonly [string, V])[] = []
+            for (const name of keyNames) {
+                const value = buildKey(name as never, item as never)
+                if (failed(value)) return value
+                if (value === undefined) continue
+                const carriedValue = carry(name, value)
+                if (failed(carriedValue)) return carriedValue
+                entries.push([name, carriedValue] as const)
+            }
+            return Object.fromEntries(entries)
+        }
 
         /**
          * The row with a key part: `joinMap` of `dropMap`. The key names leave the row first, and the
@@ -4880,17 +4904,16 @@ export const tableEntry =
 
         const buildEntry = (item: Record<string, unknown>) => {
             const held = holdsKeyName(item, 'the entity')
-            if (held !== undefined) throw new RotoriseError(held)
-            return joinRow(
-                item,
+            if (held !== undefined) return keyRefusal(held)
+            return andThen(
                 keyPart(item, (name, value) =>
-                    heldKey(name, carried(name, item, value)),
+                    andThen(carried(name, item, value), (key) =>
+                        heldKey(name, key),
+                    ),
                 ),
+                (part) => joinRow(item, part),
             )
         }
-
-        const toEntry = (item: Record<string, unknown>) =>
-            returned(() => buildEntry(item))
 
         /**
          * The keys of the names, as the AttributeMap of a request. A name that the schema does not
@@ -4913,18 +4936,21 @@ export const tableEntry =
             if (unknown !== undefined) {
                 throw new RotoriseError(`Key ${unknown} not found in schema`)
             }
-            return returned(() => {
-                // the codec decides a component, so no caller passes it
-                const attributes = overDecided(given)
-                if (names.length === 0) {
-                    throw new RotoriseError(
-                        'the call names no key, so the schema does not say which keys address the table',
-                    )
-                }
-                return Object.fromEntries(
-                    names.map((name) => [name, address(name, attributes)]),
+            // the codec decides a component, so no caller passes it
+            const attributes = overDecided(given)
+            if (failed(attributes)) return attributes
+            if (names.length === 0) {
+                return keyRefusal(
+                    'the call names no key, so the schema does not say which keys address the table',
                 )
-            })
+            }
+            const entries: (readonly [string, Carrying<KeyMember>])[] = []
+            for (const name of names) {
+                const built = address(name, attributes)
+                if (failed(built)) return built
+                entries.push([name, built] as const)
+            }
+            return Object.fromEntries(entries)
         }
 
         /**
@@ -4953,26 +4979,22 @@ export const tableEntry =
                         : `the indexes option declares no index '${index}'`,
                 )
             }
-            return returned(() => {
-                // the codec decides a component, so no caller passes it
-                const attributes = overDecided(passed)
-                const sort =
-                    given.sort === undefined
-                        ? undefined
-                        : sortCondition(given.sort, attributes)
-                return {
-                    ...(index === undefined ? {} : { index }),
-                    partition: {
-                        name: given.partition,
-                        value: address(given.partition, attributes),
-                    },
-                    ...(sort === undefined ? {} : { sort }),
-                }
-            })
+            // the codec decides a component, so no caller passes it
+            const attributes = overDecided(passed)
+            if (failed(attributes)) return attributes
+            const sort =
+                given.sort === undefined
+                    ? undefined
+                    : sortCondition(given.sort, attributes)
+            if (failed(sort)) return sort
+            const value = address(given.partition, attributes)
+            if (failed(value)) return value
+            return {
+                ...(index === undefined ? {} : { index }),
+                partition: { name: given.partition, value },
+                ...(sort === undefined ? {} : { sort }),
+            }
         }
-
-        const keyUpdates = (changed: Record<string, unknown>) =>
-            returned(() => updateKeys(changed))
 
         /**
          * One key of the entry. A name that the schema does not declare, and a depth that is no
@@ -4995,21 +5017,13 @@ export const tableEntry =
                     `Key ${name}: depth is a non-negative integer`,
                 )
             }
-            return returned(() =>
-                (
-                    buildKey as unknown as (
-                        name: string,
-                        attributes: Record<string, unknown>,
-                        config?: object,
-                    ) => string | undefined
-                )(name, attributes, config),
-            )
+            return buildKey(name as never, attributes as never, config as never)
         }
 
         const definition = {
-            keyUpdates: keyUpdates as never,
+            keyUpdates: updateKeys as never,
             unsafeKeyUpdates: ((changed: Record<string, unknown>) =>
-                orThrow(keyUpdates(changed))) as never,
+                orThrow(updateKeys(changed))) as never,
             keys: keysOf as never,
             unsafeKeys: ((
                 first: readonly string[] | Record<string, unknown>,
@@ -5020,9 +5034,9 @@ export const tableEntry =
                 first: string | Record<string, unknown>,
                 second?: Record<string, unknown>,
             ) => orThrow(keyConditionOf(first, second))) as never,
-            toEntry: toEntry as never,
+            toEntry: buildEntry as never,
             unsafeToEntry: ((item: Record<string, unknown>) =>
-                orThrow(toEntry(item))) as never,
+                orThrow(buildEntry(item))) as never,
             fromEntry: dropKeys as never,
             key: keyValue as never,
             unsafeKey: ((
@@ -5043,13 +5057,11 @@ export const tableEntry =
                     const held = holdsKeyName(written, 'the write of the codec')
                     return held !== undefined
                         ? new CodecError(held)
-                        : returned(() =>
-                              joinRow(
-                                  written,
-                                  keyPart(item, (name, value) =>
-                                      carried(name, item, value, written),
-                                  ),
+                        : andThen(
+                              keyPart(item, (name, value) =>
+                                  carried(name, item, value, written),
                               ),
+                              (part) => joinRow(written, part),
                           )
                 },
             )

@@ -11,6 +11,7 @@ type CodecErrorKind =
     | 'vacant'
     | 'someVariants'
     | 'ambiguous'
+    | 'key'
     | 'separator'
     | 'decided'
     | 'rewrite'
@@ -50,9 +51,9 @@ export class CodecError extends Error {
      * What kind of refusal this is, for a reader that has to tell one refusal from another. `refused`
      * is any refusal that no reader tells apart. `vacant`, `someVariants` and `ambiguous` are the
      * decisions of `at` that are no codec: no codec stands at the path, some variants declare it
-     * only, or the variants declare it differently. `separator`, `decided` and `rewrite` are the
-     * refusals of a key: a part that holds the separator, a change that writes a decided
-     * attribute at another value, and a change that cannot rebuild a touched key.
+     * only, or the variants declare it differently. `key`, `separator`, `decided` and `rewrite` are
+     * the refusals of a key: a key that no other kind names, a part that holds the separator, a change
+     * that writes a decided attribute at another value, and a change that cannot rebuild a touched key.
      */
     readonly kind: CodecErrorKind
 

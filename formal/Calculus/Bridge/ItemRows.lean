@@ -12,9 +12,9 @@ absent. A plain component of a leaf is a `Part.named` with the name of the attri
 the emitter gives as text. The model evaluates the part at the item, so the empty rule and the read of
 a path are in the model, and the host gives only the outcome. The host method toItem returns each
 refusal as a value.
-A refusal of a key has the error of the key as its cause, and the emitter reads it as a refused row. A
-refusal of the codec has no cause: the model states no write that the codec refuses, so the emitter
-skips that item. A test counts the rows that a key refuses, so a move of the channel fails that test.
+A refusal of a key has one of the four kinds of a key refusal, and the emitter reads it as a refused
+row. A refusal of the codec has another kind: the model states no write that the codec refuses, so the
+emitter skips that item. A test counts the rows that a key refuses, so a move of the channel fails that test.
 
 The comparator reads `DerivedItem.keyPartOf` over `DerivedItem.itemOf` of the value of the row, at
 the member of each key. The model refuses where one key is refused. Otherwise it gives, for each key

@@ -295,7 +295,9 @@ describe('DynamoDB refuses an empty key value, so the run time refuses it', () =
         })
         expect(refused).toBeInstanceOf(CodecError)
         if (refused instanceof CodecError)
-            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                refused.kind,
+            )
     })
 })
 

@@ -2586,7 +2586,10 @@ const reach = (
 const decision = (
     kind: CodecError['kind'],
 ): 'refused' | 'vacant' | 'someVariants' | 'ambiguous' =>
-    kind === 'separator' || kind === 'decided' || kind === 'rewrite'
+    kind === 'key' ||
+    kind === 'separator' ||
+    kind === 'decided' ||
+    kind === 'rewrite'
         ? 'refused'
         : kind
 

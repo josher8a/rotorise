@@ -3,12 +3,12 @@
  *
  * The codec refuses a value that it cannot write, and a key refuses a component that it cannot print.
  * Both come back as a `CodecError`, so a caller that holds an item of the declared type never reads a
- * throw. The error of a key has the `RotoriseError` of the builder as its cause, and the error of the
- * codec has none, so a reader tells the two apart. `unsafeToItem` throws the value that `toItem`
+ * throw. The error of a key has the kind `key`, `separator`, `decided` or `rewrite`, and the error of the
+ * codec has another kind, so a reader tells the two apart. `unsafeToItem` throws the value that `toItem`
  * returns.
  */
 import { describe, expect, it } from 'vitest'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 import { item, object, optional, string } from '../../codec'
 
 type Pet = { petId: string; nick: string }
@@ -27,7 +27,7 @@ describe('toItem returns the refusal of a key as a value', () => {
     it('returns the refusal of an empty key, and names the attribute', () => {
         const refused = Pets.toItem({ ...rex, nick: '' })
         expect(refused).toBeInstanceOf(CodecError)
-        if (refused instanceof CodecError) expect(refused.kind).toBe('refused')
+        if (refused instanceof CodecError) expect(refused.kind).toBe('key')
         if (refused instanceof CodecError)
             expect(refused.message).toContain("the attribute 'nick' is empty")
     })
@@ -82,8 +82,13 @@ describe('toItem returns the refusal of a key as a value', () => {
         expect(ofKey).toBeInstanceOf(CodecError)
         expect(ofCodec).toBeInstanceOf(CodecError)
         if (ofKey instanceof CodecError)
-            expect(ofKey.cause).toBeInstanceOf(RotoriseError)
-        if (ofCodec instanceof CodecError) expect(ofCodec.cause).toBeUndefined()
+            expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                ofKey.kind,
+            )
+        if (ofCodec instanceof CodecError)
+            expect(['key', 'separator', 'decided', 'rewrite']).not.toContain(
+                ofCodec.kind,
+            )
     })
 })
 

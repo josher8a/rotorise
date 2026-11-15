@@ -173,7 +173,9 @@ describe('a grouped match', () => {
             const refused = entry.key('SK', { type: 'toString', id: 'x' })
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
     })
 })

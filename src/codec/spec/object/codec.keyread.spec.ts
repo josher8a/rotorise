@@ -7,12 +7,7 @@
  * attributes, so a row with a correct key, a stale key or no key decodes to one item.
  */
 import { describe, expect, it } from 'vitest'
-import {
-    CodecError,
-    failed,
-    RotoriseError,
-    tableEntry,
-} from '../../../Rotorise'
+import { CodecError, failed, tableEntry } from '../../../Rotorise'
 import { string } from '../../codec'
 
 type User = { orgId: string; id: string; role: string; email: string }
@@ -82,7 +77,9 @@ describe('a key build', () => {
             const refused = Users.toEntry(bad)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
     })
 

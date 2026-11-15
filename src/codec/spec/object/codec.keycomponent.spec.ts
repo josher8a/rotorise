@@ -8,7 +8,7 @@
  * codec writes as another member, at a name and at a path, in the type and at construction.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 import {
     array,
     binary,
@@ -59,7 +59,9 @@ describe('a key component with no codec', () => {
             const refused = Dated.keys(['SK'], { at: new Date(0) } as Walk)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         tableEntry<Walk>()({
             PK: ['id'],

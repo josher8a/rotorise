@@ -3,8 +3,8 @@
  *
  * A key that cannot print, a key that the attributes give no value for, and a part that prints after
  * an absent part are failures of the argument, so a caller that holds attributes of the declared type
- * reads a `CodecError` and never a throw. The error has the `RotoriseError` of the builder as its
- * `cause`. A name that the schema does not declare, and an index that the options do not declare, are
+ * reads a `CodecError` and never a throw. The error has the kind of a key: `key`, or
+ * `separator`. A name that the schema does not declare, and an index that the options do not declare, are
  * refused by the type, so the call is broken and throws. The twin throws the value that the method
  * returns, so it throws a `CodecError`.
  */
@@ -36,8 +36,10 @@ describe('keys returns the refusal of the attributes as a value', () => {
         for (const refused of [named, table]) {
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError) {
-                expect(refused.kind).toBe('refused')
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(refused.kind).toBe('key')
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
                 expect(refused.message).toContain('Attribute petId not found')
             }
         }
@@ -80,7 +82,9 @@ describe('keyCondition returns the refusal of the attributes as a value', () => 
         })
         expect(refused).toBeInstanceOf(CodecError)
         if (refused instanceof CodecError) {
-            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                refused.kind,
+            )
             expect(refused.message).toContain(
                 "'GSI1SK' gives no key and no prefix for these attributes",
             )

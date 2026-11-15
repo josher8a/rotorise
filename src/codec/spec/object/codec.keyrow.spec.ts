@@ -78,7 +78,9 @@ describe('a key that builds no value', () => {
             const refused = Pets.toEntry(stale)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         {
             const refused = Pets.toEntry(stale)
@@ -112,7 +114,7 @@ describe('a key that cannot print', () => {
         // species holds the separator and petId is absent: the print stops at the absent part
         const run = () =>
             Pets.unsafeKey('GSI1SK', { species: 'CAT#1' } as never)
-        expect(kindOf(run)).toBe('refused')
+        expect(kindOf(run)).toBe('key')
         expect(run).toThrow(/Attribute petId not found/)
     })
 
@@ -149,7 +151,9 @@ describe('a step that cannot rebuild a key names the key', () => {
         })
         expect(refused).toBeInstanceOf(CodecError)
         if (refused instanceof CodecError) {
-            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                refused.kind,
+            )
             expect(refused.message).toMatch(
                 /^'GSI1SK' cannot be rebuilt from this change: buildCompositeKey: the print of species holds the separator/,
             )
@@ -256,7 +260,9 @@ describe('an entity that holds the name of a key', () => {
             const refused = closed.toEntry(stale)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         {
             const refused = closed.toEntry(stale)
@@ -286,7 +292,9 @@ describe('an entity that holds the name of a key', () => {
             const refused = open.toEntry(number)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
     })
 
@@ -320,7 +328,9 @@ describe('a key whose discriminator is null', () => {
         const refused = Pets.keyUpdates({ status: null })
         expect(refused).toBeInstanceOf(CodecError)
         if (refused instanceof CodecError) {
-            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                refused.kind,
+            )
             expect(refused.message).toMatch(/petId/)
             expect(refused.message).toMatch(/shelter/)
         }

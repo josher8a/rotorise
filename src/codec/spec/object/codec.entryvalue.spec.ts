@@ -3,12 +3,11 @@
  *
  * A key that cannot print, a name of a key that the entity holds, and a numeral that the marshaller
  * cannot write are failures of the argument, so a caller that holds an item of the declared type
- * reads a `CodecError` and never a throw. The error has the `RotoriseError` of the builder as its
- * `cause`. The twin throws the value that `toEntry` returns, so it throws a `CodecError`. The type of
+ * reads a `CodecError` and never a throw. The error has the kind of a key: `key` or `separator`. The twin throws the value that `toEntry` returns, so it throws a `CodecError`. The type of
  * the twin is the entry, and the type of `toEntry` is the entry or the error.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 import { decimal, string } from '../../codec'
 
 type Pet = { petId: string; nick: string }
@@ -28,10 +27,11 @@ describe('toEntry returns the refusal of an item as a value', () => {
     it('returns the refusal of an empty key, with and without a codec, and names the attribute', () => {
         const check = (refused: unknown) => {
             expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError) expect(refused.kind).toBe('key')
             if (refused instanceof CodecError)
-                expect(refused.kind).toBe('refused')
-            if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
             if (refused instanceof CodecError)
                 expect(refused.message).toContain(
                     "the attribute 'nick' is empty",
@@ -113,7 +113,9 @@ describe('unsafeToEntry throws what toEntry returns', () => {
             ) {
                 expect(thrown.kind).toBe(returned.kind)
                 expect(thrown.reason).toBe(returned.reason)
-                expect(thrown.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    thrown.kind,
+                )
             }
         }
     })

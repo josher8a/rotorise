@@ -502,7 +502,7 @@ before `'9'`.
 - One key name has one member, so the type refuses a match whose arms give `S` and `N`.
 - `null` and `undefined` give no key in every method.
 - DynamoDB refuses an empty string or an empty `Uint8Array` at a key, so `keyUpdates`,
-  `keys`, `keyCondition`, `toEntry` and `toItem` return a `CodecError` that holds the `RotoriseError` as its `cause`. The message names the key and not the value.
+  `keys`, `keyCondition`, `toEntry` and `toItem` return a `CodecError` of the kind `key`. The message names the key and not the value.
   `key` and `keyCondition` refuse an empty full key too, also where a transform prints the empty
   string at a component. A partial key, which is a call with
   `allowPartial` or with a `depth` below the count of components, may be the empty string.
@@ -528,9 +528,9 @@ names no separator. A bare string as the second argument is refused.
 
 ## Error Handling
 
-`RotoriseError` (exported) is the error of a refusal at construction, so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. `toItem`, `toEntry`, `key`, `keys`, `keyCondition` and `keyUpdates` return a key that cannot be built as a `CodecError` too, and its `cause` is the `RotoriseError` of the key. The codec gives a `CodecError` with no `cause`. A call that the type refuses, such as a key name that the schema does not declare, throws `RotoriseError`.
+`RotoriseError` (exported) is the error of a refusal at construction, so you can distinguish library errors from your own. `toItem` and `fromItem` return a `CodecError` as a value where the codec refuses the item or the row. `toItem`, `toEntry`, `key`, `keys`, `keyCondition` and `keyUpdates` return a key that cannot be built as a `CodecError` too, and its kind is `key`, `separator`, `decided` or `rewrite`. The codec gives a `CodecError` of another kind. A call that the type refuses, such as a key name that the schema does not declare, throws `RotoriseError`.
 
-Each error holds a `kind`. A `RotoriseError` is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'refused'` otherwise. A `CodecError` that `toItem`, `toEntry`, `key`, `keys`, `keyCondition` or `keyUpdates` returns for a key has the kind of its `cause`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
+Each error holds a `kind`. A `CodecError` that `toItem`, `toEntry`, `key`, `keys`, `keyCondition` or `keyUpdates` returns for a key is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'key'` otherwise. A `RotoriseError` is the error of a refusal at construction and of a broken call, and its kind is `'refused'`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
 
 ```ts
 import { RotoriseError } from 'rotorise'

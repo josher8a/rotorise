@@ -16,7 +16,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { RotoriseError, tableEntry } from '../../Rotorise'
+import { tableEntry } from '../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../attribute'
 import { CodecError, decimal, number, object, optional, string } from '../codec'
 import {
@@ -1201,13 +1201,14 @@ const itemRows = (): ItemRow[] => {
                               },
                 },
             }))
-            // a refusal of a key is a value with the `RotoriseError` as its cause. The model has no row
-            // for a write that the codec refuses, and the pool draws none, so a refusal with no cause is
-            // a defect of the draw
+            // a refusal of a key has a kind of a key. The model has no row for a write that the codec
+            // refuses, and the pool draws none, so a refusal of another kind is a defect of the draw
             const result = entry.toItem(draw)
             if (
                 result instanceof CodecError &&
-                !(result.cause instanceof RotoriseError)
+                !['key', 'separator', 'decided', 'rewrite'].includes(
+                    result.kind,
+                )
             )
                 throw new Error('the pool drew an item that the codec refuses')
             const outcome: ItemOutcome =
@@ -1324,7 +1325,7 @@ describe('the item rows, against the model of the row of an item', () => {
         })
     })
 
-    it('counts the rows that a throw refuses, because the model compares a throw as a refusal', () => {
+    it('counts the rows that a key refuses, because the model compares an error of a key as a refusal', () => {
         expect(
             rows.filter((row) => row.outcome.kind === 'refused').length,
         ).toBe(REFUSED_ITEM_ROWS)

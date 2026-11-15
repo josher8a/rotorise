@@ -8,7 +8,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { KeyCondition } from '../../../Rotorise'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 
 type Pet = {
     petId: string
@@ -135,7 +135,9 @@ describe('a query that selects no partition or no prefix is refused', () => {
             const refused = Pets.keyCondition('GSI1', { status: 'AVAILABLE' })
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
     })
 

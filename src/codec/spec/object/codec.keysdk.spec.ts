@@ -11,7 +11,7 @@
  */
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { describe, expect, it } from 'vitest'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../../attribute'
 import { decimal, number, string } from '../../codec'
 
@@ -75,7 +75,9 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
             const refused = Weights.toEntry({ id: 'w1', weight: numeral })
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         {
             const refused = Weights.toEntry({ id: 'w1', weight: numeral })
@@ -98,7 +100,9 @@ describe('toEntry holds a key of N as the SDK writes it, and the SDK reads it ba
             const refused = Weights.toEntry({ id: 'w1', weight: numeral })
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
     })
 })

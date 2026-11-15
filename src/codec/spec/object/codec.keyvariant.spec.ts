@@ -10,7 +10,7 @@
  * alone, so the specs reach it through an entry that the type does not check.
  */
 import { describe, expect, it } from 'vitest'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 import {
     binary,
     discriminatedUnion,
@@ -289,7 +289,9 @@ describe('a path that variants declare differently refuses on use with the reaso
             const refused = Notes.keys(['SK'], dogNote)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         {
             const refused = Notes.keys(['SK'], dogNote)
@@ -307,5 +309,35 @@ describe('a path that variants declare differently refuses on use with the reaso
                     /^'meta\.note' is a component of a key, and the codec cannot address that path/,
                 )
         }
+    })
+
+    it('names the path and the reason of at for a key of one attribute at that path', () => {
+        const Notes = route(
+            { PK: ['petId'], SK: 'meta.note' },
+            item(
+                discriminatedUnion('kind', [
+                    object({
+                        kind: string('DOG'),
+                        petId: string,
+                        meta: object({ note: string }),
+                    }),
+                    object({
+                        kind: string('CAT'),
+                        petId: string,
+                        meta: object({ note: isoAt }),
+                    }),
+                ]),
+            ),
+        )
+        const refused = Notes.key('SK', {
+            kind: 'DOG',
+            petId: 'p1',
+            meta: { note: 'a' },
+        } as never)
+        expect(refused).toBeInstanceOf(CodecError)
+        if (refused instanceof CodecError)
+            expect(refused.message).toMatch(
+                /declared differently in different variants/,
+            )
     })
 })

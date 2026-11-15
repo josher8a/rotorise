@@ -4,7 +4,7 @@
  * A full key that prints no segment, a component that the attributes lack, a part that holds the
  * separator, a discriminator that selects no arm, and a value that no key can print are failures of
  * the attributes, so a caller that holds attributes of the declared type reads a `CodecError` and never
- * a throw. The error has the `RotoriseError` of the builder as its `cause`. A key name that the schema
+ * a throw. The error has the kind of a key: `key` or `separator`. A key name that the schema
  * does not declare, and a depth that is no non-negative integer, are refused by the type, so the call is
  * broken and throws a `RotoriseError`. The twin throws the value that `key` returns. This pass changes
  * the channel only: a partial key keeps the outcome that it had.
@@ -28,8 +28,10 @@ describe('key returns the refusal of the attributes as a value', () => {
         const refused = Pets.key('SK', { ...rex, nick: '' })
         expect(refused).toBeInstanceOf(CodecError)
         if (refused instanceof CodecError) {
-            expect(refused.kind).toBe('refused')
-            expect(refused.cause).toBeInstanceOf(RotoriseError)
+            expect(refused.kind).toBe('key')
+            expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                refused.kind,
+            )
             expect(refused.message).toContain("the attribute 'nick' is empty")
         }
     })
@@ -132,7 +134,12 @@ describe('unsafeKey throws what key returns', () => {
                 if (thrown instanceof CodecError) {
                     expect(thrown.kind).toBe(returned.kind)
                     expect(thrown.reason).toBe(returned.reason)
-                    expect(thrown.cause).toBeInstanceOf(RotoriseError)
+                    expect([
+                        'key',
+                        'separator',
+                        'decided',
+                        'rewrite',
+                    ]).toContain(thrown.kind)
                 }
             }
         }

@@ -10,7 +10,7 @@
  * present.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
+import { CodecError, tableEntry } from '../../../Rotorise'
 
 type Pet = { petId: string; shelterId: string; nick: string }
 
@@ -41,7 +41,9 @@ describe('a full key of one attribute refuses the empty string, on every route',
             const refused = Pets.key('SK', unnamed)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         {
             const refused = Pets.key('SK', unnamed)
@@ -125,7 +127,9 @@ describe('a full key whose print is the empty text refuses, as a key of one attr
             const refused = Pets.key('GSI3SK', unnamed)
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
-                expect(refused.cause).toBeInstanceOf(RotoriseError)
+                expect(['key', 'separator', 'decided', 'rewrite']).toContain(
+                    refused.kind,
+                )
         }
         {
             const refused = Pets.key('GSI3SK', unnamed)
