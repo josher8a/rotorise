@@ -80,11 +80,9 @@
 # either toItem refused 1 built 2
 construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
-construct|accept|158dae9a|nest.pathTagDefault
 construct|accept|98e0a4e3|plain.defaultOpts
 construct|accept|a6d27a96|plain.tagOpts
 construct|accept|bd98ba26|nullableMeta.noCodec
-construct|accept|cd45d4d0|opt.pathDefaultOpts
 declaration|accept|ce03a404b2|dissection size
 decoded|refuse|b3aa5bd4bf|Decoded of the codec = { a: "x", c: "y" }
 exclude|refuse|034696c49d|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0

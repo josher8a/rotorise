@@ -8,7 +8,7 @@ import type { ErrorMessage, Exact, NonEmptyArray, show } from './utils'
 type AnyPathPin = `${string}.${string}`
 type PathComponents =
     | AnyPathPin
-    | [AnyPathPin, { readonly tag: string }]
+    | [AnyPathPin, { readonly tag: string }, unknown?]
     // biome-ignore lint/suspicious/noExplicitAny: the constraint types the parameter of a path transform as any
     | [AnyPathPin, (key: any) => TransformShape, unknown?]
 type LooseArmPin =

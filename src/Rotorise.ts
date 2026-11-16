@@ -445,12 +445,16 @@ type ExtractPathPair<
     : Spec extends [
             infer Key extends string,
             { readonly tag: infer Tag extends string },
+            ...infer Rest,
         ]
       ? [
             Tag,
-            Printed<ValueOfKey<Entity, Key> & joinable, Partial>,
+            Printed<
+                Defaulted<ValueOfKey<Entity, Key>, Rest> & joinable,
+                Partial
+            >,
             true extends Partial
-                ? Absence<ValueOfKey<Entity, Key>, false>
+                ? Absence<Defaulted<ValueOfKey<Entity, Key>, Rest>, false>
                 : 'never',
         ]
       : Spec extends string
@@ -829,7 +833,7 @@ type NonPath<Entity> = Exclude<keyof Entity, AnyPath>
  */
 type PathComponent =
     | AnyPath
-    | [AnyPath, TagOptions]
+    | [AnyPath, TagOptions, unknown?]
     // biome-ignore lint/suspicious/noExplicitAny: the value at a path is read by ValidatePaths, not by the constraint
     | [AnyPath, (key: any) => TransformShape, unknown?]
 
@@ -963,10 +967,16 @@ type AbsentValue<N, V> = undefined extends V
  * with no transform prints the stored value, and a `null` does not print.
  */
 type AbsentOrNull<N, V> = [AbsentValue<N, V>] extends [never]
-    ? null extends V
-        ? ErrorMessage<`'${N & string}' can be null: give a transform that reads the null`>
-        : never
+    ? NullValue<N, V>
     : AbsentValue<N, V>
+
+/**
+ * The refusal of a component with no transform whose value can be `null`. A default stands for an
+ * absent value only, so a tag with a default meets this refusal and no other.
+ */
+type NullValue<N, V> = null extends V
+    ? ErrorMessage<`'${N & string}' can be null: give a transform that reads the null`>
+    : never
 
 /** What a name can be where the value is `V`: a value that can be absent or `null` needs a transform. */
 type NameOfValue<E, N, V> = [V] extends [never]
@@ -993,9 +1003,13 @@ type ValidateComponent<E, C> = C extends string
                 : [AbsentValue<P, ValueOfKey<E, P>>] extends [never]
                   ? [P, (key: ValueOfKey<E, P>) => TransformShape]
                   : AbsentValue<P, ValueOfKey<E, P>>
-            : [AbsentOrNull<P, ValueOfKey<E, P>>] extends [never]
-              ? [P, Second]
-              : AbsentOrNull<P, ValueOfKey<E, P>>
+            : Rest extends [unknown]
+              ? [NullValue<P, ValueOfKey<E, P>>] extends [never]
+                  ? [P, Second, Exclude<ValueOfKey<E, P>, undefined>]
+                  : NullValue<P, ValueOfKey<E, P>>
+              : [AbsentOrNull<P, ValueOfKey<E, P>>] extends [never]
+                ? [P, Second]
+                : AbsentOrNull<P, ValueOfKey<E, P>>
       : C
 
 /**

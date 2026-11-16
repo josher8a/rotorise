@@ -520,33 +520,6 @@ of two literals at one slot.
 
 ---
 
-## Known: the type of a key component refuses a default beside an options object, where the run time reads the default
-
-**Observation.** A component of a key is a name, or a tuple of a name, a transform and a default.
-The transform is a function, or an options object such as `{ tag: 'DOSE' }`. The type takes a
-default beside a function only. The run time reads the default beside each form. Measured
-2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Pet = { petId: string; vaccine?: { lastDose: string } }
-
-    tableEntry<Pet>()({ PK: ['petId'], SK: [['vaccine.lastDose', { tag: 'DOSE' }, 'x']] })
-      type checker: refused, 'tag' does not exist in type '(key: any) => TransformShape'
-      runtime:      builds, and toEntry({ petId: 'p1' }) gives the SK "DOSE#x"
-
-    tableEntry<Pet>()({ PK: ['petId'], SK: [['vaccine.lastDose', (dose: string) => dose, 'x']] })
-      type checker: builds
-      runtime:      builds, and toEntry({ petId: 'p1' }) gives the SK "LASTDOSE#x"
-
-TypeScript 6 prints the first refusal as `is not assignable to type 'never'`, with no reason.
-
-**Effect.** The first call does not compile, and the run time builds the entry and reads the
-default.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids of
-the group construct, one for each table with a default beside an options object.
-
----
-
 ## Known: a key element that two rules refuse prints `never` at the head of the error
 
 **Observation.** A refusal of a key element is an intersection of the element with a message. Two
@@ -1328,9 +1301,18 @@ the options object at each. Measured 2026-11-12 with `tsc --noEmit` on TypeScrip
       type checker: builds
       runtime:      builds, and key('SK', { petId: 'p1', shelter: { code: 'c1' } }) gives "SC#c1"
 
+A default beside the options object at a name of the top level has the same outcome. Measured
+2026-11-15 with the type Pet and `note?: string`:
+
+    tableEntry<Pet>()({ PK: ['petId'], SK: [['note', { tag: 'DOSE' }, 'x']] })
+      type checker: refused
+      runtime:      builds, and key('SK', { petId: 'p1' }) gives "DOSE#x"
+
 TypeScript 6 refuses the first call at the same line with the code TS2322.
 
 **Effect.** The first call does not compile, and the run time builds the entry and prints the tag.
+The run time prints the default for an absent value, and an empty text is absent.
 
-**Pin.** No test pins a name of the top level. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 1 id of the group construct, for that name.
+**Pin.** No test pins a name of the top level. A test pins the refusal of the type for the form with
+a default. The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 2 ids of
+the group construct, one for each form of that name.
