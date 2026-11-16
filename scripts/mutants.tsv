@@ -227,3 +227,5 @@ p154_T3_null_value_with_a_default_is_not_refused	src/Rotorise.ts	s/^type NullVal
 p154_T4_constraint_takes_no_default_after_a_tag	src/Rotorise.ts	s/^    \| \[AnyPath, TagOptions, unknown\?\]$/    | [AnyPath, TagOptions]/	node ./node_modules/typescript-7/bin/tsc --noEmit	TS2322
 p154_T5_validate_reads_no_default_after_a_tag	src/Rotorise.ts	s/^            : Rest extends \[unknown\]$/            : Rest extends [never]/	node ./node_modules/typescript-7/bin/tsc --noEmit	can be absent: give a transform with a default
 p154_T6_absence_ignores_the_default_in_a_partial_key	src/Rotorise.ts	s/Absence<Defaulted<ValueOfKey<Entity, Key>, Rest>, false>/Absence<ValueOfKey<Entity, Key>, false>/	node ./node_modules/typescript-7/bin/tsc --noEmit	TS2344
+p156_K1_arm_that_can_be_absent_reads_any	src/Rotorise.ts	s/^( {26})\(key: Exclude<E\[key\], undefined>\) => TransformShape,$/\1(key: any) => TransformShape,/	node ./node_modules/typescript-7/bin/tsc --noEmit	TS2578
+p156_K2_arm_that_is_present_reads_any	src/Rotorise.ts	s/^( {20}): \[key, \(key: E\[key\]\) => TransformShape\]\)$/\1: [key, (key: any) => TransformShape])/	node ./node_modules/typescript-7/bin/tsc --noEmit	TS2578
