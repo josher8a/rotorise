@@ -1192,71 +1192,6 @@ give no key, and the term adds no check.
 
 ---
 
-## Known: the type of a key states no label for a component whose transform function gives the tag
-
-**Observation.** A transform function can give an object with a tag and a value, and the run time
-prints the tag as the label of the component. The type of the key states a text with a `#` and no
-label. The type of a key with a plain component states the label. Measured 2026-11-12 with
-`tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the type Pet and the item rex of the
-entry above:
-
-    const Tagged = tableEntry<Pet>()({
-        PK: ['petId'],
-        SK: [['name', (name: string) => ({ tag: 'T', value: name })]],
-    })
-
-    Tagged.key('SK', rex)
-      type checker: builds, and the type of the key is `${string}#${string}`
-      runtime:      gives "T#rex"
-
-    const key = () => Tagged.key('SK', rex)
-    const other: ReturnType<typeof key> = '~T#rex'
-      type checker: builds
-
-    tableEntry<Pet>()({ PK: ['petId'], SK: ['name'] }).key('SK', rex)
-      type checker: builds, and the type of the key is `NAME#${string}`
-      runtime:      gives "NAME#rex"
-
-The constraint of the schema gives the return expression of the function no contextual type. The
-function arms of the union of the constraint have different parameter types, and TypeScript gives a
-union a contextual signature only where the signatures are the same apart from the return type. So
-the literal `'T'` widens to `string` before the type of the key reads the tag. A function whose
-return type holds the tag as a literal gives the label. Measured 2026-11-14 with `tsc --noEmit` on
-TypeScript 7 and `npx vitest --run`, with the type Pet and the item rex above:
-
-    const Literal = tableEntry<Pet>()({
-        PK: ['petId'],
-        SK: [['name', (name: string) => ({ tag: 'T', value: name }) as const]],
-    })
-
-    Literal.key('SK', rex)
-      type checker: builds, and the type of the key is `T#${string}`
-      runtime:      gives "T#rex"
-
-    const literal = () => Literal.key('SK', rex)
-    const stranger: ReturnType<typeof literal> = '~T#rex'
-      type checker: refused
-
-    SK: [['name', (name: string): { tag: 'T'; value: string } => ({ tag: 'T', value: name })]]
-      type checker: builds, and the type of the key is `T#${string}`
-
-    SK: [['name', (name: string) => ({ tag: name === 'rex' ? 'P' : 'N', value: name }) as const]]
-      type checker: builds, and the type of the key is `N#${string}` | `P#${string}`
-      runtime:      gives "P#rex" for rex
-
-**Effect.** The type of the key is wider than the value for a function that returns the tag as a
-string. Each value that the run time gives fits the type, and a text with another label fits the
-type also. A function with a literal tag gives the label.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 26 ids: 9
-of toEntry, 9 of infer and 8 of key. Each is a foreign text with another label. The ids are the
-draws tagTf and tagTf_sep of the entry pool, which write the function with a wide tag. The draws
-tagTfConst and tagTfConst_sep write the tag with `as const` and hold no id.
-`src/codec/spec/object/codec.keylabel.spec.ts` pins the label of a literal tag, the text with no
-label of a wide tag, and the union of two tags.
-
----
-
 ## Known: the type of key refuses an argument that holds no component of the key at depth 0, where the run time gives the empty text
 
 **Observation.** A key of depth 0 reads no component, and the run time gives the empty text for
@@ -1284,35 +1219,20 @@ formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key for the re
 
 ---
 
-## Known: the type of a key component refuses an options object at a top level name, where the run time builds the key
+## Known: the type of a component record admits a property that the record does not have, where the run time refuses the schema
 
-**Observation.** A component of a key is a name, or a tuple of a name and a transform. The
-transform is a function, or an options object such as `{ tag: 'NM' }`. The type takes the options
-object at a path, and refuses the options object at a name of the top level. The run time reads
-the options object at each. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
-`npx vitest --run`, with the type Pet and the item rex above:
+**Observation.** A component record holds the name of the attribute, a tag, a value function and a
+default. The run time refuses a record with another property, because such a property is a typo of
+one of the four. The type compiles the record. Measured 2026-11-16 with `tsc --noEmit` on
+TypeScript 7 and `npx vitest --run`, with the type Pet and `name: string`:
 
-    tableEntry<Pet>()({ PK: ['petId'], SK: [['name', { tag: 'NM' }]] })
-      type checker: refused, 'tag' does not exist in type '(key: string) => TransformShape'
-      runtime:      builds, and key('SK', rex) gives "NM#rex"
-
-    type Housed = { petId: string; shelter: { code: string } }
-    tableEntry<Housed>()({ PK: ['petId'], SK: [['shelter.code', { tag: 'SC' }]] })
+    tableEntry<Pet>()({ PK: ['petId'], SK: [{ at: 'name', tags: 'T' }] })
       type checker: builds
-      runtime:      builds, and key('SK', { petId: 'p1', shelter: { code: 'c1' } }) gives "SC#c1"
+      runtime:      throws RotoriseError, the text holds "and no 'tags'"
 
-A default beside the options object at a name of the top level has the same outcome. Measured
-2026-11-15 with the type Pet and `note?: string`:
+**Effect.** A typo in the name of a property reaches the run time, where the construction throws.
+The key never prints with the name in place of the tag.
 
-    tableEntry<Pet>()({ PK: ['petId'], SK: [['note', { tag: 'DOSE' }, 'x']] })
-      type checker: refused
-      runtime:      builds, and key('SK', { petId: 'p1' }) gives "DOSE#x"
-
-TypeScript 6 refuses the first call at the same line with the code TS2322.
-
-**Effect.** The first call does not compile, and the run time builds the entry and prints the tag.
-The run time prints the default for an absent value, and an empty text is absent.
-
-**Pin.** No test pins a name of the top level. A test pins the refusal of the type for the form with
-a default. The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 2 ids of
-the group construct, one for each form of that name.
+**Pin.** `src/codec/spec/object/codec.keylabel.spec.ts` pins the refusal of the run time, and the
+same test compiles the record with no directive. The baseline of the type bridge holds no id,
+because no draw of the entry pool holds such a record.

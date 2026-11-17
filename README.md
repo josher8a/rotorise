@@ -52,7 +52,7 @@ The double-call `<Entity>()(schema)` is required because TypeScript does not sup
 Builds a specific key value from the given attributes. It returns a `Result`: the key, or a
 `CodecError` where a segment of a component holds the separator, because the key would read back as
 another list of segments. The message names the component, and never the value.
-A transform whose tag or value prints the separator is refused too, and `.toEntry(item)` returns that refusal as a value.
+A value that prints the separator is refused too, and `.toEntry(item)` returns that refusal as a value. A tag that holds the separator, or is the empty text, is refused where the schema is read, because the tag is a constant of the schema.
 `.unsafeKey(keyName, attributes, config?)` returns the key or throws that error. A key name that the
 schema does not declare, and a depth that is no non-negative integer, are refused by the type, so the
 call throws a `RotoriseError`.
@@ -69,7 +69,7 @@ UserTable.key('GSI1SK', { email: 'a@b.com' })
 **`config` options:**
 
 - **`depth`** — Limit composite key to the first N components. Useful for `begins_with` queries.
-- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of throwing. A component with a transform does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there, and so does a name that the call lacks. A component that is never absent leaves no prefix before it. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
+- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of throwing. A component with a `value` function does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there, and so does a name that the call lacks. A component that is never absent leaves no prefix before it. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
 - **`enforceBoundary`** — When `true`, appends a trailing separator if the key is partial. Ensures a `begins_with` query doesn't match unintended prefixes.
 
 Each option holds one literal, or nothing. The type of the key follows the value, so the type refuses a `number`, a `boolean`, and each other union: `1 | 2`, or a literal that can be `undefined`.
@@ -272,15 +272,16 @@ A name has a string where the name is a letter, then letters, digits and `_`. An
 
 ## Advanced Features
 
-### Transforms
+### Components
 
-Override how a field maps to its key segment using a transform function.
+A component is a name, or a record that holds the name at `at`. The record holds a constant `tag`, a
+function `value`, and a `default`.
 
 ```ts
 const Table = tableEntry<User>()({
   PK: [
-    ['orgId', (id: string) => ({ tag: 'ORG', value: id })],
-    ['id', (id: string) => ({ tag: 'USER', value: id })],
+    { at: 'orgId', tag: 'ORG' },
+    { at: 'id', tag: 'USER', value: (id: string) => id },
   ],
   SK: ['role'],
 })
@@ -289,10 +290,19 @@ Table.key('PK', { orgId: 'acme', id: '123' })
 // => 'ORG#acme#USER#123'
 ```
 
-A transform returns either:
-- A `joinable` value (the field name uppercased becomes the tag)
-- `{ value }` (no tag segment emitted)
-- `{ tag, value }` (custom tag)
+- `tag` is the label of the component. A record with no `tag` prints the name of the attribute,
+  uppercased. `tag: false` prints no label, so the component is one segment. A tag is a constant, so
+  the type of a key states the literal with no `as const`. A schema refuses a tag that holds the
+  separator and a tag that is the empty text.
+- `value` is a function of the value of the attribute. It returns text, a number, a boolean, `null`
+  or `undefined`, and `null` and `undefined` print as the empty text. The parameter has the type of the
+  attribute, so a function with no annotation reads that type, and the checker refuses an annotation
+  that the attribute does not fit.
+- `default` stands for a value that is absent. A name that can be absent needs a `default`, and a name
+  that can be `null` needs a `value` function that reads the `null`.
+
+An array is no component: the type refuses `['orgId', (id: string) => id]`, and the schema refuses it
+where it is read.
 
 ### Discriminated Schemas
 
@@ -360,7 +370,7 @@ ThingTable.key('SK', { TAG: 'ANIMAL', SPECIE: 'DOG', BREED: 'LAB', id: '4' })
 ### Components that Read a Path
 
 A component can name a value below the top level. A path joins names with `.` and reads into
-objects only. The key prints the last name of the path, or the tag of an options object. The key
+objects only. The key prints the last name of the path, or the `tag` of the record. The key
 input holds the paths that the key reads, and no sibling of a path. An absent name on the path is an
 absent component. A discriminator can be a path too.
 
@@ -376,8 +386,8 @@ const HandoffTable = tableEntry<Handoff>()({
   GSI1PK: {
     discriminator: 'type',
     spec: {
-      INTAKE: [['to.ownerId', { tag: 'ownerId' }]],
-      ADOPTION: [['to.ownerId', { tag: 'ownerId' }], 'to.extra.deep.id'],
+      INTAKE: [{ at: 'to.ownerId', tag: 'ownerId' }],
+      ADOPTION: [{ at: 'to.ownerId', tag: 'ownerId' }, 'to.extra.deep.id'],
       RELEASE: null,
     },
   },
@@ -393,12 +403,13 @@ HandoffTable.key('GSI1PK', {
 // => 'ownerId#u1#ID#d9'
 ```
 
-A transform on a path needs an annotation on its parameter, such as
-`['to.ownerId', (x: string) => x]`. The checker refuses an annotation that the value at the path
-does not fit. A path whose value can be absent needs a transform with a default, or a tag with a default. A path
-whose value can be `null` needs a transform that reads the `null`, because a default stands for an
-absent value only. The options object holds no transform, so an empty text at the path is absent,
-and the default does not stand for it. The options object is for a path only. A name with
+A `value` function on a path needs an annotation on its parameter, such as
+`{ at: 'to.ownerId', value: (x: string) => x }`, and the checker refuses a function with no
+annotation. The checker refuses an annotation that the value at the path does not fit. A path whose
+value can be absent needs a `default`. A path whose value can be `null` needs a `value` function
+that reads the `null`, because a default stands for an absent value only. A record with no `value`
+function prints the stored value, so an empty text at the path is absent, and the default does not
+stand for it. A name with
 a `.` is always a path, as DynamoDB reads a `.` in a name of an expression. A key cannot read an
 attribute whose own name holds a `.`: the type refuses that name, and an entry with a codec refuses
 it at construction.
@@ -417,7 +428,7 @@ const HandoffsByOwner = tableEntry<Handoff>()({
   GSI1PK: {
     discriminator: 'type',
     cases: [
-      [['INTAKE', 'ADOPTION'], [['to.ownerId', { tag: 'ownerId' }]]],
+      [['INTAKE', 'ADOPTION'], [{ at: 'to.ownerId', tag: 'ownerId' }]],
       [['RELEASE'], null],
     ],
   },
