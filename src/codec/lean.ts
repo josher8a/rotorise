@@ -3976,6 +3976,8 @@ export type KeyArm =
     | {
           readonly kind: 'leaf'
           readonly full: number
+          /** The tag of each component of the spec, or `undefined` where the schema states no tag. */
+          readonly tags: readonly (string | undefined)[]
           readonly parts: readonly KeyPart[]
       }
     | {
@@ -4044,6 +4046,8 @@ export type ConditionOutcome =
 export type ConditionRow = {
     readonly name: string
     readonly full: number
+    /** The tag of each component of the spec, or `undefined` where the schema states no tag. */
+    readonly tags: readonly (string | undefined)[]
     readonly parts: readonly KeyPart[]
     readonly separator: string
     readonly outcome: ConditionOutcome
@@ -4093,6 +4097,9 @@ export type ItemRow = {
     readonly outcome: ItemOutcome
 }
 
+const leanTag = (tag: string | undefined): string =>
+    tag === undefined ? 'none' : `(some ${leanString(tag)})`
+
 const leanKeyPart = (part: KeyPart): string =>
     part === undefined
         ? 'none'
@@ -4118,9 +4125,9 @@ const leanPlainParts = (
 
 const leanKeyArm = (arm: KeyArm): string =>
     arm.kind === 'leaf'
-        ? `.leaf (.const ${arm.full} [${arm.parts.map(leanKeyPart).join(', ')}])`
+        ? `.leaf (.const ${arm.full} [${arm.tags.map(leanTag).join(', ')}] [${arm.parts.map(leanKeyPart).join(', ')}])`
         : arm.kind === 'plain'
-          ? `.leaf ⟨${arm.full}, [${leanPlainParts(arm.parts)}]⟩`
+          ? `.leaf ⟨${arm.full}, [${leanPlainParts(arm.parts)}], [${arm.parts.map(([, label]) => `some ${leanString(label)}`).join(', ')}]⟩`
           : arm.kind === 'attr'
             ? `.attr ${leanString(arm.name)}`
             : `.${arm.kind}`
@@ -4225,6 +4232,7 @@ export const leanKeyModule = (
     const conditionLines = conditions.map(
         (row, i) =>
             `  { name := ${leanString(row.name)}, full := ${row.full},
+    tags := [${row.tags.map(leanTag).join(', ')}],
     parts := [${row.parts.map(leanKeyPart).join(', ')}],
     sep := Char.ofNat ${(conditionChars[i]?.[0] ?? '').codePointAt(0)},
     host := ${leanConditionOutcome(row.outcome)} }`,
@@ -4362,7 +4370,7 @@ const leanUpdateArm = (arm: UpdateArm): string =>
     arm.kind === 'components'
         ? `.leaf ⟨${arm.names.length}, [${leanPlainParts(
               arm.names.map((n) => [n, plainLabel(n)]),
-          )}]⟩`
+          )}], [${arm.names.map((n) => `some ${leanString(plainLabel(n))}`).join(', ')}]⟩`
         : arm.kind === 'attr'
           ? `.attr ${leanString(arm.name)}`
           : `.${arm.kind}`

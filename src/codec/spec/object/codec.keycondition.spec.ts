@@ -65,14 +65,17 @@ describe('a query on an index reads the keys that the index names', () => {
         })
     })
 
-    it('gives beginsWith with the boundary where the attributes give a leading part of the sort key', () => {
-        // the boundary keeps STATUS#AVAILABLE from selecting STATUS#AVAILABLE_SOON
+    it('gives beginsWith with the next tag and the boundary where the attributes give a leading part of the sort key', () => {
+        // the boundary keeps STATUS#AVAILABLE from selecting STATUS#AVAILABLE_SOON, and the next tag keeps the prefix on the next component
         expect(
             Pets.unsafeKeyCondition('GSI1', {
                 shelterId: 's1',
                 status: 'AVAILABLE',
             }).sort,
-        ).toEqual({ name: 'GSI1SK', beginsWith: { S: 'STATUS#AVAILABLE#' } })
+        ).toEqual({
+            name: 'GSI1SK',
+            beginsWith: { S: 'STATUS#AVAILABLE#UPDATEDAT#' },
+        })
     })
 
     it('gives no sort condition where the attributes hold no component of the sort key', () => {
@@ -122,7 +125,10 @@ describe('one adapter reads the condition of every query', () => {
                     status: 'ADOPTED',
                 }),
             ),
-        ).toEqual({ name: 'GSI1SK', beginsWith: { S: 'STATUS#ADOPTED#' } })
+        ).toEqual({
+            name: 'GSI1SK',
+            beginsWith: { S: 'STATUS#ADOPTED#UPDATEDAT#' },
+        })
         expect(
             sortOf(Pets.unsafeKeyCondition('BY_SHELTER', { shelterId: 's1' })),
         ).toBe(undefined)
@@ -141,7 +147,7 @@ describe('a query that selects no partition or no prefix is refused', () => {
         }
     })
 
-    it('refuses a later sort component without the first, because no prefix selects it', () => {
+    it('refuses a later sort component without the first, because the print would drop it', () => {
         {
             const refused = Pets.keyCondition('GSI1', {
                 shelterId: 's1',
@@ -150,7 +156,7 @@ describe('a query that selects no partition or no prefix is refused', () => {
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
                 expect(refused.message).toContain(
-                    "'GSI1SK' gives no key and no prefix for these attributes",
+                    "'updatedAt' is given and 'status' before it is not, so a partial key would drop 'updatedAt'",
                 )
         }
     })
@@ -180,7 +186,7 @@ describe('a query that selects no partition or no prefix is refused', () => {
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
                 expect(refused.message).toContain(
-                    "'SK' gets 'day' and lacks 'month' before it, so the condition would drop 'day'",
+                    "'day' is given and 'month' before it is not, so a partial key would drop 'day'",
                 )
         }
     })
@@ -191,7 +197,10 @@ describe('a query that selects no partition or no prefix is refused', () => {
                 shelterId: 's1',
                 status: 'AVAILABLE',
             }).sort,
-        ).toEqual({ name: 'GSI1SK', beginsWith: { S: 'STATUS#AVAILABLE#' } })
+        ).toEqual({
+            name: 'GSI1SK',
+            beginsWith: { S: 'STATUS#AVAILABLE#UPDATEDAT#' },
+        })
     })
 
     it('refuses an index name that the indexes option does not declare', () => {

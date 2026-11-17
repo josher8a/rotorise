@@ -26,17 +26,18 @@ inductive HostCondition where
   | equals (k : String)
   | prefix (k : String)
 
-/-- A row of the condition builder: the name, the length of the spec, the parts that the host
-    evaluated for the item, the separator, and what the host gave. -/
+/-- A row of the condition builder: the name, the length of the spec, the tag of each component, the
+    parts that the host evaluated for the item, the separator, and what the host gave. -/
 structure ConditionRow where
   name : String
   full : Nat
+  tags : List (Option String)
   parts : List (Option Comp)
   sep : Char
   host : HostCondition
 
 /-- What the model gives for a row. -/
-def ConditionRow.out (r : ConditionRow) : Cond := condition r.full r.parts
+def ConditionRow.out (r : ConditionRow) : Cond := condition r.full r.tags r.parts
 
 /-- **The comparator of a condition row.** The host gave no condition where the model gives none,
     a refusal where the model refuses, and a key where the model gives segments of the same kind

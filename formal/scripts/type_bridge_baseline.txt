@@ -72,7 +72,7 @@
 #               another code for one refusal.
 # either encodePartial refused 0 built 1
 # either fromItem refused 0 built 4
-# either key refused 123 built 37
+# either key refused 127 built 73
 # either keyCondition refused 0 built 7
 # either keyUpdates refused 8 built 1
 # either keys refused 0 built 6
@@ -109,10 +109,6 @@ exclude|refuse|f45cbe8e82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|feb1120b66|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chGhost).call
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chStr).call
-key|accept|b04a5f18|T_plain_listOne.key(PK,nameOnly,d0).call
-key|accept|b04a5f18|T_plain_listOne.key(PK,nameOnly,partial).call
-key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,d0).call
-key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,partial).call
 key|accept|b869b9a6|T_plain_list2_sep.key(SK,sLit,narrow).result
 key|accept|f1510f52|T_plain_list2.key(SK,sLit,narrow).result
 meet|refuse|26fd3c2238|meet(m0_l, m0_r)

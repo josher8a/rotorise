@@ -1118,8 +1118,12 @@ the value at that name. Two items that agree on the names that a spec reads give
 
 The key of one attribute is the printed value of that attribute. A full key is not empty, so the
 model refuses a full key whose text is empty: the key of one attribute at the arm, and a key of a
-leaf where the builder joins the segments. A partial key may be empty, because the host gives it
-as a prefix.
+leaf where the builder joins the segments. A partial key is a position: the count of the leading
+components that print, closed or open. A key of no component without the boundary has no text, so the
+model refuses it. A hole, a component that prints after one that does not, is a refusal, because the
+prefix would drop the component. A closed key ends with the tag of the next component, where the
+schema states one, and the separator. Where the first component has no tag, a closed key of no
+component prints nothing, and the model refuses it.
 
 A condition on a sort key is the key of the parts that a query gives. It is the equality on the whole
 key where the query gives every part, and the prefix match of the leading parts with the boundary

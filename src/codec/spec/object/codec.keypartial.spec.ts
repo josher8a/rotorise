@@ -39,18 +39,23 @@ const build = Pets.unsafeKey as unknown as (
 ) => unknown
 
 describe('the type of a partial key', () => {
-    it('ends at the prefix before a component that can be absent', () => {
-        const key = Pets.unsafeKey(
-            'GSI1SK',
-            { species: 'CAT', breed: undefined as Breed | undefined, age: 3 },
-            partial,
-        )
-        expectTypeOf(key).toEqualTypeOf<
+    it('refuses a hole where a component that can be absent is absent and a later one is given, and the type states each prefix', () => {
+        const call = () =>
+            Pets.unsafeKey(
+                'GSI1SK',
+                {
+                    species: 'CAT',
+                    breed: undefined as Breed | undefined,
+                    age: 3,
+                },
+                partial,
+            )
+        expectTypeOf(call).returns.toEqualTypeOf<
             | 'SPECIES#CAT'
             | 'SPECIES#CAT#BREED#PUG#AGE#3'
             | 'SPECIES#CAT#BREED#LAB#AGE#3'
         >()
-        expect(key).toBe('SPECIES#CAT')
+        expect(call).toThrow(/would drop 'age'/)
     })
 
     it('holds each key that the run time builds, so the type is never narrower than the run time', () => {
@@ -62,9 +67,9 @@ describe('the type of a partial key', () => {
             >
         >
         const built: readonly (readonly [object, Keys])[] = [
-            [{ species: 'CAT', age: 3 }, 'SPECIES#CAT'],
-            [{ species: 'CAT', breed: null, age: 3 }, 'SPECIES#CAT'],
-            [{ species: 'CAT', breed: '', age: 3 }, 'SPECIES#CAT'],
+            [{ species: 'CAT' }, 'SPECIES#CAT'],
+            [{ species: 'CAT', breed: null }, 'SPECIES#CAT'],
+            [{ species: 'CAT', breed: '' }, 'SPECIES#CAT'],
             [
                 { species: 'CAT', breed: 'PUG', age: 3 },
                 'SPECIES#CAT#BREED#PUG#AGE#3',
@@ -167,23 +172,24 @@ describe('the type of a partial key, where a component reads a path or sits in a
     })
 
     it('ends at a path component that can be absent', () => {
-        const key = Visits.unsafeKey(
-            'SK',
-            {
-                species: 'CAT',
-                vaccine: {
-                    dose: 2,
-                    vet: undefined as 'ALICE' | 'BOB' | undefined,
+        const call = () =>
+            Visits.unsafeKey(
+                'SK',
+                {
+                    species: 'CAT',
+                    vaccine: {
+                        dose: 2,
+                        vet: undefined as 'ALICE' | 'BOB' | undefined,
+                    },
                 },
-            },
-            partial,
-        )
-        expectTypeOf(key).toEqualTypeOf<
+                partial,
+            )
+        expectTypeOf(call).returns.toEqualTypeOf<
             | 'SPECIES#CAT'
             | 'SPECIES#CAT#VET#ALICE#DOSE#2'
             | 'SPECIES#CAT#VET#BOB#DOSE#2'
         >()
-        expect(key).toBe('SPECIES#CAT')
+        expect(call).toThrow(/would drop 'vaccine.dose'/)
     })
 
     it('ends the print at a path component that the call lacks', () => {
@@ -387,14 +393,14 @@ describe('the type of a partial key reads the components that the call lacks', (
         expect(key).toBe('SPECIES#CAT#BREED#PUG')
     })
 
-    it('adds the boundary after the print that stops at a component that the call lacks', () => {
+    it('adds the tag of the component that the call lacks and the boundary after the print that stops at it', () => {
         const given: { species: 'CAT' } = { species: 'CAT' }
         const key = Pets.unsafeKey('GSI1SK', given, {
             allowPartial: true,
             enforceBoundary: true,
         })
-        expectTypeOf(key).toEqualTypeOf<'SPECIES#CAT#'>()
-        expect(key).toBe('SPECIES#CAT#')
+        expectTypeOf(key).toEqualTypeOf<'SPECIES#CAT#BREED#'>()
+        expect(key).toBe('SPECIES#CAT#BREED#')
     })
 })
 
@@ -404,40 +410,43 @@ describe('the type of a partial key holds the empty text where the first compone
     const unnamed: Placed = { shelterId: '', petId: 'p1' }
     const named: Placed = { shelterId: 's', petId: 'p1' }
 
-    it('holds the empty text, and the run time gives it where the first value is empty', () => {
-        const key = Shelters.unsafeKey('SK', unnamed, partial)
-        expectTypeOf(key).toEqualTypeOf<
+    it('holds the empty text in the type, and the run time refuses a hole where the first value is empty and the second is given', () => {
+        const call = () => Shelters.unsafeKey('SK', unnamed, partial)
+        expectTypeOf(call).returns.toEqualTypeOf<
             '' | `SHELTERID#${string}` | `SHELTERID#${string}#PETID#${string}`
         >()
-        expect(key).toBe('')
+        expect(call).toThrow(/would drop 'petId'/)
         expect(Shelters.unsafeKey('SK', named, partial)).toBe(
             'SHELTERID#s#PETID#p1',
         )
     })
 
-    it('holds the empty text with the boundary, because a print of no segment has no boundary', () => {
-        const key = Shelters.unsafeKey('SK', unnamed, {
-            allowPartial: true,
-            enforceBoundary: true,
-        })
-        expectTypeOf(key).toEqualTypeOf<
-            '' | `SHELTERID#${string}#` | `SHELTERID#${string}#PETID#${string}`
+    it('refuses the same hole with the boundary, and the type states the closed prefixes', () => {
+        const call = () =>
+            Shelters.unsafeKey('SK', unnamed, {
+                allowPartial: true,
+                enforceBoundary: true,
+            })
+        expectTypeOf(call).returns.toEqualTypeOf<
+            | 'SHELTERID#'
+            | `SHELTERID#${string}#PETID#`
+            | `SHELTERID#${string}#PETID#${string}`
         >()
-        expect(key).toBe('')
+        expect(call).toThrow(/would drop 'petId'/)
     })
 
-    it('is the empty text where the first value is the literal empty text', () => {
+    it('refuses a hole where the first value is the literal empty text, and the type states the empty text', () => {
         type Blank = { shelterId: ''; petId: string }
         const Blanks = tableEntry<Blank>()({ SK: ['shelterId', 'petId'] })
         const blank: Blank = { shelterId: '', petId: 'p1' }
-        const key = Blanks.unsafeKey('SK', blank, partial)
-        expectTypeOf(key).toEqualTypeOf<''>()
-        expect(key).toBe('')
+        const call = () => Blanks.unsafeKey('SK', blank, partial)
+        expectTypeOf(call).returns.toEqualTypeOf<''>()
+        expect(call).toThrow(/would drop 'petId'/)
     })
 })
 
 describe('the type of a partial key, where a component is in the case that it can be absent', () => {
-    it('ends the print before a component in the middle that can be absent, and the run time gives each member', () => {
+    it('states each prefix for a component in the middle that can be absent, and the run time refuses the hole and gives the full key', () => {
         type Held = { species: 'CAT'; breed: 'PUG'; age: 3 }
         const Helds = tableEntry<Held>()({
             GSI1SK: ['species', 'breed', 'age'],
@@ -445,13 +454,13 @@ describe('the type of a partial key, where a component is in the case that it ca
         type Given = { species: 'CAT'; breed: 'PUG' | undefined; age: 3 }
         const without: Given = { species: 'CAT', breed: undefined, age: 3 }
         const withBreed: Given = { species: 'CAT', breed: 'PUG', age: 3 }
-        const first = Helds.unsafeKey('GSI1SK', without, partial)
+        const first = () => Helds.unsafeKey('GSI1SK', without, partial)
         const second = Helds.unsafeKey('GSI1SK', withBreed, partial)
-        expectTypeOf(first).toEqualTypeOf<
+        expectTypeOf(first).returns.toEqualTypeOf<
             'SPECIES#CAT' | 'SPECIES#CAT#BREED#PUG#AGE#3'
         >()
-        expectTypeOf(second).toEqualTypeOf<typeof first>()
-        expect(first).toBe('SPECIES#CAT')
+        expectTypeOf(second).toEqualTypeOf<ReturnType<typeof first>>()
+        expect(first).toThrow(/would drop 'age'/)
         expect(second).toBe('SPECIES#CAT#BREED#PUG#AGE#3')
     })
 
@@ -460,9 +469,9 @@ describe('the type of a partial key, where a component is in the case that it ca
         const Eithers = tableEntry<Either>()({ SK: ['shelterId', 'petId'] })
         const empty: Either = { shelterId: '', petId: 'p' }
         const present: Either = { shelterId: 'S', petId: 'p' }
-        const first = Eithers.unsafeKey('SK', empty, partial)
-        expectTypeOf(first).toEqualTypeOf<'' | 'SHELTERID#S#PETID#p'>()
-        expect(first).toBe('')
+        const first = () => Eithers.unsafeKey('SK', empty, partial)
+        expectTypeOf(first).returns.toEqualTypeOf<'' | 'SHELTERID#S#PETID#p'>()
+        expect(first).toThrow(/would drop 'petId'/)
         expect(Eithers.unsafeKey('SK', present, partial)).toBe(
             'SHELTERID#S#PETID#p',
         )
@@ -515,9 +524,9 @@ describe('the type of a partial key, where a component is in the case that it ca
         const Places = tableEntry<Placed>()({ SK: ['shelter.code', 'petId'] })
         const empty: Placed = { shelter: { code: '' }, petId: 'p' }
         const present: Placed = { shelter: { code: 'S' }, petId: 'p' }
-        const first = Places.unsafeKey('SK', empty, partial)
-        expectTypeOf(first).toEqualTypeOf<'' | 'CODE#S#PETID#p'>()
-        expect(first).toBe('')
+        const first = () => Places.unsafeKey('SK', empty, partial)
+        expectTypeOf(first).returns.toEqualTypeOf<'' | 'CODE#S#PETID#p'>()
+        expect(first).toThrow(/would drop 'petId'/)
         expect(Places.unsafeKey('SK', present, partial)).toBe('CODE#S#PETID#p')
     })
 
@@ -528,9 +537,9 @@ describe('the type of a partial key, where a component is in the case that it ca
         })
         const empty: Placed = { shelter: { code: '' }, petId: 'p' }
         const present: Placed = { shelter: { code: 'S' }, petId: 'p' }
-        const first = Places.unsafeKey('SK', empty, partial)
-        expectTypeOf(first).toEqualTypeOf<'' | 'AT#S#PETID#p'>()
-        expect(first).toBe('')
+        const first = () => Places.unsafeKey('SK', empty, partial)
+        expectTypeOf(first).returns.toEqualTypeOf<'' | 'AT#S#PETID#p'>()
+        expect(first).toThrow(/would drop 'petId'/)
         expect(Places.unsafeKey('SK', present, partial)).toBe('AT#S#PETID#p')
     })
 

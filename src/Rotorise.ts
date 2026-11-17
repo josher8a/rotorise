@@ -235,9 +235,9 @@ type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
       ? false
       : SliceFromStart<Spec, Deep> extends infer Kept extends readonly unknown[]
         ? Spec extends readonly unknown[]
-            ? Kept['length'] extends 0 | Spec['length']
+            ? Kept['length'] extends Spec['length']
                 ? false
-                : true
+                : [Spec[Kept['length'] & keyof Spec]]
             : false
         : false
 
@@ -329,8 +329,26 @@ type Defaulted<Value, Rest> = Rest extends [infer Default, ...unknown[]]
 type StopText<
     Acc extends string | null,
     Separator extends string,
-    Bounded extends boolean,
-> = Acc extends null ? '' : Bounded extends true ? `${Acc}${Separator}` : Acc
+    Closed extends false | readonly [unknown],
+> = Closed extends readonly [infer Next]
+    ? Acc extends null
+        ? `${NextLabel<Next>}${Separator}`
+        : [NextLabel<Next>] extends [never]
+          ? `${Acc}${Separator}`
+          : `${Acc}${Separator}${NextLabel<Next>}${Separator}`
+    : Acc extends null
+      ? ''
+      : Acc
+
+/**
+ * The label that the next component of a closed key prints: its tag, or its name where it has no
+ * tag. A component with `tag: false` has no label, and `never` stands for it.
+ */
+type NextLabel<C> = C extends { readonly at: infer K extends string | number }
+    ? LabelOf<C, NameOf<`${K}`>>
+    : C extends string | number
+      ? NameOf<`${C}`>
+      : never
 
 type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends {
     readonly at: infer Key extends string | number
@@ -375,7 +393,7 @@ type CompositeKeyStringBuilder<
     Acc extends string | null = null,
     AllAcc extends string = never,
     Boundary extends boolean = false,
-    Stops extends boolean = false,
+    Stops extends false | readonly [unknown] = false,
 > = Spec extends [infer Head, ...infer Tail]
     ? ExtractPair<Entity, Head, KeepIntermediate> extends [
           infer Key extends joinable,
@@ -383,7 +401,13 @@ type CompositeKeyStringBuilder<
           infer Case,
       ]
         ? Case extends 'always'
-            ? AllAcc | StopText<Acc, Separator, Boundary>
+            ?
+                  | AllAcc
+                  | StopText<
+                        Acc,
+                        Separator,
+                        Boundary extends true ? [Head] : false
+                    >
             : CompositeKeyStringBuilder<
                   Entity,
                   Tail,
@@ -397,7 +421,13 @@ type CompositeKeyStringBuilder<
                         ? `${Acc}${Separator}${Value}`
                         : `${Acc}${Separator}${Key}${Separator}${Value}`,
                   Case extends 'can'
-                      ? AllAcc | StopText<Acc, Separator, Boundary>
+                      ?
+                            | AllAcc
+                            | StopText<
+                                  Acc,
+                                  Separator,
+                                  Boundary extends true ? [Head] : false
+                              >
                       : AllAcc,
                   Boundary,
                   Stops
@@ -461,7 +491,7 @@ type CompositeKeyStringBuilderPath<
     Acc extends string | null = null,
     AllAcc extends string = never,
     Boundary extends boolean = false,
-    Stops extends boolean = false,
+    Stops extends false | readonly [unknown] = false,
 > = Spec extends [infer Head, ...infer Tail]
     ? ExtractPathPair<Entity, Head, KeepIntermediate> extends [
           infer Key extends joinable,
@@ -469,7 +499,13 @@ type CompositeKeyStringBuilderPath<
           infer Case,
       ]
         ? Case extends 'always'
-            ? AllAcc | StopText<Acc, Separator, Boundary>
+            ?
+                  | AllAcc
+                  | StopText<
+                        Acc,
+                        Separator,
+                        Boundary extends true ? [Head] : false
+                    >
             : CompositeKeyStringBuilderPath<
                   Entity,
                   Tail,
@@ -483,7 +519,13 @@ type CompositeKeyStringBuilderPath<
                         ? `${Acc}${Separator}${Value}`
                         : `${Acc}${Separator}${Key}${Separator}${Value}`,
                   Case extends 'can'
-                      ? AllAcc | StopText<Acc, Separator, Boundary>
+                      ?
+                            | AllAcc
+                            | StopText<
+                                  Acc,
+                                  Separator,
+                                  Boundary extends true ? [Head] : false
+                              >
                       : AllAcc,
                   Boundary,
                   Stops
@@ -2090,13 +2132,25 @@ const key =
                 return undefined
             }
 
-            for (const [at, part] of parts(
+            const printedParts = parts(
                 structure,
                 attributes as Record<string, unknown>,
                 read,
-            ).entries()) {
+            )
+            for (const [at, part] of printedParts.entries()) {
                 if (part === undefined) {
-                    if (config?.allowPartial) break
+                    if (config?.allowPartial) {
+                        // a present component after the absent one is a hole: the print stops at
+                        // the absent component and would drop the present one
+                        const later = structure.findIndex(
+                            (_, after) =>
+                                after > at && printedParts[after] !== undefined,
+                        )
+                        if (later < 0) break
+                        return keyRefusal(
+                            `Key ${key.toString()}: '${componentName(structure[later])}' is given and '${componentName(structure[at])}' before it is not, so a partial key would drop '${componentName(structure[later])}' and select more items than the attributes name. Give '${componentName(structure[at])}' or leave '${componentName(structure[later])}' out.`,
+                        )
+                    }
                     return keyRefusal(
                         `buildCompositeKey: Attribute ${componentName(structure[at])} not found`,
                     )
@@ -2153,7 +2207,29 @@ const key =
             // A component prints one or two segments: a transform that gives a value with no tag prints
             // one. So the components are counted, and not the segments. If the print stops before the
             // last component (a partial key), append a trailing separator.
+            // A key of no component that stops before the last component has no text.
+            if (printed === 0 && !config?.enforceBoundary && fullLength > 0) {
+                return keyRefusal(
+                    `Key ${key.toString()}: the print of no component is empty, so the key has no text. Give the first component, or leave the key out.`,
+                )
+            }
             if (config?.enforceBoundary && printed < fullLength) {
+                const next = arm.components[printed]
+                const { tag, at: nextAt } = (
+                    typeof next === 'object' && next !== null
+                        ? next
+                        : { at: next }
+                ) as { tag?: string | false; at: unknown }
+                const label =
+                    tag === false
+                        ? undefined
+                        : (tag ?? printedName(String(nextAt)))
+                if (label === undefined && printed === 0) {
+                    return keyRefusal(
+                        `Key ${key.toString()}: the first component has no tag, so a key of no component has no text. Give the first component, or leave the key out.`,
+                    )
+                }
+                if (label !== undefined) composite.push(label)
                 composite.push('')
             }
 
@@ -4812,26 +4888,6 @@ export const tableEntry =
         }
 
         /**
-         * The refusal of a component that prints after a component that does not. A partial key stops
-         * at the first absent component, so the prefix would drop the later component and select
-         * more items than the attributes name. The error names the two components and holds no value.
-         */
-        const refuseGap = (
-            name: string,
-            components: readonly unknown[],
-            printed: readonly (Part | undefined)[],
-        ): CodecError | undefined => {
-            const absent = printed.indexOf(undefined)
-            const later = printed.findIndex(
-                (part, at) => at > absent && part !== undefined,
-            )
-            if (absent < 0 || later < 0) return undefined
-            return keyRefusal(
-                `'${name}' gets '${componentName(components[later])}' and lacks '${componentName(components[absent])}' before it, so the condition would drop '${componentName(components[later])}' and select more items than the attributes name. Give '${componentName(components[absent])}' or leave '${componentName(components[later])}' out.`,
-            )
-        }
-
-        /**
          * The condition on a sort key that the attributes give. Attributes that hold no part of the
          * key give no condition. Attributes that give every part give `equals`. Attributes that give a
          * leading part of a list give `beginsWith` with the boundary, so the prefix selects no key
@@ -4868,13 +4924,11 @@ export const tableEntry =
                 { allowPartial: true, enforceBoundary: true } as never,
             )
             if (failed(built)) return built
-            if (built === undefined || printed[0] === undefined) {
+            if (built === undefined) {
                 return keyRefusal(
                     `'${name}' gives no key and no prefix for these attributes, so the condition selects nothing`,
                 )
             }
-            const gap = refuseGap(name, components, printed)
-            if (gap !== undefined) return gap
             if (!printed.every((part) => part !== undefined))
                 return { name, beginsWith: carrying('S', String(built)) }
             const equals = carried(name, attributes, built)

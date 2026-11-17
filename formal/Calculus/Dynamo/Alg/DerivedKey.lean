@@ -324,17 +324,46 @@ theorem printed_partial :
     host appends it by this rule. `full` is the length of the spec. -/
 def boundary (full : Nat) (cs : List Comp) : Bool := decide (cs.length < full)
 
-/-- The key of the host: the segments of the printed components, and the empty segment of the
-    boundary where the option is on and the print stops before the last component of the spec.
-    `full` is the length of the spec, and `parts` are the components that the host evaluates: the
-    spec cut to the depth. A print that holds each component of the spec is a full key, and a full
-    key whose segments are the one empty segment is the empty text, which DynamoDB stores as no key,
-    so it is a refusal. A partial key may be empty, because the host gives it as a prefix. -/
-def build (full : Nat) (allowPartial enforce : Bool) (parts : List (Option Comp)) :
-    Option (List String) :=
-  (printed allowPartial parts).bind fun cs =>
+/-- **No part prints after an absent part.** The list ends with absent parts, or has none. -/
+def gapFree : List (Option Comp) → Bool
+  | [] => true
+  | none :: r => r.all Option.isNone
+  | some _ :: r => gapFree r
+
+/-- **A list has no gap exactly where the parts after the leading parts are all absent.** -/
+theorem gapFree_iff_dropWhile : ∀ ps : List (Option Comp),
+    gapFree ps = true ↔ (ps.dropWhile Option.isSome).all Option.isNone = true
+  | [] => by simp [gapFree]
+  | none :: r => by simp [gapFree, List.dropWhile]
+  | some _ :: r => by simp [gapFree, List.dropWhile, gapFree_iff_dropWhile r]
+
+/-- The tag of the component at a position of the spec, or none where the schema states no tag
+    there. `tags` holds one entry for each component of the spec, and the tag is data of the
+    schema, so it does not depend on the item. -/
+def nextTag (tags : List (Option String)) (n : Nat) : Option String := (tags[n]?).bind id
+
+/-- The key of the host. A partial key is a position: the count `k` of the leading components that
+    print, closed or open. A print with an absent part before a present part is a hole, and a hole
+    is a refusal, because the prefix would drop the present part. A closed key (the option on, `k`
+    below the length of the spec) is the segments of the `k` components, the tag of component `k`
+    where the schema states one, and the empty segment. At `k = 0` with no tag nothing prints, so
+    the key is a refusal. An open key of no component has no text, so it is a refusal. A print that
+    holds each component of the spec is a full key, and a full key whose segments are the one empty
+    segment is the empty text, which DynamoDB stores as no key, so it is a refusal. `full` is the
+    length of the spec, `tags` are the tags of its components, and `parts` are the components that
+    the host evaluates: the spec cut to the depth. -/
+def build (full : Nat) (allowPartial enforce : Bool) (tags : List (Option String))
+    (parts : List (Option Comp)) : Option (List String) :=
+  if allowPartial && !gapFree parts then none
+  else (printed allowPartial parts).bind fun cs =>
     if boundary full cs then
-      some (if enforce then cs.flatMap Comp.segs ++ [""] else cs.flatMap Comp.segs)
+      if enforce then
+        match cs, nextTag tags cs.length with
+        | [], none => none
+        | _, some t => some (cs.flatMap Comp.segs ++ [t, ""])
+        | _, none => some (cs.flatMap Comp.segs ++ [""])
+      else if cs = [] then none
+      else some (cs.flatMap Comp.segs)
     else if cs.flatMap Comp.segs = [""] then none
     else some (cs.flatMap Comp.segs)
 
@@ -344,35 +373,73 @@ theorem boundary_iff (full : Nat) (cs : List Comp) :
     boundary full cs = true ↔ cs.length < full :=
   decide_eq_true_iff
 
+/-- **A hole is a refusal.** A part prints after an absent part, and the partial key would drop it. -/
+theorem build_gap_refused {full : Nat} {enforce : Bool} {tags : List (Option String)}
+    {parts : List (Option Comp)} (hg : gapFree parts = false) :
+    build full true enforce tags parts = none := by
+  simp [build, hg]
+
 /-- **A full key ends without the boundary.** Where the print holds each component of the spec,
     the key is the segments of the components, with the option on. -/
 theorem build_full_ends_without_boundary {full : Nat} {allowPartial : Bool}
-    {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
+    {tags : List (Option String)} {parts : List (Option Comp)} {cs : List Comp}
+    (hg : (allowPartial && !gapFree parts) = false) (h : printed allowPartial parts = some cs)
     (hfull : cs.length = full) (hne : cs.flatMap Comp.segs ≠ [""]) :
-    build full allowPartial true parts = some (cs.flatMap Comp.segs) := by
+    build full allowPartial true tags parts = some (cs.flatMap Comp.segs) := by
   have hb : boundary full cs = false := by simp [boundary, hfull]
-  simp [build, h, hb, hne]
+  simp [build, hg, h, hb, hne]
 
-/-- **A partial key ends with the boundary.** Where the print stops before the last component of
-    the spec, through an absent value or through a depth, the key is the segments of the components
-    and one empty segment, with the option on. -/
-theorem build_partial_ends_with_boundary {full : Nat} {allowPartial : Bool}
-    {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
-    (hlt : cs.length < full) :
-    build full allowPartial true parts = some (cs.flatMap Comp.segs ++ [""]) := by
+/-- **A closed key ends with the tag of the next component and the boundary.** Where the print
+    stops before the last component of the spec and the schema states the tag `t` of the next
+    component, the key is the segments of the components, the tag, and one empty segment. -/
+theorem build_closed_ends_with_tag {full : Nat} {allowPartial : Bool}
+    {tags : List (Option String)} {parts : List (Option Comp)} {cs : List Comp} {t : String}
+    (hg : (allowPartial && !gapFree parts) = false) (h : printed allowPartial parts = some cs)
+    (hlt : cs.length < full) (ht : nextTag tags cs.length = some t) :
+    build full allowPartial true tags parts = some (cs.flatMap Comp.segs ++ [t, ""]) := by
   have hb : boundary full cs = true := (boundary_iff _ _).mpr hlt
-  simp [build, h, hb]
+  cases cs <;> simp only [List.length_cons, List.length_nil] at ht <;> simp [build, hg, h, hb, ht]
+
+/-- **A closed key with no tag at the next component ends with the boundary alone.** Where the
+    print holds a component, the key is the segments of the components and one empty segment. -/
+theorem build_closed_ends_with_boundary {full : Nat} {allowPartial : Bool}
+    {tags : List (Option String)} {parts : List (Option Comp)} {c : Comp} {cs : List Comp}
+    (hg : (allowPartial && !gapFree parts) = false) (h : printed allowPartial parts = some (c :: cs))
+    (hlt : (c :: cs).length < full) (ht : nextTag tags (c :: cs).length = none) :
+    build full allowPartial true tags parts = some ((c :: cs).flatMap Comp.segs ++ [""]) := by
+  have hb : boundary full (c :: cs) = true := (boundary_iff _ _).mpr hlt
+  simp only [List.length_cons] at ht
+  simp [build, hg, h, hb, ht]
+
+/-- **A closed key of no component with no tag is a refusal.** Nothing prints. -/
+theorem build_closed_empty_refused {full : Nat} {allowPartial : Bool}
+    {tags : List (Option String)} {parts : List (Option Comp)}
+    (hg : (allowPartial && !gapFree parts) = false) (h : printed allowPartial parts = some [])
+    (hlt : 0 < full) (ht : nextTag tags 0 = none) :
+    build full allowPartial true tags parts = none := by
+  have hb : boundary full [] = true := (boundary_iff _ _).mpr hlt
+  simp [build, hg, h, hb, ht]
+
+/-- **An open key of no component is a refusal.** The key has no segment, and DynamoDB stores no
+    empty key. -/
+theorem build_open_empty_refused {full : Nat} {allowPartial : Bool}
+    {tags : List (Option String)} {parts : List (Option Comp)}
+    (hg : (allowPartial && !gapFree parts) = false) (h : printed allowPartial parts = some [])
+    (hlt : 0 < full) :
+    build full allowPartial false tags parts = none := by
+  have hb : boundary full [] = true := (boundary_iff _ _).mpr hlt
+  simp [build, hg, h, hb]
 
 /-- **A full key has a segment.** Where the print holds each of the `full` components of a spec
     with a component, and the text is not empty, the key is the segments of those components, and
-    the list is not empty. A partial key is the print that stops before the last component, and it
-    may be empty. -/
+    the list is not empty. -/
 theorem build_full_ne_nil {full : Nat} {allowPartial enforce : Bool}
-    {parts : List (Option Comp)} {cs : List Comp} (h : printed allowPartial parts = some cs)
+    {tags : List (Option String)} {parts : List (Option Comp)} {cs : List Comp}
+    (hg : (allowPartial && !gapFree parts) = false) (h : printed allowPartial parts = some cs)
     (hfull : cs.length = full) (hpos : 0 < full) (hne : cs.flatMap Comp.segs ≠ [""]) :
-    ∃ ss, build full allowPartial enforce parts = some ss ∧ ss ≠ [] := by
+    ∃ ss, build full allowPartial enforce tags parts = some ss ∧ ss ≠ [] := by
   have hb : boundary full cs = false := by simp [boundary, hfull]
-  refine ⟨cs.flatMap Comp.segs, by simp [build, h, hb, hne], ?_⟩
+  refine ⟨cs.flatMap Comp.segs, by simp [build, hg, h, hb, hne], ?_⟩
   cases cs with
   | nil => simp at hfull; omega
   | cons c r => simp [List.flatMap_cons, List.append_eq_nil_iff, Comp.segs_ne_nil c]

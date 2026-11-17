@@ -149,7 +149,7 @@ export const kennelPins = {
         partial: pinned<Result<'' | `NAME#${string}`>>()(
             Kennels.key('SK', kennel, { allowPartial: true }),
         ),
-        boundary: pinned<Result<'' | `NAME#${string}`>>()(
+        boundary: pinned<Result<'NAME#' | `NAME#${string}`>>()(
             Kennels.key('SK', kennel, { allowPartial: true, enforceBoundary: true }),
         ),
     },
@@ -161,7 +161,7 @@ export const kennelPins = {
         partial: pinned<'' | `NAME#${string}`>()(
             Kennels.unsafeKey('SK', kennel, { allowPartial: true }),
         ),
-        boundary: pinned<'' | `NAME#${string}`>()(
+        boundary: pinned<'NAME#' | `NAME#${string}`>()(
             Kennels.unsafeKey('SK', kennel, { allowPartial: true, enforceBoundary: true }),
         ),
     },

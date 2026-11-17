@@ -141,20 +141,46 @@ describe('a full key whose print is the empty text refuses, as a key of one attr
         }
     })
 
-    it('gives the empty prefix where the same print is a partial key', () => {
-        expect(Pets.unsafeKey('GSI3SK', unnamed, { depth: 0 })).toBe('')
+    it('refuses the same print as a partial key of no component, because a key of no component has no text', () => {
+        expect(() => Pets.unsafeKey('GSI3SK', unnamed, { depth: 0 })).toThrow(
+            /no component/,
+        )
+    })
+
+    it('refuses a closed key of no component where the first component has no tag, because nothing prints', () => {
+        expect(() =>
+            Pets.unsafeKey('GSI3SK', unnamed, {
+                depth: 0,
+                enforceBoundary: true,
+            }),
+        ).toThrow(/has no tag/)
     })
 })
 
-describe('a partial key may be the empty string, because it is a begins_with prefix', () => {
-    it('is empty at a depth of 0', () => {
-        expect(Pets.unsafeKey('PK', unnamed, { depth: 0 })).toBe('')
+describe('a partial key of no component has no text, because the empty text has no representation', () => {
+    it('refuses a depth of 0', () => {
+        expect(() => Pets.unsafeKey('PK', unnamed, { depth: 0 })).toThrow(
+            /no component/,
+        )
     })
 
-    it('is empty under allowPartial where no part is present, and the type builds the call', () => {
-        const key = Pets.unsafeKey('PK', {}, { allowPartial: true })
-        expectTypeOf(key).toEqualTypeOf<''>()
-        expect(key).toBe('')
+    it('refuses allowPartial where no part is present, and the type states the empty text', () => {
+        const call = () => Pets.unsafeKey('PK', {}, { allowPartial: true })
+        expectTypeOf(call).returns.toEqualTypeOf<''>()
+        expect(call).toThrow(/no component/)
+    })
+
+    it('prints the first tag and the separator for a closed key of no component', () => {
+        const key = Pets.unsafeKey(
+            'PK',
+            {},
+            {
+                allowPartial: true,
+                enforceBoundary: true,
+            },
+        )
+        expectTypeOf(key).toEqualTypeOf<'PETID#'>()
+        expect(key).toBe('PETID#')
     })
 
     it('is the prefix of the first part where only the first part is present', () => {
@@ -164,15 +190,12 @@ describe('a partial key may be the empty string, because it is a begins_with pre
         expect(key).toBe('PETID#p1')
     })
 
-    it('is empty where only the second part is present, because the builder stops at the first absent part', () => {
+    it('refuses a hole, where only the second part is present, because the print would drop it', () => {
         const Two = tableEntry<Pet>()({ PK: ['petId', 'shelterId'] })
-        const key = Two.unsafeKey(
-            'PK',
-            { shelterId: 's1' },
-            { allowPartial: true },
-        )
-        expectTypeOf(key).toEqualTypeOf<''>()
-        expect(key).toBe('')
+        const call = () =>
+            Two.unsafeKey('PK', { shelterId: 's1' }, { allowPartial: true })
+        expectTypeOf(call).returns.toEqualTypeOf<''>()
+        expect(call).toThrow(/would drop 'shelterId'/)
     })
 
     it('refuses a part of another type, as a full key does', () => {

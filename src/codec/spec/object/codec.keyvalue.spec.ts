@@ -69,9 +69,15 @@ describe('key returns the refusal of the attributes as a value', () => {
         expect(Animals.key('SK', { petId: 'p1', kind: 'CAT' })).toBeUndefined()
     })
 
-    it('keeps the outcome of a partial key, which this pass does not change', () => {
-        expect(Pets.key('PK', {} as never, { allowPartial: true })).toBe('')
-        expect(Pets.key('PK', rex, { depth: 0 })).toBe('')
+    it('returns the refusal of a partial key of no component, because the empty text has no representation', () => {
+        for (const refused of [
+            Pets.key('PK', {} as never, { allowPartial: true }),
+            Pets.key('PK', rex, { depth: 0 }),
+        ]) {
+            expect(refused).toBeInstanceOf(CodecError)
+            if (refused instanceof CodecError)
+                expect(refused.message).toContain('no component')
+        }
     })
 })
 

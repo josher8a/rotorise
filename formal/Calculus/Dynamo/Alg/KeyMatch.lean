@@ -18,7 +18,7 @@ The model is parametric in the name of an attribute. A name is opaque: the item 
 from a name to the printed value, and no definition or theorem reads a name as a top-level
 attribute. A later pass can instantiate the name with a path and change no law.
 
-A leaf holds its parts and the length of the spec. A part holds the name of the attribute that it
+A leaf holds its parts, the tag of each component, and the length of the spec. A part holds the name of the attribute that it
 reads and the print of the value at that name, because the host gives a transform the value at the
 path of its component and nothing else. So the parts of an item are the prints at the names, and two
 items that agree on the names that a spec reads give one key (`keyOf_congr`). The selection of the
@@ -52,10 +52,12 @@ structure Part (N : Type) where
 /-- The part of an item: the print of the value at the name of the part. -/
 def Part.eval {N : Type} (p : Part N) (i : Item N) : Option Comp := p.print (p.name.bind i)
 
-/-- A leaf: the length of the spec, and the parts. -/
+/-- A leaf: the length of the spec, the parts, and the tag of each component. The tag is data of
+    the schema, so it does not depend on the item. -/
 structure Leaf (N : Type) where
   full : Nat
   comps : List (Part N)
+  tags : List (Option String)
 
 /-- The parts of a leaf for an item. -/
 def Leaf.parts {N : Type} (l : Leaf N) (i : Item N) : List (Option Comp) :=
@@ -66,12 +68,14 @@ def Leaf.reads {N : Type} (l : Leaf N) : List N := l.comps.flatMap fun p => p.na
 
 /-- A leaf whose parts read no attribute. A row of the vectors holds one item, so its leaves are
     constant. -/
-def Leaf.const {N : Type} (full : Nat) (ps : List (Option Comp)) : Leaf N :=
-  ⟨full, ps.map fun p => ⟨none, fun _ => p⟩⟩
+def Leaf.const {N : Type} (full : Nat) (tags : List (Option String)) (ps : List (Option Comp)) :
+    Leaf N :=
+  ⟨full, ps.map fun p => ⟨none, fun _ => p⟩, tags⟩
 
 /-- **A constant leaf gives its parts at every item.** -/
-theorem Leaf.parts_const {N : Type} (full : Nat) (ps : List (Option Comp)) (i : Item N) :
-    (Leaf.const full ps).parts i = ps := by
+theorem Leaf.parts_const {N : Type} (full : Nat) (tags : List (Option String))
+    (ps : List (Option Comp)) (i : Item N) :
+    (Leaf.const full tags ps).parts i = ps := by
   simp [Leaf.parts, Leaf.const, Part.eval, List.map_map, Function.comp_def]
 
 /-- An arm that does not match. A leaf prints parts. `null` gives no key. `attr` gives the printed
@@ -206,7 +210,7 @@ inductive Out where
 /-- The key of an arm for an item. -/
 def Arm.key {N : Type} (allowPartial enforce : Bool) (i : Item N) : Arm N → Out
   | .leaf l =>
-      match build l.full allowPartial enforce (l.parts i) with
+      match build l.full allowPartial enforce l.tags (l.parts i) with
       | none => .refused
       | some ss => .segs ss
   | .null => .nothing
@@ -232,7 +236,7 @@ theorem keyOf_match {d : N} {arms : String → KeySpec N} {v : String} (h : i d 
 /-- **The key of a match is `build` on the leaf that the item selects.** -/
 theorem keyOf_leaf {s : KeySpec N} {l : Leaf N} (h : select i s = .leaf l) :
     keyOf allowPartial enforce i s =
-      match build l.full allowPartial enforce (l.parts i) with
+      match build l.full allowPartial enforce l.tags (l.parts i) with
       | none => .refused
       | some ss => .segs ss := by
   simp [keyOf, h, Arm.key]
@@ -285,10 +289,11 @@ theorem Arm.key_attr_raw_ne_empty {n : N} {k : String}
     is not empty, gives a key from a non-empty list of segments. A partial key is the print that stops before the
     last component, and it may be empty. -/
 theorem Arm.key_leaf_full_ne_nil {l : Leaf N} {cs : List Comp}
+    (hg : (allowPartial && !gapFree (l.parts i)) = false)
     (h : printed allowPartial (l.parts i) = some cs) (hfull : cs.length = l.full)
     (hpos : 0 < l.full) (hne : cs.flatMap Comp.segs ≠ [""]) :
     ∃ ss, (Arm.leaf l).key allowPartial enforce i = .segs ss ∧ ss ≠ [] := by
-  obtain ⟨ss, hb, hne⟩ := build_full_ne_nil (enforce := enforce) h hfull hpos hne
+  obtain ⟨ss, hb, hne⟩ := build_full_ne_nil (enforce := enforce) (tags := l.tags) hg h hfull hpos hne
   exact ⟨ss, by simp [Arm.key, hb], hne⟩
 
 /-! ## The support of a key -/
@@ -351,7 +356,7 @@ def charSegs (ss : List String) : List (List Char) := ss.map String.toList
 /-- **Inside one arm the read of the key gives the segments back.** The leaf is lawful where it has
     a segment and no segment holds the separator, which is the domain of `keyCodec_lawful`. -/
 theorem leaf_key_split (c : Char) {s : KeySpec N} {l : Leaf N} {ss : List String}
-    (hl : select i s = .leaf l) (hb : build l.full allowPartial enforce (l.parts i) = some ss)
+    (hl : select i s = .leaf l) (hb : build l.full allowPartial enforce l.tags (l.parts i) = some ss)
     (hne : ss ≠ []) (hn : NoSep c (charSegs ss)) :
     keyOf allowPartial enforce i s = .segs ss ∧
       split c (join c (charSegs ss)) = charSegs ss := by
@@ -391,8 +396,9 @@ theorem not_decodable {d : N} {arms : String → KeySpec N} {x y : String} {a : 
 
 /-- **A leaf that does not read the item meets the collision.** -/
 theorem collision_const {d : N} {arms : String → KeySpec N} {x y : String} {full : Nat}
-    {ps : List (Option Comp)} (hx : arms x = .arm (.leaf (.const full ps)))
-    (hy : arms y = .arm (.leaf (.const full ps))) (hi : i d = some x) (hi' : i' d = some y) :
+    {tags : List (Option String)} {ps : List (Option Comp)}
+    (hx : arms x = .arm (.leaf (.const full tags ps)))
+    (hy : arms y = .arm (.leaf (.const full tags ps))) (hi : i d = some x) (hi' : i' d = some y) :
     keyOf allowPartial enforce i (.match_ d arms) =
       keyOf allowPartial enforce i' (.match_ d arms) :=
   collision hx hy hi hi' (by simp [Arm.key, Leaf.parts_const])
@@ -413,7 +419,7 @@ def ownerSpec : KeySpec String :=
     [ ("OBJECT", .arm .null)
     , ("ANIMAL", .match_ "SPECIE" (KeySpec.ofList
         [ ("CAT", .arm .null)
-        , ("DOG", .match_ "BREED" (KeySpec.ofList [("PUG", .arm (.leaf (.const 1 [some (.named "B" "pug")])))]))
+        , ("DOG", .match_ "BREED" (KeySpec.ofList [("PUG", .arm (.leaf (.const 1 [some "B"] [some (.named "B" "pug")])))]))
         , ("HORSE", .arm .null) ])) ])
 
 /-- The path of a dog item, and the arm that the flat match gives at the path. -/
@@ -440,8 +446,8 @@ theorem owner_pug :
 /-- The two items of a collision: two literals, one arm. -/
 def twin : KeySpec String :=
   .match_ "K" (KeySpec.ofList
-    [("x", .arm (.leaf (.const 1 [some (.named "A" "1")]))),
-     ("y", .arm (.leaf (.const 1 [some (.named "A" "1")])))])
+    [("x", .arm (.leaf (.const 1 [some "A"] [some (.named "A" "1")]))),
+     ("y", .arm (.leaf (.const 1 [some "A"] [some (.named "A" "1")])))])
 
 /-- **The collision has an instance.** Two items with different literals print one key. -/
 theorem twin_collides :

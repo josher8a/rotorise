@@ -146,8 +146,10 @@ describe('DynamoDB Utils', () => {
         // @ts-expect-error a depth that is no literal says no component count
         const loose = () => Transformed.unsafeKey('PK', { a: 'x' }, { depth })
         expect(loose).toThrow(/Attribute b not found/)
-        // a partial key of no component is the empty prefix: the type builds the call
-        expect(Transformed.unsafeKey('PK', {}, { allowPartial: true })).toBe('')
+        // a partial key of no component has no text: the key is an error value, and the type builds the call
+        expect(() =>
+            Transformed.unsafeKey('PK', {}, { allowPartial: true }),
+        ).toThrow(/no component/)
 
         // 8939 -> 9878: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
@@ -310,7 +312,7 @@ describe('DynamoDB Utils', () => {
                     enforceBoundary: true,
                 },
             ),
-        ).toBe('A-a1-B-1-')
+        ).toBe('A-a1-B-1-C-')
 
         const entity = {
             a: 'a1',
@@ -1291,12 +1293,23 @@ describe('DynamoDB Utils', () => {
             testTableEntry.unsafeKey(
                 'PK',
                 {
-                    c: 0,
                     a: 'a2',
                 },
                 { allowPartial: true },
             ),
         ).toBe('A-a2')
+
+        // a later component that the call gives after an absent one is a hole: the print would drop it
+        expect(() =>
+            testTableEntry.unsafeKey(
+                'PK',
+                {
+                    c: 0,
+                    a: 'a2',
+                },
+                { allowPartial: true },
+            ),
+        ).toThrow(/would drop/)
     })
 
     test('a key schema over variants that type one attribute differently gives a transform the union of those types', () => {

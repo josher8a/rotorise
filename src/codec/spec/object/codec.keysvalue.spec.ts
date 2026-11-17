@@ -86,7 +86,7 @@ describe('keyCondition returns the refusal of the attributes as a value', () => 
                 refused.kind,
             )
             expect(refused.message).toContain(
-                "'GSI1SK' gives no key and no prefix for these attributes",
+                "so a partial key would drop 'petId'",
             )
         }
     })

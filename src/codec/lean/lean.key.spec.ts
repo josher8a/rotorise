@@ -151,6 +151,21 @@ const writeAt = (item: Item, path: string, value: unknown): Item => {
 }
 
 /**
+ * The tag of each component of a spec: the constant of a record, the name where the record has no
+ * tag, and `undefined` where the tag is `false`. The tag is data of the schema, so it does not
+ * depend on the item.
+ */
+const tagsOf = (components: readonly Component[]): (string | undefined)[] =>
+    components.map((component) => {
+        const record =
+            typeof component === 'string' ? { at: component } : component
+        const tag = 'tag' in record ? record.tag : undefined
+        return tag === false
+            ? undefined
+            : (tag ?? (record.at.split('.').pop() ?? record.at).toUpperCase())
+    })
+
+/**
  * The parts of a spec for an item, as a second reading of the spec: the components cut to the
  * depth, each one read. A default stands for an undefined value only. A component is absent where
  * its value is undefined, and, with no transform, where its value is null or empty. The model
@@ -228,15 +243,28 @@ const modelSegments = (row: KeyRow): string[] | undefined => {
     const arm = selectArm(row.tree, row.item)
     if (arm.kind !== 'leaf') return undefined
     const printed: (KeyPart & object)[] = []
+    const absent = arm.parts.indexOf(undefined)
     for (const part of arm.parts) {
         if (part === undefined) {
-            if (row.allowPartial) break
-            return undefined
+            if (!row.allowPartial) return undefined
+            // a hole: a part prints after an absent part, so the partial key would drop it
+            if (arm.parts.slice(absent).some((later) => later !== undefined))
+                return undefined
+            break
         }
         printed.push(part)
     }
     const segments = printed.flatMap(segmentsOf)
-    if (row.enforce && printed.length < arm.full) segments.push('')
+    if (printed.length < arm.full) {
+        const next = arm.tags[printed.length]
+        // a key of no component has no text, and a closed key of no component with no tag prints nothing
+        if (printed.length === 0 && (!row.enforce || next === undefined))
+            return undefined
+        if (row.enforce) {
+            if (next !== undefined) segments.push(next)
+            segments.push('')
+        }
+    }
     // a full key whose print is the empty text is a refusal, as `DerivedKey.build` states it
     if (
         printed.length >= arm.full &&
@@ -483,6 +511,7 @@ const treeOf = (arm: Arm, item: Item, depth: number | undefined): KeyTree =>
                         : {
                               kind: 'leaf',
                               full: arm.length,
+                              tags: tagsOf(arm),
                               parts: partsOf(arm, item, depth),
                           },
           }
@@ -751,6 +780,7 @@ describe('the derived key rows, against the model of a key', () => {
             arm: {
                 kind: 'leaf',
                 full: 1,
+                tags: ['B'],
                 parts: [{ kind: 'named', name: 'B', value: 'pug' }],
             },
         }
@@ -784,6 +814,8 @@ describe('the derived key rows, against the model of a key', () => {
             },
         ])
         expect(text.match(/\.match_/g)?.length).toBe(2)
+        // the leaf carries the tag of each component, because the model prints a closed key through the next tag
+        expect(text).toContain('.const 1 [(some "B")]')
     })
 
     it('reads back each item that the entry wrote, for each spec of the pool', () => {
@@ -801,7 +833,7 @@ describe('the derived key rows, against the model of a key', () => {
         expect(wrote).toBeGreaterThan(0)
     })
 
-    it('has a trailing separator where a depth stops before the last component', () => {
+    it('ends a closed key with the tag of the next component and the separator, where a depth stops before the last component', () => {
         const stop = rows.find(
             (row) =>
                 row.name.startsWith('plain_') &&
@@ -815,8 +847,48 @@ describe('the derived key rows, against the model of a key', () => {
                     (p) => p?.kind !== 'named' || p.value === '1',
                 ),
         )
-        expect(stop?.outcome).toEqual({ kind: 'key', key: 'A#1#' })
+        expect(stop?.outcome).toEqual({ kind: 'key', key: 'A#1#B#' })
         expect(stop?.lawful).toBe(true)
+    })
+
+    it('refuses a hole, and a partial key of no component, and prints the first tag for a closed key of no component', () => {
+        const holes = rows.filter((row) => {
+            const parts = leafOf(row)?.parts ?? []
+            const absent = parts.indexOf(undefined)
+            return (
+                row.allowPartial &&
+                absent >= 0 &&
+                parts.slice(absent).some((part) => part !== undefined)
+            )
+        })
+        expect(holes.length).toBeGreaterThan(0)
+        for (const row of holes)
+            expect(row.outcome.kind, row.name).toBe('refused')
+        const open = rows.filter(
+            (row) =>
+                !row.enforce &&
+                leafOf(row) !== undefined &&
+                (leafOf(row)?.parts.every((part) => part === undefined) ??
+                    false) &&
+                (leafOf(row)?.full ?? 0) > 0 &&
+                row.outcome.kind !== 'separator',
+        )
+        expect(open.length).toBeGreaterThan(0)
+        for (const row of open)
+            expect(row.outcome.kind, row.name).toBe('refused')
+        const closedAtZero = rows.filter(
+            (row) =>
+                row.enforce &&
+                (leafOf(row)?.parts.length === 0 ||
+                    leafOf(row)?.parts.every((part) => part === undefined)) &&
+                row.outcome.kind === 'key',
+        )
+        expect(closedAtZero.length).toBeGreaterThan(0)
+        for (const row of closedAtZero)
+            expect(row.outcome, row.name).toEqual({
+                kind: 'key',
+                key: `${leafOf(row)?.tags[0]}${row.separator}`,
+            })
     })
 
     it('has no trailing separator on a full key with the option on', () => {
@@ -960,6 +1032,7 @@ const conditionRows = (): ConditionRow[] => {
                 const row: ConditionRow = {
                     name: `condition_${rows.length}`,
                     full: names.length,
+                    tags: names.map((name) => name.toUpperCase()),
                     parts: names.map((name, i) =>
                         present[i]
                             ? {
@@ -985,7 +1058,7 @@ const conditionRows = (): ConditionRow[] => {
 describe('the sort condition rows, against the model of a condition', () => {
     const rows = conditionRows()
 
-    it('refuses a part that prints after an absent part, and gives the prefix of the leading parts otherwise', () => {
+    it('refuses a part that prints after an absent part, and gives the prefix of the leading parts and the next tag otherwise', () => {
         for (const row of rows) {
             const present = row.parts.map((part) => part !== undefined)
             const leading = present.indexOf(false)
@@ -1007,7 +1080,8 @@ describe('the sort condition rows, against the model of a condition', () => {
             else
                 expect(row.outcome, row.name).toEqual({
                     kind: 'prefix',
-                    key: `${texts.join(row.separator)}${row.separator}`,
+                    // the prefix ends with the tag of the next component and the separator
+                    key: `${texts.join(row.separator)}${row.separator}${row.tags[present.indexOf(false)]}${row.separator}`,
                 })
         }
     })

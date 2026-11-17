@@ -30,20 +30,20 @@ describe('a key with enforceBoundary', () => {
         ).toBe('1')
     })
 
-    it('has a trailing separator on a partial key with a tagless transform', () => {
+    it('ends a partial key with the tag of the next component and the separator, where the first component has a tagless transform', () => {
         expect(
             Mixed.unsafeKey(
                 'K',
                 { a: '1' },
                 { allowPartial: true, enforceBoundary: true },
             ),
-        ).toBe('1#')
+        ).toBe('1#B#')
         expect(
             Mixed.unsafeKey('K', row, { depth: 1, enforceBoundary: true }),
-        ).toBe('1#')
+        ).toBe('1#B#')
     })
 
-    it('leaves the key of a spec with no tagless transform as it was', () => {
+    it('prints the tag of the next component after the cut of a spec with no tagless transform, and leaves the full key as it was', () => {
         expect(Mixed.unsafeKey('M', row, { enforceBoundary: true })).toBe(
             'T#1#B#2',
         )
@@ -52,7 +52,7 @@ describe('a key with enforceBoundary', () => {
         )
         expect(
             Mixed.unsafeKey('N', row, { depth: 1, enforceBoundary: true }),
-        ).toBe('A#1#')
+        ).toBe('A#1#B#')
     })
 
     it('adds nothing where the option is absent', () => {
@@ -64,12 +64,12 @@ describe('a key with enforceBoundary', () => {
         const full: 'A#1#B#2' = Mixed.unsafeKey('N', as, {
             enforceBoundary: true,
         })
-        const cut: 'A#1#' = Mixed.unsafeKey('N', as, {
+        const cut: 'A#1#B#' = Mixed.unsafeKey('N', as, {
             depth: 1,
             enforceBoundary: true,
         })
         const plain: 'A#1' = Mixed.unsafeKey('N', as, { depth: 1 })
-        const partial: 'A#1#' | 'A#1#B#2' = Mixed.unsafeKey('N', as, {
+        const partial: 'A#1#B#' | 'A#1#B#2' = Mixed.unsafeKey('N', as, {
             allowPartial: true,
             enforceBoundary: true,
         })
@@ -81,7 +81,7 @@ describe('a key with enforceBoundary', () => {
         })
         expect([full, cut, plain, partial, typeof wrong]).toEqual([
             'A#1#B#2',
-            'A#1#',
+            'A#1#B#',
             'A#1',
             'A#1#B#2',
             'string',
@@ -98,10 +98,10 @@ describe('a key of a path component with enforceBoundary', () => {
         const full: 'X#1#B#2' = Paths.unsafeKey('P', as, {
             enforceBoundary: true,
         })
-        const cut: 'X#1#' = Paths.unsafeKey('P', as, {
+        const cut: 'X#1#B#' = Paths.unsafeKey('P', as, {
             depth: 1,
             enforceBoundary: true,
         })
-        expect([full, cut]).toEqual(['X#1#B#2', 'X#1#'])
+        expect([full, cut]).toEqual(['X#1#B#2', 'X#1#B#'])
     })
 })

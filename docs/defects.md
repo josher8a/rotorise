@@ -655,38 +655,6 @@ with the keys of the changed pet, for a key name with a `.` also.
 
 ---
 
-## Known: the type of key with allowPartial refuses an argument that holds no component of the key, where the run time gives the empty string
-
-**Observation.** The type of `key` with `allowPartial` states each component as optional. A partial
-key of no component, and of the first component, compile. An argument of a declared type that holds
-another name only has no property in common with the parameter, and the weak type check of the
-compiler refuses the argument. The run time gives the empty string for each argument. Measured
-2026-11-14 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    const Pets = tableEntry<{ shelterId: string; petId: string }>()({ PK: ['shelterId', 'petId'] })
-    const nameOnly: { name: string } = { name: 'rex' }
-
-    Pets.key('PK', {}, { allowPartial: true })
-      type checker: builds, with the type ""
-      runtime:      gives ""
-
-    Pets.key('PK', nameOnly, { allowPartial: true })
-      type checker: refused, '{ name: string; }' has no properties in common with
-                    '{ petId?: string | undefined; shelterId?: string | undefined; }'
-      runtime:      gives ""
-
-**Effect.** The second call does not compile, and the run time gives the key. A caller writes the
-empty prefix with `{}`.
-
-**Pin.** `src/Rotorise.spec.ts` and `src/codec/spec/object/codec.keyempty.spec.ts` pin the empty
-string of a partial key of no component, with the type of the call, and the refusal of a part of
-another type. `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty string of `depth: 0`.
-No test pins the refusal of the weak type check. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key: the calls nameOnly and pidOnly
-of T_plain_listOne with `allowPartial`.
-
----
-
 ## Known: the declaration of a consumer has no name for a cycle of a scope that goes through a list and a union only
 
 **Observation.** A consumer that exports a codec constant with `declaration: true` needs a name for
@@ -1192,33 +1160,6 @@ give no key, and the term adds no check.
 
 ---
 
-## Known: the type of key refuses an argument that holds no component of the key at depth 0, where the run time gives the empty text
-
-**Observation.** A key of depth 0 reads no component, and the run time gives the empty text for
-each argument. The parameter of `key` at depth 0 states each component as optional. An argument of
-a declared type that holds another name only has no property in common with the parameter, and
-the type refuses the argument. The empty object compiles. Measured 2026-11-14 with
-`tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the entry Pets above:
-
-    const nameOnly: { name: string } = { name: 'rex' }
-
-    Pets.key('PK', nameOnly, { depth: 0 })
-      type checker: refused, '{ name: string; }' has no properties in common with
-                    '{ petId?: string | undefined; }'
-      runtime:      gives ""
-
-    Pets.key('PK', {}, { depth: 0 })
-      type checker: builds
-      runtime:      gives ""
-
-**Effect.** The first call does not compile, and the run time gives the key.
-
-**Pin.** `src/codec/spec/object/codec.keydepth.spec.ts` pins the empty text of `depth: 0` at run
-time. No test pins the refusal. The baseline of the type bridge,
-formal/scripts/type_bridge_baseline.txt, holds 2 ids of the group key for the refusal.
-
----
-
 ## Known: the type of a component record admits a property that the record does not have, where the run time refuses the schema
 
 **Observation.** A component record holds the name of the attribute, a tag, a value function and a
@@ -1236,3 +1177,34 @@ The key never prints with the name in place of the tag.
 **Pin.** `src/codec/spec/object/codec.keylabel.spec.ts` pins the refusal of the run time, and the
 same test compiles the record with no directive. The baseline of the type bridge holds no id,
 because no draw of the entry pool holds such a record.
+
+---
+
+## Known: the type of a partial key admits a hole and the empty text, where the run time gives an error value
+
+**Observation.** A partial key is a position: the count `k` of the leading components that print. The
+run time gives an error value for a key of no component without the boundary, and for a hole, which
+is a component that prints after one that does not. The type of the result is a union of the
+prefixes that the builder can print, and the type of the argument states each component as
+optional. So the type names the empty text, and the prefix before an absent component, where the
+run time gives the error value. The type of a closed key states the tag of the next component and
+the separator, and agrees with the run time. Measured 2026-11-17 with `tsc --noEmit` on TypeScript 7
+and `npx vitest --run`, with the entry Pets of `codec.keypartial.spec.ts`:
+
+    Pets.key('GSI1SK', { species: 'CAT', breed: undefined as Breed | undefined, age: 3 }, { allowPartial: true })
+      type checker: builds, 'SPECIES#CAT' | 'SPECIES#CAT#BREED#PUG#AGE#3' | 'SPECIES#CAT#BREED#LAB#AGE#3'
+      runtime:      CodecError, "'age' is given and 'breed' before it is not, so a partial key would drop 'age'"
+
+    Pets.key('GSI1SK', {}, { allowPartial: true })
+      type checker: builds, with the type ""
+      runtime:      CodecError, "the print of no component is empty, so the key has no text"
+
+**Effect.** A caller reads a string type and gets an error value. The type cannot refuse the hole,
+because a value of a type that can be absent is a hole only where it is absent. A form of the
+argument as a union of the leading sets refuses the hole, and it raised seven attest pins by 5
+percent or more and gave 19 compile errors in 3 spec files, so it was not built.
+
+**Pin.** `src/codec/spec/object/codec.keypartial.spec.ts`, `codec.keyempty.spec.ts` and
+`codec.keydepth.spec.ts` pin the type of each call and the error value of the run time in the same
+test.
+

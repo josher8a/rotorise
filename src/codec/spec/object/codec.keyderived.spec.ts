@@ -52,10 +52,10 @@ describe('the codec decides a component, so no caller passes it', () => {
         })
     })
 
-    it('gives the prefix of the decided component where the attributes give no other part of the sort key', () => {
+    it('gives the prefix of the decided component and the tag of the next component where the attributes give no other part of the sort key', () => {
         expect(Pets.unsafeKeyCondition({ petId: 'p1' }).sort).toEqual({
             name: 'SK',
-            beginsWith: { S: 'TAG#PET#' },
+            beginsWith: { S: 'TAG#PET#CREATEDAT#' },
         })
     })
 

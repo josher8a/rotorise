@@ -68,9 +68,9 @@ UserTable.key('GSI1SK', { email: 'a@b.com' })
 
 **`config` options:**
 
-- **`depth`** — Limit composite key to the first N components. Useful for `begins_with` queries.
-- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of throwing. A component with a `value` function does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there, and so does a name that the call lacks. A component that is never absent leaves no prefix before it. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
-- **`enforceBoundary`** — When `true`, appends a trailing separator if the key is partial. Ensures a `begins_with` query doesn't match unintended prefixes.
+- **`depth`** — Limit composite key to the first N components. Useful for `begins_with` queries. A component that the call lacks inside the depth is an error.
+- **`allowPartial`** — When `true`, stops building the key at the first component that does not print, instead of giving an error for it. A component that prints after one that does not (a hole) is an error value, because the key would drop it and select more items than the call names. A component past the `depth` is no hole. A key of no component has no text, so it is an error value. A component with a `value` function does not print where its value is `undefined`. Any other component does not print where its value is `undefined`, `null` or `''`. The type is the union of the prefixes that the builder can print: a component that can be absent ends a prefix there, and so does a name that the call lacks. A component that is never absent leaves no prefix before it. A `string` component keeps its continuation, because a type cannot remove `''` from `string`.
+- **`enforceBoundary`** — When `true`, a partial key ends with the tag of the next component, where that component has a tag, and the separator. Ensures a `begins_with` query doesn't match unintended prefixes. A closed key of no component prints the first tag and the separator, and is an error value where the first component has `tag: false`.
 
 Each option holds one literal, or nothing. The type of the key follows the value, so the type refuses a `number`, a `boolean`, and each other union: `1 | 2`, or a literal that can be `undefined`.
 
@@ -83,7 +83,7 @@ UserTable.key('PK', { orgId: 'acme', id: '1' }, { depth: 1 })
 // => 'ORGID#acme'
 
 UserTable.key('PK', { orgId: 'acme', id: '1' }, { depth: 1, enforceBoundary: true })
-// => 'ORGID#acme#'
+// => 'ORGID#acme#ID#'
 ```
 
 ### `.toEntry(item)`
@@ -516,7 +516,8 @@ before `'9'`.
   `keys`, `keyCondition`, `toEntry` and `toItem` return a `CodecError` of the kind `key`. The message names the key and not the value.
   `key` and `keyCondition` refuse an empty full key too, also where a transform prints the empty
   string at a component. A partial key, which is a call with
-  `allowPartial` or with a `depth` below the count of components, may be the empty string.
+  `allowPartial` or with a `depth` below the count of components, has no empty text: a partial key of
+  no component is a `CodecError`, and so is a hole.
 - `toEntry` holds a key of `N` as the value that `marshall` of `@aws-sdk/util-dynamodb` writes: a
   `number` where the number is within the safe integer range and equals the numeral that `toItem`
   writes (DynamoDB normalises a number, so `1e-7` and `0.0000001` are one number), else a `bigint`

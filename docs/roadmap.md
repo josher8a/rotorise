@@ -341,8 +341,10 @@ partial key with a trailing separator is a prefix of a key exactly where the key
 segments (`DerivedKey.prefix_iff`), and without the separator it selects more
 (`DerivedKey.prefix_without_separator`). The key builder appends the boundary of
 `key(name, attributes, { enforceBoundary: true })` where the print stops before the last component
-of the spec, through an absent value or a depth, which the model states as `DerivedKey.boundary`,
-and the type of the result reads the same option.
+of the spec, through an absent value or a depth, which the model states as `DerivedKey.boundary`.
+The boundary follows the tag of the next component, so the key selects the items that agree on the
+leading components (`DerivedKey.build_closed_ends_with_tag`), and the type of the result reads the
+same option.
 
 **What decides it.** A query by a derived partial key that returns an item outside its prefix, or a
 hand-built prefix in a service that the derived form cannot state.

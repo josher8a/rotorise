@@ -9,32 +9,16 @@ condition with every part is an equality on the whole key. A condition with the 
 prefix match: the key of those parts and the boundary. A prefix is exact only where no part prints
 after a part that does not, because the prefix stops at the first absent part and so drops each
 later part (`gap_selects_both`). A query with a gap would then select items that disagree on a part
-that the query names, so the condition refuses it.
+that the query names, so `build` refuses it (`build_gap_refused`), and the condition reads `build`.
 
 This file states the condition as a function of the length of the spec and the parts, as `build`
-does for the key. The condition is a layer above the key: the key builder gives a partial key and
-drops a later part in silence (`printed_partial`), and the condition refuses the query where that
-drop would widen the selection.
+does for the key. The condition reads `build`: the key builder gives a partial key, and refuses the
+query where a later part would be dropped and the selection would widen.
 -/
 
 namespace Calculus
 
 namespace DerivedKey
-
-/-! ## The gap -/
-
-/-- **No part prints after an absent part.** The list ends with absent parts, or has none. -/
-def gapFree : List (Option Comp) → Bool
-  | [] => true
-  | none :: r => r.all Option.isNone
-  | some _ :: r => gapFree r
-
-/-- **A list has no gap exactly where the parts after the leading parts are all absent.** -/
-theorem gapFree_iff_dropWhile : ∀ ps : List (Option Comp),
-    gapFree ps = true ↔ (ps.dropWhile Option.isSome).all Option.isNone = true
-  | [] => by simp [gapFree]
-  | none :: r => by simp [gapFree, List.dropWhile]
-  | some _ :: r => by simp [gapFree, List.dropWhile, gapFree_iff_dropWhile r]
 
 /-! ## The condition -/
 
@@ -47,43 +31,44 @@ inductive Cond where
   | prefix (ss : List String)
   deriving DecidableEq
 
-/-- **The condition.** No part given gives no condition. A part that prints after an absent part is
-    a refusal. Otherwise the key is the key that `build` gives for the parts: the whole key where
-    the print holds every component of the spec, and the prefix with the boundary where it does not.
+/-- **The condition.** No part given gives no condition. Otherwise the key is the key that `build`
+    gives for the parts: the whole key where the print holds every component of the spec, and the
+    prefix with the next tag and the boundary where it does not. A part that prints after an absent
+    part is a refusal of `build` (`build_gap_refused`), so the condition has no gap test of its own.
     A whole key whose text is empty is a refusal, as `build` states it. `full` is the length of the
-    spec. -/
-def condition (full : Nat) (parts : List (Option Comp)) : Cond :=
+    spec, and `tags` are the tags of its components. -/
+def condition (full : Nat) (tags : List (Option String)) (parts : List (Option Comp)) : Cond :=
   if parts.all Option.isNone then .nothing
-  else if gapFree parts then
-    match printed true parts, build full true true parts with
+  else
+    match printed true parts, build full true true tags parts with
     | some cs, some ss => if boundary full cs then .prefix ss else .equals ss
     | _, _ => .refused
-  else .refused
 
 /-- **A query that gives no part has no condition.** -/
-theorem condition_nothing {full : Nat} {parts : List (Option Comp)}
-    (h : parts.all Option.isNone = true) : condition full parts = .nothing := by
+theorem condition_nothing {full : Nat} {tags : List (Option String)} {parts : List (Option Comp)}
+    (h : parts.all Option.isNone = true) : condition full tags parts = .nothing := by
   simp [condition, h]
 
 /-- **A query with a gap is a refusal.** A part is given, and a part prints after an absent part. -/
-theorem condition_gap {full : Nat} {parts : List (Option Comp)}
+theorem condition_gap {full : Nat} {tags : List (Option String)} {parts : List (Option Comp)}
     (hp : parts.all Option.isNone = false) (hg : gapFree parts = false) :
-    condition full parts = .refused := by
-  simp [condition, hp, hg]
+    condition full tags parts = .refused := by
+  simp [condition, hp, build_gap_refused hg]
 
-/-- **A query with no gap has the key that `build` gives.** The condition is that key, as the whole
-    key where the print holds every component and as the prefix where it does not. -/
-theorem condition_of_gapFree {full : Nat} {parts : List (Option Comp)}
-    (hp : parts.all Option.isNone = false) (hg : gapFree parts = true) {cs : List Comp}
-    {ss : List String} (hc : printed true parts = some cs) (hb : build full true true parts = some ss) :
-    condition full parts = if boundary full cs then .prefix ss else .equals ss := by
-  simp [condition, hp, hg, hc, hb]
+/-- **A query has the key that `build` gives.** The condition is that key, as the whole key where
+    the print holds every component and as the prefix where it does not. -/
+theorem condition_of_build {full : Nat} {tags : List (Option String)} {parts : List (Option Comp)}
+    (hp : parts.all Option.isNone = false) {cs : List Comp}
+    {ss : List String} (hc : printed true parts = some cs)
+    (hb : build full true true tags parts = some ss) :
+    condition full tags parts = if boundary full cs then .prefix ss else .equals ss := by
+  simp [condition, hp, hc, hb]
 
-/-- **A whole key of a query that prints the empty text is a refusal.** `build` refuses it. -/
-theorem condition_refused_of_build {full : Nat} {parts : List (Option Comp)}
-    (hp : parts.all Option.isNone = false) (hg : gapFree parts = true)
-    (hb : build full true true parts = none) : condition full parts = .refused := by
-  simp [condition, hp, hg, hb]
+/-- **A query whose build is a refusal is a refusal.** -/
+theorem condition_refused_of_build {full : Nat} {tags : List (Option String)}
+    {parts : List (Option Comp)} (hp : parts.all Option.isNone = false)
+    (hb : build full true true tags parts = none) : condition full tags parts = .refused := by
+  simp [condition, hp, hb]
 
 /-- **A gap leaves the later part free.** The prefix of the leading segments `p` has a prefix match
     with the segments of each item that begins with `p`, whatever follows. So two items that

@@ -30,24 +30,26 @@ describe('a depth is a non-negative integer', () => {
         ).toBe('SHELTERID#s#PETID#p')
     })
 
-    it('keeps no component at a depth of 0, and the key is the empty prefix, with or without the boundary', () => {
+    it('keeps no component at a depth of 0, and the key has no text without the boundary, and is the first tag and the separator with it', () => {
         const attributes = { shelterId: 's', petId: 'p' }
-        expect(Pets.unsafeKey('SK', attributes, { depth: 0 })).toBe('')
+        expect(() => Pets.unsafeKey('SK', attributes, { depth: 0 })).toThrow(
+            /no component/,
+        )
         expect(
             Pets.unsafeKey('SK', attributes, {
                 depth: 0,
                 enforceBoundary: true,
             }),
-        ).toBe('')
+        ).toBe('SHELTERID#')
         expectTypeOf(
             Pets.unsafeKey('SK', attributes, {
                 depth: 0,
                 enforceBoundary: true,
             }),
-        ).toEqualTypeOf<''>()
-        expectTypeOf(
+        ).toEqualTypeOf<'SHELTERID#'>()
+        expectTypeOf(() =>
             Pets.unsafeKey('SK', attributes, { depth: 0 }),
-        ).toEqualTypeOf<''>()
+        ).returns.toEqualTypeOf<''>()
     })
 
     it.each([-1, 1.5, Number.NaN])(
@@ -106,14 +108,14 @@ describe('a slot of the config states one literal, or nothing', () => {
                 // @ts-expect-error a boolean does not say whether the key ends with the separator
                 enforceBoundary: flag,
             })
-        expect(build(true)).toBe('SHELTERID#s#')
+        expect(build(true)).toBe('SHELTERID#s#PETID#')
         expect(build(false)).toBe('SHELTERID#s')
         expectTypeOf(
             Pets.unsafeKey('SK', attributes, {
                 depth: 1,
                 enforceBoundary: true,
             }),
-        ).toEqualTypeOf<'SHELTERID#s#'>()
+        ).toEqualTypeOf<'SHELTERID#s#PETID#'>()
         expectTypeOf(
             Pets.unsafeKey('SK', attributes, {
                 depth: 1,
@@ -153,7 +155,7 @@ describe('a slot of the config states one literal, or nothing', () => {
         const build = (depth: 1 | 2) =>
             // @ts-expect-error two depths do not say whether the key stops before the last component
             Pets.unsafeKey('SK', attributes, { depth, enforceBoundary: true })
-        expect(build(1)).toBe('SHELTERID#s#')
+        expect(build(1)).toBe('SHELTERID#s#PETID#')
         expect(build(2)).toBe('SHELTERID#s#PETID#p')
     })
 
