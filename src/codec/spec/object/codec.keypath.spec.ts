@@ -232,7 +232,7 @@ describe('a key component that reads a path', () => {
         it('refuses a transform at a path whose value can be absent where no default is given, because the builder throws for an absent value', () => {
             const Pets = tableEntry<Transfer>()({
                 PK: ['id'],
-                // @ts-expect-error `vaccine.lastDose` can be absent: the transform needs a default
+                // @ts-expect-error `vaccine.lastDose` can be absent: the record needs a default
                 SK: [{ at: 'vaccine.lastDose', value: (x: string) => x }],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
@@ -249,7 +249,7 @@ describe('a key component that reads a path', () => {
         it('refuses a tag at a path whose value can be absent, because a tag has no slot for a default', () => {
             const Pets = tableEntry<Transfer>()({
                 PK: ['id'],
-                // @ts-expect-error `vaccine.lastDose` can be absent: give a transform with a default
+                // @ts-expect-error `vaccine.lastDose` can be absent: write a record with a default
                 SK: [{ at: 'vaccine.lastDose', tag: 'DOSE' }],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
@@ -267,7 +267,7 @@ describe('a key component that reads a path', () => {
             type Nullable = { id: string; vaccine: { lastDose: string } | null }
             const Pets = tableEntry<Nullable>()({
                 PK: ['id'],
-                // @ts-expect-error the parent can be null, so `vaccine.lastDose` can be absent: the transform needs a default
+                // @ts-expect-error the parent can be null, so `vaccine.lastDose` can be absent: the record needs a default
                 SK: [{ at: 'vaccine.lastDose', value: (x: string) => x }],
             })
             const absent: Nullable = { id: 'p', vaccine: null }
@@ -300,7 +300,7 @@ describe('a key component that reads a path', () => {
             type Chipped = { id: string; chip: { serial: string | null } }
             const Pets = tableEntry<Chipped>()({
                 PK: ['id'],
-                // @ts-expect-error `chip.serial` can be null: give a transform that reads the null
+                // @ts-expect-error `chip.serial` can be null: write a record with a function that reads the null
                 SK: [{ at: 'chip.serial', tag: 'CHIP' }],
             })
             const unchipped: Chipped = { id: 'p', chip: { serial: null } }

@@ -218,15 +218,15 @@ describe('a path that the type does not see', () => {
 })
 
 describe('a component whose value can be null', () => {
-    it('names the transform that reads the null, because a default stands for an absent value only', () => {
+    it('names the record with a function that reads the null, because a default stands for an absent value only', () => {
         attest(() =>
             tableEntry<{ id: string; chip: { serial: string | null } }>()({
                 PK: ['id'],
-                // @ts-expect-error a component with no transform does not print a null
+                // @ts-expect-error a component with no function does not print a null
                 SK: ['chip.serial'],
             }),
         ).type.errors.snap(
-            "Type '\"chip.serial\"' is not assignable to type '\"chip.serial\" & ErrorMessage<\"'chip.serial' can be null: give a transform that reads the null\">'.Type 'string' is not assignable to type 'ErrorMessage<\"'chip.serial' can be null: give a transform that reads the null\">'.",
+            "Type '\"chip.serial\"' is not assignable to type '\"chip.serial\" & ErrorMessage<\"'chip.serial' can be null: write a record with a function that reads the null\">'.Type 'string' is not assignable to type 'ErrorMessage<\"'chip.serial' can be null: write a record with a function that reads the null\">'.",
         )
     })
 })

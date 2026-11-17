@@ -536,7 +536,7 @@ on TypeScript 7 and on TypeScript 6:
 
     tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] })
       head:      ... not assignable to type '"meta.note" & ErrorMessage<"'meta.note' can be absent:
-                 give a transform with a default">'
+                 write a record with a default">'
 
     type Flat = { petId: string; 'owner.name': string }
     tableEntry<Flat>()({ PK: ['petId'], GSI1PK: 'owner.name' })

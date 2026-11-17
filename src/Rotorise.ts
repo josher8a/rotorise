@@ -892,11 +892,11 @@ type NoSuchName<E, N> = N extends string
 
 /**
  * The refusal of a component whose value can be absent. The builder throws where the value is absent
- * and the component holds no default, so each form of a component needs a transform with a default.
+ * and the component holds no default, so each form of a component needs a record with a default.
  * The type is `never` where the value is always present.
  */
 type AbsentValue<N, V> = undefined extends V
-    ? ErrorMessage<`'${N & string}' can be absent: give a transform with a default`>
+    ? ErrorMessage<`'${N & string}' can be absent: write a record with a default`>
     : never
 
 /**
@@ -913,7 +913,7 @@ type AbsentOrNull<N, V> = [AbsentValue<N, V>] extends [never]
  * absent value only, so a tag with a default meets this refusal and no other.
  */
 type NullValue<N, V> = null extends V
-    ? ErrorMessage<`'${N & string}' can be null: give a transform that reads the null`>
+    ? ErrorMessage<`'${N & string}' can be null: write a record with a function that reads the null`>
     : never
 
 /** What a name can be where the value is `V`: a value that can be absent or `null` needs a transform. */
