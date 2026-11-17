@@ -101,7 +101,6 @@ Tagged
 TaggedCodec
 Term
 TermMark
-TransformShape
 UndefinableCodec
 UnionCodec
 Untagged

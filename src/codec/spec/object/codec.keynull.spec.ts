@@ -16,11 +16,11 @@ describe('a key component that a transform leaves empty', () => {
             PK: ['petId'],
             GSI1PK: [
                 'petId',
-                [
-                    'collar',
-                    (collar: string) =>
+                {
+                    at: 'collar',
+                    value: (collar: string) =>
                         collar === 'NONE' ? null : ('red' as const),
-                ],
+                },
             ],
         })
         const key = Pets.unsafeKey('GSI1PK', { petId: 'p1', collar: 'NONE' })
@@ -35,11 +35,11 @@ describe('a key component that a transform leaves empty', () => {
             PK: ['petId'],
             GSI1PK: [
                 'petId',
-                [
-                    'collar',
-                    (collar: string) =>
+                {
+                    at: 'collar',
+                    value: (collar: string) =>
                         collar === 'NONE' ? undefined : ('red' as const),
-                ],
+                },
             ],
         })
         const key = Pets.unsafeKey('GSI1PK', { petId: 'p1', collar: 'NONE' })

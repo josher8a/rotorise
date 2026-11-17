@@ -32,7 +32,9 @@ const Adoption = tableEntry<Adoption>()(
         GSI1SK: ['status', 'updatedAt'],
         GSI2PK: ['status'],
         GSI2SK: ['updatedAt'],
-        GSI3PK: [['adoptionGroupId', (x?: string) => x, '']],
+        GSI3PK: [
+            { at: 'adoptionGroupId', value: (x?: string) => x, default: '' },
+        ],
         GSI3SK: ['adoptionId'],
     },
     {

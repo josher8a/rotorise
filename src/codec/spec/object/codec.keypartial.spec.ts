@@ -122,13 +122,13 @@ describe('the type of a partial key, where a component has a default or a transf
     const Stays = tableEntry<Stay>()({
         WITH_DEFAULT: [
             'species',
-            [
-                'nickname',
-                (x: string | undefined) => (x ?? '').toUpperCase(),
-                'NONE',
-            ],
+            {
+                at: 'nickname',
+                value: (x: string | undefined) => (x ?? '').toUpperCase(),
+                default: 'NONE',
+            },
         ],
-        NO_DEFAULT: ['species', ['owner', (x: string) => `o${x}`]],
+        NO_DEFAULT: ['species', { at: 'owner', value: (x: string) => `o${x}` }],
     })
 
     it('never ends the prefix at a component with a default, because the default fills the absent value', () => {
@@ -275,11 +275,11 @@ describe('the components that a call of key must give', () => {
     const Stays = tableEntry<Stay>()({
         SK: [
             'species',
-            [
-                'nickname',
-                (x: string | undefined) => (x ?? '').toUpperCase(),
-                'NONE',
-            ],
+            {
+                at: 'nickname',
+                value: (x: string | undefined) => (x ?? '').toUpperCase(),
+                default: 'NONE',
+            },
             'age',
         ],
     })
@@ -309,11 +309,12 @@ describe('the components that a call of key must give', () => {
             spec: {
                 KENNEL: [
                     'age',
-                    [
-                        'nickname',
-                        (x: string | undefined) => (x ?? '').toUpperCase(),
-                        'NONE',
-                    ],
+                    {
+                        at: 'nickname',
+                        value: (x: string | undefined) =>
+                            (x ?? '').toUpperCase(),
+                        default: 'NONE',
+                    },
                 ],
                 CATTERY: ['id'],
             },
@@ -341,7 +342,11 @@ describe('the components that a call of key must give', () => {
         SK: [
             'species',
             'vaccine.vet',
-            ['vaccine.dose', (x: number | undefined) => String(x ?? 0), 0],
+            {
+                at: 'vaccine.dose',
+                value: (x: number | undefined) => String(x ?? 0),
+                default: 0,
+            },
         ],
     })
 
@@ -466,7 +471,10 @@ describe('the type of a partial key, where a component is in the case that it ca
     it('never ends the print before a transform of the type `S | empty`, because the transform prints the empty text', () => {
         type Either = { shelterId: 'S' | ''; petId: 'p' }
         const Eithers = tableEntry<Either>()({
-            SK: [['shelterId', (value: 'S' | '') => value], 'petId'],
+            SK: [
+                { at: 'shelterId', value: (value: 'S' | '') => value },
+                'petId',
+            ],
         })
         const empty: Either = { shelterId: '', petId: 'p' }
         const present: Either = { shelterId: 'S', petId: 'p' }
@@ -485,11 +493,11 @@ describe('the type of a partial key, where a component is in the case that it ca
         const Names = tableEntry<Named>()({
             SK: [
                 'species',
-                [
-                    'nickname',
-                    (x: string | undefined) => (x ?? '').toUpperCase(),
-                    'NONE',
-                ],
+                {
+                    at: 'nickname',
+                    value: (x: string | undefined) => (x ?? '').toUpperCase(),
+                    default: 'NONE',
+                },
             ],
         })
         const absent: Named = { species: 'CAT' }
@@ -516,7 +524,7 @@ describe('the type of a partial key, where a component is in the case that it ca
     it('ends the print before a path component with a tag of the type `S | empty`, because the empty text is absent', () => {
         type Placed = { shelter: { code: 'S' | '' }; petId: 'p' }
         const Places = tableEntry<Placed>()({
-            SK: [['shelter.code', { tag: 'AT' }], 'petId'],
+            SK: [{ at: 'shelter.code', tag: 'AT' }, 'petId'],
         })
         const empty: Placed = { shelter: { code: '' }, petId: 'p' }
         const present: Placed = { shelter: { code: 'S' }, petId: 'p' }
@@ -529,7 +537,10 @@ describe('the type of a partial key, where a component is in the case that it ca
     it('never ends the print before a transform of a path of the type `S | empty`, because the transform prints the empty text', () => {
         type Placed = { shelter: { code: 'S' | '' }; petId: 'p' }
         const Places = tableEntry<Placed>()({
-            SK: [['shelter.code', (value: 'S' | '') => value], 'petId'],
+            SK: [
+                { at: 'shelter.code', value: (value: 'S' | '') => value },
+                'petId',
+            ],
         })
         const empty: Placed = { shelter: { code: '' }, petId: 'p' }
         const present: Placed = { shelter: { code: 'S' }, petId: 'p' }

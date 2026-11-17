@@ -36,11 +36,14 @@ import {
 } from '../lean'
 
 type Transform = (value: unknown) => unknown
-type Tag = { readonly tag: string }
 type Component =
     | string
-    | readonly [string, Transform, unknown?]
-    | readonly [string, Tag]
+    | {
+          readonly at: string
+          readonly tag?: string | false
+          readonly value?: Transform
+          readonly default?: unknown
+      }
 type Discriminated =
     | {
           readonly discriminator: string
@@ -59,12 +62,25 @@ type Config = {
     readonly enforceBoundary?: boolean
 }
 
-const tagless: Transform = (x) => ({ value: x })
-const tagged: Transform = (x) => ({ tag: 'T', value: x })
-const untagged: Transform = (x) => ({ tag: undefined, value: x })
-const nulled: Transform = () => ({ value: null })
-const bracket: Transform = (x) => `<${String(x)}>`
-const doubled: Transform = (x) => ({ tag: 'N', value: Number(x) * 2 })
+/** A component that prints the result of a function, with a constant tag or with none. */
+const shaped =
+    (tag: string | false, value: Transform) =>
+    (at: string, fallback?: unknown): Component => ({
+        at,
+        tag,
+        value,
+        ...(fallback === undefined ? {} : { default: fallback }),
+    })
+const tagless = shaped(false, (x) => x)
+const tagged = shaped('T', (x) => x)
+const untagged = shaped(false, (x) => x)
+const nulled = shaped(false, () => null)
+const bracket = (at: string, fallback?: unknown): Component => ({
+    at,
+    value: (x) => `<${String(x)}>`,
+    ...(fallback === undefined ? {} : { default: fallback }),
+})
+const doubled = shaped('N', (x) => Number(x) * 2)
 
 /** The table entry of `src/` for a schema with one key. */
 const entryOf = (spec: Spec, separator: string) => {
@@ -150,37 +166,33 @@ const partsOf = (
     for (const component of depth === undefined
         ? components
         : components.slice(0, depth)) {
-        const [name, second, fallback] =
-            typeof component === 'string' ? [component] : component
-        const transform = typeof second === 'function' ? second : undefined
-        const tag =
-            typeof second === 'object' && second !== null
-                ? second.tag
-                : undefined
+        const record =
+            typeof component === 'string' ? { at: component } : component
+        const name = record.at
+        const tag = 'tag' in record ? record.tag : undefined
+        const transform = 'value' in record ? record.value : undefined
+        const fallback = 'default' in record ? record.default : undefined
         const printed = (name.split('.').pop() ?? name).toUpperCase()
         const read = readAt(item, name)
         const value = read === undefined ? fallback : read
+        const shapedPart = (text: unknown): KeyPart =>
+            tag === undefined
+                ? { kind: 'named', name: printed, value: segment(text) }
+                : {
+                      kind: 'shaped',
+                      tag: tag === false ? undefined : tag,
+                      value: segment(text),
+                  }
         let part: KeyPart
         if (transform !== undefined && value !== undefined) {
-            const out = transform(value)
-            if (typeof out === 'object' && out !== null) {
-                const { tag, value: inner } = out as {
-                    tag?: string
-                    value: unknown
-                }
-                part = { kind: 'shaped', tag, value: segment(inner) }
-            } else {
-                part = {
-                    kind: 'named',
-                    name: printed,
-                    value: segment(out),
-                }
-            }
-        } else if (value !== undefined && value !== null && value !== '') {
-            part =
-                tag === undefined
-                    ? { kind: 'named', name: printed, value: segment(value) }
-                    : { kind: 'shaped', tag, value: segment(value) }
+            part = shapedPart(transform(value))
+        } else if (
+            transform === undefined &&
+            value !== undefined &&
+            value !== null &&
+            value !== ''
+        ) {
+            part = shapedPart(value)
         } else {
             parts.push(undefined)
             continue
@@ -272,20 +284,20 @@ const cases: readonly Case[] = [
     { name: 'plain', spec: ['a', 'b'] },
     { name: 'three', spec: ['a', 'b', 'c'] },
     { name: 'single', spec: ['a'] },
-    { name: 'tagless', spec: [['a', tagless], 'b'] },
-    { name: 'tagged', spec: [['a', tagged], 'b'] },
-    { name: 'untagged', spec: [['a', untagged], 'b'] },
-    { name: 'text', spec: [['a', bracket], 'b'] },
-    { name: 'number', spec: [['n', doubled], 'a'] },
-    { name: 'nulled', spec: [['a', nulled], 'b'] },
-    { name: 'default', spec: [['c', tagged, 'dflt'], 'a'] },
-    { name: 'defaultText', spec: [['c', bracket, 'dflt'], 'a'] },
+    { name: 'tagless', spec: [tagless('a'), 'b'] },
+    { name: 'tagged', spec: [tagged('a'), 'b'] },
+    { name: 'untagged', spec: [untagged('a'), 'b'] },
+    { name: 'text', spec: [bracket('a'), 'b'] },
+    { name: 'number', spec: [doubled('n'), 'a'] },
+    { name: 'nulled', spec: [nulled('a'), 'b'] },
+    { name: 'default', spec: [tagged('c', 'dflt'), 'a'] },
+    { name: 'defaultText', spec: [bracket('c', 'dflt'), 'a'] },
     { name: 'numeral', spec: ['n', 'a'] },
     {
         name: 'discriminated',
         spec: {
             discriminator: 'kind',
-            spec: { x: ['a', 'b'], y: [['a', tagless]], z: null },
+            spec: { x: ['a', 'b'], y: [tagless('a')], z: null },
         },
     },
     {
@@ -309,7 +321,7 @@ const cases: readonly Case[] = [
                     discriminator: 'specie',
                     spec: {
                         CAT: null,
-                        HORSE: [['a', tagged]],
+                        HORSE: [tagged('a')],
                         DOG: {
                             discriminator: 'breed',
                             spec: { LAB: ['a', 'b'], PUG: 'c' },
@@ -334,10 +346,10 @@ const cases: readonly Case[] = [
         },
     },
     { name: 'path', spec: ['meta.a', 'b'] },
-    { name: 'pathTag', spec: [['meta.a', { tag: 'PRICE' }], 'b'] },
-    { name: 'tagOnly', spec: [['a', { tag: 'PRICE' }], 'b'] },
-    { name: 'pathTransform', spec: [['meta.n', doubled], 'meta.b'] },
-    { name: 'pathDefault', spec: [['meta.c', tagged, 'dflt'], 'a'] },
+    { name: 'pathTag', spec: [{ at: 'meta.a', tag: 'PRICE' }, 'b'] },
+    { name: 'tagOnly', spec: [{ at: 'a', tag: 'PRICE' }, 'b'] },
+    { name: 'pathTransform', spec: [doubled('meta.n'), 'meta.b'] },
+    { name: 'pathDefault', spec: [tagged('meta.c', 'dflt'), 'a'] },
     {
         name: 'pathDiscriminator',
         spec: {
@@ -353,7 +365,7 @@ const cases: readonly Case[] = [
                 x: {
                     discriminator: 'meta.kind',
                     spec: {
-                        p: [['meta.a', { tag: 'T' }]],
+                        p: [{ at: 'meta.a', tag: 'T' }],
                         q: 'meta.b',
                         r: null,
                     },
@@ -382,7 +394,7 @@ const cases: readonly Case[] = [
             discriminator: 'kind',
             cases: [
                 [['x', 'y'], 'a'],
-                [['z'], [['a', tagged], 'b']],
+                [['z'], [tagged('a'), 'b']],
             ],
         },
     },
@@ -427,7 +439,7 @@ const cases: readonly Case[] = [
         },
     },
     { name: 'dashPlain', spec: ['a', 'b'], separator: '-' },
-    { name: 'dashTagless', spec: [['a', tagless], 'b'], separator: '-' },
+    { name: 'dashTagless', spec: [tagless('a'), 'b'], separator: '-' },
 ]
 
 const isDiscriminated = (arm: Arm): arm is Discriminated =>
@@ -508,7 +520,7 @@ const namesOf = (spec: Spec): string[] => [
     ...new Set([
         ...componentsOf(spec)
             .flat()
-            .map((c) => (typeof c === 'string' ? c : c[0])),
+            .map((c) => (typeof c === 'string' ? c : c.at)),
         ...readNames(spec).filter(
             (name) => !discriminatorsOf(spec).includes(name),
         ),

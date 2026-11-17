@@ -63,7 +63,7 @@ type TransformOverride<
     Fallback,
     Matched = Extract<
         Spec[number],
-        [K, (...args: never[]) => unknown, ...unknown[]]
+        { readonly at: K; readonly value: (...args: never[]) => unknown }
     >,
 > = [Matched] extends [never]
     ? Fallback
@@ -71,7 +71,7 @@ type TransformOverride<
       // different transforms (e.g. Pick<Obj,'id'> and Pick<Obj,'name'>),
       // this intersects the parameter types rather than unioning them.
       (
-            Matched extends [unknown, (x: infer P) => unknown, ...unknown[]]
+            Matched extends { readonly value: (x: infer P) => unknown }
                 ? (x: P) => void
                 : never
         ) extends (x: infer I) => void
@@ -119,7 +119,7 @@ type RequiredComponents<
     Inside = [skip] extends [never]
         ? InputSpec[number]
         : SliceFromStart<InputSpec, number extends skip ? 1 : skip>[number],
-> = Exclude<Inside, readonly [unknown, unknown, unknown, ...unknown[]]>
+> = Exclude<Inside, { readonly default: unknown }>
 
 type PlainKeyParams<
     Entity,
@@ -246,18 +246,25 @@ type joinable = string | number | bigint | boolean | null | undefined
 /** What a transform result prints: `Array.join` prints `null` and `undefined` as the empty string. */
 type Print<Value> = Value extends null | undefined ? '' : Value
 
-type ExtractHelper<Key, Value> = Value extends object
-    ? Value extends {
-          tag: infer Tag extends string
-          value: infer Value extends joinable
-      }
-        ? [Tag, Print<Value>]
-        : Value extends {
-                value: infer Value extends joinable
-            }
-          ? [never, Print<Value>]
-          : never
-    : [Key, Print<Value>]
+/** The value of a component, and what its default stands for. */
+type DefaultOfComponent<C> = C extends { readonly default: infer D } ? [D] : []
+
+/**
+ * The label of a component: the tag of the record, the name where the record has no tag, and no label
+ * where the tag is `false`.
+ */
+type LabelOf<C, Name> = C extends { readonly tag: infer T }
+    ? T extends string
+        ? T
+        : never
+    : Name
+
+/** What a component prints for a value: the result of the function, or the value of the attribute. */
+type PrintOf<C, Value, Partial extends boolean> = C extends {
+    readonly value: (...key: never[]) => infer R
+}
+    ? Print<R & joinable>
+    : Printed<Value & joinable, Partial>
 
 /**
  * The values of a component that the builder prints. A partial key ends at a component whose value
@@ -303,14 +310,9 @@ type Absence<Value, Shaped extends boolean> = [Value] extends [never]
         ? 'can'
         : 'never'
 
-/** The pair of a component, and its case. A helper that gives no pair gives no pair. */
-type WithCase<Pair, Case> = Pair extends [infer Key, infer Value]
-    ? [Key, Value, Case]
-    : never
-
 /**
  * The value that a component reads, where a default stands for `undefined` only. A default is the
- * element after the transform. A name that the attributes lack has the value `undefined`, which
+ * `default` of the record. A name that the attributes lack has the value `undefined`, which
  * `never` stands for here.
  */
 type Defaulted<Value, Rest> = Rest extends [infer Default, ...unknown[]]
@@ -330,59 +332,40 @@ type StopText<
     Bounded extends boolean,
 > = Acc extends null ? '' : Bounded extends true ? `${Acc}${Separator}` : Acc
 
-type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends [
-    infer Key extends string,
-    // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
-    (...key: any[]) => infer Value,
-    ...infer Rest,
-]
-    ? WithCase<
-          ExtractHelper<Uppercase<Key>, Value>,
+type ExtractPair<Entity, Spec, Partial extends boolean = false> = Spec extends {
+    readonly at: infer Key extends string | number
+}
+    ? [
+          LabelOf<Spec, Uppercase<`${Key}`>>,
+          PrintOf<
+              Spec,
+              Defaulted<
+                  Key extends keyof Entity ? Entity[Key] : never,
+                  DefaultOfComponent<Spec>
+              >,
+              Partial
+          >,
           true extends Partial
               ? Absence<
                     Defaulted<
                         Key extends keyof Entity ? Entity[Key] : never,
-                        Rest
+                        DefaultOfComponent<Spec>
                     >,
-                    true
+                    Spec extends { readonly value: unknown } ? true : false
                 >
-              : 'never'
-      >
-    : Spec extends keyof Entity & string
+              : 'never',
+      ]
+    : Spec extends keyof Entity & (string | number)
       ? [
-            Uppercase<Spec>,
+            Uppercase<`${Spec}`>,
             Printed<Entity[Spec] & joinable, Partial>,
             true extends Partial ? Absence<Entity[Spec], false> : 'never',
         ]
-      : Spec extends string
+      : Spec extends string | number
         ? true extends Partial
-            ? [Uppercase<Spec>, never, 'always']
+            ? [Uppercase<`${Spec}`>, never, 'always']
             : never
-        : Spec extends [
-                infer Key extends number,
-                // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
-                (...key: any[]) => infer Value,
-                ...infer Rest,
-            ]
-          ? WithCase<
-                ExtractHelper<Uppercase<`${Key}`>, Value>,
-                true extends Partial
-                    ? Absence<
-                          Defaulted<
-                              Key extends keyof Entity ? Entity[Key] : never,
-                              Rest
-                          >,
-                          true
-                      >
-                    : 'never'
-            >
-          : Spec extends keyof Entity & number
-            ? [
-                  Uppercase<`${Spec}`>,
-                  Printed<Entity[Spec] & joinable, Partial>,
-                  true extends Partial ? Absence<Entity[Spec], false> : 'never',
-              ]
-            : never
+        : never
 
 type CompositeKeyStringBuilder<
     Entity,
@@ -424,48 +407,39 @@ type CompositeKeyStringBuilder<
 
 /**
  * The pair of a component that reads a path: a path prints its last name, and an attribute prints its
- * name. A tag in an options object prints in place of the name.
+ * name. A tag in the record prints in place of the name.
  */
 type ExtractPathPair<
     Entity,
     Spec,
     Partial extends boolean = false,
-> = Spec extends [
-    infer Key extends string,
-    // biome-ignore lint/suspicious/noExplicitAny: required for generic transform inference
-    (...key: any[]) => infer Value,
-    ...infer Rest,
-]
-    ? WithCase<
-          ExtractHelper<NameOf<Key>, Value>,
+> = Spec extends { readonly at: infer Key extends string }
+    ? [
+          LabelOf<Spec, NameOf<Key>>,
+          PrintOf<
+              Spec,
+              Defaulted<ValueOfKey<Entity, Key>, DefaultOfComponent<Spec>>,
+              Partial
+          >,
           true extends Partial
-              ? Absence<Defaulted<ValueOfKey<Entity, Key>, Rest>, true>
-              : 'never'
-      >
-    : Spec extends [
-            infer Key extends string,
-            { readonly tag: infer Tag extends string },
-            ...infer Rest,
-        ]
+              ? Absence<
+                    Defaulted<
+                        ValueOfKey<Entity, Key>,
+                        DefaultOfComponent<Spec>
+                    >,
+                    Spec extends { readonly value: unknown } ? true : false
+                >
+              : 'never',
+      ]
+    : Spec extends string
       ? [
-            Tag,
-            Printed<
-                Defaulted<ValueOfKey<Entity, Key>, Rest> & joinable,
-                Partial
-            >,
+            NameOf<Spec>,
+            Printed<ValueOfKey<Entity, Spec> & joinable, Partial>,
             true extends Partial
-                ? Absence<Defaulted<ValueOfKey<Entity, Key>, Rest>, false>
+                ? Absence<ValueOfKey<Entity, Spec>, false>
                 : 'never',
         ]
-      : Spec extends string
-        ? [
-              NameOf<Spec>,
-              Printed<ValueOfKey<Entity, Spec> & joinable, Partial>,
-              true extends Partial
-                  ? Absence<ValueOfKey<Entity, Spec>, false>
-                  : 'never',
-          ]
-        : never
+      : never
 
 /** Whether a spec holds a component that reads a path. */
 type HoldsPath<Spec> = [
@@ -525,16 +499,14 @@ type DiscriminatedSchemaShape = {
 }
 
 type InputSpecShape = (
-    | [PropertyKey, ((key: never) => unknown) | TagOptions, ...unknown[]]
+    | {
+          readonly at: PropertyKey
+          readonly tag?: string | false
+          readonly value?: (key: never) => unknown
+          readonly default?: unknown
+      }
     | PropertyKey
 )[]
-
-export type TransformShape =
-    | {
-          tag?: string
-          value: joinable
-      }
-    | joinable
 
 type ComputeTableKeyType<
     Entity,
@@ -675,12 +647,6 @@ type HeldEntry<
           >
         : never
     : never
-
-// Partial<T> for objects so narrowed transform defaults pass the InputSpec constraint.
-type DefaultOf<T> = T extends Record<string, unknown> ? Partial<T> : T
-
-/** The tag of a component, which prints in place of the name. */
-type TagOptions = { readonly tag: string }
 
 declare const lacksName: unique symbol
 /** Marks an option of an object type that holds no value at the name. */
@@ -833,20 +799,46 @@ type NonPath<Entity> = Exclude<keyof Entity, AnyPath>
  */
 type PathComponent =
     | AnyPath
-    | [AnyPath, TagOptions, unknown?]
-    // biome-ignore lint/suspicious/noExplicitAny: the value at a path is read by ValidatePaths, not by the constraint
-    | [AnyPath, (key: any) => TransformShape, unknown?]
+    | {
+          readonly at: AnyPath
+          readonly tag?: string | false
+          // `never` states no type for the parameter: ValidatePaths reads the value at the path, and
+          // a function with no annotation reads a parameter of no type, so the checker refuses it
+          readonly value?: (key: never) => joinable
+          readonly default?: unknown
+      }
+
+// Partial<T> for objects so a default that fills the part of the value that the function reads passes
+// the constraint. ValidateComponent states the default as the parameter of the function.
+type DefaultOf<T> = T extends Record<string, unknown> ? Partial<T> : T
 
 type InputSpec<E> =
     | {
           [key in keyof E]:
               | (undefined extends E[key]
-                    ? [
-                          key,
-                          (key: Exclude<E[key], undefined>) => TransformShape,
-                          DefaultOf<Exclude<E[key], undefined>>,
-                      ]
-                    : [key, (key: E[key]) => TransformShape])
+                    ? {
+                          readonly at: key
+                          readonly tag?: string | false
+                          readonly value?: (
+                              key: Exclude<E[key], undefined>,
+                          ) => joinable
+                          readonly default: DefaultOf<
+                              Exclude<E[key], undefined>
+                          >
+                      }
+                    : null extends E[key]
+                      ? {
+                            readonly at: key
+                            readonly tag?: string | false
+                            readonly value: (key: E[key]) => joinable
+                            readonly default?: never
+                        }
+                      : {
+                            readonly at: key
+                            readonly tag?: string | false
+                            readonly value?: (key: E[key]) => joinable
+                            readonly default?: never
+                        })
               | (undefined extends E[key]
                     ? never
                     : null extends E[key]
@@ -854,60 +846,6 @@ type InputSpec<E> =
                       : key)
       }[keyof E]
     | PathComponent
-
-// --- 3-tuple default validation ---
-// InputSpec uses DefaultOf so narrowed defaults pass the constraint.
-// ValidateSchema mirrors the schema replacing each 3-tuple default slot with
-// the transform's param type. The `Schema & ValidateSchema<Schema>` intersection
-// then rejects defaults that don't match the transform param (e.g. `{}`).
-
-type ValidateInputSpec<T> = {
-    [I in keyof T]: T[I] extends readonly [
-        unknown,
-        (arg: infer P) => unknown,
-        unknown,
-    ]
-        ? [T[I][0], T[I][1], P]
-        : T[I]
-}
-
-type Tuple3 = { length: 3 }
-
-// The arms of a match are validated one by one, and an arm that is a match validates its arms.
-type ValidateMatch<M> = M extends {
-    discriminator: unknown
-    spec: infer Spec
-}
-    ? {
-          discriminator: M['discriminator']
-          spec: {
-              [SV in keyof Spec]: Spec[SV] extends { discriminator: unknown }
-                  ? ValidateMatch<Spec[SV]>
-                  : ValidateInputSpec<Spec[SV]>
-          }
-      }
-    : never
-
-// True if any spec entry in V is a 3-tuple. Recurses into discriminated specs.
-type NeedsValidation<V> = V extends readonly unknown[]
-    ? Extract<V[number], Tuple3>
-    : V extends { spec: infer S }
-      ? NeedsValidation<S[keyof S]>
-      : never
-
-// Short-circuits to `unknown` when schema has no 3-tuples (zero overhead).
-type ValidateSchema<Schema> = [NeedsValidation<Schema[keyof Schema]>] extends [
-    never,
-]
-    ? unknown
-    : {
-          [K in keyof Schema]: Schema[K] extends {
-              discriminator: unknown
-              spec: unknown
-          }
-              ? ValidateMatch<Schema[K]>
-              : ValidateInputSpec<Schema[K]>
-      }
 
 /**
  * What a spec holds that only the exact check reads: a path, in a component, a discriminator or an
@@ -922,22 +860,22 @@ type NeedsExactCheck<S, Depth extends unknown[] = []> = S extends string
         : never
     : S extends readonly unknown[]
       ? NeedsExactCheck<S[number], Depth>
-      : S extends { discriminator: infer D; spec: infer Arms }
-        ? Depth['length'] extends 4
-            ? never
-            :
-                  | NeedsExactCheck<D, Depth>
-                  | NeedsExactCheck<Arms[keyof Arms], [...Depth, 0]>
-        : S extends { discriminator: infer D; cases: infer C }
+      : S extends { readonly at: infer A }
+        ? NeedsExactCheck<A, Depth>
+        : S extends { discriminator: infer D; spec: infer Arms }
           ? Depth['length'] extends 4
               ? never
               :
-                    | 'cases'
                     | NeedsExactCheck<D, Depth>
-                    | NeedsExactCheck<ArmOfCases<C>, [...Depth, 0]>
-          : never
-
-type DefaultSlot<V> = [DefaultOf<Exclude<V, undefined>>]
+                    | NeedsExactCheck<Arms[keyof Arms], [...Depth, 0]>
+          : S extends { discriminator: infer D; cases: infer C }
+            ? Depth['length'] extends 4
+                ? never
+                :
+                      | 'cases'
+                      | NeedsExactCheck<D, Depth>
+                      | NeedsExactCheck<ArmOfCases<C>, [...Depth, 0]>
+            : never
 
 /** The reason that a key cannot read an attribute whose own name holds a `.`. One text for the type and the run time. */
 type DotIsPath = typeof dotIsPath
@@ -988,27 +926,37 @@ type NameOfValue<E, N, V> = [V] extends [never]
 /** One component of a spec, against the options of the entity that its arm reads. */
 type ValidateComponent<E, C> = C extends string
     ? NameOfValue<E, C, ValueOfKey<E, C>>
-    : C extends readonly [infer P extends string, infer Second, ...infer Rest]
+    : C extends { readonly at: infer P extends string }
       ? [ValueOfKey<E, P>] extends [never]
           ? NoSuchName<E, P>
-          : Second extends (...args: never[]) => unknown
-            ? Rest extends [unknown]
-                ? [
-                      P,
-                      (
+          : C extends { readonly value: unknown }
+            ? C extends { readonly default: unknown }
+                ? {
+                      readonly at: P
+                      readonly value: (
                           key: Exclude<ValueOfKey<E, P>, undefined>,
-                      ) => TransformShape,
-                      ...DefaultSlot<ValueOfKey<E, P>>,
-                  ]
+                      ) => joinable
+                      readonly default: C extends {
+                          readonly value: (arg: infer A) => unknown
+                      }
+                          ? A
+                          : never
+                  }
                 : [AbsentValue<P, ValueOfKey<E, P>>] extends [never]
-                  ? [P, (key: ValueOfKey<E, P>) => TransformShape]
+                  ? {
+                        readonly at: P
+                        readonly value: (key: ValueOfKey<E, P>) => joinable
+                    }
                   : AbsentValue<P, ValueOfKey<E, P>>
-            : Rest extends [unknown]
+            : C extends { readonly default: unknown }
               ? [NullValue<P, ValueOfKey<E, P>>] extends [never]
-                  ? [P, Second, Exclude<ValueOfKey<E, P>, undefined>]
+                  ? {
+                        readonly at: P
+                        readonly default: Exclude<ValueOfKey<E, P>, undefined>
+                    }
                   : NullValue<P, ValueOfKey<E, P>>
               : [AbsentOrNull<P, ValueOfKey<E, P>>] extends [never]
-                ? [P, Second]
+                ? { readonly at: P }
                 : AbsentOrNull<P, ValueOfKey<E, P>>
       : C
 
@@ -1162,7 +1110,7 @@ type ValidateGroupArm<E, Arm> = IsUnion<E> extends false
 /** The name or the path that a component reads. */
 type NameOfComponent<C> = C extends string
     ? C
-    : C extends readonly [infer P extends string, ...unknown[]]
+    : C extends { readonly at: infer P extends string }
       ? P
       : never
 
@@ -1466,11 +1414,12 @@ type ValidateKeyNames<Schema, CodecSpec, CodecRest> =
           : string extends keyof EncodedAttributes<CodecSpec, CodecRest>
             ? unknown // an open entry states no name that can be found
             : {
-                  [K in keyof Schema &
-                      keyof EncodedAttributes<
-                          CodecSpec,
-                          CodecRest
-                      >]: ErrorMessage<`[tableEntry] '${K & string}' is a key of the schema and a field of the codec. The codec writes no key name, because the item holds each key name once. Rename the key or the field`>
+                  [K in keyof Schema]: K extends keyof EncodedAttributes<
+                      CodecSpec,
+                      CodecRest
+                  >
+                      ? ErrorMessage<`[tableEntry] '${K & string}' is a key of the schema and a field of the codec. The codec writes no key name, because the item holds each key name once. Rename the key or the field`>
+                      : unknown
               }
 
 /**
@@ -1509,7 +1458,15 @@ type ValidatePaths<Schema, E> = string extends keyof Schema // the constraint, b
       ? unknown
       : { [K in keyof Schema]: ValidateSpec<E, Schema[K]> }
 
-type extractHeadOrPass<T> = T extends readonly unknown[] ? T[0] : T
+/**
+ * The name of a component. The constraint on `A` matters: a string has a method `at`, so a bare name
+ * matches `{ at: unknown }` and only a property of the type of a name is the name.
+ */
+type extractHeadOrPass<T> = T extends {
+    readonly at: infer A extends PropertyKey
+}
+    ? A
+    : T
 
 /**
  * A key spec that is not discriminated: a list of components, one attribute name, or nothing.
@@ -1584,7 +1541,7 @@ type CasesMatch = {
 }
 
 type LooseArm =
-    | (string | unknown[])[]
+    | (string | { readonly at: string })[]
     | string
     | null
     | { discriminator: string; spec: { [literal: string]: unknown } }
@@ -1705,7 +1662,7 @@ const givenAt: KeyNameReader = (attributes, path) =>
  */
 type Part = {
     readonly path: string
-    readonly tag: string | undefined
+    readonly tag: string | false | undefined
     readonly shape: ((value: never) => unknown) | undefined
     readonly value: unknown
 }
@@ -1715,23 +1672,29 @@ const partOf = (
     attributes: Record<string, unknown>,
     read: KeyNameReader,
 ): Part | undefined => {
-    const [name, transform, Default] = Array.isArray(component)
-        ? component
-        : [component]
+    const {
+        at: name,
+        tag,
+        value: shape,
+        default: Default,
+    } = (
+        typeof component === 'object' && component !== null
+            ? component
+            : { at: component }
+    ) as {
+        at: unknown
+        tag?: string | false
+        value?: (value: never) => unknown
+        default?: unknown
+    }
     const path = String(name)
     const found = read(attributes, path)
     const value = found === undefined ? Default : found
-    const shape = typeof transform === 'function' ? transform : undefined
     const prints =
         shape === undefined
             ? value !== undefined && value !== null && value !== ''
             : value !== undefined
     if (!prints) return undefined
-    // a second slot that is an object gives the tag, and shapes no value
-    const tag =
-        typeof transform === 'object' && transform !== null
-            ? (transform as { tag: string }).tag
-            : undefined
     return { path, tag, shape, value }
 }
 
@@ -1744,7 +1707,11 @@ const parts = (
     components.map((component) => partOf(component, attributes, read))
 
 const componentName = (component: unknown): string =>
-    String(Array.isArray(component) ? component[0] : component)
+    String(
+        typeof component === 'object' && component !== null
+            ? (component as { at: unknown }).at
+            : component,
+    )
 
 /**
  * What a key spec gives at the attributes: the model's `Arm`. A list of components is a `leaf`. A
@@ -1823,6 +1790,84 @@ const checkPaths = (schema: Record<string, unknown>): void => {
     for (const spec of Object.values(schema))
         for (const path of componentsOf(spec, {}, valueAt).components)
             pathSegments(path)
+}
+
+/**
+ * The properties of a component record. A name that is no property of the record is a typo, and the
+ * run time would read it as an absent tag or an absent function.
+ */
+const componentProperties: ReadonlySet<string> = new Set([
+    'at',
+    'tag',
+    'value',
+    'default',
+])
+
+/**
+ * Refuses each component of a schema that is no name and no record, and each tag that cannot print
+ * as one segment, once, where the schema is read. The type refuses the same, so a call that reaches
+ * this refusal casts around the type. An array holds no component: `Array.prototype.at` is a
+ * function, so the reader would find no name and give a message that names no cause.
+ */
+const checkComponents = (
+    schema: Record<string, unknown>,
+    separator: string,
+): void => {
+    const refuse = (key: string, reason: string): never => {
+        throw new RotoriseError(`'${key}': ${reason}`)
+    }
+    const list = (key: string, components: readonly unknown[]): void => {
+        for (const component of components) {
+            if (typeof component === 'string' || typeof component === 'number')
+                continue
+            if (
+                typeof component !== 'object' ||
+                component === null ||
+                Array.isArray(component)
+            ) {
+                refuse(
+                    key,
+                    "a component is a name or a record { at, tag, value, default }, and an array is neither. Write { at: 'name', tag: 'TAG', value: (v) => v } in place of ['name', ...]",
+                )
+            }
+            const record = component as Record<string, unknown>
+            for (const property of Object.keys(record)) {
+                if (!componentProperties.has(property)) {
+                    refuse(
+                        key,
+                        `a component record holds at, tag, value and default, and no '${property}'`,
+                    )
+                }
+            }
+            const { at, tag, value } = record
+            if (typeof at !== 'string' && typeof at !== 'number') {
+                refuse(key, 'a component record names its attribute at `at`')
+            }
+            if (tag !== undefined && tag !== false) {
+                if (typeof tag !== 'string' || tag === '') {
+                    refuse(
+                        key,
+                        `the tag of ${String(at)} is a non-empty text, or false for no tag`,
+                    )
+                }
+                if ((tag as string).includes(separator)) {
+                    refuse(
+                        key,
+                        `the tag of ${String(at)} holds the separator '${separator}', and a segment that holds it reads back as two`,
+                    )
+                }
+            }
+            if (value !== undefined && typeof value !== 'function') {
+                refuse(key, `the value of ${String(at)} is a function`)
+            }
+        }
+    }
+    const walk = (key: string, spec: unknown): void => {
+        if (Array.isArray(spec)) list(key, spec)
+        else if (isMatch(spec))
+            for (const arm of Object.values(spec.spec)) walk(key, arm)
+    }
+    for (const [key, spec] of Object.entries(schema)) walk(key, spec)
 }
 
 /** A match that groups literals: a discriminator and a list of cases. */
@@ -1945,6 +1990,7 @@ const key =
         /** How a key name reads a value at the carrier of the call: an item, or the given item of an update. */
         read: KeyNameReader = valueAt,
     ) => {
+        checkComponents(schema, separator)
         checkPaths(schema)
         return <
             const Key extends keyof Schema,
@@ -2056,48 +2102,28 @@ const key =
                     )
                 }
                 const { path, tag, shape, value } = part
-                const name = printedName(path)
-                if (shape) {
-                    const transformed = shape(value as never) as
-                        | joinable
-                        | { tag?: string; value: joinable }
-                    if (
-                        typeof transformed === 'object' &&
-                        transformed !== null
-                    ) {
-                        const refusedTag =
-                            transformed.tag === undefined
-                                ? undefined
-                                : push(`the tag of ${path}`, transformed.tag)
-                        if (refusedTag !== undefined) return refusedTag
-                        const refusedValue = push(path, transformed.value)
-                        if (refusedValue !== undefined) return refusedValue
-                    } else {
-                        const refusedName = push(`the name ${path}`, name)
-                        if (refusedName !== undefined) return refusedName
-                        const refusedValue = push(path, transformed)
-                        if (refusedValue !== undefined) return refusedValue
-                    }
-                } else {
+                if (tag !== false) {
                     const refusedLabel = push(
                         tag === undefined
                             ? `the name ${path}`
                             : `the tag of ${path}`,
-                        tag ?? name,
+                        tag ?? printedName(path),
                     )
                     if (refusedLabel !== undefined) return refusedLabel
-                    const stored =
-                        text === undefined
-                            ? value
-                            : text(
-                                  path,
-                                  value,
-                                  attributes as Record<string, unknown>,
-                              )
-                    if (failed(stored)) return stored
-                    const refusedValue = push(path, stored as joinable)
-                    if (refusedValue !== undefined) return refusedValue
                 }
+                const stored =
+                    shape !== undefined
+                        ? (shape(value as never) as joinable)
+                        : text === undefined
+                          ? value
+                          : text(
+                                path,
+                                value,
+                                attributes as Record<string, unknown>,
+                            )
+                if (failed(stored)) return stored
+                const refusedValue = push(path, stored as joinable)
+                if (refusedValue !== undefined) return refusedValue
                 printed++
             }
 
@@ -3125,10 +3151,7 @@ export type KeyComponents<Spec, Given = unknown> = Spec extends string
         ? {
               [I in keyof Spec]: Spec[I] extends string
                   ? Spec[I]
-                  : Spec[I] extends readonly [
-                          infer Named extends string,
-                          ...unknown[],
-                      ]
+                  : Spec[I] extends { readonly at: infer Named extends string }
                     ? Named
                     : never
           }[number]
@@ -3657,7 +3680,7 @@ export const keyComponents = (
  * The one walk, which also says whether a discriminant chose anything along the way.
  *
  * Walks the shapes a schema entry can take: a bare attribute name, a list of them, a list carrying
- * transform tuples, and a discriminated spec, whose discriminator is itself a component because it
+ * records, and a discriminated spec, whose discriminator is itself a component because it
  * chooses which list applies.
  *
  * `narrows` is what lets a key be walked once at declaration instead of once per update: without a
@@ -3680,8 +3703,12 @@ const componentsOf = (
         }
         if (Array.isArray(value)) {
             for (const entry of value) {
-                // a transform tuple names its attribute first: ['a', (x) => x, default]
-                walk(Array.isArray(entry) ? entry[0] : entry)
+                // a record names its attribute at `at`: { at: 'a', value: (x) => x }
+                walk(
+                    typeof entry === 'object' && entry !== null
+                        ? (entry as { at: unknown }).at
+                        : entry,
+                )
             }
             return
         }
@@ -3714,14 +3741,14 @@ const componentsOf = (
 type PlainComponent = string | number | bigint | boolean | null | undefined
 
 /**
- * The name of a component that prints the stored value: a bare name, and the name of a tuple whose
- * second slot is no function. A tag changes the label only. A transform prints what the function
+ * The name of a component that prints the stored value: a bare name, and the name of a record that
+ * holds no function. A tag changes the label only. A transform prints what the function
  * gives, so the name of a transform is no component of this kind.
  */
 type StoredName<C> = C extends string
     ? C
-    : C extends readonly [infer P extends string, infer Second, ...unknown[]]
-      ? Second extends (...args: never[]) => unknown
+    : C extends { readonly at: infer P extends string }
+      ? C extends { readonly value: unknown }
           ? never
           : P
       : never
@@ -3974,7 +4001,6 @@ export const tableEntry =
             | undefined = undefined,
     >(
         schema: Schema &
-            ValidateSchema<Schema> &
             ValidatePaths<Schema, KeyedBy> &
             ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest> &
             ValidateKeyNames<Schema, CodecSpec, CodecRest> &
@@ -4552,9 +4578,11 @@ export const tableEntry =
                     // a component with no transform prints the text that the codec writes, so the
                     // codec writes text or a number there
                     for (const component of value) {
-                        const [field, transform] = Array.isArray(component)
-                            ? component
-                            : [component]
+                        const { at: field, value: transform } = (
+                            typeof component === 'object' && component !== null
+                                ? component
+                                : { at: component }
+                        ) as { at: unknown; value?: unknown }
                         if (
                             typeof field !== 'string' ||
                             typeof transform === 'function'

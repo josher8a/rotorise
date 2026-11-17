@@ -75,7 +75,7 @@ describe('a key component with no codec', () => {
         const Notes = tableEntry<Noted>()({
             PK: ['id'],
             // @ts-expect-error a tag prints the stored value, and an object has no text of its own
-            SK: [['meta.note', { tag: 'NOTE' }]],
+            SK: [{ at: 'meta.note', tag: 'NOTE' }],
         })
         const noted: Noted = { id: 'n', meta: { note: { text: 't' } } }
         {
@@ -164,7 +164,7 @@ describe('a key component with a codec', () => {
                 {
                     PK: ['id'],
                     // @ts-expect-error a tag prints the stored value, so the codec must write S or N at the path
-                    SK: [['tag.chip', { tag: 'CHIP' }]],
+                    SK: [{ at: 'tag.chip', tag: 'CHIP' }],
                 },
                 { codec: { id: string, tag: object({ chip: binary }) } },
             ),
@@ -176,7 +176,12 @@ describe('a key component with a codec', () => {
         const Pets = tableEntry<Chipped>()(
             {
                 PK: ['id'],
-                SK: [['tag.chip', (chip: Uint8Array) => String(chip.length)]],
+                SK: [
+                    {
+                        at: 'tag.chip',
+                        value: (chip: Uint8Array) => String(chip.length),
+                    },
+                ],
             },
             { codec: { id: string, tag: object({ chip: binary }) } },
         )
@@ -450,15 +455,27 @@ describe('a name of a key that holds a dot is a path', () => {
         }
         const Pets = tableEntry<Optional>()({
             PK: ['petId'],
-            SK: [['owner.name', (name: string) => name.toUpperCase(), '']],
+            SK: [
+                {
+                    at: 'owner.name',
+                    value: (name: string) => name.toUpperCase(),
+                    default: '',
+                },
+            ],
         })
         expect(
             Pets.unsafeToEntry({ petId: 'p1', owner: { name: 'bob' } }).SK,
         ).toBe('NAME#BOB')
         tableEntry<Optional>()({
             PK: ['petId'],
-            // @ts-expect-error the parameter is the string at the path, and not the number of the attribute
-            SK: [['owner.name', (name: number) => name + 1, 0]],
+            SK: [
+                {
+                    at: 'owner.name',
+                    // @ts-expect-error the parameter is the string at the path, and not the number of the attribute
+                    value: (name: number) => name + 1,
+                    default: 0,
+                },
+            ],
         })
     })
 

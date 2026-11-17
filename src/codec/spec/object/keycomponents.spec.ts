@@ -57,7 +57,7 @@ describe('the type walk and the runtime walk agree', () => {
     it('on a list carrying a transform tuple, whose head is the attribute', () => {
         const spec = [
             'TAG',
-            ['createdAt', (d: string) => d.slice(0, 10)],
+            { at: 'createdAt', value: (d: string) => d.slice(0, 10) },
         ] as const
         attest<[KeyComponents<typeof spec>], ['TAG' | 'createdAt']>()
         expect(found(spec)).toEqual(['TAG', 'createdAt'].sort())
@@ -65,7 +65,11 @@ describe('the type walk and the runtime walk agree', () => {
 
     it('on a three-tuple, where the third slot is a default and not a component', () => {
         const spec = [
-            ['status', (s: string) => s.toUpperCase(), 'DRAFT'],
+            {
+                at: 'status',
+                value: (s: string) => s.toUpperCase(),
+                default: 'DRAFT',
+            },
         ] as const
         attest<[KeyComponents<typeof spec>], ['status']>()
         expect(found(spec)).toEqual(['status'])
@@ -96,7 +100,7 @@ describe('the type walk and the runtime walk agree', () => {
         const spec = {
             discriminator: 'kind',
             spec: {
-                EMAIL: [['email', (e: string) => e.toLowerCase()]],
+                EMAIL: [{ at: 'email', value: (e: string) => e.toLowerCase() }],
                 PHONE: ['phone'],
             },
         } as const

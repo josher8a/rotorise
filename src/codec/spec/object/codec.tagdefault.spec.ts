@@ -4,8 +4,8 @@
  * so the key is the tag and the value, or the tag and the default. An empty text is a value that a
  * component with no transform does not print, and the default does not stand for it. The type states
  * the default as the value at the path, and refuses a default of another type on the element that
- * holds it. A tag at a top level name stays refused. A value that can be `null` needs a transform
- * that reads the `null`, because a default stands for an absent value only.
+ * holds it. A tag with a default at a top level name is the same rule as at a path. A value that can
+ * be `null` needs a transform that reads the `null`, because a default stands for an absent value only.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, tableEntry } from '../../../Rotorise'
@@ -17,7 +17,7 @@ type Leaf = { petId: string; shelter: { code: string | null } }
 describe('a tag at a path takes a default', () => {
     const Pets = tableEntry<Pet>()({
         PK: ['petId'],
-        SK: [['owner.id', { tag: 'ID' }, 'none']],
+        SK: [{ at: 'owner.id', tag: 'ID', default: 'none' }],
     })
 
     it('prints the value under the tag where the object is present', () => {
@@ -62,7 +62,7 @@ describe('a tag at a path takes a default', () => {
         tableEntry<Pet>()({
             PK: ['petId'],
             // @ts-expect-error the value at `owner.id` is a string, so the default is a string
-            SK: [['owner.id', { tag: 'ID' }, 5]],
+            SK: [{ at: 'owner.id', tag: 'ID', default: 5 }],
         })
     })
 })
@@ -71,7 +71,7 @@ describe('a tag with a default meets the rules of a component with no transform'
     it('stands for the value where the object above the path is null, because the path reads nothing there', () => {
         const Houses = tableEntry<Housed>()({
             PK: ['petId'],
-            SK: [['shelter.code', { tag: 'AT' }, 'x']],
+            SK: [{ at: 'shelter.code', tag: 'AT', default: 'x' }],
         })
         expect(Houses.unsafeKey('SK', { shelter: null })).toBe('AT#x')
         expect(Houses.unsafeKey('SK', { shelter: { code: 'c1' } })).toBe(
@@ -83,17 +83,22 @@ describe('a tag with a default meets the rules of a component with no transform'
         const Leaves = tableEntry<Leaf>()({
             PK: ['petId'],
             // @ts-expect-error the value can be null, and a default does not stand for a null
-            SK: [['shelter.code', { tag: 'AT' }, 'x']],
+            SK: [{ at: 'shelter.code', tag: 'AT', default: 'x' }],
         })
         const refused = Leaves.key('SK', { shelter: { code: null } })
         expect(refused).toBeInstanceOf(CodecError)
     })
 
-    it('stays refused at a top level name, where the options object is for a path only', () => {
-        tableEntry<{ petId: string; note?: string }>()({
+    it('is the same rule at a top level name, in the type and at run time', () => {
+        const Notes = tableEntry<{ petId: string; note?: string }>()({
             PK: ['petId'],
-            // @ts-expect-error a tag is for a path, and a top level name takes a transform
-            SK: [['note', { tag: 'DOSE' }, 'x']],
+            SK: [{ at: 'note', tag: 'DOSE', default: 'x' }],
         })
+        const none: { note?: string } = {}
+        expectTypeOf(
+            Notes.unsafeKey('SK', none),
+        ).toEqualTypeOf<`DOSE#${string}`>()
+        expect(Notes.unsafeKey('SK', none)).toBe('DOSE#x')
+        expect(Notes.unsafeKey('SK', { note: 'z' })).toBe('DOSE#z')
     })
 })

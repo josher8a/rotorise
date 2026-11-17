@@ -1,18 +1,22 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it, test } from 'vitest'
-import { type TransformShape, tableEntry } from './Rotorise'
+import { tableEntry } from './Rotorise'
 import type { ErrorMessage, Exact, NonEmptyArray, show } from './utils'
 
 // The constraint of a key spec admits any path and any match on a path, whatever the entity holds,
 // and `ValidatePaths` reads the paths that a spec holds. The pins below state the two shapes.
 type AnyPathPin = `${string}.${string}`
+type Joinable = string | number | bigint | boolean | null | undefined
 type PathComponents =
     | AnyPathPin
-    | [AnyPathPin, { readonly tag: string }, unknown?]
-    // biome-ignore lint/suspicious/noExplicitAny: the constraint types the parameter of a path transform as any
-    | [AnyPathPin, (key: any) => TransformShape, unknown?]
+    | {
+          readonly at: AnyPathPin
+          readonly tag?: string | false
+          readonly value?: (key: never) => Joinable
+          readonly default?: unknown
+      }
 type LooseArmPin =
-    | (string | unknown[])[]
+    | (string | { readonly at: string })[]
     | string
     | null
     | { discriminator: string; spec: { [literal: string]: unknown } }
@@ -120,7 +124,11 @@ describe('Exact<> with discriminated unions', () => {
 describe('DynamoDB Utils', () => {
     it('key requires the components up to the depth, and makes each later component optional', () => {
         const Transformed = tableEntry<{ a: string; b: number; c: boolean }>()({
-            PK: ['a', 'b', ['c', (_c: boolean) => 'TRANSFORM' as const]],
+            PK: [
+                'a',
+                'b',
+                { at: 'c', value: (_c: boolean) => 'TRANSFORM' as const },
+            ],
         })
         const depth = 2 as number
         // a depth of two requires the first two components
@@ -144,7 +152,8 @@ describe('DynamoDB Utils', () => {
         // 8939 -> 9878: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([9878, 'instantiations'])
+        // 9878 -> 8132: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 9457.
+        attest.instantiations([8132, 'instantiations'])
     })
 
     it('key types the key as the template of its components, joined by the separator', () => {
@@ -188,7 +197,11 @@ describe('DynamoDB Utils', () => {
         )
 
         const Transform = tableEntry<Union>()({
-            PK: ['a', 'b', ['c', (_c: boolean) => 'TRANSFORM' as const]],
+            PK: [
+                'a',
+                'b',
+                { at: 'c', value: (_c: boolean) => 'TRANSFORM' as const },
+            ],
         })
         attest<'A#a1#B#1#C#TRANSFORM' | 'A#a2#B#2#C#TRANSFORM'>(
             Transform.unsafeKey('PK', partial, {
@@ -201,13 +214,11 @@ describe('DynamoDB Utils', () => {
             PK: [
                 'a',
                 'b',
-                [
-                    'c',
-                    (_c: boolean) => ({
-                        tag: 'TAG' as const,
-                        value: 'TRANSFORM' as const,
-                    }),
-                ],
+                {
+                    at: 'c',
+                    tag: 'TAG',
+                    value: (_c: boolean) => 'TRANSFORM' as const,
+                },
             ],
         })
         attest<'A#a1#B#1#TAG#TRANSFORM' | 'A#a2#B#2#TAG#TRANSFORM'>(
@@ -218,7 +229,11 @@ describe('DynamoDB Utils', () => {
             PK: [
                 'a',
                 'b',
-                ['c', (_c: boolean) => ({ value: 'TRANSFORM' as const })],
+                {
+                    at: 'c',
+                    tag: false,
+                    value: (_c: boolean) => 'TRANSFORM' as const,
+                },
             ],
         })
         attest<'A#a1#B#1#TRANSFORM' | 'A#a2#B#2#TRANSFORM'>(
@@ -228,7 +243,8 @@ describe('DynamoDB Utils', () => {
         // 23005 -> 25224: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([25224, 'instantiations'])
+        // 25224 -> 22012: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 24747.
+        attest.instantiations([22012, 'instantiations'])
     })
 
     it('tableEntry joins the key components with the separator, and reads an entry back as the entity', () => {
@@ -398,7 +414,8 @@ describe('DynamoDB Utils', () => {
         // 11330 -> 12971: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([12971, 'instantiations'])
+        // 12971 -> 13785: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 14136.
+        attest.instantiations([13785, 'instantiations'])
     })
 
     test('path from infer then toString', () => {
@@ -448,7 +465,8 @@ describe('DynamoDB Utils', () => {
         // 2966 -> 3538: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([3538, 'instantiations'])
+        // 3538 -> 3915: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 4014.
+        attest.instantiations([3915, 'instantiations'])
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -470,10 +488,30 @@ describe('DynamoDB Utils', () => {
                           | 'b'
                           | 'c'
                           | 'z'
-                          | ['a', (key: 'a1' | 'a2') => TransformShape]
-                          | ['b', (key: 1n | 2) => TransformShape]
-                          | ['c', (key: true | 0) => TransformShape]
-                          | ['z', (key: 'never') => TransformShape]
+                          | {
+                                readonly at: 'a'
+                                readonly tag?: string | false
+                                readonly value?: (key: 'a1' | 'a2') => Joinable
+                                readonly default?: never
+                            }
+                          | {
+                                readonly at: 'b'
+                                readonly tag?: string | false
+                                readonly value?: (key: 1n | 2) => Joinable
+                                readonly default?: never
+                            }
+                          | {
+                                readonly at: 'c'
+                                readonly tag?: string | false
+                                readonly value?: (key: true | 0) => Joinable
+                                readonly default?: never
+                            }
+                          | {
+                                readonly at: 'z'
+                                readonly tag?: string | false
+                                readonly value?: (key: 'never') => Joinable
+                                readonly default?: never
+                            }
                           | PathComponents
                       >
                     | null
@@ -494,13 +532,38 @@ describe('DynamoDB Utils', () => {
                                         | 'b'
                                         | 'c'
                                         | 'z'
-                                        | ['a', (key: 'a1') => TransformShape]
-                                        | ['b', (key: 1n) => TransformShape]
-                                        | ['c', (key: true) => TransformShape]
-                                        | [
-                                              'z',
-                                              (key: 'never') => TransformShape,
-                                          ]
+                                        | {
+                                              readonly at: 'a'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'a1',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'b'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 1n,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'c'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: true,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'z'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'never',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
                                         | PathComponents
                                     >
                                   | null
@@ -517,13 +580,38 @@ describe('DynamoDB Utils', () => {
                                         | 'b'
                                         | 'c'
                                         | 'z'
-                                        | ['a', (key: 'a2') => TransformShape]
-                                        | ['b', (key: 2) => TransformShape]
-                                        | ['c', (key: 0) => TransformShape]
-                                        | [
-                                              'z',
-                                              (key: 'never') => TransformShape,
-                                          ]
+                                        | {
+                                              readonly at: 'a'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'a2',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'b'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 2,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'c'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 0,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'z'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'never',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
                                         | PathComponents
                                     >
                                   | null
@@ -546,21 +634,38 @@ describe('DynamoDB Utils', () => {
                                         | 'b'
                                         | 'c'
                                         | 'z'
-                                        | [
-                                              'a',
-                                              (
+                                        | {
+                                              readonly at: 'a'
+                                              readonly tag?: string | false
+                                              readonly value?: (
                                                   key: 'a1' | 'a2',
-                                              ) => TransformShape,
-                                          ]
-                                        | ['b', (key: 2 | 1n) => TransformShape]
-                                        | [
-                                              'c',
-                                              (key: true | 0) => TransformShape,
-                                          ]
-                                        | [
-                                              'z',
-                                              (key: 'never') => TransformShape,
-                                          ]
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'b'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 2 | 1n,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'c'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: true | 0,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'z'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'never',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
                                         | PathComponents
                                     >
                                   | null
@@ -581,30 +686,46 @@ describe('DynamoDB Utils', () => {
                                                       | 'b'
                                                       | 'c'
                                                       | 'z'
-                                                      | [
-                                                            'a',
-                                                            (
+                                                      | {
+                                                            readonly at: 'a'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 'a1',
-                                                            ) => TransformShape,
-                                                        ]
-                                                      | [
-                                                            'b',
-                                                            (
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
+                                                      | {
+                                                            readonly at: 'b'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 1n,
-                                                            ) => TransformShape,
-                                                        ]
-                                                      | [
-                                                            'c',
-                                                            (
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
+                                                      | {
+                                                            readonly at: 'c'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: true,
-                                                            ) => TransformShape,
-                                                        ]
-                                                      | [
-                                                            'z',
-                                                            (
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
+                                                      | {
+                                                            readonly at: 'z'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 'never',
-                                                            ) => TransformShape,
-                                                        ]
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
                                                       | PathComponents
                                                   >
                                                 | null
@@ -621,30 +742,46 @@ describe('DynamoDB Utils', () => {
                                                       | 'b'
                                                       | 'c'
                                                       | 'z'
-                                                      | [
-                                                            'a',
-                                                            (
+                                                      | {
+                                                            readonly at: 'a'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 'a2',
-                                                            ) => TransformShape,
-                                                        ]
-                                                      | [
-                                                            'b',
-                                                            (
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
+                                                      | {
+                                                            readonly at: 'b'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 2,
-                                                            ) => TransformShape,
-                                                        ]
-                                                      | [
-                                                            'c',
-                                                            (
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
+                                                      | {
+                                                            readonly at: 'c'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 0,
-                                                            ) => TransformShape,
-                                                        ]
-                                                      | [
-                                                            'z',
-                                                            (
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
+                                                      | {
+                                                            readonly at: 'z'
+                                                            readonly tag?:
+                                                                | string
+                                                                | false
+                                                            readonly value?: (
                                                                 key: 'never',
-                                                            ) => TransformShape,
-                                                        ]
+                                                            ) => Joinable
+                                                            readonly default?: never
+                                                        }
                                                       | PathComponents
                                                   >
                                                 | null
@@ -663,7 +800,11 @@ describe('DynamoDB Utils', () => {
                 PK: [
                     'a',
                     'b',
-                    ['c', (c: number | boolean) => (c ? 'VERDADERO' : 'FALSO')],
+                    {
+                        at: 'c',
+                        value: (c: number | boolean) =>
+                            c ? 'VERDADERO' : 'FALSO',
+                    },
                 ],
                 SK: 'b',
 
@@ -680,15 +821,14 @@ describe('DynamoDB Utils', () => {
                         a1: [
                             'a',
                             'b',
-                            [
-                                'c',
-                                (c: number | boolean) => ({
-                                    tag: 'NEW_TAG' as const,
-                                    value: c
+                            {
+                                at: 'c',
+                                tag: 'NEW_TAG',
+                                value: (c: number | boolean) =>
+                                    c
                                         ? ('VERDADERO' as const)
                                         : ('FALSO' as const),
-                                }),
-                            ],
+                            },
                         ],
                     },
                 },
@@ -845,7 +985,8 @@ describe('DynamoDB Utils', () => {
         // 16581 -> 17975: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([17975, 'instantiations'])
+        // 17975 -> 17375: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 18726.
+        attest.instantiations([17375, 'instantiations'])
     })
 
     test('a union of many variants over one large record types the key of each tag, within the instantiation count', () => {
@@ -1062,7 +1203,8 @@ describe('DynamoDB Utils', () => {
         // 31172 -> 33286: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([33286, 'instantiations'])
+        // 33286 -> 36454: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 36702.
+        attest.instantiations([36454, 'instantiations'])
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1073,19 +1215,29 @@ describe('DynamoDB Utils', () => {
 
         const testTableEntry = base(
             {
-                PK: ['a', ['b', (x: 1n | 2) => x.toString()], 'c'],
-                SK: ['c', ['z', (z: 'never' | null) => z ?? 'DEFAULT', null]],
+                PK: ['a', { at: 'b', value: (x: 1n | 2) => x.toString() }, 'c'],
+                SK: [
+                    'c',
+                    {
+                        at: 'z',
+                        value: (z: 'never' | null) => z ?? 'DEFAULT',
+                        default: null,
+                    },
+                ],
                 GSIPK: 'z',
                 GSISK: {
                     discriminator: 'a',
                     spec: {
-                        a1: ['z', ['z', (z: 'never') => z ?? 'DEFAULT']],
+                        a1: [
+                            'z',
+                            { at: 'z', value: (z: 'never') => z ?? 'DEFAULT' },
+                        ],
                         a2: [
-                            [
-                                'z',
-                                (z: 'never' | null) => z ?? 'DEFAULT',
-                                'never',
-                            ],
+                            {
+                                at: 'z',
+                                value: (z: 'never' | null) => z ?? 'DEFAULT',
+                                default: 'never',
+                            },
                         ],
                     },
                 },
@@ -1151,7 +1303,6 @@ describe('DynamoDB Utils', () => {
         const base = tableEntry<
             { a: 'a1'; b: 1n; extra: 'extra' } | { a: 'a2'; b: 2 }
         >()
-
         attest<
             [
                 schema: Record<
@@ -1162,8 +1313,18 @@ describe('DynamoDB Utils', () => {
                     | NonEmptyArray<
                           | 'a'
                           | 'b'
-                          | ['a', (key: 'a1' | 'a2') => TransformShape]
-                          | ['b', (key: 1n | 2) => TransformShape]
+                          | {
+                                readonly at: 'a'
+                                readonly tag?: string | false
+                                readonly value?: (key: 'a1' | 'a2') => Joinable
+                                readonly default?: never
+                            }
+                          | {
+                                readonly at: 'b'
+                                readonly tag?: string | false
+                                readonly value?: (key: 1n | 2) => Joinable
+                                readonly default?: never
+                            }
                           | PathComponents
                       >
                     | null
@@ -1182,12 +1343,30 @@ describe('DynamoDB Utils', () => {
                                         | 'a'
                                         | 'b'
                                         | 'extra'
-                                        | ['a', (key: 'a1') => TransformShape]
-                                        | ['b', (key: 1n) => TransformShape]
-                                        | [
-                                              'extra',
-                                              (key: 'extra') => TransformShape,
-                                          ]
+                                        | {
+                                              readonly at: 'a'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'a1',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'b'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 1n,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'extra'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'extra',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
                                         | PathComponents
                                     >
                                   | null
@@ -1200,8 +1379,22 @@ describe('DynamoDB Utils', () => {
                                   | NonEmptyArray<
                                         | 'a'
                                         | 'b'
-                                        | ['a', (key: 'a2') => TransformShape]
-                                        | ['b', (key: 2) => TransformShape]
+                                        | {
+                                              readonly at: 'a'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 'a2',
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
+                                        | {
+                                              readonly at: 'b'
+                                              readonly tag?: string | false
+                                              readonly value?: (
+                                                  key: 2,
+                                              ) => Joinable
+                                              readonly default?: never
+                                          }
                                         | PathComponents
                                     >
                                   | null
@@ -1223,14 +1416,12 @@ describe('DynamoDB Utils', () => {
 
         const table = tableEntry<Entity>()({
             PK: [
-                [
-                    'data',
-                    (d: Pick<Inner, 'id'>) => ({
-                        tag: 'DATA' as const,
-                        value: d.id,
-                    }),
-                    { id: 'default-id' },
-                ],
+                {
+                    at: 'data',
+                    tag: 'DATA',
+                    value: (d: Pick<Inner, 'id'>) => d.id,
+                    default: { id: 'default-id' },
+                },
                 'key',
             ],
         })
@@ -1238,15 +1429,12 @@ describe('DynamoDB Utils', () => {
         // empty object should be rejected — it doesn't satisfy the transform param
         tableEntry<Entity>()({
             PK: [
-                [
-                    'data',
-                    (d: Pick<Inner, 'id'>) => ({
-                        tag: 'DATA' as const,
-                        value: d.id,
-                    }),
-                    // @ts-expect-error - {} does not satisfy Pick<Inner, 'id'>
-                    {},
-                ],
+                {
+                    at: 'data',
+                    tag: 'DATA',
+                    value: (d: Pick<Inner, 'id'>) => d.id,
+                    default: {},
+                },
                 'key',
             ],
         })
@@ -1282,57 +1470,14 @@ describe('DynamoDB Utils', () => {
         }
 
         const Entry = tableEntry<B>()({
-            PK: [
-                [
-                    'a',
-                    (x: Pick<A, 'w'>) => ({
-                        tag: 'W' as const,
-                        value: x.w,
-                    }),
-                ],
-            ],
+            PK: [{ at: 'a', tag: 'W', value: (x: Pick<A, 'w'>) => x.w }],
             SK: [
-                [
-                    /// ERROR FOUND - adding other sub attribute to the same key structure
-                    'a',
-                    (x: Pick<A, 'w'>) => ({
-                        tag: 'W' as const,
-                        value: x.w,
-                    }),
-                ],
-                [
-                    'a',
-                    (x: Pick<A, 'x'>) => ({
-                        tag: 'X' as const,
-                        value: x.x,
-                    }),
-                ],
-                [
-                    'b',
-                    (x: string) => ({
-                        tag: 'B_VAL' as const,
-                        value: x,
-                    }),
-                ],
+                { at: 'a', tag: 'W', value: (x: Pick<A, 'w'>) => x.w },
+                { at: 'a', tag: 'X', value: (x: Pick<A, 'x'>) => x.x },
+                { at: 'b', tag: 'B_VAL', value: (x: string) => x },
             ],
-            GSI1PK: [
-                [
-                    'a',
-                    (x: Pick<A, 'w'>) => ({
-                        tag: 'W' as const,
-                        value: x.w,
-                    }),
-                ],
-            ],
-            GSI1SK: [
-                [
-                    'b',
-                    (x: string) => ({
-                        tag: 'B_VAL' as const,
-                        value: x,
-                    }),
-                ],
-            ],
+            GSI1PK: [{ at: 'a', tag: 'W', value: (x: Pick<A, 'w'>) => x.w }],
+            GSI1SK: [{ at: 'b', tag: 'B_VAL', value: (x: string) => x }],
         })
 
         // PK only needs w
@@ -1399,27 +1544,26 @@ describe('DynamoDB Utils', () => {
         // 7931 -> 8734: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([8734, 'instantiations'])
+        // 8734 -> 7651: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 8829.
+        attest.instantiations([7651, 'instantiations'])
     })
 
-    test('NeedsValidation detects 3-tuples in mixed arrays', () => {
+    test('a default of the wrong type is refused in a list that also holds a bare name', () => {
         type Entity = {
             id: string
             data?: { name: string }
         }
 
-        // Schema where the ONLY 3-tuple is in a mixed array (alongside a bare key).
-        // NeedsValidation uses `V[number] extends Tuple3` which checks ALL elements,
-        // so if it misses mixed arrays, {} would incorrectly pass.
+        // The only record with a default is in a list beside a bare name, and the default is checked
+        // against the type of the value.
         tableEntry<Entity>()({
             PK: [
                 'id',
-                [
-                    'data',
-                    (d: { name: string }) => d.name,
-                    // @ts-expect-error - {} does not satisfy { name: string }
-                    {},
-                ],
+                {
+                    at: 'data',
+                    value: (d: { name: string }) => d.name,
+                    default: {},
+                },
             ],
         })
 
@@ -1427,7 +1571,11 @@ describe('DynamoDB Utils', () => {
         const table = tableEntry<Entity>()({
             PK: [
                 'id',
-                ['data', (d: { name: string }) => d.name, { name: 'legacy' }],
+                {
+                    at: 'data',
+                    value: (d: { name: string }) => d.name,
+                    default: { name: 'legacy' },
+                },
             ],
         })
 

@@ -192,7 +192,10 @@ describe('a transform with a default', () => {
         PK: ['TAG', 'orgId'],
         SK: ['TAG', 'id'],
         GSI1PK: ['provider'],
-        GSI1SK: ['TAG', ['externalId', (x: string) => x, '']],
+        GSI1SK: [
+            'TAG',
+            { at: 'externalId', value: (x: string) => x, default: '' },
+        ],
     })
 
     it('sees the attribute named inside a transform tuple', () => {
@@ -222,8 +225,14 @@ describe('identity, discriminated with transforms', () => {
         PK: {
             discriminator: 'TAG',
             spec: {
-                EMAIL: ['TAG', ['email', (x: string) => x.toLowerCase()]],
-                PHONE: ['TAG', ['phone', (x: string) => x.toLowerCase()]],
+                EMAIL: [
+                    'TAG',
+                    { at: 'email', value: (x: string) => x.toLowerCase() },
+                ],
+                PHONE: [
+                    'TAG',
+                    { at: 'phone', value: (x: string) => x.toLowerCase() },
+                ],
             },
         },
         SK: ['TAG'],

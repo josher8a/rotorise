@@ -18,8 +18,7 @@ type Handoff =
     | { type: 'FOSTER'; id: string; to: Owner; from: Owner }
     | { type: 'RELEASE'; id: string; from: Owner }
 
-const to = (x: Pick<Owner, 'ownerId'>) =>
-    ({ tag: 'ownerId', value: x.ownerId }) as const
+const ownerId = (x: Pick<Owner, 'ownerId'>) => x.ownerId
 
 /** A handoff of a pet: one transform arm under three literals. */
 const Grouped = tableEntry<Handoff>()({
@@ -27,7 +26,10 @@ const Grouped = tableEntry<Handoff>()({
     GSI1PK: {
         discriminator: 'type',
         cases: [
-            [['INTAKE', 'ADOPTION', 'FOSTER'], [['to', to]]],
+            [
+                ['INTAKE', 'ADOPTION', 'FOSTER'],
+                [{ at: 'to', tag: 'ownerId', value: ownerId }],
+            ],
             [['RELEASE'], null],
         ],
     },
@@ -35,7 +37,10 @@ const Grouped = tableEntry<Handoff>()({
         discriminator: 'type',
         cases: [
             [['INTAKE'], null],
-            [['ADOPTION', 'FOSTER', 'RELEASE'], [['from', to]]],
+            [
+                ['ADOPTION', 'FOSTER', 'RELEASE'],
+                [{ at: 'from', tag: 'ownerId', value: ownerId }],
+            ],
         ],
     },
 })
@@ -45,9 +50,9 @@ const Ungrouped = tableEntry<Handoff>()({
     GSI1PK: {
         discriminator: 'type',
         spec: {
-            INTAKE: [['to', to]],
-            ADOPTION: [['to', to]],
-            FOSTER: [['to', to]],
+            INTAKE: [{ at: 'to', tag: 'ownerId', value: ownerId }],
+            ADOPTION: [{ at: 'to', tag: 'ownerId', value: ownerId }],
+            FOSTER: [{ at: 'to', tag: 'ownerId', value: ownerId }],
             RELEASE: null,
         },
     },
@@ -55,9 +60,9 @@ const Ungrouped = tableEntry<Handoff>()({
         discriminator: 'type',
         spec: {
             INTAKE: null,
-            ADOPTION: [['from', to]],
-            FOSTER: [['from', to]],
-            RELEASE: [['from', to]],
+            ADOPTION: [{ at: 'from', tag: 'ownerId', value: ownerId }],
+            FOSTER: [{ at: 'from', tag: 'ownerId', value: ownerId }],
+            RELEASE: [{ at: 'from', tag: 'ownerId', value: ownerId }],
         },
     },
 })
@@ -435,8 +440,11 @@ describe('the type of a grouped match', () => {
                 discriminator: 'type',
                 cases: [
                     // `from` is on a transfer and not on a mint
-                    // @ts-expect-error a mint holds no `from`
-                    [['INTAKE', 'ADOPTION'], [['from', to]]],
+                    [
+                        ['INTAKE', 'ADOPTION'],
+                        // @ts-expect-error a mint holds no `from`
+                        [{ at: 'from', tag: 'ownerId', value: ownerId }],
+                    ],
                     [['FOSTER', 'RELEASE'], null],
                 ],
             },
@@ -465,7 +473,7 @@ describe('the type of a grouped match', () => {
                 discriminator: 'meta.kind',
                 cases: [
                     [['A', 'B'], ['meta.kind']],
-                    [['C'], [['meta.c', { tag: 'c' }]]],
+                    [['C'], [{ at: 'meta.c', tag: 'c' }]],
                 ],
             },
         })

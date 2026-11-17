@@ -111,7 +111,13 @@ describe('a default stands for an undefined value only', () => {
     type Pet = { petId: string; nickname?: string | null }
     const Pets = tableEntry<Pet>()({
         PK: ['petId'],
-        GSI1SK: [['nickname', (n: string | null) => n ?? 'NONE', 'ANON']],
+        GSI1SK: [
+            {
+                at: 'nickname',
+                value: (n: string | null) => n ?? 'NONE',
+                default: 'ANON',
+            },
+        ],
     })
 
     it('gives the transform a null value, which the type of the transform admits', () => {
@@ -137,7 +143,13 @@ describe('a sort condition reads the parts that print', () => {
             PK: ['petId'],
             GSI1PK: ['shelterId'],
             GSI1SK: ['status', 'updatedAt'],
-            GSI2SK: [['nickname', (n: string | null) => n ?? 'NONE', 'ANON']],
+            GSI2SK: [
+                {
+                    at: 'nickname',
+                    value: (n: string | null) => n ?? 'NONE',
+                    default: 'ANON',
+                },
+            ],
         },
         {
             key: { partition: 'PK' },

@@ -101,7 +101,7 @@ describe('an item of the entity is a call of key', () => {
         type Stay = { id: string; stay?: { n: number } }
         const Stays = tableEntry<Stay>()({
             PK: ['id'],
-            SK: [['stay.n', (n: number) => `${n}`, 0]],
+            SK: [{ at: 'stay.n', value: (n: number) => `${n}`, default: 0 }],
         })
 
         it('takes an item of the entity, for a list of paths and for a transform at a path below an optional object', () => {

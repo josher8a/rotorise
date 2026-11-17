@@ -80,8 +80,6 @@
 # either toItem refused 1 built 2
 construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
-construct|accept|98e0a4e3|plain.defaultOpts
-construct|accept|a6d27a96|plain.tagOpts
 construct|accept|bd98ba26|nullableMeta.noCodec
 declaration|accept|ce03a404b2|dissection size
 decoded|refuse|b3aa5bd4bf|Decoded of the codec = { a: "x", c: "y" }
@@ -109,15 +107,6 @@ exclude|refuse|e2198121e1|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|ea30057fc2|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|f45cbe8e82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|feb1120b66|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
-infer|refuse|184b973a|T_plain_tagTf.infer(blank).foreign:SK
-infer|refuse|184b973a|T_plain_tagTf.infer(blankNote).foreign:SK
-infer|refuse|184b973a|T_plain_tagTf.infer(nonote).foreign:SK
-infer|refuse|184b973a|T_plain_tagTf.infer(ok).foreign:SK
-infer|refuse|83487729|T_plain_tagTf_sep.infer(blank).foreign:SK
-infer|refuse|83487729|T_plain_tagTf_sep.infer(blankNote).foreign:SK
-infer|refuse|83487729|T_plain_tagTf_sep.infer(nonote).foreign:SK
-infer|refuse|83487729|T_plain_tagTf_sep.infer(ok).foreign:SK
-infer|refuse|83487729|T_plain_tagTf_sep.infer(sep).foreign:SK
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chGhost).call
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chStr).call
 key|accept|b04a5f18|T_plain_listOne.key(PK,nameOnly,d0).call
@@ -126,14 +115,6 @@ key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,d0).call
 key|accept|b04a5f18|T_plain_listOne.key(SK,pidOnly,partial).call
 key|accept|b869b9a6|T_plain_list2_sep.key(SK,sLit,narrow).result
 key|accept|f1510f52|T_plain_list2.key(SK,sLit,narrow).result
-key|refuse|184b973a|T_plain_tagTf.key(SK,blank,none).foreign
-key|refuse|184b973a|T_plain_tagTf.key(SK,blank,partial).foreign
-key|refuse|184b973a|T_plain_tagTf.key(SK,ok,none).foreign
-key|refuse|184b973a|T_plain_tagTf.key(SK,ok,partial).foreign
-key|refuse|83487729|T_plain_tagTf_sep.key(SK,blank,none).foreign
-key|refuse|83487729|T_plain_tagTf_sep.key(SK,blank,partial).foreign
-key|refuse|83487729|T_plain_tagTf_sep.key(SK,ok,none).foreign
-key|refuse|83487729|T_plain_tagTf_sep.key(SK,ok,partial).foreign
 meet|refuse|26fd3c2238|meet(m0_l, m0_r)
 path|accept|d255ceca7a|at(narrow(at(C.p482_w, ["r", "op"]), object({ x: string })), [])
 site|construct|refuse|0dc91cde|kind_mixed.nopath_spec_neg
@@ -157,14 +138,5 @@ text|construct|refuse|9333dbb0|kind_optional.armpath_spec_neg
 text|construct|refuse|9776bc42|kind_lacking.otherpath_spec_neg
 text|construct|refuse|dfb3f055|kind_lacking.nopath_spec_neg
 text|construct|refuse|fa506674|kind_optional.nopath_spec_neg
-toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blank).foreign:SK
-toEntry|refuse|184b973a|T_plain_tagTf.toEntry(blankNote).foreign:SK
-toEntry|refuse|184b973a|T_plain_tagTf.toEntry(nonote).foreign:SK
-toEntry|refuse|184b973a|T_plain_tagTf.toEntry(ok).foreign:SK
-toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blank).foreign:SK
-toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(blankNote).foreign:SK
-toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(nonote).foreign:SK
-toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(ok).foreign:SK
-toEntry|refuse|83487729|T_plain_tagTf_sep.toEntry(sep).foreign:SK
 value|accept|51086640d5|extract({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0
 value|refuse|51086640d5|exclude({ tree: object({ kind: string("branch"), kids: object({ kind: string("leaf") }) }) }) member 0 value 0

@@ -6,11 +6,11 @@
  * the run time passes a value that the function does not read. The rule holds at a name, at a name
  * that can be absent, at a name that can be `null`, at a path, and in an arm of a match.
  *
- * The constraint of the schema states the parameter of each function arm. A change of the constraint
- * that types the parameter `any`, so that the arms share one signature, removes the refusal at a name
- * and fails these tests.
+ * The constraint of the schema states the parameter of each record, and the record states the name at
+ * `at`, so a function with no annotation reads the type of the value at that name. A change of the
+ * constraint that types the parameter `any` removes the refusal at a name and fails these tests.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
 
 type Pet = {
@@ -38,7 +38,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `age` is a number
-                ['age', (x: string) => x],
+                { at: 'age', value: (x: string) => x },
             ],
         })
     })
@@ -47,7 +47,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `note` is a string
-                ['note', (x: number) => String(x), 'd'],
+                { at: 'note', value: (x: number) => String(x), default: 'd' },
             ],
         })
     })
@@ -56,7 +56,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `note` is a string, so the default is a string
-                ['note', (x: string) => x, 5],
+                { at: 'note', value: (x: string) => x, default: 5 },
             ],
         })
     })
@@ -65,7 +65,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `note` is a string
-                ['note', (x: number) => String(x), 5],
+                { at: 'note', value: (x: number) => String(x), default: 5 },
             ],
         })
     })
@@ -74,7 +74,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `note` is a string, and the parameter reads the literal 'd' only
-                ['note', (x: 'd') => x, 'd'],
+                { at: 'note', value: (x: 'd') => x, default: 'd' },
             ],
         })
     })
@@ -83,7 +83,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `nul` is a string or null
-                ['nul', (x: number) => String(x)],
+                { at: 'nul', value: (x: number) => String(x) },
             ],
         })
     })
@@ -92,7 +92,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `tagged` is 'A' or 'B'
-                ['tagged', (x: 'A') => x],
+                { at: 'tagged', value: (x: 'A') => x },
             ],
         })
     })
@@ -101,7 +101,7 @@ describe('a transform reads the value of its component: the type refuses a param
         tableEntry<Pet>()({
             PK: [
                 // @ts-expect-error the value at `shelter.code` is a string
-                ['shelter.code', (x: number) => String(x)],
+                { at: 'shelter.code', value: (x: number) => String(x) },
             ],
         })
     })
@@ -109,8 +109,14 @@ describe('a transform reads the value of its component: the type refuses a param
     it('refuses a parameter of another type at a path that can be absent, with a default', () => {
         tableEntry<Pet>()({
             PK: [
-                // @ts-expect-error the value at `owner.id` is a string
-                ['owner.id', (x: number) => String(x), 'none'],
+                {
+                    // @ts-expect-error the value at `owner.id` is a string
+                    at: 'owner.id',
+                    // @ts-expect-error the value at `owner.id` is a string
+                    value: (x: number) => String(x),
+                    // @ts-expect-error the value at `owner.id` is a string
+                    default: 'none',
+                },
             ],
         })
     })
@@ -121,7 +127,7 @@ describe('a transform reads the value of its component: the type refuses a param
             PK: {
                 discriminator: 'kind',
                 spec: {
-                    X: [['age', (x: string) => x]],
+                    X: [{ at: 'age', value: (x: string) => x }],
                     Y: ['petId'],
                 },
             },
@@ -133,8 +139,10 @@ describe('a transform reads the value of its component: the type refuses a param
             PK: {
                 discriminator: 'kind',
                 spec: {
-                    // @ts-expect-error the value at `shelter.code` is a string
-                    X: [['shelter.code', (x: number) => String(x)]],
+                    X: [
+                        // @ts-expect-error the value at `shelter.code` is a string
+                        { at: 'shelter.code', value: (x: number) => String(x) },
+                    ],
                     Y: ['petId'],
                 },
             },
@@ -147,20 +155,19 @@ describe('a transform reads the value of its component: the type refuses a param
                 discriminator: 'kind',
                 cases: [
                     // @ts-expect-error the value at `age` is a number
-                    [['X'], [['age', (x: string) => x]]],
+                    [['X'], [{ at: 'age', value: (x: string) => x }]],
                     [['Y'], ['petId']],
                 ],
             },
         })
     })
 
-    it('refuses a parameter of another type next to a name that is right', () => {
+    it('refuses a parameter of another type next to a name that is right, on the element that is wrong', () => {
         tableEntry<Pet>()({
             PK: [
-                // @ts-expect-error a list that holds a wrong parameter is refused as a whole
                 'petId',
                 // @ts-expect-error the value at `age` is a number
-                ['age', (x: string) => x],
+                { at: 'age', value: (x: string) => x },
             ],
         })
     })
@@ -170,7 +177,7 @@ describe('a transform reads the value of its component: the type accepts a param
     it('accepts a parameter that accepts more than the value, and the run time passes the value to it', () => {
         const Pets = tableEntry<Pet>()({
             PK: ['petId'],
-            SK: [['age', (x: string | number) => `n${String(x)}`]],
+            SK: [{ at: 'age', value: (x: string | number) => `n${String(x)}` }],
         })
         expect(Pets.unsafeKey('SK', pet)).toBe('AGE#n3')
     })
@@ -178,7 +185,7 @@ describe('a transform reads the value of its component: the type accepts a param
     it('accepts a parameter of the type of the value at a name, and the run time passes the value to it', () => {
         const Pets = tableEntry<Pet>()({
             PK: ['petId'],
-            SK: [['age', (x: number) => `n${x + 1}`]],
+            SK: [{ at: 'age', value: (x: number) => `n${x + 1}` }],
         })
         expect(Pets.unsafeKey('SK', pet)).toBe('AGE#n4')
     })
@@ -186,9 +193,65 @@ describe('a transform reads the value of its component: the type accepts a param
     it('accepts a parameter of the type of the value at a name that can be absent, with a default', () => {
         const Pets = tableEntry<Pet>()({
             PK: ['petId'],
-            SK: [['note', (x: string) => x, 'd']],
+            SK: [{ at: 'note', value: (x: string) => x, default: 'd' }],
         })
         expect(Pets.unsafeKey('SK', pet)).toBe('NOTE#d')
         expect(Pets.unsafeKey('SK', { ...pet, note: 'z' })).toBe('NOTE#z')
+    })
+})
+
+describe('a function with no annotation reads the type of the value of its component', () => {
+    it('gives the parameter the type of the attribute at a name', () => {
+        const Pets = tableEntry<Pet>()({
+            PK: ['petId'],
+            SK: [
+                {
+                    at: 'age',
+                    value: (x) => {
+                        expectTypeOf(x).toEqualTypeOf<number>()
+                        return x.toFixed(0)
+                    },
+                },
+            ],
+        })
+        expect(Pets.unsafeKey('SK', pet)).toBe('AGE#3')
+    })
+
+    it('gives the parameter the type of the value without undefined, at a name that can be absent', () => {
+        const Pets = tableEntry<Pet>()({
+            PK: ['petId'],
+            SK: [
+                {
+                    at: 'note',
+                    default: 'd',
+                    value: (x) => {
+                        expectTypeOf(x).toEqualTypeOf<string>()
+                        return x.trim()
+                    },
+                },
+            ],
+        })
+        expect(Pets.unsafeKey('SK', pet)).toBe('NOTE#d')
+    })
+
+    it('gives the parameter the type of the attribute in an arm of a match', () => {
+        const Pets = tableEntry<Pet>()({
+            PK: {
+                discriminator: 'kind',
+                spec: {
+                    X: [
+                        {
+                            at: 'age',
+                            value: (x) => {
+                                expectTypeOf(x).toEqualTypeOf<number>()
+                                return x.toFixed(0)
+                            },
+                        },
+                    ],
+                    Y: ['petId'],
+                },
+            },
+        })
+        expect(Pets.unsafeKey('PK', pet)).toBe('AGE#3')
     })
 })

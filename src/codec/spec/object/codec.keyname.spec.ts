@@ -52,7 +52,7 @@ describe('a component whose name is a number prints the number as its tag', () =
     it('is the tag of a component with a transform', () => {
         const Transformed = tableEntry<Rows>()({
             PK: ['petId'],
-            SK: [[0, (value: string) => value]],
+            SK: [{ at: 0, value: (value: string) => value }],
         })
         const key = Transformed.unsafeKey('SK', row)
         expectTypeOf(key).toEqualTypeOf<`0#${string}`>()

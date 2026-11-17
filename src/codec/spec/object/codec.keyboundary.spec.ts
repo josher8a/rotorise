@@ -12,14 +12,11 @@ import { tableEntry } from '../../../Rotorise'
 
 type Row = { a: string; b: string }
 
-const tagless = (x: string) => ({ value: x })
-const tagged = (x: string) => ({ tag: 'T', value: x })
-
 describe('a key with enforceBoundary', () => {
     const Mixed = tableEntry<Row>()({
-        K: [['a', tagless], 'b'],
-        L: [['a', tagless]],
-        M: [['a', tagged], 'b'],
+        K: [{ at: 'a', tag: false, value: (x: string) => x }, 'b'],
+        L: [{ at: 'a', tag: false, value: (x: string) => x }],
+        M: [{ at: 'a', tag: 'T', value: (x: string) => x }, 'b'],
         N: ['a', 'b'],
     })
     const row = { a: '1', b: '2' }

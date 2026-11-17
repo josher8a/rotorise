@@ -35,11 +35,11 @@ type User = {
 
 const userSchema = tableEntry<User>()({
     PK: [
-        ['orgId', (id: string) => `ORG:${id}`],
-        ['id', (id: string) => `USER:${id}`],
+        { at: 'orgId', value: (id: string) => `ORG:${id}` },
+        { at: 'id', value: (id: string) => `USER:${id}` },
     ],
     SK: ['role'],
-    GSI1PK: [['role', (role: string) => `ROLE:${role}`]],
+    GSI1PK: [{ at: 'role', value: (role: string) => `ROLE:${role}` }],
 })
 
 describe('Rotorise Performance Baseline', () => {
@@ -57,13 +57,14 @@ describe('Rotorise Performance Baseline', () => {
         }
         tableEntry<Member>()({
             PK: [
-                ['orgId', (id: string) => `ORG:${id}`],
-                ['id', (id: string) => `USER:${id}`],
+                { at: 'orgId', value: (id: string) => `ORG:${id}` },
+                { at: 'id', value: (id: string) => `USER:${id}` },
             ],
             SK: ['role'],
-            GSI1PK: [['role', (role: string) => `ROLE:${role}`]],
+            GSI1PK: [{ at: 'role', value: (role: string) => `ROLE:${role}` }],
         })
-        attest.instantiations([2091, 'instantiations'])
+        // 2091 -> 1158: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 2459.
+        attest.instantiations([1158, 'instantiations'])
     })
 
     it('measures instantiation count for key generation', () => {
@@ -71,7 +72,8 @@ describe('Rotorise Performance Baseline', () => {
         // 3751 -> 3823: the builder of the key type reads the case of each component (can be
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
-        attest.instantiations([3823, 'instantiations'])
+        // 3823 -> 3617: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 3738.
+        attest.instantiations([3617, 'instantiations'])
     })
 
     it('verifies type outputs with snapshots', () => {

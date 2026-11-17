@@ -28,8 +28,8 @@ describe('a key component that reads a path', () => {
             }
             const Transfers = tableEntry<Transfer>()({
                 PK: ['id'],
-                GSI1PK: [['to.ownerId', { tag: 'ownerId' }]],
-                GSI2PK: [['from.ownerId', { tag: 'ownerId' }]],
+                GSI1PK: [{ at: 'to.ownerId', tag: 'ownerId' }],
+                GSI2PK: [{ at: 'from.ownerId', tag: 'ownerId' }],
             })
             const key = Transfers.unsafeKey('GSI1PK', { to: { ownerId: 'u1' } })
             key satisfies 'ownerId#u1'
@@ -45,7 +45,7 @@ describe('a key component that reads a path', () => {
                 collar: { tagId: string; color: string }
             }
             const Pets = tableEntry<Pet>()({
-                PK: ['storeId', ['collar.tagId', { tag: 'collar' }]],
+                PK: ['storeId', { at: 'collar.tagId', tag: 'collar' }],
             })
             expect(
                 Pets.unsafeKey('PK', {
@@ -61,7 +61,7 @@ describe('a key component that reads a path', () => {
                 price: { amount: number; currency: string }
             }
             const Listings = tableEntry<Listing>()({
-                GSI1SK: [['price.amount', { tag: 'PRICE' }]],
+                GSI1SK: [{ at: 'price.amount', tag: 'PRICE' }],
             })
             const key = Listings.unsafeKey('GSI1SK', {
                 price: { amount: 1.5 },
@@ -83,7 +83,13 @@ describe('a key component that reads a path', () => {
             type Pet = { id: string; vaccine?: { lastDose: string } }
             const Pets = tableEntry<Pet>()({
                 PK: ['id'],
-                SK: [['vaccine.lastDose', (x: string) => x, '0']],
+                SK: [
+                    {
+                        at: 'vaccine.lastDose',
+                        value: (x: string) => x,
+                        default: '0',
+                    },
+                ],
             })
             expect(untyped(Pets)('SK', { id: 'p' })).toBe('LASTDOSE#0')
             expect(Pets.unsafeKey('SK', { vaccine: { lastDose: '5' } })).toBe(
@@ -152,7 +158,7 @@ describe('a key component that reads a path', () => {
         }
         const Defaulted = tableEntry<Doc>()({
             PK: ['id'],
-            SK: [['meta.a', (a: string) => a, 'none']],
+            SK: [{ at: 'meta.a', value: (a: string) => a, default: 'none' }],
         })
         expect(
             Defaulted.unsafeToEntry({ id: 'd', meta: { kind: 'b', b: 'y' } })
@@ -173,18 +179,34 @@ describe('a key component that reads a path', () => {
             vaccine?: { lastDose: string }
         }
 
-        it('has no contextual type, so a parameter needs an annotation', () => {
+        it('refuses a function with no annotation, because the constraint states no type for the parameter of a path', () => {
             tableEntry<Transfer>()({
-                PK: [
-                    // @ts-expect-error the parameter has no contextual type: annotate it
-                    ['to.ownerId', (x) => String(x)],
+                PK: ['id'],
+                SK: [
+                    // @ts-expect-error a parameter with no annotation has no type at a path: annotate it
+                    { at: 'to.ownerId', value: (x) => String(x).toUpperCase() },
                 ],
             })
         })
 
+        it('reads the parameter that the annotation states, and the run time passes the value', () => {
+            const Transfers = tableEntry<Transfer>()({
+                PK: ['id'],
+                SK: [
+                    {
+                        at: 'to.ownerId',
+                        value: (x: string) => x.toUpperCase(),
+                    },
+                ],
+            })
+            expect(Transfers.unsafeKey('SK', { to: { ownerId: 'o1' } })).toBe(
+                'OWNERID#O1',
+            )
+        })
+
         it('accepts a parameter whose annotation the value at the path fits', () => {
             const Transfers = tableEntry<Transfer>()({
-                PK: [['to.ownerId', (x: string) => x]],
+                PK: [{ at: 'to.ownerId', value: (x: string) => x }],
             })
             expect(Transfers.unsafeKey('PK', { to: { ownerId: 'u' } })).toBe(
                 'OWNERID#u',
@@ -195,7 +217,7 @@ describe('a key component that reads a path', () => {
             tableEntry<Transfer>()({
                 PK: [
                     // @ts-expect-error the value at `to.ownerId` is a string
-                    ['to.ownerId', (x: number) => x],
+                    { at: 'to.ownerId', value: (x: number) => x },
                 ],
             })
         })
@@ -211,7 +233,7 @@ describe('a key component that reads a path', () => {
             const Pets = tableEntry<Transfer>()({
                 PK: ['id'],
                 // @ts-expect-error `vaccine.lastDose` can be absent: the transform needs a default
-                SK: [['vaccine.lastDose', (x: string) => x]],
+                SK: [{ at: 'vaccine.lastDose', value: (x: string) => x }],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
             {
@@ -228,7 +250,7 @@ describe('a key component that reads a path', () => {
             const Pets = tableEntry<Transfer>()({
                 PK: ['id'],
                 // @ts-expect-error `vaccine.lastDose` can be absent: give a transform with a default
-                SK: [['vaccine.lastDose', { tag: 'DOSE' }]],
+                SK: [{ at: 'vaccine.lastDose', tag: 'DOSE' }],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
             {
@@ -246,7 +268,7 @@ describe('a key component that reads a path', () => {
             const Pets = tableEntry<Nullable>()({
                 PK: ['id'],
                 // @ts-expect-error the parent can be null, so `vaccine.lastDose` can be absent: the transform needs a default
-                SK: [['vaccine.lastDose', (x: string) => x]],
+                SK: [{ at: 'vaccine.lastDose', value: (x: string) => x }],
             })
             const absent: Nullable = { id: 'p', vaccine: null }
             {
@@ -263,7 +285,12 @@ describe('a key component that reads a path', () => {
             type Chipped = { id: string; chip: { serial: string | null } }
             const Pets = tableEntry<Chipped>()({
                 PK: ['id'],
-                SK: [['chip.serial', (x: string | null) => x ?? 'NONE']],
+                SK: [
+                    {
+                        at: 'chip.serial',
+                        value: (x: string | null) => x ?? 'NONE',
+                    },
+                ],
             })
             const unchipped: Chipped = { id: 'p', chip: { serial: null } }
             expect(Pets.unsafeToEntry(unchipped).SK).toBe('SERIAL#NONE')
@@ -274,7 +301,7 @@ describe('a key component that reads a path', () => {
             const Pets = tableEntry<Chipped>()({
                 PK: ['id'],
                 // @ts-expect-error `chip.serial` can be null: give a transform that reads the null
-                SK: [['chip.serial', { tag: 'CHIP' }]],
+                SK: [{ at: 'chip.serial', tag: 'CHIP' }],
             })
             const unchipped: Chipped = { id: 'p', chip: { serial: null } }
             {
@@ -290,7 +317,13 @@ describe('a key component that reads a path', () => {
         it('accepts a transform at a path that can be absent where a default is given, and prints the default', () => {
             const Pets = tableEntry<Transfer>()({
                 PK: ['id'],
-                SK: [['vaccine.lastDose', (x: string) => x, '0']],
+                SK: [
+                    {
+                        at: 'vaccine.lastDose',
+                        value: (x: string) => x,
+                        default: '0',
+                    },
+                ],
             })
             const absent: Transfer = { id: 'p', to: { ownerId: 'u' } }
             expect(Pets.unsafeToEntry(absent).SK).toBe('LASTDOSE#0')
@@ -435,7 +468,7 @@ describe('the round trip of the entries that read a path', () => {
         type Transfer = { id: string; to: { ownerId: string; name: string } }
         const Transfers = tableEntry<Transfer>()({
             PK: ['id'],
-            GSI1PK: [['to.ownerId', { tag: 'ownerId' }]],
+            GSI1PK: [{ at: 'to.ownerId', tag: 'ownerId' }],
         })
         const item = { id: 'a', to: { ownerId: 'u', name: 'n' } }
         expect(Transfers.fromEntry(Transfers.unsafeToEntry(item))).toEqual(item)
@@ -456,7 +489,7 @@ describe('the change of a key that reads a path', () => {
     const Things = tableEntry<Thing>()({
         PK: ['id'],
         GSI1PK: ['meta.kind', 'label'],
-        GSI2PK: [['meta', (m: { kind: string }) => m.kind]],
+        GSI2PK: [{ at: 'meta', value: (m: { kind: string }) => m.kind }],
     })
 
     it('rebuilds each key that reads a path below a written attribute', () => {

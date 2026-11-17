@@ -20,8 +20,8 @@ const Pets = tableEntry<Pet>()(
         SK: 'nick',
         GSI1PK: ['shelterId'],
         GSI1SK: 'nick',
-        GSI2SK: [['petId', (_id: string) => '']],
-        GSI3SK: [['nick', (text: string) => ({ value: text })]],
+        GSI2SK: [{ at: 'petId', value: (_id: string) => '' }],
+        GSI3SK: [{ at: 'nick', tag: false, value: (text: string) => text }],
     },
     {
         key: { partition: 'PK', sort: 'SK' },
@@ -191,17 +191,15 @@ describe('a partial key may be the empty string, because it is a begins_with pre
 
 describe('the type of a key counts the segments that a print holds, and not the text', () => {
     type Tagless = { petId: string; shelterId: string; nick: string }
-    const hidden = (_nick: string): { value: null } => ({ value: null })
-    const vip = (nick: string): { value: 'VIP' | null } => ({
-        value: nick === 'x' ? null : 'VIP',
-    })
-    const blank = (_nick: string): { value: '' } => ({ value: '' })
+    const hidden = (_nick: string): null => null
+    const vip = (nick: string): 'VIP' | null => (nick === 'x' ? null : 'VIP')
+    const blank = (_nick: string): '' => ''
     const tagless: Tagless = { petId: 'p1', shelterId: 's1', nick: 'rex' }
     const quiet: Tagless = { petId: 'p1', shelterId: 's1', nick: 'x' }
 
     it('keeps the separator of a first component that prints one empty segment', () => {
         const Hidden = tableEntry<Tagless>()({
-            PK: [['nick', hidden], 'petId'],
+            PK: [{ at: 'nick', tag: false, value: hidden }, 'petId'],
         })
         const key = Hidden.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
@@ -213,7 +211,11 @@ describe('the type of a key counts the segments that a print holds, and not the 
 
     it('keeps one separator for each leading empty segment', () => {
         const Hidden = tableEntry<Tagless>()({
-            PK: [['nick', hidden], ['shelterId', hidden], 'petId'],
+            PK: [
+                { at: 'nick', tag: false, value: hidden },
+                { at: 'shelterId', tag: false, value: hidden },
+                'petId',
+            ],
         })
         const key = Hidden.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`##PETID#${string}`>()
@@ -221,7 +223,9 @@ describe('the type of a key counts the segments that a print holds, and not the 
     })
 
     it('holds both prints where the value is a literal or null, and the run time gives each', () => {
-        const Vip = tableEntry<Tagless>()({ PK: [['nick', vip], 'petId'] })
+        const Vip = tableEntry<Tagless>()({
+            PK: [{ at: 'nick', tag: false, value: vip }, 'petId'],
+        })
         const key = Vip.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<
             `VIP#PETID#${string}` | `#PETID#${string}`
@@ -231,7 +235,9 @@ describe('the type of a key counts the segments that a print holds, and not the 
     })
 
     it('keeps the separator where the value is the empty text', () => {
-        const Blank = tableEntry<Tagless>()({ PK: [['nick', blank], 'petId'] })
+        const Blank = tableEntry<Tagless>()({
+            PK: [{ at: 'nick', tag: false, value: blank }, 'petId'],
+        })
         const key = Blank.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`#PETID#${string}`>()
         expect(key).toBe('#PETID#p1')
@@ -239,7 +245,7 @@ describe('the type of a key counts the segments that a print holds, and not the 
 
     it('holds the print of an empty segment that is not first, as before', () => {
         const Hidden = tableEntry<Tagless>()({
-            PK: ['petId', ['nick', hidden]],
+            PK: ['petId', { at: 'nick', tag: false, value: hidden }],
         })
         const key = Hidden.unsafeKey('PK', tagless)
         expectTypeOf(key).toEqualTypeOf<`PETID#${string}#`>()

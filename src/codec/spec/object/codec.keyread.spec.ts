@@ -7,7 +7,12 @@
  * attributes, so a row with a correct key, a stale key or no key decodes to one item.
  */
 import { describe, expect, it } from 'vitest'
-import { CodecError, failed, tableEntry } from '../../../Rotorise'
+import {
+    CodecError,
+    failed,
+    RotoriseError,
+    tableEntry,
+} from '../../../Rotorise'
 import { string } from '../../codec'
 
 type User = { orgId: string; id: string; role: string; email: string }
@@ -83,19 +88,18 @@ describe('a key build', () => {
         }
     })
 
-    it('refuses a transform whose tag holds the separator', () => {
-        const Tagged = tableEntry<User>()({
-            PK: [['orgId', (x: string) => ({ tag: 'T#X', value: x })]],
-        })
-        const build = () => Tagged.unsafeKey('PK', { orgId: 'acme' })
-        expect(build).toThrow(CodecError)
-        expect(build).toThrow(/tag of orgId/)
-        expect(build).not.toThrow(/acme/)
+    it('refuses a tag that holds the separator where the schema is read, and names the tag and no value', () => {
+        const build = () =>
+            tableEntry<User>()({
+                PK: [{ at: 'orgId', tag: 'T#X', value: (x: string) => x }],
+            })
+        expect(build).toThrow(RotoriseError)
+        expect(build).toThrow(/the tag of orgId holds the separator/)
     })
 
     it('refuses a transform whose value holds the separator', () => {
         const Prefixed = tableEntry<User>()({
-            PK: [['orgId', (x: string) => `ORG#${x}`]],
+            PK: [{ at: 'orgId', value: (x: string) => `ORG#${x}` }],
         })
         {
             const refused = Prefixed.key('PK', { orgId: 'acme' })

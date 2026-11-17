@@ -33,7 +33,7 @@ describe('a schema that holds a malformed key path', () => {
 
     it('refuses the path at the head of a transform tuple', () => {
         expect(() =>
-            declare({ PK: [['a..b', (value: unknown) => value]] }),
+            declare({ PK: [{ at: 'a..b', value: (value: unknown) => value }] }),
         ).toThrow(refusal)
     })
 
