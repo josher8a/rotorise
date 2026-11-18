@@ -33,10 +33,12 @@ import {
     pathBuilder,
 } from './codec/codec'
 import type { KnownKeys } from './codec/derivedItem'
+import type { Segment } from './codec/frontier'
 import { native } from './codec/native'
 import { constantOf } from './codec/objects'
 import type { itemMark } from './codec/scope'
 import type { ChildAt, CodecAt } from './codec/scopePath'
+import { parsePath } from './codec/scopePath'
 import type { KeyText } from './codec/sums'
 import type { Field, Term } from './codec/term'
 import { isCallerPin, member, sameTerm, storedPin } from './codec/term'
@@ -1713,17 +1715,26 @@ const dotIsPath =
     'a `.` in a key name is a path separator, as in DynamoDB, so a key cannot read an attribute whose own name holds a `.`' as const
 
 /**
- * The segments of a key path: names joined by `.`, which read into objects only. A position in
- * brackets and an empty name are refused, because a key does not read into a list.
+ * The segments of a key path: the document path of {@link parsePath}, without a position, because a
+ * key does not read into a list. A path that `parsePath` refuses, a position, and the empty path are refused.
  */
 const pathSegments = (path: string): string[] => {
-    const segments = path.split('.')
-    if (segments.some((segment) => segment === '' || /[[\]]/.test(segment))) {
-        throw new RotoriseError(
+    const refused = () =>
+        new RotoriseError(
             `'${path}' is no key path: a key path joins names with '.', and holds no empty name and no position`,
         )
+    let read: readonly Segment[]
+    try {
+        read = parsePath(path)
+    } catch (cause) {
+        if (cause instanceof CodecError) throw refused()
+        throw cause
     }
-    return segments
+    const names = read.filter(
+        (segment): segment is string => typeof segment === 'string',
+    )
+    if (names.length === 0 || names.length !== read.length) throw refused()
+    return names
 }
 
 /** How a key name reads a value at a carrier: an item reads one way, and the given item of an update reads another. */

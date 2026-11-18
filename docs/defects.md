@@ -850,31 +850,39 @@ codec that cannot name a variant, behind a cast.
 
 ---
 
-## Known: a codec builds and writes an attribute name of no character, where DynamoDB refuses the name
+## Known: `native` and `opaque` write an attribute name of no character, and the tuple form of `at` builds a place at an open key of that name, where DynamoDB refuses the name
 
-**Observation.** The former of an object takes the empty text as the name of a field. The codec
-writes the name, and reads the name back. DynamoDB refuses an item that holds an attribute name of
-no character, at the top of the item and inside a map. Measured 2026-11-12 with `tsc --noEmit` on
-TypeScript 7 and `npx vitest --run`, and with a PutItem call on DynamoDB Local:
+**Observation.** `object` refuses a field of no name at construction. An open key entry of `object`
+refuses the key in its encode. Two routes stay: the codecs `native` and `opaque`, which write a map
+of any keys, and the tuple form of `at`, which takes the segments as they are. Measured 2026-11-18
+with `tsc --noEmit` on TypeScript 7, and with `npx vitest --run` on Node 24:
 
-    const Named = item(object({ petId: string, '': string }))
+    native.encode({ '': 'v' })
       type checker: builds
-      runtime:      builds
+      runtime:      gives { M: { '': { S: 'v' } } }
 
-    Named.unsafeEncode({ petId: 'p1', '': 'ball' })
+    opaque.encode({ '': 'v' })
       type checker: builds
-      runtime:      gives { petId: { S: 'p1' }, '': { S: 'ball' } }
+      runtime:      gives { M: { '': { S: 'v' } } }
 
-    PutItem, the name "" at the top of the item
-      DynamoDB Local: refused, Empty attribute name
+    const Kennel = item(object({ petId: string, vaccines: object({}, [string, optional(string)]) }))
+    at(Kennel, ['vaccines', ''])
+      type checker: builds
+      runtime:      builds. encode('x') gives { S: 'x' }. path(...) throws a CodecError: the name at
+                    segment 1 of the path is not a letter, then letters, digits and '_'
 
-    PutItem, the name "" inside a map
-      DynamoDB Local: refused, Empty attribute name
+    PutItem, the name "" at the top of the item, and inside a map
+      DynamoDB Local: refused, Empty attribute name (amazon/dynamodb-local 3.3.1)
 
-**Effect.** The codec gives an item that DynamoDB refuses. The failure arrives at the write, not
-where the caller declares the field.
+The string form of `at` refuses an empty segment in the type and at run time, and `path` gives no
+string for one.
 
-**Pin.** None.
+**Effect.** `native` and `opaque` give an item that DynamoDB refuses, and the failure arrives at the
+write. The tuple form builds a place that no expression string names.
+
+**Pin.** None. `src/codec/spec/object/codec.emptyname.spec.ts` pins the refusal of `object`, of an
+open key in its encode, and of the string form of a path. No test pins `native`, `opaque` or the
+tuple form.
 
 ---
 

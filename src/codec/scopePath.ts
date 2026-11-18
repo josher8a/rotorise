@@ -62,7 +62,7 @@ import type {
 } from './pathModel'
 import type { LibraryInner } from './prisms'
 import type { Result } from './result'
-import { asPath, CodecError } from './result'
+import { asPath, CodecError, emptyNameReason, isEmptyName } from './result'
 import type { Marked, UnionCodec } from './scope'
 import { itemMark } from './scope'
 import type { Precondition } from './scoped'
@@ -1040,15 +1040,16 @@ export function narrow(
 
 /**
  * **The segments of a document path in DynamoDB syntax**: a name, or a position in brackets, each
- * name after the first behind a `.`. A name holds no `.`, `[` or `]`: the tuple form carries such a
- * name. The function reads more names than {@link expressionPath} prints: a name with a `-` is a
+ * name after the first behind a `.`. A name holds no `.`, `[` or `]`, and has a character: the tuple
+ * form carries a name with a `.`, `[` or `]`. A position with no name before it is the first part
+ * only. The function reads more names than {@link expressionPath} prints: a name with a `-` is a
  * name here, and has no expression string. A malformed path is a defect of the caller. The type of
  * {@link at} refuses a malformed literal first, and a string that is no literal reaches this throw.
  */
 export const parsePath = (path: string): readonly Segment[] => {
     if (path === '') return []
     const segments: Segment[] = []
-    for (const part of path.split('.')) {
+    for (const [at, part] of path.split('.').entries()) {
         const parsed = /^([^[\]]*)((?:\[\d+\])*)$/.exec(part)
         if (parsed === null) {
             throw new CodecError(
@@ -1056,7 +1057,13 @@ export const parsePath = (path: string): readonly Segment[] => {
             )
         }
         const [, name = '', positions = ''] = parsed
-        if (name !== '' || positions === '') segments.push(name)
+        // a position with no name before it reads the list that the path starts at, so only the first part has one
+        if (isEmptyName(name) && (positions === '' || at > 0)) {
+            throw new CodecError(
+                `'${path}' is no document path: a name has a character, because ${emptyNameReason}`,
+            )
+        }
+        if (!isEmptyName(name)) segments.push(name)
         for (const [, digits] of positions.matchAll(/\[(\d+)\]/g)) {
             segments.push(Number(digits))
         }

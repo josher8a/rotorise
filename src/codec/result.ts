@@ -222,6 +222,16 @@ export const every = <A, B>(
 }
 
 /**
+ * **An attribute name has a character.** DynamoDB refuses an item that holds an attribute name of no
+ * character, at the top of the item and inside a map, and refuses an expression that holds an empty
+ * name. Each site that names an attribute reads this rule: the field names of `object` at
+ * construction, the open key names of its `encode`, and the names of a document path.
+ */
+export const isEmptyName = (name: string): boolean => name === ''
+export const emptyNameReason =
+    'DynamoDB refuses an attribute name of no character'
+
+/**
  * Sets an own data property of a record that a decode or an encode builds.
  *
  * `JSON.parse` and `Object.fromEntries` hold `__proto__` as an own data property, and a plain

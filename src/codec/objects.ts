@@ -24,7 +24,7 @@ import { entryCodec, fieldOf } from './derivedItem'
 import type { Norm } from './pathModel'
 import type { LibraryInner } from './prisms'
 import type { NoNeverField, NoSpreadMember } from './products'
-import { CodecError, setOwn } from './result'
+import { CodecError, emptyNameReason, isEmptyName, setOwn } from './result'
 import type {
     ObjectCodec,
     OptionalCodec,
@@ -199,6 +199,11 @@ export const objectFromMap = <
     const fields: Record<string, Field> = {}
     const declaredSpec = spec as unknown as Record<string, ObjectSlot>
     for (const name in declaredSpec) {
+        if (isEmptyName(name)) {
+            throw new CodecError(
+                `the object declares the field '${name}', which has no character in its name: ${emptyNameReason}`,
+            )
+        }
         setOwn(fields, name, fieldOf(declaredSpec[name] as ObjectSlot))
     }
 

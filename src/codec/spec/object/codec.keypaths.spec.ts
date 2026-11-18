@@ -67,6 +67,18 @@ describe('a schema that holds a malformed key path', () => {
         ).toThrow(refusal)
     })
 
+    it('refuses a path that opens or ends with a dot, because a name has a character', () => {
+        expect(() => declare({ PK: '.ownerId' })).toThrow(/is no key path/)
+        expect(() => declare({ PK: 'ownerId.' })).toThrow(/is no key path/)
+    })
+
+    it('refuses a position, because a key does not read into a list', () => {
+        expect(() => declare({ PK: 'litter[0]' })).toThrow(/is no key path/)
+        expect(() => declare({ PK: 'owner.litter[0]' })).toThrow(
+            /is no key path/,
+        )
+    })
+
     it('admits a well formed path in each position', () => {
         expect(() =>
             declare({

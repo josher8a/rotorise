@@ -33,10 +33,12 @@ import type { Result } from './result'
 import {
     andThen,
     CodecError,
+    emptyNameReason,
     every,
     everyEntry,
     failed,
     HeldSideRefusal,
+    isEmptyName,
     restated,
     setOwn,
 } from './result'
@@ -472,6 +474,12 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                         `'${name}' is not an attribute this codec declares`,
                     )
                 }
+                // an open key is data, so the refusal is a value here, where a declared field is refused at construction
+                if (isEmptyName(name)) {
+                    return new CodecError(
+                        `an open key has no character in its name: ${emptyNameReason}`,
+                    ).under(name)
+                }
                 const written = restPair.encode(value as never, enclosing)
                 if (failed(written)) return written.under(name)
                 setOwn(out, name, written)
@@ -519,6 +527,7 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
                 setOwn(out, name, read)
             }
             for (const name in item) {
+                // decode reads the empty name as any name: DynamoDB never stores one, so no row holds it
                 // a name that holds `undefined` is absent, as the write reads it
                 if (Object.hasOwn(of, name) || item[name] === undefined)
                     continue

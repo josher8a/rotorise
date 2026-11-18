@@ -188,7 +188,8 @@ export type Wide = 'wide'
 
 /**
  * **A document path in DynamoDB syntax, as its segments**: `'legs[1].at'` is `['legs', 1, 'at']`.
- * A name holds no `.`, `[` or `]`, and the tuple form carries such a name. A part that is no name
+ * A name holds no `.`, `[` or `]`, and has a character. The tuple form carries a name with a `.`,
+ * `[` or `]`. A part behind a `.` starts with a name. A part that is no name
  * and no position is a segment that no place offers. A position is digits that print back as the
  * same text, with no `-` and no `+`, and the text after a `]` is empty or starts with `[`. The
  * pattern `` `a[${number}]` `` reads a wide position, and the run time refuses a member that is no
@@ -197,8 +198,12 @@ export type Wide = 'wide'
 export type ParsePath<S extends string> = S extends '' ? [] : PathParts<S>
 export type PathParts<S extends string> =
     S extends `${infer Head}.${infer Tail}`
-        ? [...PathPart<Head>, ...PathParts<Tail>]
+        ? [...PathPart<Head>, ...PathAfterDot<Tail>]
         : PathPart<S>
+/** A part behind a `.` has a name: a position with no name before it starts the path only. */
+type PathAfterDot<S extends string> = S extends `[${string}`
+    ? [['no segment']]
+    : PathParts<S>
 export type PathPart<S extends string> =
     S extends `${infer Name}[${infer I}]${infer Rest}`
         ? [
@@ -224,8 +229,11 @@ export type PathPosition<I extends string> =
               ? N
               : ['no segment']
           : ['no segment']
-export type PathName<S extends string> =
-    S extends `${string}${'[' | ']'}${string}` ? [['no segment']] : [S]
+export type PathName<S extends string> = S extends
+    | ''
+    | `${string}${'[' | ']'}${string}`
+    ? [['no segment']]
+    : [S]
 
 /** The segments of a path in either form. */
 export type SegmentsOf<S> = S extends string

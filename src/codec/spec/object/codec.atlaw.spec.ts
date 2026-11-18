@@ -123,7 +123,6 @@ describe('the string of a path addresses the place of its segments', () => {
         space: [' a', 'a '],
         // DynamoDB refuses the expression
         store: ['0', '12', '1a', '_a', 'a-b', 'a b', 'é', 'aé'],
-        empty: [''],
     } as const
     const attributes = Object.fromEntries(
         Object.values(names)
@@ -153,7 +152,6 @@ describe('the string of a path addresses the place of its segments', () => {
             comma: 0,
             space: 0,
             store: 0,
-            empty: 0,
         }
         const drawn = { ...none }
         const refused = { ...none }
