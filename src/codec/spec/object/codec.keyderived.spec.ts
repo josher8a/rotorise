@@ -160,12 +160,15 @@ describe('a sort condition reads the parts that print', () => {
         },
     )
 
-    it('gives no sort condition where the only given component is empty, because an empty value does not print', () => {
+    it('gives the prefix of the first tag where the only given component is empty, because an empty value does not print and no component is given', () => {
         const condition = Pets.unsafeKeyCondition('GSI1', {
             shelterId: 's1',
             status: '',
         })
-        expect('sort' in condition).toBe(false)
+        expect(condition.sort).toEqual({
+            name: 'GSI1SK',
+            beginsWith: { S: 'STATUS#' },
+        })
     })
 
     it('gives equals where the only given component has a transform and a null value, because the transform prints', () => {

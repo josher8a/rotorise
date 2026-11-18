@@ -2858,7 +2858,8 @@ export type TableEntryDefinition<
               /**
                * The condition of a query on the table. The attributes give every component of the
                * partition key. They give the sort key whole for `equals`, a leading part of a list
-               * for `beginsWith`, or none of it for no sort condition.
+               * for `beginsWith`, or none of it for `beginsWith` of the first tag. A first component
+               * with `tag: false` gives no sort condition.
                */
               keyCondition(
                   attributes: Partial<Entity> & Record<string, unknown>,
@@ -4889,7 +4890,9 @@ export const tableEntry =
 
         /**
          * The condition on a sort key that the attributes give. Attributes that hold no part of the
-         * key give no condition. Attributes that give every part give `equals`. Attributes that give a
+         * key give the position of no component, closed: `beginsWith` of the first tag and the
+         * separator. A first component with no tag, a key of one attribute and a spec with no arm
+         * give no condition. Attributes that give every part give `equals`. Attributes that give a
          * leading part of a list give `beginsWith` with the boundary, so the prefix selects no key
          * whose component only starts with the last value. A `null` arm and a list whose first
          * component is absent select nothing, and are refused. The attributes are read over the
@@ -4917,7 +4920,27 @@ export const tableEntry =
                     : arm.kind === 'attr'
                       ? isValue(valueAt(attributes, arm.name))
                       : printed.some((part) => part !== undefined)
-            if (!given) return undefined
+            if (!given) {
+                // the position of no component, closed: the tag of the first component and the
+                // separator. A first component with no tag, a key of one attribute and a spec with
+                // no arm give no text, so they give no condition
+                const [first] = arm.kind === 'leaf' ? arm.components : []
+                if (first === undefined) return undefined
+                const tag =
+                    typeof first === 'object' && first !== null
+                        ? (first as { tag?: unknown }).tag
+                        : undefined
+                if (tag === false) return undefined
+                const closed = buildKey(
+                    name as never,
+                    attributes as never,
+                    { allowPartial: true, enforceBoundary: true } as never,
+                )
+                if (failed(closed)) return closed
+                return closed === undefined
+                    ? undefined
+                    : { name, beginsWith: carrying('S', String(closed)) }
+            }
             const built = buildKey(
                 name as never,
                 attributes as never,

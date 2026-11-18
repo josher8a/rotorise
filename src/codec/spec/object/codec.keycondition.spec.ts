@@ -78,11 +78,12 @@ describe('a query on an index reads the keys that the index names', () => {
         })
     })
 
-    it('gives no sort condition where the attributes hold no component of the sort key', () => {
+    it('gives the prefix of the first tag where the attributes hold no component of the sort key, so the query selects each row of the spec and no row of another spec', () => {
         const condition = Pets.unsafeKeyCondition('GSI1', { shelterId: 's1' })
         expect(condition).toEqual({
             index: 'GSI1',
             partition: { name: 'GSI1PK', value: { S: 'SHELTERID#s1' } },
+            sort: { name: 'GSI1SK', beginsWith: { S: 'STATUS#' } },
         })
     })
 
@@ -261,5 +262,66 @@ describe('a null discriminator on the sort key', () => {
         expect(
             Entries.unsafeKeyCondition({ petId: 'p1', status: null }),
         ).toEqual(Entries.unsafeKeyCondition({ petId: 'p1' }))
+    })
+})
+
+describe('a query that gives no component of the sort key is the position of no component, closed', () => {
+    type Row = {
+        pk: string
+        kind: 'dog' | 'cat' | 'fish' | 'bird'
+        a?: string
+        b?: string
+    }
+    const make = tableEntry<Row>() as unknown as (
+        schema: unknown,
+        options: unknown,
+    ) => {
+        readonly unsafeKeyCondition: (attributes: object) => {
+            readonly sort?: unknown
+        }
+    }
+    const Rows = make(
+        {
+            PK: ['pk'],
+            SK: {
+                discriminator: 'kind',
+                spec: {
+                    dog: [{ at: 'a', tag: 'DOG' }, 'b'],
+                    cat: [{ at: 'a', tag: 'CAT' }],
+                    fish: [{ at: 'a', tag: false, value: (x: string) => x }],
+                    bird: null,
+                },
+            },
+        },
+        { key: { partition: 'PK', sort: 'SK' } },
+    )
+
+    it('gives the prefix of the first tag of the arm that the discriminator names, and no other arm', () => {
+        expect(Rows.unsafeKeyCondition({ pk: 'x', kind: 'dog' }).sort).toEqual({
+            name: 'SK',
+            beginsWith: { S: 'DOG#' },
+        })
+        expect(Rows.unsafeKeyCondition({ pk: 'x', kind: 'cat' }).sort).toEqual({
+            name: 'SK',
+            beginsWith: { S: 'CAT#' },
+        })
+    })
+
+    it('gives no sort condition where the first component states no tag, because no text names the position', () => {
+        expect(
+            Rows.unsafeKeyCondition({ pk: 'x', kind: 'fish' }).sort,
+        ).toBeUndefined()
+    })
+
+    it('gives no sort condition where the discriminator is not given, because no arm has a position', () => {
+        expect(Rows.unsafeKeyCondition({ pk: 'x' }).sort).toBeUndefined()
+    })
+
+    it('gives no sort condition where the sort key is one attribute, because the attribute has no tag', () => {
+        const One = make(
+            { PK: ['pk'], SK: 'a' },
+            { key: { partition: 'PK', sort: 'SK' } },
+        )
+        expect(One.unsafeKeyCondition({ pk: 'x' }).sort).toBeUndefined()
     })
 })

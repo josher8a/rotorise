@@ -969,7 +969,7 @@ describe('the derived key rows, against the model of a key', () => {
  * string, which the builder reads as absent. The gate checks each row in the kernel against
  * `DerivedKey.condition`.
  */
-const conditionEntryOf = (names: readonly string[], separator: string) => {
+const conditionEntryOf = (names: readonly unknown[], separator: string) => {
     const make = tableEntry<Record<string, unknown>>() as unknown as (
         schema: unknown,
         options: unknown,
@@ -1015,15 +1015,26 @@ const conditionRows = (): ConditionRow[] => {
     const rows: ConditionRow[] = []
     const seen = new Set<string>()
     const separator = '#'
-    for (const names of [
-        ['a', 'b'],
-        ['a', 'b', 'c'],
-    ]) {
-        const run = conditionEntryOf(names, separator)
+    // the first component of the last schema states no tag: it prints the value alone
+    const untagged = [{ at: 'a', tag: false, value: (x: string) => x }, 'b']
+    for (const [schema, names] of [
+        [
+            ['a', 'b'],
+            ['a', 'b'],
+        ],
+        [
+            ['a', 'b', 'c'],
+            ['a', 'b', 'c'],
+        ],
+        [untagged, ['a', 'b']],
+    ] as const) {
+        const run = conditionEntryOf(schema, separator)
         for (let mask = 0; mask < 2 ** names.length; mask++) {
             for (const absentAs of ['missing', 'empty'] as const) {
                 const present = names.map((_, i) => (mask >> i) % 2 === 1)
                 if (absentAs === 'empty' && present.every(Boolean)) continue
+                // a transform prints an empty value, so only a missing attribute is absent
+                if (absentAs === 'empty' && schema === untagged) continue
                 const attributes: Record<string, unknown> = { pk: 'p1' }
                 names.forEach((name, i) => {
                     if (present[i]) attributes[name] = conditionValues[name]
@@ -1032,15 +1043,25 @@ const conditionRows = (): ConditionRow[] => {
                 const row: ConditionRow = {
                     name: `condition_${rows.length}`,
                     full: names.length,
-                    tags: names.map((name) => name.toUpperCase()),
+                    tags: names.map((name, i) =>
+                        schema === untagged && i === 0
+                            ? undefined
+                            : name.toUpperCase(),
+                    ),
                     parts: names.map((name, i) =>
-                        present[i]
-                            ? {
-                                  kind: 'named' as const,
-                                  name: name.toUpperCase(),
-                                  value: conditionValues[name] ?? '',
-                              }
-                            : undefined,
+                        !present[i]
+                            ? undefined
+                            : schema === untagged && i === 0
+                              ? {
+                                    kind: 'shaped' as const,
+                                    tag: undefined,
+                                    value: conditionValues[name] ?? '',
+                                }
+                              : {
+                                    kind: 'named' as const,
+                                    name: name.toUpperCase(),
+                                    value: conditionValues[name] ?? '',
+                                },
                     ),
                     separator,
                     outcome: conditionOutcome(run, attributes),
@@ -1058,18 +1079,32 @@ const conditionRows = (): ConditionRow[] => {
 describe('the sort condition rows, against the model of a condition', () => {
     const rows = conditionRows()
 
-    it('refuses a part that prints after an absent part, and gives the prefix of the leading parts and the next tag otherwise', () => {
+    it('refuses a part that prints after an absent part, gives the prefix of the first tag where no part is given, and the prefix of the leading parts and the next tag otherwise', () => {
         for (const row of rows) {
             const present = row.parts.map((part) => part !== undefined)
             const leading = present.indexOf(false)
             const gap = leading >= 0 && present.slice(leading).some(Boolean)
             const texts = row.parts.flatMap((part) =>
-                part === undefined || part.kind !== 'named'
+                part === undefined
                     ? []
-                    : [part.name, part.value],
+                    : part.kind === 'named'
+                      ? [part.name, part.value]
+                      : part.tag === undefined
+                        ? [part.value]
+                        : [part.tag, part.value],
             )
+            const next = row.tags[present.indexOf(false)]
             if (!present.some(Boolean))
-                expect(row.outcome, row.name).toEqual({ kind: 'nothing' })
+                // the position of no component, closed: the first tag and the separator, or no
+                // condition where the first component states no tag
+                expect(row.outcome, row.name).toEqual(
+                    row.tags[0] === undefined
+                        ? { kind: 'nothing' }
+                        : {
+                              kind: 'prefix',
+                              key: `${row.tags[0]}${row.separator}`,
+                          },
+                )
             else if (gap)
                 expect(row.outcome, row.name).toEqual({ kind: 'refused' })
             else if (present.every(Boolean))
@@ -1080,8 +1115,8 @@ describe('the sort condition rows, against the model of a condition', () => {
             else
                 expect(row.outcome, row.name).toEqual({
                     kind: 'prefix',
-                    // the prefix ends with the tag of the next component and the separator
-                    key: `${texts.join(row.separator)}${row.separator}${row.tags[present.indexOf(false)]}${row.separator}`,
+                    // the prefix ends with the tag of the next component where it has one, and the separator
+                    key: `${texts.join(row.separator)}${row.separator}${next === undefined ? '' : `${next}${row.separator}`}`,
                 })
         }
     })

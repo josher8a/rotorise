@@ -1127,7 +1127,9 @@ component prints nothing, and the model refuses it.
 
 A condition on a sort key is the key of the parts that a query gives. It is the equality on the whole
 key where the query gives every part, and the prefix match of the leading parts with the boundary
-otherwise. A query that gives no part has no condition. A part that prints after an absent part is a
+otherwise. A query that gives no part is the position of no component, closed: the prefix match of
+the first tag and the boundary, and no condition where the first component has no tag. A part that
+prints after an absent part is a
 refusal, because the prefix stops at the absent part, and the match would select the items that
 disagree on the later part.
 

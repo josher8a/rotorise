@@ -158,7 +158,10 @@ do not declare is refused by the type, so the call throws a `RotoriseError`.
 - Where the attributes give a leading part of a list sort key, the sort condition is `beginsWith`,
   with a trailing separator. The separator keeps `STATUS#AVAILABLE` from selecting
   `STATUS#AVAILABLE_SOON`.
-- Where the attributes hold no component of the sort key, the result has no sort condition.
+- Where the attributes hold no component of the sort key, the sort condition is `beginsWith` of the
+  first tag and the separator, so the query selects each item of that key spec in the partition. A
+  first component with `tag: false`, a sort key of one attribute, and a match with no discriminator
+  give no sort condition.
 - A component that follows an absent component throws a `RotoriseError`: the prefix would drop the
   component and select more items than the attributes name.
 - A later component without the first, or a `null` arm, selects nothing and throws a `RotoriseError`.
