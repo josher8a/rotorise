@@ -62,8 +62,12 @@ export type Replace<T, U, V> = T extends U ? V : T
 
 /**
  * Represents a type-level error message. Used to provide helpful feedback in the IDE.
+ *
+ * The message sits in a tuple. A property that holds a unit type makes two different messages at one
+ * slot meet to `never`, and the head of the error then names no reason. A property that holds a tuple
+ * keeps the intersection, so the head names each message.
  */
 export declare const errorMessage: unique symbol
 export type ErrorMessage<T extends string> = {
-    readonly [errorMessage]: T
+    readonly [errorMessage]: [T]
 }

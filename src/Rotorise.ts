@@ -1339,7 +1339,9 @@ type KeyMembers<E, Enc, CodecSpec, Spec> =
  * One attribute that is a key, against its member. A key attribute of DynamoDB is `S`, `N` or `B`,
  * so an attribute of any other member cannot be a key. A key
  * attribute has one type, so the arms of one key give one member. The refusal names the key and the
- * attribute and holds no value.
+ * attribute and holds no value. A name that no option holds has no member, and {@link NoSuchName}
+ * refuses that name on the same slot. This type adds no second refusal there: the name does not
+ * break the rule of a member.
  */
 type ValidateLeaf<
     E,
@@ -1350,12 +1352,14 @@ type ValidateLeaf<
     All,
 > = [MemberOfName<E, Enc, CodecSpec, Name>] extends [infer Own]
     ? [Own] extends [never]
-        ? // an entry with no codec has no frontier of the type: the value itself is none of the three
-          [Enc] extends [never]
-            ? ErrorMessage<NoKeyMember<KeyName, Name>>
-            : Name extends `${string}.${string}`
-              ? ErrorMessage<NoPathMember<KeyName, Name>>
-              : ErrorMessage<NoKeyMember<KeyName, Name>>
+        ? [ValueOfKey<E, Name>] extends [never]
+            ? Name
+            : // an entry with no codec has no frontier of the type: the value itself is none of the three
+              [Enc] extends [never]
+              ? ErrorMessage<NoKeyMember<KeyName, Name>>
+              : Name extends `${string}.${string}`
+                ? ErrorMessage<NoPathMember<KeyName, Name>>
+                : ErrorMessage<NoKeyMember<KeyName, Name>>
         : [Exclude<Own, KeyMember>] extends [never]
           ? IsUnion<Own> extends true
               ? ErrorMessage<`[tableEntry] '${KeyName}' is built from '${Name}', which is stored as more than one type. A key attribute has one type`>

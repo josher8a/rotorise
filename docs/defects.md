@@ -520,43 +520,41 @@ of two literals at one slot.
 
 ---
 
-## Known: a key element that two rules refuse prints `never` at the head of the error
+## Known: the type refuses a key that reads a path that can be absent, or a name with a `.`, where the run time builds the entry
 
-**Observation.** A refusal of a key element is an intersection of the element with a message. Two
-refusals of one element give two messages at one property, and the compiler reduces the
-intersection to `never`. The head of the error then names no reason. The line below the head
-prints the intersection, and can elide the second message. Measured 2026-11-11 with `tsc --noEmit`
-on TypeScript 7 and on TypeScript 6:
+**Observation.** The type refuses a key component at a path whose parent can be `null`, and a key
+that names an attribute whose own name holds a `.`. The refusal lands on the component, and the
+head of the error names each rule that the component breaks. The run time holds no type of the
+entity, so it builds each entry. Measured 2026-11-18 with `tsc --noEmit` on TypeScript 7 and
+`npx vitest --run`:
 
     type Pet = { id: string; meta: { note: string } | null }
     tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] },
                       { codec: { id: string, meta: nullable(object({ note: string })) } })
-      head:      Type '"meta.note"' is not assignable to type 'never'
-      next line: the two messages: the path can be absent, and the codec cannot address the path
+      type checker: refused at 'meta.note', with two messages in the head: the path can be absent,
+                    and the codec cannot address the path
+      runtime:      builds. toEntry gives the SK NOTE#n where meta is an object, and a CodecError,
+                    "Attribute meta.note not found", where meta is null
 
     tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] })
-      head:      ... not assignable to type '"meta.note" & ErrorMessage<"'meta.note' can be absent:
-                 write a record with a default">'
+      type checker: refused at 'meta.note': the path can be absent
+      runtime:      builds, with the same two results of toEntry
 
     type Flat = { petId: string; 'owner.name': string }
     tableEntry<Flat>()({ PK: ['petId'], GSI1PK: 'owner.name' })
-      head:      Type '"owner.name"' is not assignable to type 'never'
-      next line: the first message, and `ErrorMessage<...>` for the second
+      type checker: refused at 'owner.name', with one message: a `.` in a key name is a path
+                    separator
+      runtime:      builds. toEntry writes no GSI1PK, because the path owner.name reads no value
 
-    tableEntry<Flat>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
-      head:      the message: a `.` in a key name is a path separator
-
-The run time builds the first entry, and reads the path through the codec. `toEntry(item)` gives
-the SK `NOTE#n` where the value below the first name is an object, and throws
-`Attribute meta.note not found` where that value is `null`.
-
-**Effect.** A reader of the head of the error gets no reason. A reader of the whole error gets one
-reason or two.
+**Effect.** A schema that the type refuses builds behind a cast. A key at a path that can be absent
+gives an error value for the item that lacks the path. A key that names an attribute with a `.`
+is never written, with no error.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids of
-the group construct, one for each table that the type refuses and the run time builds. No test pins
-the head. src/codec/spec/object/codec.keycomponent.spec.ts pins the refusal of the entity whose
-attribute holds the `.`, for a list.
+the group construct, one for each table that the type refuses and the run time builds.
+src/Rotorise.attest.test.ts pins the head of the first and of the third refusal.
+src/codec/spec/object/codec.keycomponent.spec.ts pins the refusal of the entity whose attribute
+holds the `.`, for a list.
 
 ---
 

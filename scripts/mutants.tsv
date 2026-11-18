@@ -168,7 +168,7 @@ p137_D1_duplicate_text_states_distinct	src/codec/capabilities.ts	s/a literal's a
 p137_D2_duplicate_text_keeps_the_positions	src/codec/capabilities.ts	s/at positions \$\{i\} and \$\{at\}/at position ${i}/	npx vitest --run src/codec/spec/literal/codec.literalbase.spec.ts	because a union of two equal options decides no constant
 p138_V1_read_hop_lacking_name_is_never	src/Rotorise.ts	s/^              \? LacksName$/              ? never/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
 p138_V2_read_last_name_lacking_is_never	src/Rotorise.ts	s/^            \? LacksName$/            ? never/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
-p138_V3_read_leaf_option_counts_as_lacking	src/Rotorise.ts	s/^          : E extends object$/          : E extends unknown/	npx vitest --run src/Rotorise.attest.test.ts	was reduced to 'never'
+p138_V3_read_leaf_option_counts_as_lacking	src/Rotorise.ts	s/^          : E extends object$/          : E extends unknown/	npx vitest --run src/Rotorise.attest.test.ts	can be absent: write a record with a default
 p138_V4_read_lacking_gives_no_undefined	src/Rotorise.ts	s/^              \? undefined$/              ? never/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive.
 p138_V5_read_absent_path_is_undefined	src/Rotorise.ts	s/\[R\] extends \[LacksName\]/[R] extends [never]/	npx vitest --run src/Rotorise.attest.test.ts	is no name or path of the entity
 p138_P1_projection_lacking_name_above_leaf_weak	src/Rotorise.ts	s/\{ \[K in Head\]\?: undefined \} & object/{ [K in Head]?: undefined }/	node ./node_modules/typescript-7/bin/tsc --noEmit	is not assignable to parameter of type
@@ -256,3 +256,5 @@ p162_held_tag_is_rendered_where_it_has_no_text_form	src/codec/denote.ts	s/\$\{re
 p162_item_refuses_a_union_with_an_option_that_is_no_object	src/codec/sums.ts	s/if \(stray !== undefined\) \{/if (false) {/	npx vitest --run src/codec/spec/object/codec.item.spec.ts	to throw
 p162_item_reads_an_option_behind_an_unbound_ref_at_the_read	src/codec/sums.ts	s/one === undefined \|\| one\.kind === 'ref' \|\| one\.kind === 'object'/one === undefined || one.kind === 'object'/	npx vitest --run src/codec/spec/object/codec.item.spec.ts	1 failed | 14 passed
 p162_item_refuses_the_union_at_the_argument	src/codec/sums.ts	s/codec: C \& ItemRefusal<C>,/codec: C,/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error'
+p163_o2_name_no_option_holds_gets_no_member_refusal	src/Rotorise.ts	s/\[ValueOfKey<E, Name>\] extends \[never\]$/[Name] extends [never]/	npx vitest --run src/Rotorise.attest.test.ts	names the rule of the name only, for a name with a
+p163_o1_message_carrier_is_a_tuple	src/utils.d.ts	s/readonly \[errorMessage\]: \[T\]/readonly [errorMessage]: T/	npx vitest --run src/Rotorise.attest.test.ts	names each rule in the head, and never reduces the two messages

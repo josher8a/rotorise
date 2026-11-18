@@ -279,3 +279,37 @@ describe('an entity that is a union', () => {
         )
     })
 })
+
+describe('a key element that two rules refuse', () => {
+    it('names each rule in the head, and never reduces the two messages to `never`, because a head of `never` names no reason', () => {
+        attest(() =>
+            tableEntry<{ id: string; meta: { note: string } | null }>()(
+                {
+                    PK: ['id'],
+                    // @ts-expect-error the path can be absent, and the codec cannot address the path
+                    SK: ['meta.note'],
+                },
+                {
+                    codec: {
+                        id: string,
+                        meta: nullable(object({ note: string })),
+                    },
+                },
+            ),
+        ).type.errors.snap(
+            "Type '\"meta.note\"' is not assignable to type '\"meta.note\" & ErrorMessage<\"'meta.note' can be absent: write a record with a default\"> & ErrorMessage<\"[tableEntry] 'meta.note' is a component, and the codec cannot address that path. Address the attribute itself, or a path that the type enters. The codec has no field there, or the type does not see below nullable, ...'.Type 'string' is not assignable to type 'ErrorMessage<\"'meta.note' can be absent: write a record with a default\">'.",
+        )
+    })
+
+    it('names the rule of the name only, for a name with a `.` that is a string attribute, because a string is stored as `S`', () => {
+        attest(() =>
+            tableEntry<{ petId: string; 'owner.name': string }>()({
+                PK: ['petId'],
+                // @ts-expect-error a `.` in a key name is a path separator
+                GSI1PK: 'owner.name',
+            }),
+        ).type.errors.snap(
+            "Type '\"owner.name\"' is not assignable to type '\"owner.name\" & ErrorMessage<\"'owner.name' is an attribute of the entity, and a `.` in a key name is a path separator, as in DynamoDB, so a key cannot read an attribute whose own name holds a `.`\">'.Type 'string' is not assignable to type 'ErrorMessage<\"'owner.name' is an attribute of the entity, and a `.` in a key name is a path separator, as in DynamoDB, so a key cannot read an attribute whose own name holds a `.`\">'.",
+        )
+    })
+})
