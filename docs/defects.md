@@ -850,42 +850,6 @@ codec that cannot name a variant, behind a cast.
 
 ---
 
-## Known: `native` and `opaque` write an attribute name of no character, and the tuple form of `at` builds a place at an open key of that name, where DynamoDB refuses the name
-
-**Observation.** `object` refuses a field of no name at construction. An open key entry of `object`
-refuses the key in its encode. Two routes stay: the codecs `native` and `opaque`, which write a map
-of any keys, and the tuple form of `at`, which takes the segments as they are. Measured 2026-11-18
-with `tsc --noEmit` on TypeScript 7, and with `npx vitest --run` on Node 24:
-
-    native.encode({ '': 'v' })
-      type checker: builds
-      runtime:      gives { M: { '': { S: 'v' } } }
-
-    opaque.encode({ '': 'v' })
-      type checker: builds
-      runtime:      gives { M: { '': { S: 'v' } } }
-
-    const Kennel = item(object({ petId: string, vaccines: object({}, [string, optional(string)]) }))
-    at(Kennel, ['vaccines', ''])
-      type checker: builds
-      runtime:      builds. encode('x') gives { S: 'x' }. path(...) throws a CodecError: the name at
-                    segment 1 of the path is not a letter, then letters, digits and '_'
-
-    PutItem, the name "" at the top of the item, and inside a map
-      DynamoDB Local: refused, Empty attribute name (amazon/dynamodb-local 3.3.1)
-
-The string form of `at` refuses an empty segment in the type and at run time, and `path` gives no
-string for one.
-
-**Effect.** `native` and `opaque` give an item that DynamoDB refuses, and the failure arrives at the
-write. The tuple form builds a place that no expression string names.
-
-**Pin.** None. `src/codec/spec/object/codec.emptyname.spec.ts` pins the refusal of `object`, of an
-open key in its encode, and of the string form of a path. No test pins `native`, `opaque` or the
-tuple form.
-
----
-
 ## Known: the test of a transform at a path that the codec writes as B reads no key
 
 **Observation.** `src/codec/spec/object/codec.keycomponent.spec.ts` holds the test 'accepts a

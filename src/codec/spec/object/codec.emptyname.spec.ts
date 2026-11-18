@@ -13,9 +13,11 @@ import {
     CodecError,
     item,
     object,
+    opaque,
     optional,
     string,
 } from '../../codec'
+import { native } from '../../native'
 import { failed } from '../../result'
 import { parsePath } from '../../scopePath'
 
@@ -133,5 +135,73 @@ describe('a document path has a character in each name', () => {
 
     it('admits a path at an open key with a name of one character', () => {
         expect(() => at(Kennel, 'vaccines.r')).not.toThrow()
+    })
+})
+
+describe('native and opaque write a map key with a character in its name', () => {
+    it.each([
+        ['native', native],
+        ['opaque', opaque],
+    ])(
+        '%s refuses the key at the top of a map, with the key as the place of the refusal',
+        (_name, codec) => {
+            const written = codec.encode({ petId: 'p1', '': 'v' })
+            expect(failed(written)).toBe(true)
+            if (!failed(written)) return
+            expect(written.path).toEqual([''])
+            expect(written.reason).toMatch(/no character/)
+        },
+    )
+
+    it.each([
+        ['native', native],
+        ['opaque', opaque],
+    ])(
+        '%s refuses the key inside a nested map, with the whole path of the refusal',
+        (_name, codec) => {
+            const written = codec.encode({ vaccines: { '': '2024-01-01' } })
+            expect(failed(written)).toBe(true)
+            if (!failed(written)) return
+            expect(written.path).toEqual(['vaccines', ''])
+        },
+    )
+
+    it.each([
+        ['native', native],
+        ['opaque', opaque],
+    ])('%s throws the refusal from unsafeEncode', (_name, codec) => {
+        expect(() => codec.unsafeEncode({ '': 'v' })).toThrow(CodecError)
+    })
+
+    it.each([
+        ['native', native],
+        ['opaque', opaque],
+    ])('%s writes a key with one character', (_name, codec) => {
+        expect(codec.unsafeEncode({ r: 'v' })).toEqual({ M: { r: { S: 'v' } } })
+    })
+
+    it('native refuses the key of a Map that it writes as a map', () => {
+        const written = native.encode(new Map([['', 'v']]))
+        expect(failed(written)).toBe(true)
+    })
+})
+
+describe('the tuple form of at has a character in each name', () => {
+    it('refuses an empty name at an open key at run time, and names the segment', () => {
+        // @ts-expect-error a name has a character
+        const run = () => at(Kennel, ['vaccines', ''])
+        expect(run).toThrow(CodecError)
+        expect(run).toThrow(/segment 1 of the path is no name/)
+    })
+
+    it('refuses an empty name at the first segment', () => {
+        // @ts-expect-error a name has a character
+        const run = () => at(Kennel, [''])
+        expect(run).toThrow(/a name has a character/)
+    })
+
+    it('admits a name of one character and a position', () => {
+        expect(() => at(Kennel, ['vaccines', 'r'])).not.toThrow()
+        expect(() => at(Litter, ['litter', 0])).not.toThrow()
     })
 })

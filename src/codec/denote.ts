@@ -2111,11 +2111,15 @@ export const encodeUnknown = (
         if (deep) return new CodecError(deep)
         return andThen(
             everyEntry(record, (v, k) =>
-                v === undefined
+                isEmptyName(k)
                     ? new CodecError(
-                          `'${k}' is undefined, and DynamoDB has no attribute holding undefined. Omit the key, or use \`optional(...)\` on a declared attribute.`,
+                          `a map key has no character in its name: ${emptyNameReason}`,
                       )
-                    : encodeUnknown(v, enclosing + 1),
+                    : v === undefined
+                      ? new CodecError(
+                            `'${k}' is undefined, and DynamoDB has no attribute holding undefined. Omit the key, or use \`optional(...)\` on a declared attribute.`,
+                        )
+                      : encodeUnknown(v, enclosing + 1),
             ),
             (written) => carrying('M', written),
         )

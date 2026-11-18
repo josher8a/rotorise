@@ -743,20 +743,27 @@ export type CheckPath<H, S, Done extends readonly unknown[] = []> = H extends
     | Refused
     ? unknown
     : S extends readonly [infer Head, ...infer Tail]
-      ? StepAt<H, Head> extends infer N
-          ? N extends Refused
-              ? readonly [...Done, Head & NoSegment<OfferedAt<H>>, ...Tail]
-              : N extends ['term', infer Fs, unknown, unknown, unknown]
-                ? [KindOfFrames<Fs>] extends ['vacant' | 'refused']
-                    ? readonly [
-                          ...Done,
-                          Head &
-                              ErrorMessage<`[at] the path is ${KindOfFrames<Fs> & string} from this segment: no one codec stands at the path`>,
-                          ...Tail,
-                      ]
-                    : CheckPath<N, Tail, [...Done, Head]>
-                : CheckPath<N, Tail, [...Done, Head]>
-          : never
+      ? [Head] extends ['']
+          ? readonly [
+                ...Done,
+                Head &
+                    ErrorMessage<`[at] a name has a character, because ${typeof emptyNameReason}`>,
+                ...Tail,
+            ]
+          : StepAt<H, Head> extends infer N
+            ? N extends Refused
+                ? readonly [...Done, Head & NoSegment<OfferedAt<H>>, ...Tail]
+                : N extends ['term', infer Fs, unknown, unknown, unknown]
+                  ? [KindOfFrames<Fs>] extends ['vacant' | 'refused']
+                      ? readonly [
+                            ...Done,
+                            Head &
+                                ErrorMessage<`[at] the path is ${KindOfFrames<Fs> & string} from this segment: no one codec stands at the path`>,
+                            ...Tail,
+                        ]
+                      : CheckPath<N, Tail, [...Done, Head]>
+                  : CheckPath<N, Tail, [...Done, Head]>
+            : never
       : S extends readonly []
         ? ResolvesAt<H>
         : unknown
@@ -1006,14 +1013,17 @@ export function at(
     const prior = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
     // the walk reads the item codec as one codec among those it carries, which it is at run time
     const root = prior?.root ?? (codec as unknown as AnyCodec)
-    return locate(
-        root,
-        [
-            ...(prior?.steps ?? []),
-            ...(typeof path === 'string' ? parsePath(path) : path),
-        ],
-        prior,
+    const segments = typeof path === 'string' ? parsePath(path) : path
+    // the tuple form carries each name as it is, so the string form's rule is read here too
+    const empty = segments.findIndex(
+        (segment) => typeof segment === 'string' && isEmptyName(segment),
     )
+    if (empty >= 0) {
+        throw new CodecError(
+            `the segment ${empty} of the path is no name: a name has a character, because ${emptyNameReason}`,
+        )
+    }
+    return locate(root, [...(prior?.steps ?? []), ...segments], prior)
 }
 
 /**
