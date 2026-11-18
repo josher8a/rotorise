@@ -64,7 +64,8 @@ describe('Rotorise Performance Baseline', () => {
             GSI1PK: [{ at: 'role', value: (role: string) => `ROLE:${role}` }],
         })
         // 2091 -> 1158: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 2459.
-        attest.instantiations([1158, 'instantiations'])
+        // 1158 -> 1203: the check of a dead arm in a match with the form `spec` runs for each call, and reads one gate for a schema with no such match. The owner ruled that the pin rises by this count.
+        attest.instantiations([1203, 'instantiations'])
     })
 
     it('measures instantiation count for key generation', () => {

@@ -338,7 +338,8 @@ Set a discriminated spec value to `null` to produce `undefined` (useful for GSIs
 
 An arm can be a discriminated spec of the variants that its literal selects, so a key follows a
 hierarchy of unions. An inner discriminator exists only on the variants of its arm. A literal that
-names no arm throws, at each level.
+names no arm throws, at each level. The type refuses an arm for a literal that the discriminator
+never holds, in the form with `spec` and in the form with `cases`.
 
 ```ts
 type Thing =

@@ -125,6 +125,88 @@ describe('an arm of a match for an option that holds two literals', () => {
         expect(Cages.unsafeToEntry(boarder).SK).toBe('KENNEL#k1')
     })
 
+    it('refuses an arm that the discriminator never holds, on the arm, because the arm reads no option', () => {
+        tableEntry<Boarder>()({
+            PK: ['petId'],
+            SK: {
+                discriminator: 'status',
+                spec: {
+                    IN: ['kennel'],
+                    OUT: ['petId'],
+                    // @ts-expect-error `status` never holds 'HELD'
+                    HELD: ['petId'],
+                },
+            },
+        })
+    })
+
+    it('refuses an arm of no key that the discriminator never holds, on the match, because `null` cannot carry the message', () => {
+        tableEntry<Boarder>()({
+            PK: ['petId'],
+            SK: {
+                discriminator: 'status',
+                // @ts-expect-error `status` never holds 'HELD'
+                spec: {
+                    IN: ['kennel'],
+                    OUT: ['petId'],
+                    HELD: null,
+                },
+            },
+        })
+    })
+
+    it('refuses an arm of no key that the discriminator never holds, on the match, where another arm reads a path', () => {
+        tableEntry<Boarder>()({
+            PK: ['petId'],
+            SK: {
+                discriminator: 'status',
+                // @ts-expect-error `status` never holds 'HELD'
+                spec: {
+                    IN: ['owner.id'],
+                    OUT: ['petId'],
+                    HELD: null,
+                },
+            },
+        })
+    })
+
+    it('refuses a dead literal in the form with `spec` as the form with `cases` does, because the two forms state one rule', () => {
+        tableEntry<Boarder>()({
+            PK: ['petId'],
+            SK: {
+                discriminator: 'status',
+                spec: {
+                    IN: ['kennel'],
+                    OUT: ['petId'],
+                    // @ts-expect-error `status` never holds 'HELD'
+                    HELD: ['petId'],
+                },
+            },
+        })
+        tableEntry<Boarder>()({
+            PK: ['petId'],
+            SK: {
+                discriminator: 'status',
+                cases: [
+                    [['IN'], ['kennel']],
+                    // @ts-expect-error `status` never holds 'HELD'
+                    [['OUT', 'HELD'], ['petId']],
+                ],
+            },
+        })
+    })
+
+    it('admits a match whose arms are the literals of the discriminator, so a schema with no dead arm is not refused', () => {
+        const Boarders = tableEntry<Boarder>()({
+            PK: ['petId'],
+            SK: {
+                discriminator: 'status',
+                spec: { IN: ['kennel'], OUT: null },
+            },
+        })
+        expect(Boarders.unsafeToEntry(boarder).SK).toBe('KENNEL#k1')
+    })
+
     it('refuses a call of key with the discriminator alone, because the arm needs the attribute', () => {
         const Boarders = tableEntry<Boarder>()({
             PK: ['petId'],

@@ -174,6 +174,28 @@ describe('the type of a nested key match', () => {
         tableEntry<Creature>()<Schema>
     })
 
+    it('refuses a dead arm of an inner match, on the arm, because the inner match reads the options that its literal selects', () => {
+        tableEntry<Creature>()({
+            PK: ['id'],
+            SK: {
+                discriminator: 'tag',
+                spec: {
+                    OBJECT: ['name'],
+                    ANIMAL: {
+                        discriminator: 'specie',
+                        spec: {
+                            CAT: null,
+                            HORSE: ['name'],
+                            DOG: ['name'],
+                            // @ts-expect-error `specie` never holds 'BIRD'
+                            BIRD: ['name'],
+                        },
+                    },
+                },
+            },
+        })
+    })
+
     it('refuses an inner match that lacks a literal', () => {
         type Schema = {
             PK: ['id']

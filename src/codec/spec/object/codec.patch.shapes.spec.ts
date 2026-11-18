@@ -270,7 +270,7 @@ describe('a discriminator that the codec decides', () => {
         {
             PK: {
                 discriminator: 'TAG',
-                spec: { EMAIL: ['TAG', 'email'], PHONE: ['TAG', 'phone'] },
+                spec: { EMAIL: ['TAG', 'email'] },
             },
             SK: ['userId'],
         },
@@ -285,7 +285,7 @@ describe('a discriminator that the codec decides', () => {
     )
 
     it('selects the variant, so a write of its components is complete', () => {
-        // the codec decides TAG as EMAIL, so PK reads the EMAIL list and never asks for phone
+        // the codec decides TAG as EMAIL, so PK reads the EMAIL list
         const { set: keys } = Identities.unsafeKeyUpdates({ email: 'a@b' })
         expect(keys).toEqual({ PK: { S: 'TAG#EMAIL#EMAIL#a@b' } })
     })

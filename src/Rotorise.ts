@@ -1060,9 +1060,69 @@ type ValidateMatchPaths<E, D extends string, Arms> = {
         [Literal in Exclude<
             keyof Arms,
             ValueOfKey<E, D>
-        >]: ErrorMessage<`'${D}' never holds '${Literal & string}'`>
+        > as Arms[Literal] extends null
+            ? never
+            : Literal]: ErrorMessage<`'${D}' never holds '${Literal & string}'`>
     }
+} & DeadNullArms<D, Arms, ValueOfKey<E, D>>
+
+/**
+ * The refusal of an arm that the discriminator never holds. A literal that no option holds at the
+ * discriminator selects no option, so the arm reads nothing. The message sits on the arm. An arm of
+ * `null` cannot carry it: `null` meets the message at `never`, and the whole `spec` reduces. The
+ * message then sits on the `spec` of the match. An arm that is a match is read against the options
+ * that its literal selects.
+ */
+type DeadArms<E, S> = S extends {
+    discriminator: infer D extends string
+    spec: infer Arms
 }
+    ? DeadArmsOf<E, D, Arms, ValueOfKey<E, D>>
+    : unknown
+
+type DeadArmsOf<E, D extends string, Arms, Live> = {
+    spec: {
+        [Literal in Exclude<keyof Arms, Live> as Arms[Literal] extends null
+            ? never
+            : Literal]: ErrorMessage<`'${D}' never holds '${Literal & string}'`>
+    } & {
+        [Literal in keyof Arms & Live as Arms[Literal] extends {
+            discriminator: string
+        }
+            ? Literal
+            : never]: DeadArms<ExtractVariant<E, D, Literal>, Arms[Literal]>
+    }
+} & DeadNullArms<D, Arms, Live>
+
+/**
+ * The refusal of a dead arm of the value `null`, on the `spec` of the match: the message cannot sit
+ * on the arm, because `null` meets the message at `never`.
+ */
+type DeadNullArms<D, Arms, Live> = [
+    {
+        [Literal in Exclude<keyof Arms, Live>]: Arms[Literal] extends null
+            ? Literal
+            : never
+    }[Exclude<keyof Arms, Live>],
+] extends [infer Dead]
+    ? [Dead] extends [never]
+        ? unknown
+        : {
+              spec: ErrorMessage<`'${D & string}' never holds '${Dead & string}'`>
+          }
+    : never
+
+/** A key spec that is a match with the form `spec`. */
+type SpecMatch<S> = S extends { discriminator: string; spec: unknown }
+    ? S
+    : never
+
+/** The dead arms of each key spec of a schema. A schema with no such match pays one read of its specs. */
+type ValidateDeadArms<Schema, E> = string extends keyof Schema
+    ? unknown
+    : [SpecMatch<Schema[keyof Schema]>] extends [never]
+      ? unknown
+      : { [K in keyof Schema]: DeadArms<E, Schema[K]> }
 
 type ArmOfCases<C> = C extends readonly (readonly [unknown, infer Arm])[]
     ? Arm
@@ -1495,13 +1555,14 @@ type ValidateCarriers<Schema, E, CodecSpec, CodecRest> =
 /**
  * Reads each path that a schema holds against the entity. A wrong path, a path that no option
  * holds, a transform whose parameter does not fit the value, a path whose value can be absent, and a
- * match that lacks a literal are each refused on the element that is wrong. Short-circuits to
- * `unknown` when the schema holds no path, so a schema with no path pays nothing.
+ * match that lacks a literal are each refused on the element that is wrong. A schema with no path
+ * reads only the dead arms of its matches with the form `spec`, and a schema with no such match
+ * pays one read of its specs.
  */
 type ValidatePaths<Schema, E> = string extends keyof Schema // the constraint, before a schema is inferred
     ? unknown
     : [NeedsExactCheck<Schema[keyof Schema]>] extends [never]
-      ? unknown
+      ? ValidateDeadArms<Schema, E>
       : { [K in keyof Schema]: ValidateSpec<E, Schema[K]> }
 
 /**
