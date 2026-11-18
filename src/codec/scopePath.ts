@@ -1052,9 +1052,10 @@ export function narrow(
  * **The segments of a document path in DynamoDB syntax**: a name, or a position in brackets, each
  * name after the first behind a `.`. A name holds no `.`, `[` or `]`, and has a character: the tuple
  * form carries a name with a `.`, `[` or `]`. A position with no name before it is the first part
- * only. The function reads more names than {@link expressionPath} prints: a name with a `-` is a
- * name here, and has no expression string. A malformed path is a defect of the caller. The type of
- * {@link at} refuses a malformed literal first, and a string that is no literal reaches this throw.
+ * only. A position is digits that print back as the same text, so `[007]` is refused. The function
+ * reads more names than {@link expressionPath} prints: a name with a `-` is a name here, and has no
+ * expression string. A malformed path is a defect of the caller. The type of {@link at} refuses a
+ * malformed literal first, and a string that is no literal reaches this throw.
  */
 export const parsePath = (path: string): readonly Segment[] => {
     if (path === '') return []
@@ -1074,7 +1075,13 @@ export const parsePath = (path: string): readonly Segment[] => {
             )
         }
         if (!isEmptyName(name)) segments.push(name)
-        for (const [, digits] of positions.matchAll(/\[(\d+)\]/g)) {
+        for (const [, digits = ''] of positions.matchAll(/\[(\d+)\]/g)) {
+            // the text of a position is the text that the number prints, so `007` and a digit run past a float are no position
+            if (String(Number(digits)) !== digits) {
+                throw new CodecError(
+                    `'${path}' is no document path: a position is digits that print back as the same text, and '[${digits}]' does not`,
+                )
+            }
             segments.push(Number(digits))
         }
     }

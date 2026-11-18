@@ -555,19 +555,22 @@ describe('the type of a path string against the grammar of the run time', () => 
         expect(run).toThrow("'tags[ 1]' is no document path")
     })
 
-    it('refuses a position with leading zeros, because the text does not print back, and the run time reads 7', () => {
+    it('refuses a position with a leading zero, because the text does not print back, and DynamoDB refuses it', () => {
         const padded: 'tags[007]' = 'tags[007]'
         // @ts-expect-error the text of a position is the text that the number prints
         const run = () => atOf(Parcel, padded)
-        expect(path(run())).toBe('tags[7]')
+        expect(run).toThrow("'tags[007]' is no document path")
+        const zeros: 'tags[00]' = 'tags[00]'
+        // @ts-expect-error the text of a position is the text that the number prints
+        const twice = () => atOf(Parcel, zeros)
+        expect(twice).toThrow("'tags[00]' is no document path")
     })
 
-    it('refuses a position that no number prints back, and the run time gives no string for the place', () => {
+    it('refuses a position that no number prints back, because the text does not print back', () => {
         const long: 'tags[99999999999999999999]' = 'tags[99999999999999999999]'
         // @ts-expect-error the number prints as 100000000000000000000
         const run = () => atOf(Parcel, long)
-        expect(() => path(run())).toThrow(CodecError)
-        expect(() => path(run())).toThrow(/position/)
+        expect(run).toThrow("'tags[99999999999999999999]' is no document path")
     })
 
     it('refuses a name behind a position with no dot, and the run time refuses it', () => {
