@@ -4,6 +4,7 @@
  * back. Each reading carries `itemMark`, and no codec carries it.
  */
 import { describe, expect, it } from 'vitest'
+import { CodecError } from '../../../Rotorise'
 import {
     discriminatedUnion,
     item,
@@ -11,6 +12,8 @@ import {
     number,
     object,
     optional,
+    ref,
+    scope,
     string,
     union,
 } from '../../codec'
@@ -72,11 +75,47 @@ describe('the reading of a union', () => {
         expect(readings.union.spec).toHaveLength(2)
     })
 
-    it('has a message for a type and no members where the union can hold an attribute that is not a map', () => {
+    it('is refused by the type and at construction where the union can hold an attribute that is not a map', () => {
         const either = union([cat, string])
         // @ts-expect-error the union can hold an `S`, so there is no item to read
-        const write = item(either).unsafeEncode
-        void write
+        expect(() => item(either)).toThrow(/option 1 is not an object/)
+    })
+})
+
+describe('an item of a union is refused where an option is no object', () => {
+    it('refuses a union of an object and a number at construction, because a row that reaches the number would read no codec', () => {
+        // @ts-expect-error the union can hold an `N`, so there is no item to read
+        expect(() => item(union([cat, number]))).toThrow(CodecError)
+    })
+
+    it('refuses a union whose scope binds a non-object, where the scope binds it', () => {
+        const bound = scope({ name: string, either: union([ref('name'), cat]) })
+        expect(() => item(bound.either as never)).toThrow(
+            /option 0 is not an object/,
+        )
+    })
+
+    it('builds a union whose scope binds an object, and reads a row of each option', () => {
+        const bound = scope({
+            shelter: object({ shelterId: string }),
+            either: union([ref('shelter'), cat]),
+        })
+        const either = item(bound.either)
+        expect(either.decode({ shelterId: { S: 's1' } })).toEqual({
+            shelterId: 's1',
+        })
+        expect(
+            either.decode({ kind: { S: 'cat' }, lives: { N: '9' } }),
+        ).toEqual({ kind: 'cat', lives: 9 })
+    })
+
+    it('builds a union behind a ref that no scope binds, and reads a row as an error value', () => {
+        const open = item(union([ref('shelter'), cat]) as never) as {
+            decode: (row: object) => unknown
+        }
+        expect(open.decode({ shelterId: { S: 's1' } })).toBeInstanceOf(
+            CodecError,
+        )
     })
 })
 

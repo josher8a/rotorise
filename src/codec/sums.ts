@@ -272,6 +272,27 @@ export const readingOf = (t: Term): Reading | undefined => {
     return ks ? dissectionOf(node, ks).self : unionOf(node)
 }
 
+/** The refusal of a union that holds an option that is no object: the message of its marker. */
+type ItemRefusal<C> = C extends Itemable<infer X>
+    ? X extends ErrorMessage<string>
+        ? X
+        : unknown
+    : unknown
+
+/** The index of the first option of a union that no object reads, or `undefined`. */
+const nonMapOption = (t: Term): number | undefined => {
+    const node = resolvedTerm(t)
+    if (node?.kind !== 'union') return undefined
+    for (const [at, option] of node.options.entries()) {
+        const one = resolvedTerm(option)
+        if (one === undefined || one.kind === 'ref' || one.kind === 'object')
+            continue
+        if (one.kind === 'union' && nonMapOption(one) === undefined) continue
+        return at
+    }
+    return undefined
+}
+
 /**
  * The same declaration, read as a whole item: the same two directions without the top-level map,
  * and the things only a top-level codec can offer: `encodePartial` and `unsafeEncodePartial`.
@@ -300,9 +321,20 @@ export function item<
     codec: ObjectCodec<Spec, Rest, T, Tm>,
 ): ItemCodec<ItemOf<T, Spec, Rest>, Spec, Rest, Tm> &
     Free<ObjectFree<Spec, Rest, Tm>>
-export function item<C extends Itemable<unknown>>(codec: C): ReadingOf<C>
+export function item<C extends Itemable<unknown>>(
+    codec: C & ItemRefusal<C>,
+): ReadingOf<C>
 export function item(codec: object): unknown {
-    const reading = readingOf(termOf(codec as AnyCodec))
+    const term = termOf(codec as AnyCodec)
+    const reading = readingOf(term)
+    // an option that is no object has no reading as an item. An option behind a `ref` that no scope
+    // binds is read where the scope binds it
+    const stray = nonMapOption(term)
+    if (stray !== undefined) {
+        throw new CodecError(
+            `this union has no whole-item reading: option ${stray} is not an object, and an item is always a map`,
+        )
+    }
     if (reading === undefined) {
         throw new CodecError(
             'this codec has no whole-item reading: `item` takes an object or a union',
@@ -934,9 +966,11 @@ export const unionOf = (
      *
      * An item is a map, so an option that writes anything else has nothing to contribute at the top
      * level. The type says so — {@link UnionCodec} replaces this with a message where it does not
-     * apply — and the runtime is built either way rather than branching, because an option that could
-     * not be reached here also cannot be selected here: `item` is what an all-object union reads,
-     * and only an object option has it.
+     * apply, and `item` refuses the argument. `item` also refuses at construction, a union with an
+     * option that is no object, so a row never reaches an option that has no reading. An option
+     * behind a `ref` that no scope binds is read where the scope binds it, and until then a read
+     * gives an error value. The reading is built for any union, because `optionOf` reads it for a
+     * union that is the option of another union.
      */
     const self = {
         [itemMark]: true as const,

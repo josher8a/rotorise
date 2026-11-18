@@ -1145,7 +1145,7 @@ export const membersOf = <V>(
     // the law that `held` owes, `decode` then `encode` is the identity, stated at the tag table
     for (const [at, [assignment, member, decoded]] of out.entries()) {
         for (const name of ks) {
-            const said = `'${name}' = '${String(decoded[name])}'`
+            const said = `'${name}' = '${rendered(decoded[name])}'`
             // the member under check owes a write of its own value, so its refusal is the answer
             const own = written?.(member, { [name]: decoded[name] }, 'member')
             if (failed(own)) {

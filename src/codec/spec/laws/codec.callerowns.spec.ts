@@ -9,7 +9,16 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CodecError, failed } from '../../../Rotorise'
-import { held, item, number, object, refine, string, union } from '../../codec'
+import {
+    discriminatedUnion,
+    held,
+    item,
+    number,
+    object,
+    refine,
+    string,
+    union,
+} from '../../codec'
 import { RecursionRefused } from '../../term'
 
 describe('a refinement whose predicate throws', () => {
@@ -211,5 +220,43 @@ describe('a refusal at a deeper level', () => {
             [0, 'owner'],
         ])
         expect(refused.path).toEqual([])
+    })
+})
+
+describe('a held tag of a discriminated union whose decoded value has no text form', () => {
+    const anyTag = {
+        '~standard': {
+            version: 1,
+            vendor: 'test',
+            validate: (value: unknown) => ({ value }),
+        },
+    }
+    const build = (decoded: unknown) =>
+        discriminatedUnion('species', [
+            object({
+                species: held(
+                    string('D'),
+                    anyTag as never,
+                    {
+                        encode: () => 'D',
+                        decode: () => decoded,
+                    } as never,
+                ),
+                name: string,
+            }),
+            object({ species: string('cat'), name: string }),
+        ] as never)
+
+    it('refuses a tag with no prototype as a CodecError, and never as the TypeError of the engine', () => {
+        expect(() => build(Object.create(null))).toThrow(CodecError)
+    })
+
+    it('refuses a tag whose conversion to text throws as a CodecError, and never as the error of the caller', () => {
+        const decoded = {
+            toString: () => {
+                throw new Error('boom')
+            },
+        }
+        expect(() => build(decoded)).toThrow(CodecError)
     })
 })
