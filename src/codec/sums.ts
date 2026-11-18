@@ -695,6 +695,17 @@ export type DecodesTogether<
     ? true
     : false
 
+/**
+ * The tag that two options share at each key, as the run time names it: `'k' = 'a'`, and one such
+ * text for each key, joined by `and`. Read only where the texts overlap at every key.
+ */
+type SharedTag<A, B, Ks extends readonly PropertyKey[]> = Ks extends readonly [
+    infer K extends PropertyKey,
+    ...infer Rest extends readonly PropertyKey[],
+]
+    ? `'${K & string}' = '${`${TagsOf<A, K>}` & `${TagsOf<B, K>}`}'${Rest extends readonly [] ? '' : ` and ${SharedTag<A, B, Rest>}`}`
+    : never
+
 export type SharedAssignmentsFrom<
     Head,
     Rest extends readonly unknown[],
@@ -707,7 +718,7 @@ export type SharedAssignmentsFrom<
                 ? DecodesTogether<Head, Next, Ks> extends true
                     ? `options ${At} and ${Cursor['length']}`
                     : never
-                : `options ${At} and ${Cursor['length']}`)
+                : `options ${At} and ${Cursor['length']} (${SharedTag<Head, Next, Ks>})`)
           | SharedAssignmentsFrom<Head, Tail, Ks, At, [...Cursor, unknown]>
     : never
 

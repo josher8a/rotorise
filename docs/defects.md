@@ -992,45 +992,6 @@ of the group keyUpdates.
 
 ---
 
-## Known: the run time refuses a tag that is a union of number literals with a text that names another rule
-
-**Observation.** A variant answers to one tag, so a tag that is a `union` of literals is refused.
-The type refuses the call at each base with one text. The run time refuses a `union` of `string`
-literals with the text of that rule. For a `union` of number literals, and for a `union` of decimal
-literals, the text of the run time says that one option names the tag with no literal. The run rows
-are behind a cast. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    discriminatedUnion('k', [
-        object({ k: union([string('a'), string('b')]), a: string }),
-        object({ k: string('c'), b: string }),
-    ])
-      type checker: refused, [discriminatedUnion] option 0 names the discriminator with a literal
-                    admitting several values
-      runtime:      throws, 'k' names 2 values at one option (a, b), and a variant answers to
-                    exactly one tag
-
-    the same call with number(1), number(2) and number(3)
-      type checker: refused, with the same text
-      runtime:      throws, every option must name 'k' with a literal
-
-    the same call with decimal('1'), decimal('2') and decimal('3')
-      type checker: refused, with the same text
-      runtime:      throws, every option must name 'k' with a literal
-
-    discriminatedUnion('k', [object({ k: decimal('1'), a: string }),
-                             object({ k: decimal('3'), b: string })])
-      type checker: builds
-      runtime:      builds
-
-**Effect.** The call does not compile. Behind a cast, the text of the throw says that one option
-names the tag with no literal, where each option names the tag with literals. The text does not
-state the rule that the call breaks.
-
-**Pin.** `src/codec/spec/union/codec.dunion.lookup.spec.ts` pins the text of the run time for one
-`string` literal of two values. None for a `union` of literals.
-
----
-
 ## Known: a key row of the gate gives the model each component of a composite key as a constant that the emitter evaluated
 
 **Observation.** A row of the gate holds a key spec as a tree. An item row holds a plain component

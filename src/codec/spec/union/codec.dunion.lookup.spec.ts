@@ -15,9 +15,9 @@
  * the earlier option be overwritten. The refusal below is where the host states what the
  * certificate declines to give.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError } from '../../../Rotorise'
-import type { AnyObjectCodec } from '../../codec'
+import type { AnyObjectCodec, SpecsOf } from '../../codec'
 import {
     decimal,
     discriminatedUnion,
@@ -29,7 +29,9 @@ import {
     refine,
     scope,
     string,
+    union,
 } from '../../codec'
+import type { SharedAssignments } from '../../sums'
 
 /** The constructor with its declaration-time constraint forgotten, so the runtime can be asked. */
 const declare = discriminatedUnion as unknown as (
@@ -311,5 +313,79 @@ describe('a tag read through a refinement and one adapter, as the model reads a 
             kind: 'CAT',
             lives: 9,
         })
+    })
+})
+
+describe('a refusal of two options that answer to one tag', () => {
+    const first = object({ type: string('A'), x: string })
+    const other = object({ type: string('B'), y: string })
+    const second = object({ type: string('A'), z: string })
+
+    it('names the two options and the tag at the run time, because the caller finds the option by its place', () => {
+        expect(() => declare('type', [first, other, second])).toThrow(
+            /two options answer to 'type' = 'A' \(options 0 and 2\)/,
+        )
+    })
+
+    it('names the place of each option, where the first of the two is not the first option', () => {
+        expect(() => declare('type', [other, first, second])).toThrow(
+            /two options answer to 'type' = 'A' \(options 1 and 2\)/,
+        )
+    })
+
+    it('names the two options and the tag in the type, as the run time does', () => {
+        expectTypeOf<
+            SharedAssignments<
+                SpecsOf<[typeof first, typeof other, typeof second]>,
+                ['type']
+            >
+        >().toEqualTypeOf<"options 0 and 2 ('type' = 'A')">()
+    })
+})
+
+describe('a tag that is a union of literals at an adapter', () => {
+    it('is refused with the rule that a variant answers to one tag, for a union of number literals', () => {
+        expect(() =>
+            declare('k', [
+                object({ k: union([number(1), number(2)]), a: string }),
+                object({ k: number(3), b: string }),
+            ]),
+        ).toThrow(
+            /'k' names 2 values at one option \(1, 2\), and a variant answers to exactly one tag/,
+        )
+    })
+
+    it('is refused with the rule that a variant answers to one tag, for a union of decimal literals', () => {
+        expect(() =>
+            declare('k', [
+                object({ k: union([decimal('1'), decimal('2')]), a: string }),
+                object({ k: decimal('3'), b: string }),
+            ]),
+        ).toThrow(
+            /'k' names 2 values at one option \(1, 2\), and a variant answers to exactly one tag/,
+        )
+    })
+
+    it('counts each literal of each option, where an option holds several', () => {
+        expect(() =>
+            declare('k', [
+                object({
+                    k: union([string('a', 'b'), number(1)]),
+                    a: string,
+                }),
+                object({ k: number(3), b: string }),
+            ]),
+        ).toThrow(
+            /'k' names 3 values at one option \(a, b, 1\), and a variant answers to exactly one tag/,
+        )
+    })
+
+    it('stays a refusal for a union of one number literal, because the union pins no literal', () => {
+        expect(() =>
+            declare('k', [
+                object({ k: union([number(1)]), a: string }),
+                object({ k: number(3), b: string }),
+            ]),
+        ).toThrow(CodecError)
     })
 })

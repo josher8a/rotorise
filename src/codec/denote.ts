@@ -65,6 +65,7 @@ import {
     RecursionRefused,
     readMember,
     recursionUse,
+    resolvedTerm,
     setMember as setMembers,
     storedAlternatives,
     storedPin,
@@ -183,6 +184,34 @@ type Tag = {
     readonly pin: StoredPin | undefined
 }
 
+/** The refusal of an option that names more than one tag at a key. */
+const manyTags = (name: string, tags: readonly unknown[]): CodecError =>
+    new CodecError(
+        `'${name}' names ${tags.length} values at one option (${tags.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
+    )
+
+/**
+ * The values that the options of a union store, where each option stores literals at `string`,
+ * `number` or `decimal`. A union of adapters over literals pins nothing, so no tag reads it. The
+ * values state the rule that the union breaks: a tag is one value, and the union holds many.
+ */
+const unionTags = (t: Term): Alternatives['ls'][number][] | undefined => {
+    const at = resolvedTerm(t)
+    if (at?.kind !== 'union') return undefined
+    const tags: Alternatives['ls'][number][] = []
+    for (const option of at.options) {
+        const one = storedAlternatives(option)
+        if (
+            one === undefined ||
+            one.base === 'boolean' ||
+            one.base === 'binary'
+        )
+            return undefined
+        tags.push(...one.ls)
+    }
+    return tags
+}
+
 /** The tags of a body, one per key, or the refusal of a body that names no one literal at a key. */
 const tagsOf = (ks: readonly string[], body: Body): Result<readonly Tag[]> => {
     const out: Tag[] = []
@@ -206,15 +235,14 @@ const tagsOf = (ks: readonly string[], body: Body): Result<readonly Tag[]> => {
             alts.base === 'boolean' ||
             alts.base === 'binary'
         ) {
+            const tags = unionTags(field.t)
+            if (tags !== undefined && tags.length > 1)
+                return manyTags(name, tags)
             return new CodecError(
                 `every option must name '${name}' with a literal at \`string\`, \`number\` or \`decimal\`, and one of them does not — a tag is carried as 'S' or 'N', and without one a lookup cannot find the variant`,
             )
         }
-        if (alts.ls.length !== 1) {
-            return new CodecError(
-                `'${name}' names ${alts.ls.length} values at one option (${alts.ls.join(', ')}), and a variant answers to exactly one tag — split it into one option per value`,
-            )
-        }
+        if (alts.ls.length !== 1) return manyTags(name, alts.ls)
         out.push({ name, literal: alts.ls[0], pin: storedPin(field.t) })
     }
     return out
@@ -1127,17 +1155,19 @@ export const membersOf = <V>(
         const tags = tagsOf(ks, body)
         if (failed(tags)) return tags
         const assignment = textsOf(tags)
-        const clash = out.find(([one]) => sameAssignment(ks, one, assignment))
+        const clash = out.findIndex(([one]) =>
+            sameAssignment(ks, one, assignment),
+        )
         const decoded = decodedTagOf(tags)
         if (failed(decoded)) return decoded
-        if (clash !== undefined) {
+        if (clash !== -1) {
             // one template at every arity: at one key this reads `'type' = 'A'`, which is what the
             // one-key refusal always said, and at several it reads the whole assignment
             const wrote = ks
                 .map((name) => `'${name}' = '${assignment[name]}'`)
                 .join(' and ')
             return new CodecError(
-                `two options answer to ${wrote}, and a lookup reaches only one of them — give them distinct values`,
+                `two options answer to ${wrote} (options ${clash} and ${out.length}), and a lookup reaches only one of them — give them distinct values`,
             )
         }
         out.push([assignment, value, decoded] as const)
