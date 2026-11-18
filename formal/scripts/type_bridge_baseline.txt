@@ -107,8 +107,9 @@ exclude|refuse|e2198121e1|exclude({ x: binary(new Uint8Array([1, 2])) }) member 
 exclude|refuse|ea30057fc2|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|f45cbe8e82|exclude({ x: binary(new Uint8Array([1, 2])) }) member 0
 exclude|refuse|feb1120b66|exclude({ y: binary(new Uint8Array([1, 2])) }) member 1
+keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chBoth).call
+keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chNum).call
 keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chGhost).call
-keyUpdates|accept|e126bcb7|T_dotted_dottedList.keyUpdates(chStr).call
 key|accept|b869b9a6|T_plain_list2_sep.key(SK,sLit,narrow).result
 key|accept|f1510f52|T_plain_list2.key(SK,sLit,narrow).result
 meet|refuse|26fd3c2238|meet(m0_l, m0_r)

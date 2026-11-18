@@ -412,6 +412,7 @@ describe('a name of a key that holds a dot is a path', () => {
         }
         expect(None.unsafeKeyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
         // a write to the path is a change of the key: the given item reads the written name first
+        // @ts-expect-error 8 is no value of owner.name, which the type reads at the path
         expect(None.unsafeKeyUpdates({ 'owner.name': 8 })).toEqual({
             set: { GSI1SK: { S: 'NAME#8' } },
             remove: [],
@@ -419,6 +420,7 @@ describe('a name of a key that holds a dot is a path', () => {
         expect(Coded.unsafeKeyUpdates({ owner: { name: 'bea' } })).toEqual(bea)
         // the codec writes the path as text, so a number written to the path is refused
         {
+            // @ts-expect-error 8 is no value of owner.name, which the type reads at the path
             const refused = Coded.keyUpdates({ 'owner.name': 8 })
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
@@ -426,6 +428,18 @@ describe('a name of a key that holds a dot is a path', () => {
                     /codec writes no text or number/,
                 )
         }
+    })
+
+    it('types a write to the path that a key reads at the path, and not at a flat attribute of that name', () => {
+        const None = tableEntry<Kennel>()({
+            PK: ['petId'],
+            GSI1SK: ['owner.name'],
+        })
+        // the entity holds the flat attribute 'owner.name' as a number, and a key cannot read it
+        expect(None.unsafeKeyUpdates({ 'owner.name': 'bea' })).toEqual({
+            set: { GSI1SK: { S: 'NAME#bea' } },
+            remove: [],
+        })
     })
 
     it('refuses a change of a path above the path that a key reads, because the change writes a part of what the key reads', () => {

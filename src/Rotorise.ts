@@ -2843,10 +2843,10 @@ export type TableEntryDefinition<
      * cannot rebuild a touched key, and a table key that the change would rewrite give a `CodecError`
      * of the kind `decided` or `rewrite`, or of the kind `key` or `separator` that the step keeps.
      */
-    keyUpdates: <const Changed extends Partial<Entity>>(
-        changed: Exact<Partial<Entity>, Changed> &
+    keyUpdates: <const Changed extends ChangeShape<Entity, Schema>>(
+        changed: Exact<ChangeShape<Entity, Schema>, Changed> &
             ChangeRefusal<
-                Entity,
+                ChangeShape<Entity, Schema>,
                 Schema,
                 Roles,
                 Changed,
@@ -2855,10 +2855,10 @@ export type TableEntryDefinition<
     ) => Result<KeyUpdate<AbsentKeyNames<Schema>>>
 
     /** The same, throwing the error that `keyUpdates` returns. */
-    unsafeKeyUpdates: <const Changed extends Partial<Entity>>(
-        changed: Exact<Partial<Entity>, Changed> &
+    unsafeKeyUpdates: <const Changed extends ChangeShape<Entity, Schema>>(
+        changed: Exact<ChangeShape<Entity, Schema>, Changed> &
             ChangeRefusal<
-                Entity,
+                ChangeShape<Entity, Schema>,
                 Schema,
                 Roles,
                 Changed,
@@ -3390,6 +3390,28 @@ type FrozenBy<Schema, Roles, Given, Block> = {
         ? never
         : K
 }[TableKeys<Roles> & keyof Schema]
+
+/**
+ * The shape of a change: the entity, partial, where a name with a `.` that a key reads is a path.
+ * The ruling is that a key name with a `.` is always a path, so the change at that name has the
+ * type at the path, and an attribute whose own name holds that `.` gives the name no type. The
+ * dotted names are the finite set that the schema reads, and not each path of the entity. A schema
+ * with no such name keeps the entity, partial.
+ */
+type ChangeShape<Entity, Schema> = [
+    Extract<ComponentNames<Schema>, AnyPath>,
+] extends [never]
+    ? Partial<Entity>
+    : Partial<
+          WithoutNames<Entity, Extract<ComponentNames<Schema>, AnyPath>>
+      > & {
+          [P in Extract<ComponentNames<Schema>, AnyPath>]?: ValueAt<Entity, P>
+      }
+
+/** Each member of the entity, without the attributes of the names. */
+type WithoutNames<E, Names> = E extends unknown
+    ? { [K in keyof E as K extends Names ? never : K]: E[K] }
+    : never
 
 /**
  * Nothing, or why a change is refused. A change whose type is a union is one of its options, and

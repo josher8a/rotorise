@@ -118,11 +118,10 @@ describe('keyUpdates refuses a change with a name that the entity does not hold'
         expect(refused).toBeTypeOf('function')
     })
 
-    it('refuses a dotted name that the entity does not hold, beside a name that it holds', () => {
-        const refused = () =>
-            // @ts-expect-error the entity holds note, and owner.name is no attribute
-            Owned.unsafeKeyUpdates({ note: 'n', 'owner.name': 'bob' })
-        expect(refused).toBeTypeOf('function')
+    it('accepts a dotted name that a key reads as a path, beside a name that the entity holds', () => {
+        expect(
+            Owned.unsafeKeyUpdates({ note: 'n', 'owner.name': 'bob' }),
+        ).toEqual({ set: { GSI1PK: { S: 'NAME#bob' } }, remove: [] })
     })
 
     it('refuses a name that no member of a union entity holds', () => {

@@ -617,42 +617,6 @@ reads the instantiation count of `npm run check`.
 
 ---
 
-## Known: the type of keyUpdates reads a change at a name with a `.` as the attribute of that name, where the run time reads a write to the path
-
-**Observation.** An entity can declare an attribute whose own name holds a `.` beside the object of
-that path. A key name with a `.` is a path, in the type of a key and at run time. The given item of
-an update is a map from a written path to a value, so the run time reads a change at `'owner.name'`
-as a write to the path. The type of the change gives that name the type of the flat attribute.
-Measured 2026-11-11 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
-
-    type Kennel = { petId: string; 'owner.name': number; owner: { name: string } }
-    const Pets = tableEntry<Kennel>()({ PK: ['petId'], GSI1SK: ['owner.name'] })
-
-    Pets.keyUpdates({ 'owner.name': 8 })
-      type checker: builds
-      runtime:      gives { set: { GSI1SK: { S: 'NAME#8' } }, remove: [] }
-
-    Pets.keyUpdates({ 'owner.name': 'bea' })
-      type checker: refused, Type 'string' is not assignable to type 'number'
-
-    Pets.keyUpdates({ owner: { name: 'bea' }, 'owner.name': 8 })
-      type checker: builds
-      runtime:      gives { set: { GSI1SK: { S: 'NAME#8' } }, remove: [] }
-
-    Pets.keyUpdates({ owner: { name: 'bea' } })
-      runtime:      gives { set: { GSI1SK: { S: 'NAME#bea' } }, remove: [] }
-
-The run time of the second call is not measured.
-
-**Effect.** The type admits a number at a path that holds a string in the entity, and the key
-prints the number. The type refuses the string that the path holds.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 1 id of the
-group keyUpdates. src/codec/spec/laws/codec.keyupdate.spec.ts pins the run time: the patch agrees
-with the keys of the changed pet, for a key name with a `.` also.
-
----
-
 ## Known: the declaration of a consumer has no name for a cycle of a scope that goes through a list and a union only
 
 **Observation.** A consumer that exports a codec constant with `declaration: true` needs a name for
@@ -932,10 +896,8 @@ type refuses, so the input is data with no type, or a cast.
 ## Known: keyUpdates gives the empty patch for a change at a name that the entity does not hold, behind a cast
 
 **Observation.** The type of the change of keyUpdates refuses a name that the entity does not hold.
-The run time refuses no name. A change at a name that no key reads gives the patch of no key. A
-name with a `.` is a path, so a change at the name of a path that a key reads gives the patch of
-the write to that path. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and
-`npx vitest --run`:
+The run time refuses no name. A change at a name that no key reads gives the patch of no key.
+Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
     type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
     const Pets = tableEntry<OwnedPet>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
@@ -944,11 +906,8 @@ the write to that path. Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 
       type checker: refused, 'ghost' does not exist in the type of the change
       runtime:      gives { set: {}, remove: [] }
 
-    Pets.keyUpdates({ 'owner.name': 'bob' })
-      type checker: refused, ''owner.name'' does not exist in the type of the change
-      runtime:      gives { set: { GSI1PK: { S: 'NAME#bob' } }, remove: [] }
-
     Pets.keyUpdates({ 'owner.nick': 'bob' })
+      type checker: refused, ''owner.nick'' does not exist in the type of the change
       runtime:      gives { set: {}, remove: [] }
 
     Pets.keyUpdates({ owner: { name: 'bob', nick: 'b' } })
