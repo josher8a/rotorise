@@ -893,30 +893,38 @@ type refuses, so the input is data with no type, or a cast.
 
 ---
 
-## Known: the type accepts an extra name in an element of a list, where the run time refuses
+## Known: the type compares a name of an object of a union against every member, where the codec reads the member that the value chooses
 
-**Observation.** The type of the item of toEntry and the type of the change of keyUpdates compare
-the names at each depth below a plain object. A list is a leaf of that comparison, so an extra name
-in an element of a list compiles. With a codec, the run time asks the codec, and the codec refuses
-the element. Measured 2026-11-19 with `npx vitest --run` and `tsc --noEmit` on TypeScript 7, on a
-probe spec, on 54d06d3c with the check of toEntry:
+**Observation.** ExactDeep reads the names of a union of objects through every member, at each depth. A
+name that one member holds is accepted for a value of another member. With a codec, the run time
+asks the codec, and the codec reads the member that the value chooses, so it refuses the name. The
+gap holds for an object of a union, for an element of a list of a union, and for an entity that is a
+union. Measured 2026-11-19 with `npx vitest --run` and `tsc --noEmit` on TypeScript 7, on a probe
+spec, on 8d557a7f with the recursion into a list:
 
-    type Pet = { petId: string; legs: readonly { readonly id: number }[] }
-    const Coded = tableEntry<Pet>()(
-      { PK: ['petId'] },
-      { codec: { petId: string, legs: array(object({ id: number })) } },
-    )
+    type A = { kind: 'a'; x: number }
+    type B = { kind: 'b'; y: string }
+    type Pet = { petId: string; pet: A | B; mix: readonly (A | B)[] }
+    type Dog = { kind: 'dog'; petId: string; bark: string }
+    type Cat = { kind: 'cat'; petId: string; lives: number }
 
-    Coded.toEntry({ petId: 'p', legs: [{ id: 1, ghost: 1 }] })
+    P.toEntry({ petId: 'p', pet: { kind: 'a', x: 1, y: 's' }, mix: [] })
       type checker: builds
-      runtime:      refuses, at legs[0]: 'ghost' is not an attribute this codec declares
+      runtime:      refuses, at pet: no option admits this value with attributes 'kind', 'x', 'y'
 
-    Coded.keyUpdates({ legs: [{ id: 1, ghost: 1 }] })
+    P.toEntry({ petId: 'p', pet: { kind: 'a', x: 1 }, mix: [{ kind: 'a', x: 1, y: 's' }] })
       type checker: builds
-      runtime:      refuses, at [0]: 'ghost' is not an attribute this codec declares
+      runtime:      refuses, at mix[0]: no option admits this value with attributes 'kind', 'x', 'y'
 
-**Effect.** A caller that the type checker approves learns of the extra name at run time, as a
-value of the kind `refused`.
+    Animals.toEntry({ kind: 'dog', petId: 'p', bark: 'x', lives: 1 })
+      type checker: builds
+      runtime:      refuses, 'lives' is not an attribute this codec declares
+
+keyUpdates gives the same three refusals for the same values: at pet, at mix[0], and for 'lives'
+with the kind vacant.
+
+**Effect.** A caller that the type checker approves learns of the name of another member at run
+time, as a value of the kind `refused` or `vacant`.
 
 **Pin.** None.
 

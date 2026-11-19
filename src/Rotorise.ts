@@ -2771,10 +2771,10 @@ export type TableEntryDefinition<
      * Use this when preparing items for insertion into DynamoDB.
      *
      * The type refuses an item whose value has a type that the entity does not hold, an item that
-     * lacks a name of the entity, and a name in excess at each depth below an object. A name in
-     * excess in an element of a list compiles, because a list is a leaf of the comparison. `toEntry`
-     * prints each key from the attributes of the item, so a wrong value prints a key that `toItem`
-     * of the same entity never writes.
+     * lacks a name of the entity, and a name in excess at each depth below an object and below an
+     * element of a list. An object of a union is compared against every member, so a name of another
+     * member compiles, and the codec refuses it. `toEntry` prints each key from the attributes of the
+     * item, so a wrong value prints a key that `toItem` of the same entity never writes.
      *
      * With a codec, the run time asks the codec after the keys: an item that the codec refuses is
      * refused with the refusal of the codec, as `toItem` refuses it. With no codec, the run time
@@ -3479,9 +3479,8 @@ type ShapeAt<Shape, K> = Shape extends unknown
         : never
     : never
 
-/** A value that holds no names of its own to compare: a list, a function, a binary value, a set, a map, a date. */
+/** A value that holds no names of its own to compare: a function, a binary value, a set, a map, a date. */
 type Leaf =
-    | readonly unknown[]
     | ((...args: never[]) => unknown)
     | Uint8Array
     | ReadonlySet<unknown>
@@ -3489,19 +3488,29 @@ type Leaf =
     | Date
 
 /**
+ * `Exact` for the value at one name. A list compares each element with the element of the shape, and
+ * keeps the form of the list, a tuple included. A list of a primitive holds no name to compare, so
+ * the element is a leaf. A plain object compares its names. A leaf stops the comparison.
+ */
+type ExactAt<Shape, Candidate> = Candidate extends readonly unknown[]
+    ? [Shape] extends [readonly (infer Element)[]]
+        ? { [I in keyof Candidate]: ExactAt<Element, Candidate[I]> }
+        : Candidate
+    : Candidate extends object
+      ? [Shape] extends [Leaf]
+          ? Candidate
+          : [Shape] extends [object]
+            ? ExactDeep<Shape, Candidate>
+            : Candidate
+      : Candidate
+
+/**
  * `Exact`, at each depth. A name that the shape does not hold is refused below a plain object too,
- * because the codec refuses the same object. A list, a function, a binary value, a set, a map and a
- * date are leaves: the comparison stops there.
+ * because the codec refuses the same object, and below an element of a list.
  */
 type ExactDeep<Shape, Candidate> = Candidate & {
     [K in keyof Candidate]: K extends EntityNames<Shape>
-        ? Candidate[K] extends object
-            ? [ShapeAt<Shape, K>] extends [Leaf]
-                ? Candidate[K]
-                : [ShapeAt<Shape, K>] extends [object]
-                  ? ExactDeep<ShapeAt<Shape, K>, Candidate[K]>
-                  : Candidate[K]
-            : Candidate[K]
+        ? ExactAt<ShapeAt<Shape, K>, Candidate[K]>
         : never
 }
 
