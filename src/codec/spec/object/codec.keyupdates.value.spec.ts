@@ -118,6 +118,21 @@ describe('keyUpdates refuses an object that the codec refuses', () => {
         refusalOf(Coded.keyUpdates(through({ note: 5 })))
     })
 
+    it('names the path of the change in the refusal, as toItem names the attribute', () => {
+        const nested = { owner: { name: 'b', alias: 'k', ghost: 'n' } }
+        expect(refusalOf(Coded.keyUpdates(through(nested))).path).toEqual([
+            'owner',
+        ])
+        expect(
+            refusalOf(
+                Coded.keyUpdates(through({ legs: [{ id: 1, ghost: 1 }] })),
+            ).path,
+        ).toEqual(['legs', 0])
+        expect(
+            refusalOf(Coded.keyUpdates(through({ 'address.zip': 5 }))).path,
+        ).toEqual(['address', 'zip'])
+    })
+
     it('throws the same refusal from the twin that throws', () => {
         expect(() =>
             Coded.unsafeKeyUpdates(

@@ -1197,14 +1197,16 @@ const walkSteps = (
 /**
  * **The frontier at the end of a path, as a value.** {@link at} throws the refusal of a name that no
  * codec declares, and this function gives the same refusal back, so a caller inside the boundary
- * reads it with no catch. A path that {@link parsePathResult} refuses, an open codec, and a walk that
+ * reads it with no catch. The caller parses the path with {@link parsePathResult} one time. An open codec, and a walk that
  * {@link childrenOf} refuses are the other refusals, each the refusal of the codec. A frontier that
  * holds a codec that admits nothing beside one that admits a value is no refusal here: some variants
  * declare the path, and `at` marks that case on use, as `someVariants`.
  */
-export const reachAt = (root: AnyCodec, path: string): Reached | CodecError => {
-    const segments = parsePathResult(path)
-    if (segments instanceof CodecError) return segments
+export const reachAt = (
+    root: AnyCodec,
+    segments: readonly Segment[],
+    path: string,
+): Reached | CodecError => {
     if (segments.length === 0) {
         return new CodecError(
             `the path is empty: a name has a character, because ${emptyNameReason}`,

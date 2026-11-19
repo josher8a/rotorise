@@ -5003,7 +5003,9 @@ export const tableEntry =
          */
         const landedBy = (
             changed: Record<string, unknown>,
-        ): readonly (readonly [string, Reached])[] | CodecError => {
+        ):
+            | readonly (readonly [string, readonly Segment[], Reached])[]
+            | CodecError => {
             const root =
                 attributes !== undefined &&
                 isTagged(attributes) &&
@@ -5011,11 +5013,12 @@ export const tableEntry =
                     ? attributes.variantOf(changed)
                     : attributes
             if (root instanceof CodecError) return root
-            const landed: (readonly [string, Reached])[] = []
+            const landed: (readonly [string, readonly Segment[], Reached])[] =
+                []
             for (const name of Object.keys(changed)) {
+                const read = parsePathResult(name)
+                if (read instanceof CodecError) return read
                 if (root === undefined) {
-                    const read = parsePathResult(name)
-                    if (read instanceof CodecError) return read
                     if (
                         read.length === 0 ||
                         read.some((s) => typeof s === 'number')
@@ -5027,9 +5030,9 @@ export const tableEntry =
                     continue
                 }
                 // the erased TaggedRuntime states no `def`, and each codec that the library builds holds one, as for `at` above
-                const reached = reachAt(root as never, name)
+                const reached = reachAt(root as never, read, name)
                 if (reached instanceof CodecError) return reached
-                landed.push([name, reached])
+                landed.push([name, read, reached])
             }
             return landed
         }
@@ -5044,9 +5047,9 @@ export const tableEntry =
          */
         const valueRefusal = (
             changed: Record<string, unknown>,
-            landed: readonly (readonly [string, Reached])[],
+            landed: readonly (readonly [string, readonly Segment[], Reached])[],
         ): CodecError | undefined => {
-            for (const [name, reached] of landed) {
+            for (const [name, segments, reached] of landed) {
                 const given = changed[name]
                 // a removal is no value for the codec to encode, as the model states it: `changed: name → none`
                 if (given === undefined) continue
@@ -5059,7 +5062,11 @@ export const tableEntry =
                     first instanceof CodecError &&
                     refusals.every((one) => one instanceof CodecError)
                 ) {
-                    return first
+                    // the codec at the name refuses at its own path, so the refusal names the path of the change first, as toItem names it
+                    return segments.reduceRight<CodecError>(
+                        (error, segment) => error.under(segment),
+                        first,
+                    )
                 }
             }
             return undefined

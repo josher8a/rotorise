@@ -84,7 +84,9 @@ describe('keyUpdates of an entry with a codec refuses a name that the codec does
     })
 
     it('refuses the empty name, because a name has a character', () => {
-        refusalOf(Coded.keyUpdates(through({ '': 1 })))
+        expect(
+            refusalOf(Coded.keyUpdates(through({ '': 1 }))).reason,
+        ).toContain('a name has a character')
     })
 
     it('throws the same refusal from the twin that throws', () => {
