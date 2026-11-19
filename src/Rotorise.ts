@@ -243,6 +243,63 @@ type StopsBeforeLast<Spec, Deep extends number> = [Deep] extends [never]
             : false
         : false
 
+/** The properties of a component record that the run time refuses: each one that `componentPropertyNames` does not hold. */
+type StrayOf<C> = C extends
+    | string
+    | number
+    | null
+    | undefined
+    | readonly unknown[]
+    ? never
+    : C extends { readonly at: unknown }
+      ? Exclude<keyof C, (typeof componentPropertyNames)[number]>
+      : never
+
+/** Each stray property of each component record of a key spec, through the arms of a match, to a depth of 4. */
+type StrayIn<S, Depth extends unknown[] = []> = Depth['length'] extends 4
+    ? never
+    : S extends readonly unknown[]
+      ? StrayOf<S[number]>
+      : S extends { discriminator: unknown; spec: infer Arms }
+        ? StrayIn<Arms[keyof Arms], [...Depth, 0]>
+        : S extends {
+                discriminator: unknown
+                cases: infer C extends readonly unknown[]
+            }
+          ? C[number] extends infer Case
+              ? Case extends readonly [unknown, infer Arm]
+                  ? StrayIn<Arm, [...Depth, 0]>
+                  : never
+              : never
+          : never
+
+/** A list spec marks the record that holds the stray property. A match marks the key spec. */
+type MarkStray<S> = S extends readonly unknown[]
+    ? {
+          [I in keyof S]: [StrayOf<S[I]>] extends [never]
+              ? S[I]
+              : S[I] & {
+                    [P in StrayOf<S[I]> &
+                        string]: ErrorMessage<`a component record holds at, tag, value and default, and no '${P}'`>
+                }
+      }
+    : ErrorMessage<`a component record holds at, tag, value and default, and no '${StrayIn<S> & string}'`>
+
+/**
+ * Refuses a property of a component record that the record does not have, where the schema is
+ * built. The run time refuses the same in `checkComponents`, because such a property is a typo of
+ * one of the four.
+ */
+type ValidateRecords<Schema> = string extends keyof Schema
+    ? unknown
+    : [StrayIn<Schema[keyof Schema]>] extends [never]
+      ? unknown
+      : {
+            [K in keyof Schema]: [StrayIn<Schema[K]>] extends [never]
+                ? Schema[K]
+                : MarkStray<Schema[K]>
+        }
+
 type joinable = string | number | bigint | boolean | null | undefined
 
 /** What a transform result prints: `Array.join` prints `null` and `undefined` as the empty string. */
@@ -1914,12 +1971,8 @@ const checkPaths = (schema: Record<string, unknown>): void => {
  * The properties of a component record. A name that is no property of the record is a typo, and the
  * run time would read it as an absent tag or an absent function.
  */
-const componentProperties: ReadonlySet<string> = new Set([
-    'at',
-    'tag',
-    'value',
-    'default',
-])
+const componentPropertyNames = ['at', 'tag', 'value', 'default'] as const
+const componentProperties: ReadonlySet<string> = new Set(componentPropertyNames)
 
 /**
  * Refuses each component of a schema that is no name and no record, and each tag that cannot print
@@ -4177,6 +4230,7 @@ export const tableEntry =
     >(
         schema: Schema &
             ValidatePaths<Schema, KeyedBy> &
+            ValidateRecords<Schema> &
             ValidateCarriers<Schema, KeyedBy, CodecSpec, CodecRest> &
             ValidateKeyNames<Schema, CodecSpec, CodecRest> &
             ValidateComponents<Schema, KeyedBy, CodecSpec, CodecRest>,

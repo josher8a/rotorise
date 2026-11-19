@@ -5,7 +5,8 @@
  * the literal tag with no `as const`. A record with no tag prints the name, and `tag: false` prints no
  * label, so the component is one segment. A schema that holds a tag that cannot print as one segment,
  * an array in place of a record, or a property that the record does not have is refused where the
- * schema is read. The type refuses an array and a record with no name at `at`.
+ * schema is read. The type refuses an array, a record with no name at `at`, and a property that the
+ * record does not have.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
@@ -237,10 +238,25 @@ describe('a component is a name or a record', () => {
         const refused = refusal(() =>
             tableEntry<Pet>()({
                 PK: ['petId'],
+                // @ts-expect-error a component record holds at, tag, value and default
                 SK: [{ at: 'name', tags: 'T' }],
             }),
         )
         expect(refused.message).toContain("and no 'tags'")
+    })
+
+    it('refuses a property that the record does not have, in an arm of a match', () => {
+        const refused = refusal(() =>
+            tableEntry<Pet>()({
+                PK: ['petId'],
+                // @ts-expect-error a component record holds at, tag, value and default
+                SK: {
+                    discriminator: 'kind',
+                    spec: { X: [{ at: 'name', defualt: 'n' }], Y: ['name'] },
+                },
+            }),
+        )
+        expect(refused.message).toContain("and no 'defualt'")
     })
 
     it('refuses a record with no attribute at `at`', () => {

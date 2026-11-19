@@ -301,3 +301,5 @@ p173_closure_keeps_the_setup_for_a_computed_call	setupVitest.ts	s/COMPUTED\.test
 p173_closure_reads_a_declaration_file	setupVitest.ts	s/'\.ts', '\.d\.ts', /'.ts', /	bash scripts/attest-setup-probe.sh	FAIL  a spec "declared" skips the setup
 p173_a_flag_selects_every_spec	setupVitest.ts	s/a\.startsWith\('-'\)/a.startsWith('~')/	bash scripts/attest-setup-probe.sh	FAIL  a flag selects every spec
 p173_matrix_stops_at_the_first_failing_compiler	scripts/tsc-matrix.sh	s/\[ "\$failed" -eq 1 \] && \[ -n "\$\{TSC_MATRIX_FAIL_FAST:-\}" \] && exit 1/true/	bash scripts/tsc-matrix-probe.sh	FAIL  with TSC_MATRIX_FAIL_FAST a failing compiler stops the run
+p174_the_schema_type_refuses_a_stray_property_of_a_component_record	src/Rotorise.ts	s/^( *)ValidateRecords<Schema> &$/\1unknown \&/	node ./node_modules/typescript-7/bin/tsc --noEmit	codec.keylabel.spec.ts
+p174_the_refusal_reaches_a_record_in_an_arm_of_a_match	src/Rotorise.ts	s/\? StrayIn<Arms\[keyof Arms\], \[\.\.\.Depth, 0\]>/? never/	node ./node_modules/typescript-7/bin/tsc --noEmit	codec.keylabel.spec.ts

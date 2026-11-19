@@ -976,26 +976,6 @@ give no key, and the term adds no check.
 
 ---
 
-## Known: the type of a component record admits a property that the record does not have, where the run time refuses the schema
-
-**Observation.** A component record holds the name of the attribute, a tag, a value function and a
-default. The run time refuses a record with another property, because such a property is a typo of
-one of the four. The type compiles the record. Measured 2026-11-16 with `tsc --noEmit` on
-TypeScript 7 and `npx vitest --run`, with the type Pet and `name: string`:
-
-    tableEntry<Pet>()({ PK: ['petId'], SK: [{ at: 'name', tags: 'T' }] })
-      type checker: builds
-      runtime:      throws RotoriseError, the text holds "and no 'tags'"
-
-**Effect.** A typo in the name of a property reaches the run time, where the construction throws.
-The key never prints with the name in place of the tag.
-
-**Pin.** `src/codec/spec/object/codec.keylabel.spec.ts` pins the refusal of the run time, and the
-same test compiles the record with no directive. The baseline of the type bridge holds no id,
-because no draw of the entry pool holds such a record.
-
----
-
 ## Known: the type of a partial key admits a hole and the empty text, where the run time gives an error value
 
 **Observation.** A partial key is a position: the count `k` of the leading components that print. The
