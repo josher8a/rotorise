@@ -921,6 +921,41 @@ codec, and the refusal of the codec.
 
 ---
 
+## Known: keyUpdates builds a key from an object that the codec refuses
+
+**Observation.** keyUpdates reads the key components of a change, and refuses a name at the top
+level that the codec does not declare. Below the top level it checks nothing: an object that the
+codec refuses still builds the key. The type of the change compares the names at the top level
+only, so an extra name below an object compiles, also in a fresh literal. Measured 2026-11-19 on
+f6fd0352 with `npx vitest --run` and `tsc --noEmit` on TypeScript 7, on a probe spec:
+
+    type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
+    const owner = object({ name: string, nick: string })
+    const Coded = tableEntry<OwnedPet>()(
+      { PK: ['petId'], GSI1PK: ['owner.name'] },
+      { codec: { petId: string, note: string, owner } },
+    )
+
+    Coded.keyUpdates({ owner: { name: 'b', nick: 'k', ghost: 'n' } })
+      type checker: builds
+      runtime:      gives { set: { GSI1PK: { S: 'NAME#b' } }, remove: [] }
+      the codec:    owner.encode of the same object refuses, 'ghost' is not an attribute
+
+    Coded.keyUpdates({ owner: { name: 'b' } } as never)
+      type checker: refused without the cast, 'nick' is missing
+      runtime:      gives { set: { GSI1PK: { S: 'NAME#b' } }, remove: [] }
+      the codec:    owner.encode of the same object refuses, 'nick' is required
+
+The entry with no codec gives the same patch for each change.
+
+**Effect.** A change that carries a wrong name below an object, or that lacks a required name
+below an object, gives a key patch and no error. The write of the same change through the codec
+refuses it.
+
+**Pin.** None.
+
+---
+
 ## Known: a key row of the gate gives the model each component of a composite key as a constant that the emitter evaluated
 
 **Observation.** A row of the gate holds a key spec as a tree. An item row holds a plain component
