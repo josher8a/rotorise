@@ -893,6 +893,42 @@ type refuses, so the input is data with no type, or a cast.
 
 ---
 
+## Known: toEntry of an entry with a codec builds an entry that the codec refuses
+
+**Observation.** toEntry prints the keys from the attributes of the item, and returns the item with
+the keys. It reads no codec, so it checks no value of the item. toItem of the same entry refuses the
+same item. The type of the item compares the names at the top level only, so an extra name below an
+object compiles. Measured 2026-11-19 on 75752a58 with `npx vitest --run` and `tsc --noEmit` on
+TypeScript 7, on a probe spec:
+
+    type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
+    const owner = object({ name: string, nick: string })
+    const Coded = tableEntry<OwnedPet>()(
+      { PK: ['petId'], GSI1PK: ['owner.name'] },
+      { codec: { petId: string, note: string, owner } },
+    )
+
+    Coded.toEntry({ petId: 'p', note: 'n', owner: { name: 'b', nick: 'k', ghost: 'g' } })
+      type checker: builds
+      runtime:      gives the item with ghost, PK PETID#p and GSI1PK NAME#b
+      toItem:       refuses, at owner: 'ghost' is not an attribute this codec declares
+
+    Coded.toEntry({ petId: 'p', note: 'n', owner: { name: 'b' } } as never)
+      type checker: refused without the cast, 'nick' is missing
+      runtime:      gives the item, PK PETID#p and GSI1PK NAME#b
+      toItem:       refuses, at owner: 'nick' is required and was not given
+
+    Coded.toEntry({ petId: 'p', note: 'n', owner: { name: 'b', nick: 'k' }, ghost: 1 } as never)
+      type checker: refused without the cast
+      runtime:      gives the item with ghost, and the two keys
+
+**Effect.** An item that the codec refuses reaches the table through toEntry with no error, where
+toItem refuses it.
+
+**Pin.** None. The docstring of toEntry states that a name in excess below an object compiles.
+
+---
+
 ## Partially mitigated: keyUpdates of an entry with no codec gives the empty patch for a change at a name that the entity does not hold, behind a cast
 
 **Observation.** The type of the change of keyUpdates refuses a name that the entity does not hold.
