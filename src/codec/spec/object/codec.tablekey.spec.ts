@@ -328,13 +328,11 @@ describe('a change whose type is a union of object types', () => {
         expect(() => rewrite({ adoptionId: 'other' })).toThrow(CodecError)
     })
 
-    it('is refused where one option holds a name that the entity does not hold, and the run time ignores the name', () => {
+    it('is refused where one option holds a name that the entity does not hold, and the run time refuses the name', () => {
         type Change = { userId: string } | { userId: string; bogus: 1 }
         // @ts-expect-error the second option holds `bogus`, which the entity does not hold
         const rewrite = (change: Change) => Adoption.unsafeKeyUpdates(change)
-        expect(Object.keys(rewrite({ userId: 'u2', bogus: 1 }).set)).toEqual([
-            'GSI1PK',
-        ])
+        expect(() => rewrite({ userId: 'u2', bogus: 1 })).toThrow(CodecError)
     })
 
     it('is no refusal where each option compiles alone, and each option gives its own keys', () => {

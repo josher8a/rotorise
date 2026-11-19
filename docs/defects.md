@@ -893,33 +893,31 @@ type refuses, so the input is data with no type, or a cast.
 
 ---
 
-## Known: keyUpdates gives the empty patch for a change at a name that the entity does not hold, behind a cast
+## Partially mitigated: keyUpdates of an entry with no codec gives the empty patch for a change at a name that the entity does not hold, behind a cast
 
 **Observation.** The type of the change of keyUpdates refuses a name that the entity does not hold.
-The run time refuses no name. A change at a name that no key reads gives the patch of no key.
-Measured 2026-11-12 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
+An entry with a codec refuses the same name at run time, with the refusal of the codec. An entry with
+no codec holds no fact that tells a name that the entity holds from a name that the entity does not
+hold, so the run time refuses only a name that is no path, or that holds a position.
+Measured 2026-11-19 with `npx vitest --run src/codec/spec/object/codec.keyupdates.held.spec.ts`:
 
-    type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
+    type OwnedPet = { petId: string; note: string; owner: { name: string } }
     const Pets = tableEntry<OwnedPet>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
 
     Pets.keyUpdates({ ghost: 1 })
       type checker: refused, 'ghost' does not exist in the type of the change
       runtime:      gives { set: {}, remove: [] }
 
-    Pets.keyUpdates({ 'owner.nick': 'bob' })
-      type checker: refused, ''owner.nick'' does not exist in the type of the change
+    Pets.keyUpdates({ note: 'n' })
+      type checker: builds
       runtime:      gives { set: {}, remove: [] }
 
-    Pets.keyUpdates({ owner: { name: 'bob', nick: 'b' } })
-      type checker: builds
-      runtime:      gives { set: { GSI1PK: { S: 'NAME#bob' } }, remove: [] }
+**Effect.** In code with no type check, a change at a name that the caller wrote wrong gives a patch
+that changes no key, and no error, where the entry has no codec.
 
-**Effect.** In code with no type check, a change at a name that the caller wrote wrong gives a
-patch that changes no key, and no error.
-
-**Pin.** `src/codec/spec/object/codec.entryexact.spec.ts` pins the refusal of the type. None for
-the run time. The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 1 id
-of the group keyUpdates.
+**Pin.** `src/codec/spec/object/codec.entryexact.spec.ts` pins the refusal of the type.
+`src/codec/spec/object/codec.keyupdates.held.spec.ts` pins the empty patch of the entry with no
+codec, and the refusal of the codec.
 
 ---
 

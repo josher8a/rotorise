@@ -453,8 +453,8 @@ describe('a name of a key that holds a dot is a path', () => {
             GSI1PK: ['owner.name.first'],
         })
         {
-            const refused = // the type reads a write to 'owner.name' as a hold of the path below it, and the run time reads no value there
-                Pets.keyUpdates({ 'owner.name': 8 })
+            // @ts-expect-error a name with a '.' is a path, and no key reads 'owner.name' itself, so the type has no member for it
+            const refused = Pets.keyUpdates({ 'owner.name': 8 })
             expect(refused).toBeInstanceOf(CodecError)
             if (refused instanceof CodecError)
                 expect(refused.message).toMatch(/cannot be rebuilt/)
@@ -609,8 +609,9 @@ describe('a name of a key that holds a dot is a path', () => {
             // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
             const refused = Coded.keyUpdates({ 'owner.name': 8 })
             expect(refused).toBeInstanceOf(CodecError)
+            // the codec declares 'owner' as text, so the path below 'owner' is no attribute of the codec
             if (refused instanceof CodecError)
-                expect(refused.message).toMatch(/cannot be rebuilt/)
+                expect(refused.kind).toBe('vacant')
         }
     })
 

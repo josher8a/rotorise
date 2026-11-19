@@ -1054,23 +1054,26 @@ export function narrow(
  * form carries a name with a `.`, `[` or `]`. A position with no name before it is the first part
  * only. A position is digits that print back as the same text, so `[007]` is refused. The function
  * reads more names than {@link expressionPath} prints: a name with a `-` is a name here, and has no
- * expression string. A malformed path is a defect of the caller. The type of {@link at} refuses a
- * malformed literal first, and a string that is no literal reaches this throw.
+ * expression string. A malformed path gives the refusal, and {@link parsePath} throws it. A malformed
+ * path is a defect of the caller. The type of {@link at} refuses a malformed literal first, and a
+ * string that is no literal reaches the refusal.
  */
-export const parsePath = (path: string): readonly Segment[] => {
+export const parsePathResult = (
+    path: string,
+): readonly Segment[] | CodecError => {
     if (path === '') return []
     const segments: Segment[] = []
     for (const [at, part] of path.split('.').entries()) {
         const parsed = /^([^[\]]*)((?:\[\d+\])*)$/.exec(part)
         if (parsed === null) {
-            throw new CodecError(
+            return new CodecError(
                 `'${path}' is no document path: a name holds no '[' or ']', and a position is digits in brackets`,
             )
         }
         const [, name = '', positions = ''] = parsed
         // a position with no name before it reads the list that the path starts at, so only the first part has one
         if (isEmptyName(name) && (positions === '' || at > 0)) {
-            throw new CodecError(
+            return new CodecError(
                 `'${path}' is no document path: a name has a character, because ${emptyNameReason}`,
             )
         }
@@ -1078,7 +1081,7 @@ export const parsePath = (path: string): readonly Segment[] => {
         for (const [, digits = ''] of positions.matchAll(/\[(\d+)\]/g)) {
             // the text of a position is the text that the number prints, so `007` and a digit run past a float are no position
             if (String(Number(digits)) !== digits) {
-                throw new CodecError(
+                return new CodecError(
                     `'${path}' is no document path: a position is digits that print back as the same text, and '[${digits}]' does not`,
                 )
             }
@@ -1086,6 +1089,13 @@ export const parsePath = (path: string): readonly Segment[] => {
         }
     }
     return segments
+}
+
+/** {@link parsePathResult}, throwing the refusal. */
+export const parsePath = (path: string): readonly Segment[] => {
+    const read = parsePathResult(path)
+    if (read instanceof CodecError) throw read
+    return read
 }
 
 /**
@@ -1132,13 +1142,84 @@ export const expressionPath = (segments: readonly Segment[]): string => {
 /** Whether a codec is a whole-item reading: an object's, a union's or a tagged union's `item`. */
 export const isItemReading = (codec: object): boolean => itemMark in codec
 
+/** The refusal of a path that no codec of the frontier declares. */
+const noAttribute = (located: string): CodecError =>
+    new CodecError(`no attribute is declared at '${located}'`, 'vacant')
+
+/** What a walk of steps gives: the frontier, or a refusal. A frontier where no codec admits a value is `vacant`. */
+type Walked =
+    | { readonly kind: 'reached'; readonly reached: Reached }
+    | { readonly kind: 'refused'; readonly error: CodecError }
+    | { readonly kind: 'vacant'; readonly error: CodecError }
+
+/**
+ * **The one walk of a path from a root, as a value.** A prior place that the walk reached continues
+ * from its frontier, so a composition walks each step one time. A clause narrows the frontier, and
+ * a segment crosses it. A refusal of the codec is `refused`, and a name that no codec of the
+ * frontier declares is `vacant`: {@link at} throws the second, and returns a codec that refuses on
+ * use for the first. {@link reachAt} gives both back as values.
+ */
+const walkSteps = (
+    root: AnyCodec,
+    steps: readonly Step[],
+    prior: Located | undefined,
+    located: string,
+): Walked => {
+    const refused = (error: CodecError): Walked => ({ kind: 'refused', error })
+    const from: Reached | undefined = prior?.reached
+    let frontier: readonly AnyCodec[] = from?.frontier ?? [root]
+    let cycles = from?.cycles
+    if (cycles === undefined) {
+        const itemDef = termOf(root)
+        const open = openRefusal(itemDef)
+        if (open) return refused(open)
+        const flat = flatOf(itemDef)
+        // `openRefusal` refused an open item above, and `scope` refuses an unguarded cycle of refs
+        // (RecursionRefused), so a closed item has a flat scope
+        if (flat.kind === 'refused') return refused(new CodecError(flat.reason))
+        cycles = flat.cycles
+    }
+    for (const step of from ? steps.slice(prior?.steps.length) : steps) {
+        const next =
+            typeof step === 'object'
+                ? narrowAcross(frontier, step)
+                : acrossVariants(frontier, step, cycles)
+        if (next instanceof CodecError) return refused(next)
+        // a frontier where no codec admits a value is a name that no codec declares
+        if (next.every(admitsNothing)) {
+            return { kind: 'vacant', error: noAttribute(located) }
+        }
+        frontier = next
+    }
+    return { kind: 'reached', reached: { frontier, cycles } }
+}
+
+/**
+ * **The frontier at the end of a path, as a value.** {@link at} throws the refusal of a name that no
+ * codec declares, and this function gives the same refusal back, so a caller inside the boundary
+ * reads it with no catch. A path that {@link parsePathResult} refuses, an open codec, and a walk that
+ * {@link childrenOf} refuses are the other refusals, each the refusal of the codec. A frontier that
+ * holds a codec that admits nothing beside one that admits a value is no refusal here: some variants
+ * declare the path, and `at` marks that case on use, as `someVariants`.
+ */
+export const reachAt = (root: AnyCodec, path: string): Reached | CodecError => {
+    const segments = parsePathResult(path)
+    if (segments instanceof CodecError) return segments
+    if (segments.length === 0) {
+        return new CodecError(
+            `the path is empty: a name has a character, because ${emptyNameReason}`,
+        )
+    }
+    const walked = walkSteps(root, segments, undefined, path)
+    return walked.kind === 'reached' ? walked.reached : walked.error
+}
+
 /** The codec at the steps of a path from a root, with its place. */
 export const locate = (
     root: AnyCodec,
     steps: readonly Step[],
     prior: Located | undefined,
 ): unknown => {
-    const itemDef = termOf(root)
     // a whole-item reading writes no map, and only such a reading carries the item mark. An object
     // codec holds a `spec` as well, so `spec` is no test
     const whole = isItemReading(root)
@@ -1156,37 +1237,11 @@ export const locate = (
      */
     let reached: Reached | undefined
     const walk = (): AnyCodec => {
-        // a prior place that the walk reached continues from its frontier, so a composition
-        // walks each step one time
-        const from: Reached | undefined = prior?.reached
-        let frontier: readonly AnyCodec[] = from?.frontier ?? [root]
-        let cycles = from?.cycles
-        if (cycles === undefined) {
-            const open = openRefusal(itemDef)
-            if (open) return refusedAt(open)
-            const flat = flatOf(itemDef)
-            // `openRefusal` refused an open item above, and `scope` refuses an unguarded cycle of refs
-            // (RecursionRefused), so a closed item has a flat scope
-            if (flat.kind === 'refused')
-                return refusedAt(new CodecError(flat.reason))
-            cycles = flat.cycles
-        }
-        for (const step of from ? steps.slice(prior?.steps.length) : steps) {
-            const next =
-                typeof step === 'object'
-                    ? narrowAcross(frontier, step)
-                    : acrossVariants(frontier, step, cycles)
-            if (next instanceof CodecError) return refusedAt(next)
-            // a frontier where no codec admits a value is a name that no codec declares
-            if (next.every(admitsNothing)) {
-                throw new CodecError(
-                    `no attribute is declared at '${located}'`,
-                    'vacant',
-                )
-            }
-            frontier = next
-        }
-        reached = { frontier, cycles }
+        const walked = walkSteps(root, steps, prior, located)
+        if (walked.kind === 'vacant') throw walked.error
+        if (walked.kind === 'refused') return refusedAt(walked.error)
+        const { frontier } = walked.reached
+        reached = walked.reached
         // the root keeps its form. A clause at the root keeps the options that it does not separate,
         // and the codec of the kept options refuses a value of a dropped option. The root of an item
         // is an item reading, which the kept options read as a row

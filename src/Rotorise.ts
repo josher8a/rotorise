@@ -38,7 +38,7 @@ import { native } from './codec/native'
 import { constantOf } from './codec/objects'
 import type { itemMark } from './codec/scope'
 import type { ChildAt, CodecAt } from './codec/scopePath'
-import { parsePath } from './codec/scopePath'
+import { parsePath, parsePathResult, reachAt } from './codec/scopePath'
 import type { KeyText } from './codec/sums'
 import type { Field, Term } from './codec/term'
 import { isCallerPin, member, sameTerm, storedPin } from './codec/term'
@@ -2889,8 +2889,10 @@ export type TableEntryDefinition<
      * holds a `.`. The given item of this update, `{ ...decided, ...changed }`, gives the entry of the
      * change at the written name first, and then the walk into a written object: a component above a
      * written path reads no value. A written path meets each component at the path, above it and
-     * below it. The type refuses a name that the entity does not hold. A change whose type is a
-     * union of object types is one of the options, so the type refuses it where it refuses one option.
+     * below it. The type refuses a name that the entity does not hold, and a name with a `.` that no
+     * key reads as a path. With a codec, the run time refuses a name that the codec does not write,
+     * with the refusal of the codec. A change whose type is a union of object types is one of the
+     * options, so the type refuses it where it refuses one option.
      *
      * A refusal of the change is a value: a decided attribute written at another value, a change that
      * cannot rebuild a touched key, and a table key that the change would rewrite give a `CodecError`
@@ -3445,21 +3447,28 @@ type FrozenBy<Schema, Roles, Given, Block> = {
 }[TableKeys<Roles> & keyof Schema]
 
 /**
- * The shape of a change: the entity, partial, where a name with a `.` that a key reads is a path.
- * The ruling is that a key name with a `.` is always a path, so the change at that name has the
- * type at the path, and an attribute whose own name holds that `.` gives the name no type. The
- * dotted names are the finite set that the schema reads, and not each path of the entity. A schema
- * with no such name keeps the entity, partial.
+ * The shape of a change: the entity, partial, where a name with a `.` is a path. The ruling is that a
+ * key name with a `.` is always a path, and the run time reads each name of a change the same way.
+ * So a change at a name with a `.` has the type at the path where a key reads that name, and an
+ * attribute whose own name holds a `.` gives the name no type. The dotted names are the finite set
+ * that the schema reads, and not each path of the entity. An entity with no dotted attribute, under
+ * a schema with no such name, keeps the entity, partial.
  */
 type ChangeShape<Entity, Schema> = [
-    Extract<ComponentNames<Schema>, AnyPath>,
+    DottedNames<Entity> | Extract<ComponentNames<Schema>, AnyPath>,
 ] extends [never]
     ? Partial<Entity>
     : Partial<
-          WithoutNames<Entity, Extract<ComponentNames<Schema>, AnyPath>>
+          WithoutNames<
+              Entity,
+              DottedNames<Entity> | Extract<ComponentNames<Schema>, AnyPath>
+          >
       > & {
           [P in Extract<ComponentNames<Schema>, AnyPath>]?: ValueAt<Entity, P>
       }
+
+/** The attributes of the entity whose own name holds a `.`. */
+type DottedNames<E> = Extract<EntityNames<E>, AnyPath>
 
 /** Each member of the entity, without the attributes of the names. */
 type WithoutNames<E, Names> = E extends unknown
@@ -4946,16 +4955,60 @@ export const tableEntry =
         }
 
         /**
-         * The keys that a change rebuilds: `update` of `KeyUpdate`, as the model states it. Each key
-         * takes one `step` of `KeyDef`. A key that the change does not touch gives no entry. A key
-         * that the change touches either builds its value, or refuses with the key that refused,
-         * which is the `Refusal` of the step. A built key is carried at the member of the key, so the
-         * patch holds the attribute that `toItem` writes: the model prints each key at `KeyDef.mem`,
-         * as `keyPartOf` reads `mem`.
+         * The refusal of a change at a name that the entry cannot write, or `undefined`. A name is a
+         * path, because a `.` in a name is a path separator. With a codec, the codec states the names:
+         * `reachAt` gives the refusal of the codec for a name that it does not declare, and for a path
+         * that it cannot enter. A rest declares each other name at the top level. A tagged codec
+         * refuses a name that every variant refuses, and reads only the chosen variant where the
+         * change holds the discriminator. With no codec, the entry refuses only a name that is no
+         * path, or that holds a position, because a key does not read into a list.
+         */
+        const unheldBy = (
+            changed: Record<string, unknown>,
+        ): CodecError | undefined => {
+            const root =
+                attributes !== undefined &&
+                isTagged(attributes) &&
+                Object.hasOwn(changed, attributes.discriminator)
+                    ? attributes.variantOf(changed)
+                    : attributes
+            if (root instanceof CodecError) return root
+            for (const name of Object.keys(changed)) {
+                if (root === undefined) {
+                    const read = parsePathResult(name)
+                    if (read instanceof CodecError) return read
+                    if (
+                        read.length === 0 ||
+                        read.some((s) => typeof s === 'number')
+                    ) {
+                        return keyRefusal(
+                            `'${name}' is no key path: a key path joins names with '.', and holds no empty name and no position`,
+                        )
+                    }
+                    continue
+                }
+                // the erased TaggedRuntime states no `def`, and each codec that the library builds holds one, as for `at` above
+                const reached = reachAt(root as never, name)
+                if (reached instanceof CodecError) return reached
+            }
+            return undefined
+        }
+
+        /**
+         * The keys that a change rebuilds: `update` of `KeyUpdate`, as the model states it. A
+         * change at a name that the entry cannot write is refused first. With no codec, the run
+         * time holds no fact that tells `note` from `ghost`, so a well formed name that no key
+         * reads gives the empty patch. Each key takes one `step` of `KeyDef`. A key that the change
+         * does not touch gives no entry. A key that the change touches either builds its value, or
+         * refuses with the key that refused, which is the `Refusal` of the step. A built key is
+         * carried at the member of the key, so the patch holds the attribute that `toItem` writes:
+         * the model prints each key at `KeyDef.mem`, as `keyPartOf` reads `mem`.
          */
         const updateKeys = (
             changed: Record<string, unknown>,
         ): Result<KeyUpdate<string>> => {
+            const unheld = unheldBy(changed)
+            if (unheld !== undefined) return unheld
             // an entry list, so a key named `__proto__` is an own attribute of the result
             const set: [string, AttributeValue][] = []
             const remove: string[] = []
