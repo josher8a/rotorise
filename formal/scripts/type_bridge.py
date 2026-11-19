@@ -6,9 +6,8 @@ decision of the run time, and a rows file, which names the row of each check. Th
 `formal/.entry.types/` in the same form: the methods of an entry, one program for the pool of the
 entries. Each directory has its own rows, its own programs and one owner spec. A check where the
 run time accepts is a plain line. A check where the run time refuses is a line under
-`@ts-expect-error`, and a refused path row is a bare line (the row has `bare`). This script compiles the slice program beside the path programs, and the path
-programs one after another, so the peak memory holds one path program. Each program holds the
-codecs file. The script maps each error to its row:
+`@ts-expect-error`, and a refused path row is a bare line (the row has `bare`). This script compiles `--jobs` programs at one time, 2 by default, so the peak
+memory holds that many programs. Each program holds the codecs file. The script maps each error to its row:
 
   an `accept` row with an error         the type refuses what the run time accepts
   a `refuse` row whose directive is     the type accepts what the run time refuses
@@ -49,9 +48,10 @@ the baseline fails, and the script prints the id. An id of the baseline that no 
 fall: the script counts it, and the check passes.
 
 Usage:  python3 scripts/type_bridge.py            (exit 1 on a new id or a hard failure)
+        python3 scripts/type_bridge.py --jobs N   (compile N programs at one time, 2 by default)
         python3 scripts/type_bridge.py --accept   (rewrite the baseline to the current set)
 """
-import glob, json, os, re, shutil, subprocess, sys, tempfile
+import concurrent.futures, glob, json, os, re, shutil, subprocess, sys, tempfile
 from collections import Counter
 
 FORMAL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -85,18 +85,37 @@ def programs(directory, *kinds):
     )
 
 
-def compile_all():
-    """Run the slice program beside the path programs, and the path programs one after another.
-    The entry programs run in the sequence of the path programs. Return the directory, the program,
-    the output and the exit code of each program."""
-    sequence = [(POOL, p) for p in programs(POOL, "slices", "meets", "paths")]
+def compile_all(jobs):
+    """Compile the slice program, the path programs and the entry programs, `jobs` programs at one
+    time, the largest program first so that the last program is short. Return the directory, the
+    program, the output and the exit code of each program, in the sequence of the programs, so the
+    order of the output does not depend on `jobs`."""
+    sequence = [(POOL, SLICES)]
+    sequence += [(POOL, p) for p in programs(POOL, "slices", "meets", "paths")]
     sequence += [(ENTRY, p) for p in programs(ENTRY, "entries")]
-    slices = tsc(POOL, SLICES)
-    results = []
-    for directory, p in sequence:
-        proc = tsc(directory, p)
-        results.append((directory, p, proc.communicate()[0], proc.returncode))
-    return [(POOL, SLICES, slices.communicate()[0], slices.returncode), *results]
+
+    def size(item):
+        directory, program = item
+        return os.path.getsize(os.path.join(directory, program.replace("tsconfig.", "").replace(".json", ".ts")))
+
+    def run(item):
+        proc = tsc(*item)
+        return (*item, proc.communicate()[0], proc.returncode)
+
+    largest_first = sorted(sequence, key=lambda item: -size(item))
+    with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
+        done = dict(zip(largest_first, pool.map(run, largest_first)))
+    return [done[item] for item in sequence]
+
+
+def jobs():
+    """The count of programs that compile at one time: the value of `--jobs`, and 2 where the flag is absent."""
+    if "--jobs" not in sys.argv:
+        return 2
+    value = sys.argv[sys.argv.index("--jobs") + 1] if sys.argv.index("--jobs") + 1 < len(sys.argv) else ""
+    if not value.isdigit() or int(value) < 1:
+        sys.exit("--jobs needs a count of 1 or more")
+    return int(value)
 
 
 def parse(directory, program, output, hard):
@@ -285,7 +304,7 @@ def main():
             return 1
     hard = []
     errors = set()
-    for directory, program, output, code in compile_all():
+    for directory, program, output, code in compile_all(jobs()):
         if code not in (0, 1, 2):
             hard.append(f"{program}: tsc exit {code}")
         errors.update(parse(directory, program, output, hard))

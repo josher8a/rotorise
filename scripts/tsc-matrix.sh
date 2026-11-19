@@ -4,6 +4,7 @@
 #
 #   scripts/tsc-matrix.sh            read `dist/` as it stands, compile the consumer project
 #   scripts/tsc-matrix.sh --build    run `npm run build` first
+#   TSC_MATRIX_FAIL_FAST=1 scripts/tsc-matrix.sh    stop at the first compiler that fails
 #
 # A consumer compiles the published types with its own compiler, and a type can reach a limit there
 # that the compiler of the lockfile does not reach. The project resolves `rotorise` through the
@@ -11,7 +12,9 @@
 # Every version runs outside the package and prints one line. A line whose compiler prints another
 # version than the requested version fails. Then the published entries run under node, in ESM and
 # in CJS, and one script per format checks that a class has one identity across the entries.
-# Exit 1 on any failure.
+# Exit 1 on any failure. A row of `scripts/mutants.tsv` needs one failing line, so it sets
+# TSC_MATRIX_FAIL_FAST=1: the run stops after the first line that fails, and the later compilers
+# and the identity scripts do not run.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,7 +27,7 @@ DO_BUILD=0
 for arg in "$@"; do
   case "$arg" in
     --build) DO_BUILD=1 ;;
-    -h|--help) sed -n '2,6p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,7p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "tsc-matrix.sh: unknown argument: $arg" >&2
        echo "usage: tsc-matrix.sh [--build]" >&2
        exit 2 ;;
@@ -70,6 +73,7 @@ for version in "${VERSIONS[@]}"; do
     printf '%s\n' "$out" | grep -v '^Version ' | sed 's/^/      | /' | head -20
     failed=1
   fi
+  [ "$failed" -eq 1 ] && [ -n "${TSC_MATRIX_FAIL_FAST:-}" ] && exit 1
 done
 for format in mjs cjs; do
   if out=$(node "scripts/consumer/identity.$format" 2>&1); then
