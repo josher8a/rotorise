@@ -893,39 +893,32 @@ type refuses, so the input is data with no type, or a cast.
 
 ---
 
-## Known: toEntry of an entry with a codec builds an entry that the codec refuses
+## Known: the type accepts an extra name in an element of a list, where the run time refuses
 
-**Observation.** toEntry prints the keys from the attributes of the item, and returns the item with
-the keys. It reads no codec, so it checks no value of the item. toItem of the same entry refuses the
-same item. The type of the item compares the names at the top level only, so an extra name below an
-object compiles. Measured 2026-11-19 on 75752a58 with `npx vitest --run` and `tsc --noEmit` on
-TypeScript 7, on a probe spec:
+**Observation.** The type of the item of toEntry and the type of the change of keyUpdates compare
+the names at each depth below a plain object. A list is a leaf of that comparison, so an extra name
+in an element of a list compiles. With a codec, the run time asks the codec, and the codec refuses
+the element. Measured 2026-11-19 with `npx vitest --run` and `tsc --noEmit` on TypeScript 7, on a
+probe spec, on 54d06d3c with the check of toEntry:
 
-    type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
-    const owner = object({ name: string, nick: string })
-    const Coded = tableEntry<OwnedPet>()(
-      { PK: ['petId'], GSI1PK: ['owner.name'] },
-      { codec: { petId: string, note: string, owner } },
+    type Pet = { petId: string; legs: readonly { readonly id: number }[] }
+    const Coded = tableEntry<Pet>()(
+      { PK: ['petId'] },
+      { codec: { petId: string, legs: array(object({ id: number })) } },
     )
 
-    Coded.toEntry({ petId: 'p', note: 'n', owner: { name: 'b', nick: 'k', ghost: 'g' } })
+    Coded.toEntry({ petId: 'p', legs: [{ id: 1, ghost: 1 }] })
       type checker: builds
-      runtime:      gives the item with ghost, PK PETID#p and GSI1PK NAME#b
-      toItem:       refuses, at owner: 'ghost' is not an attribute this codec declares
+      runtime:      refuses, at legs[0]: 'ghost' is not an attribute this codec declares
 
-    Coded.toEntry({ petId: 'p', note: 'n', owner: { name: 'b' } } as never)
-      type checker: refused without the cast, 'nick' is missing
-      runtime:      gives the item, PK PETID#p and GSI1PK NAME#b
-      toItem:       refuses, at owner: 'nick' is required and was not given
+    Coded.keyUpdates({ legs: [{ id: 1, ghost: 1 }] })
+      type checker: builds
+      runtime:      refuses, at [0]: 'ghost' is not an attribute this codec declares
 
-    Coded.toEntry({ petId: 'p', note: 'n', owner: { name: 'b', nick: 'k' }, ghost: 1 } as never)
-      type checker: refused without the cast
-      runtime:      gives the item with ghost, and the two keys
+**Effect.** A caller that the type checker approves learns of the extra name at run time, as a
+value of the kind `refused`.
 
-**Effect.** An item that the codec refuses reaches the table through toEntry with no error, where
-toItem refuses it.
-
-**Pin.** None. The docstring of toEntry states that a name in excess below an object compiles.
+**Pin.** None.
 
 ---
 

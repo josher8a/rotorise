@@ -47,7 +47,6 @@ import type {
     DistributiveOmit,
     DistributivePick,
     ErrorMessage,
-    Exact,
     MergeIntersectionObject,
     NonEmptyArray,
     Replace,
@@ -2771,22 +2770,27 @@ export type TableEntryDefinition<
      * Converts a raw entity into a complete table entry with all keys computed.
      * Use this when preparing items for insertion into DynamoDB.
      *
-     * The type refuses an item whose value has a type that the entity does not hold, and an item
-     * that lacks a name of the entity. `toEntry` prints each key from the attributes of the item,
-     * so a wrong value prints a key that `toItem` of the same entity never writes. `Exact` compares
-     * the names at the top level only: a name in excess below an object compiles.
+     * The type refuses an item whose value has a type that the entity does not hold, an item that
+     * lacks a name of the entity, and a name in excess at each depth below an object. A name in
+     * excess in an element of a list compiles, because a list is a leaf of the comparison. `toEntry`
+     * prints each key from the attributes of the item, so a wrong value prints a key that `toItem`
+     * of the same entity never writes.
+     *
+     * With a codec, the run time asks the codec after the keys: an item that the codec refuses is
+     * refused with the refusal of the codec, as `toItem` refuses it. With no codec, the run time
+     * holds no codec to ask, so the entry checks no value of the item.
      *
      * A refusal of the item is a value: a key that cannot print, a name of a key that the item holds,
      * and a numeral that the marshaller cannot write give a `CodecError`. The error of a key has the
-     * kind `key`, `separator`, `decided` or `rewrite`.
+     * kind `key`, `separator`, `decided` or `rewrite`, and the error of the codec has another kind.
      */
     toEntry: <const ExactEntity extends Entity>(
-        item: Exact<Entity, ExactEntity>,
+        item: ExactDeep<Entity, ExactEntity>,
     ) => Result<HeldEntry<ExactEntity, Schema, Separator, CodecSpec, CodecRest>>
 
     /** The same, throwing the error that `toEntry` returns. */
     unsafeToEntry: <const ExactEntity extends Entity>(
-        item: Exact<Entity, ExactEntity>,
+        item: ExactDeep<Entity, ExactEntity>,
     ) => HeldEntry<ExactEntity, Schema, Separator, CodecSpec, CodecRest>
 
     /**
@@ -2900,7 +2904,7 @@ export type TableEntryDefinition<
      * of the kind `decided` or `rewrite`, or of the kind `key` or `separator` that the step keeps.
      */
     keyUpdates: <const Changed extends ChangeShape<Entity, Schema>>(
-        changed: ChangeExact<ChangeShape<Entity, Schema>, Changed> &
+        changed: ExactDeep<ChangeShape<Entity, Schema>, Changed> &
             ChangeRefusal<
                 ChangeShape<Entity, Schema>,
                 Schema,
@@ -2912,7 +2916,7 @@ export type TableEntryDefinition<
 
     /** The same, throwing the error that `keyUpdates` returns. */
     unsafeKeyUpdates: <const Changed extends ChangeShape<Entity, Schema>>(
-        changed: ChangeExact<ChangeShape<Entity, Schema>, Changed> &
+        changed: ExactDeep<ChangeShape<Entity, Schema>, Changed> &
             ChangeRefusal<
                 ChangeShape<Entity, Schema>,
                 Schema,
@@ -3485,17 +3489,17 @@ type Leaf =
     | Date
 
 /**
- * `Exact` for a change, at each depth. A name that the shape does not hold is refused below a plain
- * object too, because the codec refuses the same object. The shared `Exact` compares the top level
- * only, and `toEntry` keeps that comparison.
+ * `Exact`, at each depth. A name that the shape does not hold is refused below a plain object too,
+ * because the codec refuses the same object. A list, a function, a binary value, a set, a map and a
+ * date are leaves: the comparison stops there.
  */
-type ChangeExact<Shape, Candidate> = Candidate & {
+type ExactDeep<Shape, Candidate> = Candidate & {
     [K in keyof Candidate]: K extends EntityNames<Shape>
         ? Candidate[K] extends object
             ? [ShapeAt<Shape, K>] extends [Leaf]
                 ? Candidate[K]
                 : [ShapeAt<Shape, K>] extends [object]
-                  ? ChangeExact<ShapeAt<Shape, K>, Candidate[K]>
+                  ? ExactDeep<ShapeAt<Shape, K>, Candidate[K]>
                   : Candidate[K]
             : Candidate[K]
         : never
@@ -5296,7 +5300,7 @@ export const tableEntry =
         const buildEntry = (item: Record<string, unknown>) => {
             const held = holdsKeyName(item, 'the entity')
             if (held !== undefined) return keyRefusal(held)
-            return andThen(
+            const entry = andThen(
                 keyPart(item, (name, value) =>
                     andThen(carried(name, item, value), (key) =>
                         heldKey(name, key),
@@ -5304,6 +5308,11 @@ export const tableEntry =
                 ),
                 (part) => joinRow(item, part),
             )
+            // a refusal of a key keeps its own kind and text, so the codec checks the item last
+            if (failed(entry) || attributes === undefined) return entry
+            // the erased codec takes `never`, and the codec checks the item itself
+            const written = attributes.encode(item as never)
+            return written instanceof CodecError ? written : entry
         }
 
         /**
