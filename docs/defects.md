@@ -893,40 +893,29 @@ type refuses, so the input is data with no type, or a cast.
 
 ---
 
-## Known: the type compares a name of an object of a union against every member, where the codec reads the member that the value chooses
+## Known: the type accepts a name of each member of a union that holds no literal name, where the codec refuses the value
 
-**Observation.** ExactDeep reads the names of a union of objects through every member, at each depth. A
-name that one member holds is accepted for a value of another member. With a codec, the run time
-asks the codec, and the codec reads the member that the value chooses, so it refuses the name. The
-gap holds for an object of a union, for an element of a list of a union, and for an entity that is a
-union. Measured 2026-11-19 with `npx vitest --run` and `tsc --noEmit` on TypeScript 7, on a probe
-spec, on 8d557a7f with the recursion into a list:
+**Observation.** ExactDeep drops a member of a union where the value holds another literal at a name
+that the member holds as a literal. A union with no such name drops no member, so the type accepts
+the names of every member together. With a codec, the run time asks the codec, and no option admits
+a value that holds the names of two members. Measured 2026-11-19 with `npx vitest --run
+src/codec/spec/object/codec.exactunion.spec.ts` and `tsc --noEmit` on TypeScript 7:
 
-    type A = { kind: 'a'; x: number }
-    type B = { kind: 'b'; y: string }
-    type Pet = { petId: string; pet: A | B; mix: readonly (A | B)[] }
-    type Dog = { kind: 'dog'; petId: string; bark: string }
-    type Cat = { kind: 'cat'; petId: string; lives: number }
+    type Plain = { petId: string; plain: { x: number } | { y: string } }
+    const Plains = tableEntry<Plain>()({ PK: ['petId'] }, { codec: {
+        petId: string,
+        plain: union([object({ x: number }), object({ y: string })]),
+    } })
 
-    P.toEntry({ petId: 'p', pet: { kind: 'a', x: 1, y: 's' }, mix: [] })
+    Plains.toEntry({ petId: 'p', plain: { x: 1, y: 's' } })
       type checker: builds
-      runtime:      refuses, at pet: no option admits this value with attributes 'kind', 'x', 'y'
+      runtime:      refuses, no option admits this value
 
-    P.toEntry({ petId: 'p', pet: { kind: 'a', x: 1 }, mix: [{ kind: 'a', x: 1, y: 's' }] })
-      type checker: builds
-      runtime:      refuses, at mix[0]: no option admits this value with attributes 'kind', 'x', 'y'
+**Effect.** A caller that the type checker approves learns of the names of two members at run
+time, as a value of the kind 'refused'. A union that holds a literal name has no such gap.
 
-    Animals.toEntry({ kind: 'dog', petId: 'p', bark: 'x', lives: 1 })
-      type checker: builds
-      runtime:      refuses, 'lives' is not an attribute this codec declares
-
-keyUpdates gives the same three refusals for the same values: at pet, at mix[0], and for 'lives'
-with the kind vacant.
-
-**Effect.** A caller that the type checker approves learns of the name of another member at run
-time, as a value of the kind `refused` or `vacant`.
-
-**Pin.** None.
+**Pin.** `src/codec/spec/object/codec.exactunion.spec.ts` pins the acceptance of the type and the
+refusal of the codec.
 
 ---
 

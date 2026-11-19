@@ -3508,11 +3508,65 @@ type ExactAt<Shape, Candidate> = Candidate extends readonly unknown[]
  * `Exact`, at each depth. A name that the shape does not hold is refused below a plain object too,
  * because the codec refuses the same object, and below an element of a list.
  */
-type ExactDeep<Shape, Candidate> = Candidate & {
+type ExactDeep<Shape, Candidate> = ExactIn<Chosen<Shape, Candidate>, Candidate>
+
+type ExactIn<Shape, Candidate> = Candidate & {
     [K in keyof Candidate]: K extends EntityNames<Shape>
         ? ExactAt<ShapeAt<Shape, K>, Candidate[K]>
         : never
 }
+
+/** Whether a type is one literal, or a union of literals, of a string, a number or a boolean. */
+type IsLiteral<V> = [V] extends [never]
+    ? false
+    : V extends string | number | boolean
+      ? string extends V
+          ? false
+          : number extends V
+            ? false
+            : boolean extends V
+              ? false
+              : true
+      : false
+
+/** Whether no type of a union `Held` shares a value with `Given`. A `Held` with no type is not disjoint. */
+type Disjoint<Held, Given> = [Held] extends [never]
+    ? false
+    : true extends Overlaps<Held, Given>
+      ? false
+      : true
+
+type Overlaps<Held, Given> = Held extends unknown
+    ? [Held] extends [Given]
+        ? true
+        : [Given] extends [Held]
+          ? true
+          : false
+    : never
+
+/** The names where no literal of the candidate is a literal of the member, and the member holds a literal. */
+type Contradicts<Member, Candidate> = {
+    [K in keyof Candidate & keyof Member]: IsLiteral<
+        Exclude<Member[K], undefined>
+    > extends true
+        ? Disjoint<Exclude<Candidate[K], undefined>, Member[K]> extends true
+            ? K
+            : never
+        : never
+}[keyof Candidate & keyof Member]
+
+/**
+ * The members of a union of shapes that the candidate can be. The codec chooses a member that admits
+ * the value, and such a member holds the literal of the value at each literal name. So a member that
+ * shares no literal with the candidate at a literal name is not the member of the codec, and dropping
+ * the member never refuses a value that the codec admits. A candidate that holds a union of literals
+ * keeps each member that holds one of them, and a union with no literal name drops no member.
+ */
+type Chosen<Shape, Candidate> = Shape extends unknown
+    ? [Contradicts<Shape, Candidate>] extends [never]
+        ? Shape
+        : never
+    : never
 
 /** The attributes of the entity whose own name holds a `.`. */
 type DottedNames<E> = Extract<EntityNames<E>, AnyPath>
