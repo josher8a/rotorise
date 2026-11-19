@@ -33,7 +33,7 @@ import {
     pathBuilder,
 } from './codec/codec'
 import type { KnownKeys } from './codec/derivedItem'
-import type { Segment } from './codec/frontier'
+import type { Reached, Segment } from './codec/frontier'
 import { native } from './codec/native'
 import { constantOf } from './codec/objects'
 import type { itemMark } from './codec/scope'
@@ -2889,17 +2889,18 @@ export type TableEntryDefinition<
      * holds a `.`. The given item of this update, `{ ...decided, ...changed }`, gives the entry of the
      * change at the written name first, and then the walk into a written object: a component above a
      * written path reads no value. A written path meets each component at the path, above it and
-     * below it. The type refuses a name that the entity does not hold, and a name with a `.` that no
-     * key reads as a path. With a codec, the run time refuses a name that the codec does not write,
-     * with the refusal of the codec. A change whose type is a union of object types is one of the
-     * options, so the type refuses it where it refuses one option.
+     * below it. The type refuses a name that the entity does not hold, below an object too, and a name
+     * with a `.` that no key reads as a path. With a codec, the run time refuses a name that the codec
+     * does not write, and a value that the codec refuses, with the refusal of the codec. A change
+     * whose type is a union of object types is one of the options, so the type refuses it where it
+     * refuses one option.
      *
      * A refusal of the change is a value: a decided attribute written at another value, a change that
      * cannot rebuild a touched key, and a table key that the change would rewrite give a `CodecError`
      * of the kind `decided` or `rewrite`, or of the kind `key` or `separator` that the step keeps.
      */
     keyUpdates: <const Changed extends ChangeShape<Entity, Schema>>(
-        changed: Exact<ChangeShape<Entity, Schema>, Changed> &
+        changed: ChangeExact<ChangeShape<Entity, Schema>, Changed> &
             ChangeRefusal<
                 ChangeShape<Entity, Schema>,
                 Schema,
@@ -2911,7 +2912,7 @@ export type TableEntryDefinition<
 
     /** The same, throwing the error that `keyUpdates` returns. */
     unsafeKeyUpdates: <const Changed extends ChangeShape<Entity, Schema>>(
-        changed: Exact<ChangeShape<Entity, Schema>, Changed> &
+        changed: ChangeExact<ChangeShape<Entity, Schema>, Changed> &
             ChangeRefusal<
                 ChangeShape<Entity, Schema>,
                 Schema,
@@ -3466,6 +3467,39 @@ type ChangeShape<Entity, Schema> = [
       > & {
           [P in Extract<ComponentNames<Schema>, AnyPath>]?: ValueAt<Entity, P>
       }
+
+/** A key of a member of a union of shapes, without `undefined`. */
+type ShapeAt<Shape, K> = Shape extends unknown
+    ? K extends keyof Shape
+        ? Exclude<Shape[K], undefined>
+        : never
+    : never
+
+/** A value that holds no names of its own to compare: a list, a function, a binary value, a set, a map, a date. */
+type Leaf =
+    | readonly unknown[]
+    | ((...args: never[]) => unknown)
+    | Uint8Array
+    | ReadonlySet<unknown>
+    | ReadonlyMap<unknown, unknown>
+    | Date
+
+/**
+ * `Exact` for a change, at each depth. A name that the shape does not hold is refused below a plain
+ * object too, because the codec refuses the same object. The shared `Exact` compares the top level
+ * only, and `toEntry` keeps that comparison.
+ */
+type ChangeExact<Shape, Candidate> = Candidate & {
+    [K in keyof Candidate]: K extends EntityNames<Shape>
+        ? Candidate[K] extends object
+            ? [ShapeAt<Shape, K>] extends [Leaf]
+                ? Candidate[K]
+                : [ShapeAt<Shape, K>] extends [object]
+                  ? ChangeExact<ShapeAt<Shape, K>, Candidate[K]>
+                  : Candidate[K]
+            : Candidate[K]
+        : never
+}
 
 /** The attributes of the entity whose own name holds a `.`. */
 type DottedNames<E> = Extract<EntityNames<E>, AnyPath>
@@ -4955,17 +4989,17 @@ export const tableEntry =
         }
 
         /**
-         * The refusal of a change at a name that the entry cannot write, or `undefined`. A name is a
-         * path, because a `.` in a name is a path separator. With a codec, the codec states the names:
-         * `reachAt` gives the refusal of the codec for a name that it does not declare, and for a path
-         * that it cannot enter. A rest declares each other name at the top level. A tagged codec
-         * refuses a name that every variant refuses, and reads only the chosen variant where the
+         * Where each name of a change lands, or the refusal of a name that the entry cannot write. A
+         * name is a path, because a `.` in a name is a path separator. With a codec, the codec states
+         * the names: `reachAt` gives the refusal of the codec for a name that it does not declare, and
+         * for a path that it cannot enter. A rest declares each other name at the top level. A tagged
+         * codec refuses a name that every variant refuses, and reads only the chosen variant where the
          * change holds the discriminator. With no codec, the entry refuses only a name that is no
-         * path, or that holds a position, because a key does not read into a list.
+         * path, or that holds a position, because a key does not read into a list, and no name lands.
          */
-        const unheldBy = (
+        const landedBy = (
             changed: Record<string, unknown>,
-        ): CodecError | undefined => {
+        ): readonly (readonly [string, Reached])[] | CodecError => {
             const root =
                 attributes !== undefined &&
                 isTagged(attributes) &&
@@ -4973,6 +5007,7 @@ export const tableEntry =
                     ? attributes.variantOf(changed)
                     : attributes
             if (root instanceof CodecError) return root
+            const landed: (readonly [string, Reached])[] = []
             for (const name of Object.keys(changed)) {
                 if (root === undefined) {
                     const read = parsePathResult(name)
@@ -4990,6 +5025,38 @@ export const tableEntry =
                 // the erased TaggedRuntime states no `def`, and each codec that the library builds holds one, as for `at` above
                 const reached = reachAt(root as never, name)
                 if (reached instanceof CodecError) return reached
+                landed.push([name, reached])
+            }
+            return landed
+        }
+
+        /**
+         * The refusal of a value that the codec refuses, or `undefined`. The codec at each changed
+         * name checks the value, as `encode` does. A frontier of more than one codec refuses where
+         * every codec refuses. A write of `undefined` is a removal and holds no value to check. The
+         * step of the keys runs first, so a refusal of a key keeps its own kind and text. With no
+         * codec, the run time holds no fact about the value, so no name lands and the entry checks
+         * none.
+         */
+        const valueRefusal = (
+            changed: Record<string, unknown>,
+            landed: readonly (readonly [string, Reached])[],
+        ): CodecError | undefined => {
+            for (const [name, reached] of landed) {
+                const given = changed[name]
+                // a removal is no value for the codec to encode, as the model states it: `changed: name → none`
+                if (given === undefined) continue
+                const refusals = reached.frontier.map((codec) =>
+                    // the erased codec of a frontier takes `never`, and the codec checks the value itself
+                    codec.encode(given as never),
+                )
+                const [first] = refusals
+                if (
+                    first instanceof CodecError &&
+                    refusals.every((one) => one instanceof CodecError)
+                ) {
+                    return first
+                }
             }
             return undefined
         }
@@ -5007,8 +5074,8 @@ export const tableEntry =
         const updateKeys = (
             changed: Record<string, unknown>,
         ): Result<KeyUpdate<string>> => {
-            const unheld = unheldBy(changed)
-            if (unheld !== undefined) return unheld
+            const landed = landedBy(changed)
+            if (landed instanceof CodecError) return landed
             // an entry list, so a key named `__proto__` is an own attribute of the result
             const set: [string, AttributeValue][] = []
             const remove: string[] = []
@@ -5072,6 +5139,8 @@ export const tableEntry =
                 set.push([key.name, value])
             }
 
+            const wrong = valueRefusal(changed, landed)
+            if (wrong !== undefined) return wrong
             return { set: Object.fromEntries(set), remove }
         }
 

@@ -921,38 +921,25 @@ codec, and the refusal of the codec.
 
 ---
 
-## Known: keyUpdates builds a key from an object that the codec refuses
+## Partially mitigated: keyUpdates of an entry with no codec builds a key from an object that no codec reads
 
-**Observation.** keyUpdates reads the key components of a change, and refuses a name at the top
-level that the codec does not declare. Below the top level it checks nothing: an object that the
-codec refuses still builds the key. The type of the change compares the names at the top level
-only, so an extra name below an object compiles, also in a fresh literal. Measured 2026-11-19 on
-f6fd0352 with `npx vitest --run` and `tsc --noEmit` on TypeScript 7, on a probe spec:
+**Observation.** With a codec, keyUpdates asks the codec of each changed name for the value, and
+refuses a value that the codec refuses. The type refuses a name in excess at each depth. An entry
+with no codec holds no codec to ask, so the run time checks no value. Measured 2026-11-19 with
+`npx vitest --run src/codec/spec/object/codec.keyupdates.value.spec.ts`:
 
-    type OwnedPet = { petId: string; note: string; owner: { name: string; nick: string } }
-    const owner = object({ name: string, nick: string })
-    const Coded = tableEntry<OwnedPet>()(
-      { PK: ['petId'], GSI1PK: ['owner.name'] },
-      { codec: { petId: string, note: string, owner } },
-    )
+    type OwnedPet = { petId: string; note: string; owner: { name: string; alias?: string } }
+    const Plain = tableEntry<OwnedPet>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
 
-    Coded.keyUpdates({ owner: { name: 'b', nick: 'k', ghost: 'n' } })
-      type checker: builds
+    Plain.keyUpdates({ owner: { name: 'b', alias: 'k', ghost: 'n' } } as never)
+      type checker: refused without the cast, 'ghost' is in excess
       runtime:      gives { set: { GSI1PK: { S: 'NAME#b' } }, remove: [] }
-      the codec:    owner.encode of the same object refuses, 'ghost' is not an attribute
 
-    Coded.keyUpdates({ owner: { name: 'b' } } as never)
-      type checker: refused without the cast, 'nick' is missing
-      runtime:      gives { set: { GSI1PK: { S: 'NAME#b' } }, remove: [] }
-      the codec:    owner.encode of the same object refuses, 'nick' is required
+**Effect.** In code with no type check, a change that carries a wrong value gives a key patch and
+no error, where the entry has no codec.
 
-The entry with no codec gives the same patch for each change.
-
-**Effect.** A change that carries a wrong name below an object, or that lacks a required name
-below an object, gives a key patch and no error. The write of the same change through the codec
-refuses it.
-
-**Pin.** None.
+**Pin.** `src/codec/spec/object/codec.keyupdates.value.spec.ts` pins the patch of the entry with no
+codec, and the refusal of the codec.
 
 ---
 
