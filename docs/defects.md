@@ -520,41 +520,30 @@ of two literals at one slot.
 
 ---
 
-## Known: the type refuses a key that reads a path that can be absent, or a name with a `.`, where the run time builds the entry
+## Known: the type refuses a key at a path below nullable, where the run time builds the entry
 
-**Observation.** The type refuses a key component at a path whose parent can be `null`, and a key
-that names an attribute whose own name holds a `.`. The refusal lands on the component, and the
-head of the error names each rule that the component breaks. The run time holds no type of the
-entity, so it builds each entry. Measured 2026-11-18 with `tsc --noEmit` on TypeScript 7 and
-`npx vitest --run`:
+**Observation.** The type gives no member for a path below a codec of nullable, because the type of
+nullable does not carry the spec of its inner object. The refusal lands on the component. The walk
+of the run time, 'reachAt', enters nullable and reaches the path, so the construction builds the
+entry. Measured 2026-11-19 with `tsc --noEmit` on TypeScript 7 and `npx vitest --run`:
 
     type Pet = { id: string; meta: { note: string } | null }
     tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] },
                       { codec: { id: string, meta: nullable(object({ note: string })) } })
-      type checker: refused at 'meta.note', with two messages in the head: the path can be absent,
-                    and the codec cannot address the path
+      type checker: refused at 'meta.note': the codec cannot address that path. A record with a
+                    default for the component gives the same refusal
       runtime:      builds. toEntry gives the SK NOTE#n where meta is an object, and a CodecError,
                     "Attribute meta.note not found", where meta is null
 
-    tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] })
-      type checker: refused at 'meta.note': the path can be absent
-      runtime:      builds, with the same two results of toEntry
+**Effect.** A schema that the type refuses builds behind a cast. The fix changes the return type of
+nullable, so each call of nullable changes.
 
-    type Flat = { petId: string; 'owner.name': string }
-    tableEntry<Flat>()({ PK: ['petId'], GSI1PK: 'owner.name' })
-      type checker: refused at 'owner.name', with one message: a `.` in a key name is a path
-                    separator
-      runtime:      builds. toEntry writes no GSI1PK, because the path owner.name reads no value
-
-**Effect.** A schema that the type refuses builds behind a cast. A key at a path that can be absent
-gives an error value for the item that lacks the path. A key that names an attribute with a `.`
-is never written, with no error.
-
-**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 3 ids of
-the group construct, one for each table that the type refuses and the run time builds.
-src/Rotorise.attest.test.ts pins the head of the first and of the third refusal.
-src/codec/spec/object/codec.keycomponent.spec.ts pins the refusal of the entity whose attribute
-holds the `.`, for a list.
+**Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds the id
+'nullableMeta.codecPath' of the group construct for this table. The same group holds two ids for
+tables where the type refuses by a rule of the owner. A name that can be absent reaches a key
+through a match with a null arm, or through a record with a default, and the type refuses it as a
+plain component where the author gives no default. A `.` in a key name is a path separator. src/Rotorise.attest.test.ts pins the head
+of the refusal.
 
 ---
 

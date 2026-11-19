@@ -4807,10 +4807,18 @@ export const tableEntry =
             return slot === undefined ? [] : [slot]
         }
 
-        /** The slots of a component at construction, where a path that the codec cannot address is refused. */
+        /**
+         * The slots of a component at construction, where a path that the codec cannot address is refused,
+         * and so is a name that the codec declares no field of, and holds no rest for. The run time
+         * gives an error value for each item of such a key, so the refusal moves to the schema.
+         */
         const slotsAtConstruction = (name: string): ObjectSlot[] => {
             const slots = componentSlots(name)
             if (failed(slots)) throw new RotoriseError(slots.message)
+            if (attributes !== undefined && slots.length === 0)
+                throw new RotoriseError(
+                    `'${name}' is a component of a key, and the codec declares no attribute of that name, so the key cannot print the stored text`,
+                )
             return slots
         }
 
@@ -4922,12 +4930,9 @@ export const tableEntry =
                                 ? component
                                 : { at: component }
                         ) as { at: unknown; value?: unknown }
-                        if (
-                            typeof field !== 'string' ||
-                            typeof transform === 'function'
-                        )
-                            continue
+                        if (typeof field !== 'string') continue
                         const slots = slotsAtConstruction(field)
+                        if (typeof transform === 'function') continue
                         oneCodec(name, field, slots)
                         for (const slot of slots) {
                             const stored = storedAt(slot)
