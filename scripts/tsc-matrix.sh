@@ -8,8 +8,9 @@
 # A consumer compiles the published types with its own compiler, and a type can reach a limit there
 # that the compiler of the lockfile does not reach. The project resolves `rotorise` through the
 # `exports` map, as a consumer does, and checks the `.d.ts` files too (`skipLibCheck` is off).
-# Every version runs and prints one line. Then the published entries run under node, in ESM and in
-# CJS, and one script per format checks that a class has one identity across the entries.
+# Every version runs outside the package and prints one line. A line whose compiler prints another
+# version than the requested version fails. Then the published entries run under node, in ESM and
+# in CJS, and one script per format checks that a class has one identity across the entries.
 # Exit 1 on any failure.
 set -uo pipefail
 
@@ -44,13 +45,29 @@ fi
 mkdir -p scripts/consumer/node_modules
 ln -sfn ../../.. scripts/consumer/node_modules/rotorise
 
+# Each compiler runs in a directory outside the package. Inside the package, the request for a
+# version resolves to the `.bin/tsc` of the package, which is TypeScript 6, and each line would
+# name a compiler that did not run. The line names the version that the compiler printed, and a
+# line whose printed version differs from the requested version fails.
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
 failed=0
 for version in "${VERSIONS[@]}"; do
-  if out=$(npx --yes --package "typescript@$version" -- tsc -p scripts/consumer 2>&1); then
+  out=$(cd "$WORK" && npx --yes --package "typescript@$version" -- \
+    sh -c 'tsc --version && tsc -p "$0"' "$ROOT/scripts/consumer" 2>&1)
+  status=$?
+  # npx can print a notice before the compiler, so the version is the first line that names one
+  ran=$(printf '%s\n' "$out" | sed -n 's/^Version //p' | head -1)
+  if [ "$ran" != "$version" ]; then
+    printf 'FAIL  typescript@%s\n' "$version"
+    printf '      | the compiler printed version `%s`, and the request was for `%s`\n' "$ran" "$version"
+    failed=1
+  elif [ "$status" -eq 0 ]; then
     printf 'PASS  typescript@%s\n' "$version"
   else
     printf 'FAIL  typescript@%s\n' "$version"
-    printf '%s\n' "$out" | sed 's/^/      | /' | head -20
+    printf '%s\n' "$out" | grep -v '^Version ' | sed 's/^/      | /' | head -20
     failed=1
   fi
 done
