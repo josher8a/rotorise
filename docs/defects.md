@@ -768,48 +768,6 @@ no text.
 
 ---
 
-## Known: the refusal of a union codec with no discriminator lands on the key, where the key reads a held codec
-
-**Observation.** An item codec that is a `union` with no discriminator cannot name the option of an
-item, and the run time refuses the codec. The type refuses the codec at the option that holds the
-codec. Where a key of one attribute reads an attribute of a `held` codec, the type refuses the key
-and not the codec. The text says that the attribute is stored as none of S, N and B. The `held`
-codec of the measurement stores the text 'Y' or 'N'. Measured 2026-11-12 with `tsc --noEmit` on
-TypeScript 7 and `npx vitest --run`:
-
-    // flag is a schema of boolean
-    const Adopted = held(string('Y', 'N'), flag, {
-        encode: (b: boolean) => (b ? 'Y' : 'N'),
-        decode: (s: string) => s === 'Y',
-    })
-
-    tableEntry<Cat | Dog>()(
-        { PK: ['petId'], SK: 'adopted' },
-        {
-            codec: item(
-                union([
-                    object({ petId: string, species: string('CAT'), adopted: Adopted }),
-                    object({ petId: string, species: string('DOG'), adopted: Adopted }),
-                ]),
-            ),
-        },
-    )
-      type checker: refused at 'adopted', [tableEntry] 'SK' is built from 'adopted', which is
-                    stored as none of S, N and B
-      runtime:      throws, the codec passed here is neither an item codec nor a tagged one
-
-    the same call, where each option holds adopted: string
-      type checker: refused at the codec, the codec is not assignable to a tagged codec
-      runtime:      throws, with the same text
-
-**Effect.** The caller reads a refusal of the key, and the cause is the codec. A correction of the
-key does not make the table build.
-
-**Pin.** `src/codec/spec/object/codec.patch.shapes.spec.ts` pins the throw of the run time for a
-codec that cannot name a variant, behind a cast.
-
----
-
 ## Known: the test of a transform at a path that the codec writes as B reads no key
 
 **Observation.** `src/codec/spec/object/codec.keycomponent.spec.ts` holds the test 'accepts a

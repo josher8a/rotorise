@@ -36,7 +36,7 @@ import type { KnownKeys } from './codec/derivedItem'
 import type { Reached, Segment } from './codec/frontier'
 import { native } from './codec/native'
 import { constantOf } from './codec/objects'
-import type { itemMark } from './codec/scope'
+import type { itemMark, Untagged } from './codec/scope'
 import type { ChildAt, CodecAt } from './codec/scopePath'
 import { parsePath, parsePathResult, reachAt } from './codec/scopePath'
 import type { KeyText } from './codec/sums'
@@ -1601,17 +1601,19 @@ type ValidateCarriers<Schema, E, CodecSpec, CodecRest> =
         ? unknown
         : [KeyLeaves<Schema[keyof Schema]>] extends [never]
           ? unknown
-          : {
-                [K in keyof Schema]: ValidateKeyCarrier<
-                    E,
-                    [CodecSpec] extends [undefined]
-                        ? never
-                        : EncodedAttributes<CodecSpec, CodecRest>,
-                    CodecSpec,
-                    K & string,
-                    Schema[K]
-                >
-            }
+          : CodecRefused<E, CodecSpec> extends true
+            ? unknown
+            : {
+                  [K in keyof Schema]: ValidateKeyCarrier<
+                      E,
+                      [CodecSpec] extends [undefined]
+                          ? never
+                          : EncodedAttributes<CodecSpec, CodecRest>,
+                      CodecSpec,
+                      K & string,
+                      Schema[K]
+                  >
+              }
 
 /**
  * Reads each path that a schema holds against the entity. A wrong path, a path that no option
@@ -4267,6 +4269,24 @@ type ShortCodecCheck<E, S> = [S] extends [undefined]
         } & ([Exclude<KnownKeys<E>, keyof S>] extends [never]
             ? unknown
             : ErrorMessage<`[tableEntry] the codec omits '${Exclude<KnownKeys<E>, keyof S> & string}'`>)
+
+/**
+ * Whether the option `codec` is refused at the codec: the entity is a union, and the codec names no
+ * variant.
+ *
+ * The call has two failing arguments, and the compiler reports the first. The key carriers come
+ * first, and an untagged codec gives them no member to read. The key carriers step aside here, so
+ * the one error lands at the option `codec`, where the cause is.
+ */
+type CodecRefused<Entity, CodecSpec> = IsUnion<Entity> extends true
+    ? [CodecSpec] extends [undefined]
+        ? false
+        : [CodecSpec] extends [{ readonly discriminator: unknown }]
+          ? false
+          : [CodecSpec] extends [Untagged<infer _Item, infer _Specs>]
+            ? true
+            : false
+    : false
 
 /**
  * The option `codec` of an entity that is a union. A tagged codec gives a spec of variants. A record
