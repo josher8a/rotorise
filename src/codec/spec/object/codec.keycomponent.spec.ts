@@ -185,7 +185,9 @@ describe('a key component with a codec', () => {
             },
             { codec: { id: string, tag: object({ chip: binary }) } },
         )
-        expect(typeof Pets.toEntry).toBe('function')
+        const pet = { id: 'p1', tag: { chip: new Uint8Array([1, 2, 3]) } }
+        expect(Pets.unsafeKey('SK', pet)).toBe('CHIP#3')
+        expect(Pets.unsafeToEntry(pet).SK).toBe('CHIP#3')
     })
 
     it('accepts a component that the codec writes as S or N', () => {

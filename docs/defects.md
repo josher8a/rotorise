@@ -768,24 +768,6 @@ no text.
 
 ---
 
-## Known: the test of a transform at a path that the codec writes as B reads no key
-
-**Observation.** `src/codec/spec/object/codec.keycomponent.spec.ts` holds the test 'accepts a
-transform at a path that the codec writes as B, because the function prints the text'. The test
-builds the entry, and asserts that the method that builds a row is a function. The test calls no
-method of the entry. Measured 2026-11-12 with `npx vitest --run` and the name of the test, on a
-tree where the function that builds a row throws at its first statement:
-
-    the test of the file                                          passes
-    a probe that reads the SK of the row of one pet, same tree    fails, Error: mutant
-
-**Effect.** A change that breaks the key of such a path keeps the test green. The test fails only
-where the construction of the entry throws.
-
-**Pin.** None.
-
----
-
 ## Suspected: the rows of a path in the type bridge compare the kind of a value, and no value of the same kind
 
 **Observation.** `src/codec/typeVectors.ts` writes two rows for the decoded type of a codec at a
