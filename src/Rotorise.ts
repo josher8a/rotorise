@@ -1063,7 +1063,9 @@ type ValidateComponent<E, C> = C extends string
 /**
  * A spec against the options of the entity that it reads. A bare name is a key of one attribute,
  * which takes no transform and gives no key where the value is absent, so only a name that no option
- * holds is refused there.
+ * holds is refused there. A name that can be absent is accepted on purpose: the key is sparse, and
+ * the item that lacks the value is not in the index. A match needs a tag, and a record with a default
+ * always gives a key, so the bare name is the only form of a sparse key on an attribute with no tag.
  */
 type ValidateSpec<E, S> = S extends string
     ? [ValueOfKey<E, S>] extends [never]
