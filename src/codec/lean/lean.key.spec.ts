@@ -232,16 +232,41 @@ const selectArm = (tree: KeyTree, item: KeyRow['item']): KeyArm => {
         : selectArm(arm, item)
 }
 
-/** The leaf that the item of a row reaches, or `undefined`. */
+/**
+ * The parts of a plain leaf for the item of a row, as the model states them: a part is absent where
+ * the item holds no value at the name or holds the empty text, and otherwise it prints the label
+ * and the text. The oracle of the rows states this rule for a plain leaf, as `partsOf` states it
+ * for the parts that the emitter evaluates.
+ */
+const plainParts = (
+    parts: readonly (readonly [name: string, label: string])[],
+    item: KeyRow['item'],
+): KeyPart[] =>
+    parts.map(([name, label]) => {
+        const value = item.find(([at]) => at === name)?.[1]
+        return value === undefined || value === ''
+            ? undefined
+            : { kind: 'named', name: label, value }
+    })
+
+/** The leaf that the item of a row reaches, with its parts evaluated, or `undefined`. */
 const leafOf = (row: KeyRow) => {
     const arm = selectArm(row.tree, row.item)
-    return arm.kind === 'leaf' ? arm : undefined
+    return arm.kind === 'leaf'
+        ? arm
+        : arm.kind === 'plain'
+          ? {
+                full: arm.full,
+                tags: arm.tags,
+                parts: plainParts(arm.parts, row.item),
+            }
+          : undefined
 }
 
 /** The segments that the model states for a row, as `DerivedKey.build` states them, or `undefined` where it refuses. */
 const modelSegments = (row: KeyRow): string[] | undefined => {
-    const arm = selectArm(row.tree, row.item)
-    if (arm.kind !== 'leaf') return undefined
+    const arm = leafOf(row)
+    if (arm === undefined) return undefined
     const printed: (KeyPart & object)[] = []
     const absent = arm.parts.indexOf(undefined)
     for (const part of arm.parts) {
@@ -481,6 +506,25 @@ const entriesOf = (arm: Discriminated): (readonly [string, Arm])[] =>
           )
         : Object.entries(arm.spec)
 
+/**
+ * The names of the components of a list arm that all read a plain name or a path, or `undefined`
+ * where one component has a tag, a transform or a default. The model reads such an arm at the item.
+ */
+const plainNamesOf = (arm: readonly Component[]): string[] | undefined => {
+    const names: string[] = []
+    for (const component of arm) {
+        const record =
+            typeof component === 'string' ? { at: component } : component
+        if ('tag' in record || 'value' in record || 'default' in record)
+            return undefined
+        names.push(record.at)
+    }
+    return names
+}
+
+const plainLabelOf = (component: Component): string =>
+    plainLabel(typeof component === 'string' ? component : component.at)
+
 /** The tree of an arm for an item: each arm is evaluated, and the item selects one. */
 const treeOf = (arm: Arm, item: Item, depth: number | undefined): KeyTree =>
     isDiscriminated(arm)
@@ -508,12 +552,21 @@ const treeOf = (arm: Arm, item: Item, depth: number | undefined): KeyTree =>
                       ? { kind: 'null' }
                       : typeof arm === 'string'
                         ? { kind: 'attr', name: arm }
-                        : {
-                              kind: 'leaf',
-                              full: arm.length,
-                              tags: tagsOf(arm),
-                              parts: partsOf(arm, item, depth),
-                          },
+                        : plainNamesOf(arm) !== undefined
+                          ? {
+                                kind: 'plain',
+                                full: arm.length,
+                                tags: arm.map(plainLabelOf),
+                                parts: (plainNamesOf(arm) ?? [])
+                                    .slice(0, depth)
+                                    .map((name) => [name, plainLabel(name)]),
+                            }
+                          : {
+                                kind: 'leaf',
+                                full: arm.length,
+                                tags: tagsOf(arm),
+                                parts: partsOf(arm, item, depth),
+                            },
           }
 
 /** The attributes that a tree reads: each discriminator, and each attribute that an arm names. */
@@ -527,9 +580,14 @@ const readNames = (arm: Arm): string[] =>
           ? [arm]
           : []
 
-/** The printed attributes of the item that the tree reads. */
+/** The printed attributes of the item that the tree reads: the discriminators, the attributes of an arm of one attribute, and each component of a plain leaf. */
 const itemOf = (spec: Spec, item: Item): KeyRow['item'] =>
-    [...new Set(readNames(spec))].flatMap((name) => {
+    [
+        ...new Set([
+            ...readNames(spec),
+            ...componentsOf(spec).flatMap((arm) => plainNamesOf(arm) ?? []),
+        ]),
+    ].flatMap((name) => {
         const value = readAt(item, name)
         return value === undefined || value === null
             ? []
@@ -712,7 +770,8 @@ describe('the derived key rows, against the model of a key', () => {
                 case 'refused':
                     expect(
                         arm.kind === 'missing' ||
-                            (arm.kind === 'leaf' && segments === undefined) ||
+                            (leafOf(row) !== undefined &&
+                                segments === undefined) ||
                             // a full key of one attribute is not empty
                             (arm.kind === 'attr' && modelKey(row) === ''),
                         row.name,
@@ -816,6 +875,51 @@ describe('the derived key rows, against the model of a key', () => {
         expect(text.match(/\.match_/g)?.length).toBe(2)
         // the leaf carries the tag of each component, because the model prints a closed key through the next tag
         expect(text).toContain('.const 1 [(some "B")]')
+    })
+
+    it('emits a plain leaf as the name and the label of each part, and reads the part at the item', () => {
+        const tree: KeyTree = {
+            kind: 'arm',
+            arm: {
+                kind: 'plain',
+                full: 2,
+                tags: ['A', 'B'],
+                parts: [['meta.a', 'A']],
+            },
+        }
+        const text = leanKeyModule([
+            {
+                name: 'plain',
+                tree,
+                item: [['meta.a', '1']],
+                allowPartial: true,
+                enforce: false,
+                separator: '#',
+                outcome: { kind: 'key', key: 'A#1' },
+                lawful: true,
+            },
+        ])
+        expect(text).toContain(
+            '.leaf ⟨2, [Part.named "meta.a" "A"], [(some "A"), (some "B")]⟩',
+        )
+        expect(text).not.toContain('.const 2')
+    })
+
+    it('gives the model the name of a plain component in the item, and keeps a component with a tag, a transform or a default as a constant', () => {
+        const kinds = new Map<string, Set<string>>()
+        for (const row of rows) {
+            const arm = selectArm(row.tree, row.item)
+            const kind = kinds.get(row.name.replace(/_\d+$/, '')) ?? new Set()
+            kind.add(arm.kind)
+            kinds.set(row.name.replace(/_\d+$/, ''), kind)
+        }
+        expect(kinds.get('plain')).toEqual(new Set(['plain']))
+        expect(kinds.get('path')).toEqual(new Set(['plain']))
+        expect(kinds.get('tagged')).toEqual(new Set(['leaf']))
+        expect(kinds.get('pathTransform')).toEqual(new Set(['leaf']))
+        expect(kinds.get('default')).toEqual(new Set(['leaf']))
+        const row = rows.find((one) => one.name.startsWith('path_'))
+        expect(row?.item.some(([name]) => name === 'meta.a')).toBe(true)
     })
 
     it('reads back each item that the entry wrote, for each spec of the pool', () => {
@@ -945,9 +1049,13 @@ describe('the derived key rows, against the model of a key', () => {
         if (process.env.EMIT_LEAN_REFUSALS) {
             writeFileSync(join(process.cwd(), 'formal', '.keys.lean'), text)
         }
-        expect(text).toContain(
-            'theorem keyRows_check : failingKeys keyRows = []',
-        )
+        const lists = text.match(/^def keyRows\d+ : List KeyRow/gm) ?? []
+        const checks =
+            text.match(
+                /^theorem keyRows(\d+)_check : failingKeys keyRows\1 = \[\]/gm,
+            ) ?? []
+        expect(lists.length).toBeGreaterThan(1)
+        expect(checks.length).toBe(lists.length)
         expect(text).toContain(
             'theorem conditionRows_check : failingConditions conditionRows = []',
         )
@@ -1312,6 +1420,7 @@ const itemRows = (): ItemRow[] => {
                             : {
                                   kind: 'plain',
                                   full: key.spec.length,
+                                  tags: key.spec.map(plainLabel),
                                   parts: key.spec.map(
                                       (component) =>
                                           [

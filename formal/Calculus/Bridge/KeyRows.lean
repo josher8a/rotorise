@@ -6,9 +6,13 @@ import Calculus.Dynamo.Alg.KeyMatch
 # The rows of a derived key
 
 The emitter runs the key builder of `src/` on a spec, an item and the options. A row holds what
-the host read and what the host gave: the key spec as a tree with the parts that the host evaluated
-at each leaf, the attributes of the item that the tree reads, the options, the separator, the key
-or the refusal, and whether the segments are usable as a key. The comparator selects the arm that
+the host read and what the host gave: the key spec as a tree, the attributes of the item that the
+tree reads, the options, the separator, the key or the refusal, and whether the segments are usable
+as a key. A leaf of plain components holds the name and the label of each component, and the model
+reads each name at the item of the row (`Part.named`), so the rule of the empty text is in the
+model. A path is read by the emitter, which writes the flat name and the text in the item. A leaf
+with a tag, a transform or a default holds the parts that the host evaluated, and the model joins
+them. The comparator selects the arm that
 the item reaches (`KeyMatch.select`), and states that `DerivedKey.build` gives the segments that
 the host joined, that the join of the segments is the key, and that the read of the key gives the
 segments back exactly where the row says so. The host refuses a segment that holds the separator,
@@ -33,9 +37,10 @@ inductive HostKey where
   | nothing
   | key (k : String)
 
-/-- A row of the key builder: the name, the key spec with the leaves that the host evaluated for the
-    item, the attributes of the item that the spec reads, the options, the separator, what the host
-    gave, and whether the segment list has a segment and no segment holds the separator. -/
+/-- A row of the key builder: the name, the key spec, the attributes of the item that the spec reads,
+    the options, the separator, what the host gave, and whether the segment list has a segment and no
+    segment holds the separator. A leaf holds the name and the label of each plain component, or the
+    parts that the host evaluated for the item. -/
 structure KeyRow where
   name : String
   spec : KeySpec String

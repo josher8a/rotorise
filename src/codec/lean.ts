@@ -3968,9 +3968,11 @@ export type KeyOutcome =
 
 /**
  * **One arm of a key spec**: a leaf with the length of the spec and the parts that the host
- * evaluated for the item, a plain leaf with the length of the spec and a name and a label for each
- * part, which the model evaluates at the item (see {@link plainLabel}), the `null` arm, the arm that reads one attribute and gives its printed
- * value as the key, or the arm that the host lacks.
+ * evaluated for the item, a plain leaf with the length of the spec, the tag of each component and a
+ * name and a label for each part that the key keeps, which the model evaluates at the item (see
+ * {@link plainLabel}), the `null` arm, the arm that reads one attribute and gives its printed
+ * value as the key, or the arm that the host lacks. A part of a plain leaf is a plain name or a path:
+ * the emitter reads a path at the item and writes the flat name and the text in the item of the row.
  */
 export type KeyArm =
     | {
@@ -3983,6 +3985,8 @@ export type KeyArm =
     | {
           readonly kind: 'plain'
           readonly full: number
+          /** The tag of each component of the spec: the label of a plain component. */
+          readonly tags: readonly string[]
           readonly parts: readonly (readonly [name: string, label: string])[]
       }
     | { readonly kind: 'null' }
@@ -4127,7 +4131,7 @@ const leanKeyArm = (arm: KeyArm): string =>
     arm.kind === 'leaf'
         ? `.leaf (.const ${arm.full} [${arm.tags.map(leanTag).join(', ')}] [${arm.parts.map(leanKeyPart).join(', ')}])`
         : arm.kind === 'plain'
-          ? `.leaf ⟨${arm.full}, [${leanPlainParts(arm.parts)}], [${arm.parts.map(([, label]) => `some ${leanString(label)}`).join(', ')}]⟩`
+          ? `.leaf ⟨${arm.full}, [${leanPlainParts(arm.parts)}], [${arm.tags.map((tag) => leanTag(tag)).join(', ')}]⟩`
           : arm.kind === 'attr'
             ? `.attr ${leanString(arm.name)}`
             : `.${arm.kind}`
@@ -4252,31 +4256,37 @@ import Calculus.Bridge.ItemRows
 # The derived keys of the pool, checked in the model
 
 **Generated — do not edit.** One row per sampled item and option of a key spec of the pool: the
-key spec as a tree, the parts that the key builder of \`src/\` evaluated at each leaf, the attributes
-of the item that the tree reads, the options, the separator, and what the builder gave. The checker
-of the list selects the arm that the item reaches, and states that \`DerivedKey.build\` gives the
+key spec as a tree, the attributes of the item that the tree reads, the options, the separator, and
+what the builder gave. A leaf of plain components holds the name and the label of each component, and
+the model reads each name at the item. A leaf with a tag, a transform or a default holds the parts
+that the key builder of \`src/\` evaluated. The rows are in lists of ${rowsPerList}, each with its
+check. The checker of a list selects the arm that the item reaches, and states that \`DerivedKey.build\` gives the
 segments that the builder joined, that the join of the segments is the key of the builder, and that
 the read of the key gives the segments back exactly where the row says so. A row where the builder
 threw at an absent value, at an absent discriminator or at a literal that names no arm states that the
 model gives no segments. A row where the builder threw at
 a segment that holds the separator states that the model's segments hold it. A row of an attribute
 with the empty value states that the model gives no key, as the builder does. A row of a \`null\` arm
-states that the null arm writes nothing. A row reads sampled items, so the row states a witness and not the law.
+states that the model gives no key, as the builder does. A row reads sampled items, so the row states a witness and not the law.
 -/
 
 namespace Calculus
 
 open DerivedKey
 
-set_option maxRecDepth 20000 in
+${listsOf(lines)
+    .map(
+        (list, index) => `set_option maxRecDepth 20000 in
 set_option maxHeartbeats 1000000 in
-def keyRows : List KeyRow := [
-${lines.join(',\n')}]
+def keyRows${index} : List KeyRow := [
+${list.join(',\n')}]
 
-theorem keyRows_check : failingKeys keyRows = [] := kernel_rfl%
+theorem keyRows${index}_check : failingKeys keyRows${index} = [] := kernel_rfl%
 
-#eval (failingKeys keyRows).forM IO.println
-
+#eval (failingKeys keyRows${index}).forM IO.println
+`,
+    )
+    .join('\n')}
 /-- The sort conditions of the pool: what the builder of \`src/\` gave for the parts of an item. A
     row states that the model gives the same condition: none where no part is given, a refusal where
     a part prints after an absent part, and the equality or the prefix otherwise. -/

@@ -958,34 +958,32 @@ codec, and the refusal of the codec.
 
 ---
 
-## Known: a key row of the gate gives the model each component of a composite key as a constant that the emitter evaluated
+## Known: a key row of the gate gives the model a tagged, transform or default component, and the read of a path, as the emitter evaluated them
 
-**Observation.** A row of the gate holds a key spec as a tree. An item row holds a plain component
-as the name and the label: the model reads the item of the row, and applies the rule of the empty
-text. A key row holds each component as a constant. The emitter of
-`src/codec/lean/lean.key.spec.ts` reads the item, applies the rule of the empty text and prints the
-label, and the model joins the constants. So the emitter states the two rules a second time.
-Measured 2026-11-12 with `EMIT_LEAN_REFUSALS=1 npx vitest --run src/codec/lean/lean.key.spec.ts`,
-on `formal/.keys.lean`:
+**Observation.** A leaf of a key row holds each plain component as the name and the label, as an item
+row does: the model reads the item of the row and applies the rule of the empty text. A leaf that
+holds a component with a tag, a transform or a default holds each component as a constant that the
+emitter evaluated, and the emitter states the read of the item and the rule of the empty text for
+those. The model has no `Part` for a tag, and a transform is an opaque function. A path is read by
+the emitter, which writes the flat name and the text in the item of the row. A leaf that mixes the
+two kinds stays one constant leaf. Measured with `EMIT_LEAN_REFUSALS=1 npx vitest --run
+src/codec/lean/lean.key.spec.ts`, on `formal/.keys.lean`:
 
-    a leaf of a key row
-      .leaf (.const 2 [some (.named "A" "1"), some (.named "B" "2")])
+    leaves of the key rows, before    7860 '.leaf (.const', 40 `Part.named`
+    leaves of the key rows, after     3060 '.leaf (.const', 7204 `Part.named`
+    rows of 'keyRows', before         4556
+    rows of 'keyRows', after          6408
 
-    a leaf of an item row
-      .leaf ⟨2, [Part.named "petId" "PETID", Part.named "nick" "NICK"]⟩
-
-    the lines of the file that hold Part.named
-      12, each one a line of the item rows
-
-**Effect.** For a composite key of a key row, the model checks the join, the separator and the read
-of the key on the constants of the emitter. The read of the item and the rule of the empty text
-have their statement in the emitter, and not in the model. The header of
-`formal/Calculus/Bridge/KeyRows.lean` says that the host evaluated the parts.
+**Effect.** For a leaf of tagged, transform or default components, and for the read of a path, the
+model checks the join, the separator and the read of the key on the constants of the emitter. The
+statement of the read of the item and of the rule of the empty text for these has its place in the
+emitter, and not in the model. A `Part` for a tag needs a new definition in the model.
 
 **Pin.** The test 'reads each outcome of the builder as the model states it' of
-`src/codec/lean/lean.key.spec.ts` pins the two rules of the emitter against the builder. The test
-fails on a tree where the emitter reads the empty text as a present part, and on a tree where the
-emitter prints the whole name as the label.
+`src/codec/lean/lean.key.spec.ts` pins the two rules of the emitter against the builder for the
+constant leaves, and pins the rule of the oracle for the plain leaves. The test fails on a tree where
+the oracle reads the empty text as a present part, and on a tree where the label of a path is the
+whole name.
 
 ---
 
