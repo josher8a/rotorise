@@ -752,6 +752,13 @@ The run time throws `Discriminator kind not found in the attributes` for a pet o
 
 **Effect.** A caller of the form with `spec` learns that the match is wrong, and learns no name and no
 cause. For a discriminator that can be absent the text names a rule that the match does not break.
+A match with `spec` and a discriminator that is a name has one deep member of the constraint,
+'DiscriminatedSchema', and the exact check that holds the precise refusals runs only after the
+constraint passes. Two forms were measured on 2026-11-23 and not built. A shallow member that takes
+the match clears the 21 ids, and raises the attest pin of 18530 to 21444, 15.7 percent above a
+limit of 10 percent. The form also loses two refusals of a call that gives the schema as a type
+argument, because only the constraint checks such a call. A constraint without the deep member
+loses the contextual type of a transform in an arm, and gives 11 compile errors in 3 spec files.
 
 **Pin.** The baseline of the type bridge, formal/scripts/type_bridge_baseline.txt, holds 21 ids of
 the group construct: 15 with the prefix site, where the error starts at an arm name or at the whole
