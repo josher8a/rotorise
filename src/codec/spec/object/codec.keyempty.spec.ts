@@ -1,13 +1,13 @@
 /**
- * A full key is never empty, and a partial key may be.
+ * A key has no empty text, whether the key is full or partial.
  *
  * DynamoDB stores no empty key, so a full key that prints the empty string addresses no item. A key
  * of one attribute has no part, so its key is full, and an empty value refuses on every route. A list
  * of components prints the name of each component, so a full key of a list is empty only where
  * a transform prints a value with no tag, and the value is empty. A partial
  * key is a call with `allowPartial`, or with a `depth` below the count of components, and the public
- * `key` returns it as a `begins_with` prefix, so the empty prefix is the answer where no part is
- * present.
+ * `key` returns it as a `begins_with` prefix. A partial key of no component has no text, so the run
+ * time refuses it and the type of the call is `never`.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, tableEntry } from '../../../Rotorise'
@@ -164,10 +164,14 @@ describe('a partial key of no component has no text, because the empty text has 
         )
     })
 
-    it('refuses allowPartial where no part is present, and the type states the empty text', () => {
+    it('refuses allowPartial where no part is present, and the type has no success value', () => {
         const call = () => Pets.unsafeKey('PK', {}, { allowPartial: true })
-        expectTypeOf(call).returns.toEqualTypeOf<''>()
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
         expect(call).toThrow(/no component/)
+        const absent = () =>
+            Pets.unsafeKey('PK', { petId: undefined }, { allowPartial: true })
+        expectTypeOf(absent).returns.toEqualTypeOf<never>()
+        expect(absent).toThrow(/no component/)
     })
 
     it('prints the first tag and the separator for a closed key of no component', () => {
@@ -194,7 +198,7 @@ describe('a partial key of no component has no text, because the empty text has 
         const Two = tableEntry<Pet>()({ PK: ['petId', 'shelterId'] })
         const call = () =>
             Two.unsafeKey('PK', { shelterId: 's1' }, { allowPartial: true })
-        expectTypeOf(call).returns.toEqualTypeOf<''>()
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
         expect(call).toThrow(/would drop 'shelterId'/)
     })
 

@@ -178,7 +178,7 @@ describe('DynamoDB Utils', () => {
         attest<`A-${string}-B-${number}`>(
             Dashed.unsafeKey('PK', full, { depth: 2 }),
         )
-        attest<'' | `A-${string}-B-${number}-C-${boolean}`>(
+        attest<`A-${string}-B-${number}-C-${boolean}`>(
             Dashed.unsafeKey('PK', full, { depth: 3, allowPartial: true }),
         )
 

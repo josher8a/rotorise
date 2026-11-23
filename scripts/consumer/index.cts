@@ -146,7 +146,7 @@ export const kennelPins = {
         ofOne: pinned<Result<'s1'>>()(Kennels.key('GSI1PK', shelter)),
         ofEntity: pinned<Result<`NAME#${string}`>>()(Kennels.key('SK', kennel)),
         depth: pinned<Result<`NAME#${string}`>>()(Kennels.key('SK', kennel, { depth: 1 })),
-        partial: pinned<Result<'' | `NAME#${string}`>>()(
+        partial: pinned<Result<`NAME#${string}`>>()(
             Kennels.key('SK', kennel, { allowPartial: true }),
         ),
         boundary: pinned<Result<'NAME#' | `NAME#${string}`>>()(
@@ -158,7 +158,7 @@ export const kennelPins = {
         ofOne: pinned<'s1'>()(Kennels.unsafeKey('GSI1PK', shelter)),
         ofEntity: pinned<`NAME#${string}`>()(Kennels.unsafeKey('SK', kennel)),
         depth: pinned<`NAME#${string}`>()(Kennels.unsafeKey('SK', kennel, { depth: 1 })),
-        partial: pinned<'' | `NAME#${string}`>()(
+        partial: pinned<`NAME#${string}`>()(
             Kennels.unsafeKey('SK', kennel, { allowPartial: true }),
         ),
         boundary: pinned<'NAME#' | `NAME#${string}`>()(

@@ -380,9 +380,10 @@ type Defaulted<Value, Rest> = Rest extends [infer Default, ...unknown[]]
     : Value
 
 /**
- * The text of the print so far, where the print ends: the empty list prints the empty text. A print
- * that stops before the last component takes the separator as its boundary. A stop at an absent
- * component passes `Boundary`, and the end of the spec passes `Stops`.
+ * The text of the print so far, where the print ends. A print that stops before the last component
+ * takes the separator as its boundary. A stop at an absent component passes `Boundary`, and the end
+ * of the spec passes `Stops`. A key of no component has no text, and the run time refuses it, so the
+ * type of that print is `never` and no success value is the empty text.
  */
 type StopText<
     Acc extends string | null,
@@ -395,7 +396,7 @@ type StopText<
           ? `${Acc}${Separator}`
           : `${Acc}${Separator}${NextLabel<Next>}${Separator}`
     : Acc extends null
-      ? ''
+      ? never
       : Acc
 
 /**
@@ -2132,10 +2133,10 @@ type ErasedMatch<Entity> = {
  * full key: no segment holds the separator, and the print is not the empty text. One test states the
  * second half for a key of one attribute and for a list of components, because a transform can
  * print the empty text at a component. A partial key is a call with `allowPartial`, or with a `depth`
- * below the count of components. A partial key is exempt from the second half, and may be the empty
- * string, because the public `key` serves a caller that uses the key as a `begins_with` prefix. The
- * empty string is that prefix at a depth of 0, and with `allowPartial` where the first part is
- * absent. `sortCondition` refuses the empty prefix, and `asKey` refuses an empty `S` or `B` at
+ * below the count of components. The public `key` serves a caller that uses a partial key as a
+ * `begins_with` prefix. A key of no component has no text, so the run time refuses the partial key
+ * at a depth of 0, and with `allowPartial` where the first part is absent. The type of that key is
+ * `never`. `sortCondition` refuses the empty prefix, and `asKey` refuses an empty `S` or `B` at
  * carry time. The host adds the refusal of an object segment, which the model does not state,
  * because a JS value can be an object.
  */

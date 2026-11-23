@@ -9,8 +9,8 @@
  * default never ends the prefix, because the default fills the absent value. A full key throws at an
  * absent value, and its type does not change.
  *
- * The type counts segments as the run time does. A prefix of no segment prints the empty text, and a
- * component that prints one empty segment is no prefix of no segment. A name that the call lacks has
+ * The type counts segments as the run time does. A key of no component has no text, so the type of that
+ * print is `never`. A component that prints one empty segment is no prefix of no segment. A name that the call lacks has
  * the value `undefined`, so it ends the print as an absent component does. A component that is
  * never absent leaves no prefix before it.
  */
@@ -404,16 +404,16 @@ describe('the type of a partial key reads the components that the call lacks', (
     })
 })
 
-describe('the type of a partial key holds the empty text where the first component can be absent', () => {
+describe('the type of a partial key holds no empty text where the first component can be absent', () => {
     type Placed = { shelterId: string; petId: string }
     const Shelters = tableEntry<Placed>()({ SK: ['shelterId', 'petId'] })
     const unnamed: Placed = { shelterId: '', petId: 'p1' }
     const named: Placed = { shelterId: 's', petId: 'p1' }
 
-    it('holds the empty text in the type, and the run time refuses a hole where the first value is empty and the second is given', () => {
+    it('holds no empty text in the type, and the run time refuses a hole where the first value is empty and the second is given', () => {
         const call = () => Shelters.unsafeKey('SK', unnamed, partial)
         expectTypeOf(call).returns.toEqualTypeOf<
-            '' | `SHELTERID#${string}` | `SHELTERID#${string}#PETID#${string}`
+            `SHELTERID#${string}` | `SHELTERID#${string}#PETID#${string}`
         >()
         expect(call).toThrow(/would drop 'petId'/)
         expect(Shelters.unsafeKey('SK', named, partial)).toBe(
@@ -435,12 +435,12 @@ describe('the type of a partial key holds the empty text where the first compone
         expect(call).toThrow(/would drop 'petId'/)
     })
 
-    it('refuses a hole where the first value is the literal empty text, and the type states the empty text', () => {
+    it('refuses a hole where the first value is the literal empty text, and the type has no success value', () => {
         type Blank = { shelterId: ''; petId: string }
         const Blanks = tableEntry<Blank>()({ SK: ['shelterId', 'petId'] })
         const blank: Blank = { shelterId: '', petId: 'p1' }
         const call = () => Blanks.unsafeKey('SK', blank, partial)
-        expectTypeOf(call).returns.toEqualTypeOf<''>()
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
         expect(call).toThrow(/would drop 'petId'/)
     })
 })
@@ -470,7 +470,7 @@ describe('the type of a partial key, where a component is in the case that it ca
         const empty: Either = { shelterId: '', petId: 'p' }
         const present: Either = { shelterId: 'S', petId: 'p' }
         const first = () => Eithers.unsafeKey('SK', empty, partial)
-        expectTypeOf(first).returns.toEqualTypeOf<'' | 'SHELTERID#S#PETID#p'>()
+        expectTypeOf(first).returns.toEqualTypeOf<'SHELTERID#S#PETID#p'>()
         expect(first).toThrow(/would drop 'petId'/)
         expect(Eithers.unsafeKey('SK', present, partial)).toBe(
             'SHELTERID#S#PETID#p',
@@ -525,7 +525,7 @@ describe('the type of a partial key, where a component is in the case that it ca
         const empty: Placed = { shelter: { code: '' }, petId: 'p' }
         const present: Placed = { shelter: { code: 'S' }, petId: 'p' }
         const first = () => Places.unsafeKey('SK', empty, partial)
-        expectTypeOf(first).returns.toEqualTypeOf<'' | 'CODE#S#PETID#p'>()
+        expectTypeOf(first).returns.toEqualTypeOf<'CODE#S#PETID#p'>()
         expect(first).toThrow(/would drop 'petId'/)
         expect(Places.unsafeKey('SK', present, partial)).toBe('CODE#S#PETID#p')
     })
@@ -538,7 +538,7 @@ describe('the type of a partial key, where a component is in the case that it ca
         const empty: Placed = { shelter: { code: '' }, petId: 'p' }
         const present: Placed = { shelter: { code: 'S' }, petId: 'p' }
         const first = () => Places.unsafeKey('SK', empty, partial)
-        expectTypeOf(first).returns.toEqualTypeOf<'' | 'AT#S#PETID#p'>()
+        expectTypeOf(first).returns.toEqualTypeOf<'AT#S#PETID#p'>()
         expect(first).toThrow(/would drop 'petId'/)
         expect(Places.unsafeKey('SK', present, partial)).toBe('AT#S#PETID#p')
     })
@@ -557,5 +557,73 @@ describe('the type of a partial key, where a component is in the case that it ca
         expectTypeOf(first).toEqualTypeOf<'CODE#S#PETID#p' | 'CODE##PETID#p'>()
         expect(first).toBe('CODE##PETID#p')
         expect(Places.unsafeKey('SK', present, partial)).toBe('CODE#S#PETID#p')
+    })
+})
+
+describe('the type of a partial key after a component that is present', () => {
+    const species = 'CAT' as const
+
+    it('ends the print at a last component of the literal empty text, because the empty text is absent', () => {
+        type Held = { shelterId: 'S'; petId: '' }
+        const Helds = tableEntry<Held>()({ SK: ['shelterId', 'petId'] })
+        const held: Held = { shelterId: 'S', petId: '' }
+        const call = Helds.unsafeKey('SK', held, partial)
+        expectTypeOf(call).toEqualTypeOf<'SHELTERID#S'>()
+        expect(call).toBe('SHELTERID#S')
+    })
+
+    it('keeps the prefix before a plain path component of the type `S | empty`, and the run time refuses the hole', () => {
+        type Placed = {
+            species: 'CAT'
+            shelter: { code: 'S' | '' }
+            petId: 'p'
+        }
+        const Places = tableEntry<Placed>()({
+            SK: ['species', 'shelter.code', 'petId'],
+        })
+        const empty: Placed = { species, shelter: { code: '' }, petId: 'p' }
+        const first = () => Places.unsafeKey('SK', empty, partial)
+        expectTypeOf(first).returns.toEqualTypeOf<
+            'SPECIES#CAT' | 'SPECIES#CAT#CODE#S#PETID#p'
+        >()
+        expect(first).toThrow(/would drop 'petId'/)
+    })
+
+    it('keeps the prefix before a tagged path component of the type `S | empty`, and the run time refuses the hole', () => {
+        type Placed = {
+            species: 'CAT'
+            shelter: { code: 'S' | '' }
+            petId: 'p'
+        }
+        const Places = tableEntry<Placed>()({
+            SK: ['species', { at: 'shelter.code', tag: 'AT' }, 'petId'],
+        })
+        const empty: Placed = { species, shelter: { code: '' }, petId: 'p' }
+        const first = () => Places.unsafeKey('SK', empty, partial)
+        expectTypeOf(first).returns.toEqualTypeOf<
+            'SPECIES#CAT' | 'SPECIES#CAT#AT#S#PETID#p'
+        >()
+        expect(first).toThrow(/would drop 'petId'/)
+    })
+
+    it('prints the empty text of a transform of a path after a component that is present', () => {
+        type Placed = {
+            species: 'CAT'
+            shelter: { code: 'S' | '' }
+            petId: 'p'
+        }
+        const Places = tableEntry<Placed>()({
+            SK: [
+                'species',
+                { at: 'shelter.code', value: (value: 'S' | '') => value },
+                'petId',
+            ],
+        })
+        const empty: Placed = { species, shelter: { code: '' }, petId: 'p' }
+        const first = Places.unsafeKey('SK', empty, partial)
+        expectTypeOf(first).toEqualTypeOf<
+            'SPECIES#CAT#CODE#S#PETID#p' | 'SPECIES#CAT#CODE##PETID#p'
+        >()
+        expect(first).toBe('SPECIES#CAT#CODE##PETID#p')
     })
 })

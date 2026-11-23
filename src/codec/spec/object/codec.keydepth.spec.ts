@@ -49,7 +49,7 @@ describe('a depth is a non-negative integer', () => {
         ).toEqualTypeOf<'SHELTERID#'>()
         expectTypeOf(() =>
             Pets.unsafeKey('SK', attributes, { depth: 0 }),
-        ).returns.toEqualTypeOf<''>()
+        ).returns.toEqualTypeOf<never>()
     })
 
     it.each([-1, 1.5, Number.NaN])(

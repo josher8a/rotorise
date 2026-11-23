@@ -1011,29 +1011,30 @@ give no key, and the term adds no check.
 
 ---
 
-## Known: the type of a partial key admits a hole and the empty text, where the run time gives an error value
+## Known: the type of a partial key admits a hole, where the run time gives an error value
 
 **Observation.** A partial key is a position: the count `k` of the leading components that print. The
-run time gives an error value for a key of no component without the boundary, and for a hole, which
-is a component that prints after one that does not. The type of the result is a union of the
-prefixes that the builder can print, and the type of the argument states each component as
-optional. So the type names the empty text, and the prefix before an absent component, where the
-run time gives the error value. The type of a closed key states the tag of the next component and
-the separator, and agrees with the run time. Measured 2026-11-17 with `tsc --noEmit` on TypeScript 7
-and `npx vitest --run`, with the entry Pets of `codec.keypartial.spec.ts`:
+run time gives an error value for a hole, which is a component that prints after one that does not.
+The type of the argument states each component as optional, and the type of the result is a union of
+the prefixes that the builder can print. So the type names the prefix before an absent component,
+where the run time gives the error value. The type has no success value for a key of no component:
+the result is `never`, as the run time refuses that key. The type of a closed key states the tag of
+the next component and the separator, and agrees with the run time. Measured 2026-11-17 with
+`tsc --noEmit` on TypeScript 7 and `npx vitest --run`, with the entry Pets of
+`codec.keypartial.spec.ts`:
 
     Pets.key('GSI1SK', { species: 'CAT', breed: undefined as Breed | undefined, age: 3 }, { allowPartial: true })
       type checker: builds, 'SPECIES#CAT' | 'SPECIES#CAT#BREED#PUG#AGE#3' | 'SPECIES#CAT#BREED#LAB#AGE#3'
       runtime:      CodecError, "'age' is given and 'breed' before it is not, so a partial key would drop 'age'"
 
-    Pets.key('GSI1SK', {}, { allowPartial: true })
-      type checker: builds, with the type ""
-      runtime:      CodecError, "the print of no component is empty, so the key has no text"
-
-**Effect.** A caller reads a string type and gets an error value. The type cannot refuse the hole,
-because a value of a type that can be absent is a hole only where it is absent. A form of the
-argument as a union of the leading sets refuses the hole, and it raised seven attest pins by 5
-percent or more and gave 19 compile errors in 3 spec files, so it was not built.
+**Effect.** A caller reads a string type and gets an error value. The type cannot refuse the hole of
+a component typed 'X | undefined', because that component is a hole only where it is absent. The call
+that the type decides is a first component typed as absent only, and a component typed 'undefined'
+only before a component typed as present. A refusal of those calls at the argument is sound, and it
+was not built. A walker that reads the case of each component, with an intersection on the parameter,
+raised the attest pin of 8419 by 19.3 percent and the pin of 22543 by 10.9 percent, and the other
+pins by 3.2 percent or less, against a limit of 10 percent. A form of the argument as a union of the
+leading sets raised seven pins by 5 percent or more and gave 19 compile errors in 3 spec files.
 
 **Pin.** `src/codec/spec/object/codec.keypartial.spec.ts`, `codec.keyempty.spec.ts` and
 `codec.keydepth.spec.ts` pin the type of each call and the error value of the run time in the same
