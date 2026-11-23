@@ -62,7 +62,7 @@ def holdsSep (c : Char) (segs : List (List Char)) : Bool :=
 
 /-- The comparator of a row. The model refuses where the host threw at an absent value, at an
     absent discriminator, or at a literal that names no arm. The segments hold the separator where
-    the host threw at one. The null arm writes nothing where the host gave no key. Where the host
+    the host threw at one. Where the host gave no key, the model gave no key. Where the host
     gave a key from segments, no segment holds the separator, the join of the segments is the key,
     the flag says whether the list is usable, and the read of the key gives the segments back
     exactly where the flag is `true`. Where the host gave the printed attribute, the key is that
@@ -72,7 +72,7 @@ def keyRowOk (r : KeyRow) : Bool :=
   match r.host, r.out with
   | .refused, .refused => true
   | .separator, .segs ss => holdsSep r.sep (charSegs ss)
-  | .nothing, .nothing => ((Codec.empty : Codec).e (Attr.s "")).isNone
+  | .nothing, .nothing => true
   | .key k, .segs ss =>
       !holdsSep r.sep (charSegs ss) && join r.sep (charSegs ss) == k.toList &&
         lawfulSegs r.sep (charSegs ss) == r.lawful &&
@@ -82,14 +82,14 @@ def keyRowOk (r : KeyRow) : Bool :=
 
 /-- **A row that passes states what the host did.** Where the host threw, the model selects nothing
     or gives no segments. Where the host threw at the separator, the model's segments hold it. Where
-    the host gave no key, the null arm writes nothing. Where the host gave a key, either no segment
+    the host gave no key, the model gave no key. Where the host gave a key, either no segment
     holds the separator, the model's segments join to the key, and the read gives them back where
     the flag is `true` and gives another list where the flag is `false`, or the key is the printed
     attribute and the flag is `false`. -/
 theorem keyRowOk_iff (r : KeyRow) : keyRowOk r = true ↔
     (r.host = .refused ∧ r.out = .refused) ∨
     (r.host = .separator ∧ ∃ ss, r.out = .segs ss ∧ holdsSep r.sep (charSegs ss) = true) ∨
-    (r.host = .nothing ∧ r.out = .nothing ∧ ((Codec.empty : Codec).e (Attr.s "")) = none) ∨
+    (r.host = .nothing ∧ r.out = .nothing) ∨
     (∃ k v, r.host = .key k ∧ r.out = .raw v ∧ v = k ∧ r.lawful = false) ∨
       ∃ ss k, r.host = .key k ∧ r.out = .segs ss ∧ holdsSep r.sep (charSegs ss) = false ∧
         join r.sep (charSegs ss) = k.toList ∧
@@ -99,7 +99,7 @@ theorem keyRowOk_iff (r : KeyRow) : keyRowOk r = true ↔
   cases hh : r.host with
   | refused => cases ho : r.out <;> simp
   | separator => cases ho : r.out <;> simp
-  | nothing => cases ho : r.out <;> simp [Option.isNone_iff_eq_none]
+  | nothing => cases ho : r.out <;> simp
   | key k =>
       cases ho : r.out with
       | refused => simp

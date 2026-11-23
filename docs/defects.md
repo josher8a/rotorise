@@ -989,28 +989,6 @@ emitter prints the whole name as the label.
 
 ---
 
-## Known: one term of the check of a key row reads no field of the row
-
-**Observation.** `keyRowOk` of `formal/Calculus/Bridge/KeyRows.lean` compares what the host did
-with what the model gives. Where the host and the model give no key, the check is the term
-`((Codec.empty : Codec).e (Attr.s "")).isNone`. The term holds no field of the row.
-`keyRowOk_iff` states the same fact in the disjunct of that arm. `nullArm_writes_nothing` of
-`formal/Calculus/Dynamo/Alg/DerivedKey.lean` proves the fact for each value. Measured 2026-11-12
-with `lake env lean` on a scratch file that imports `Calculus.Bridge.KeyRows`:
-
-    example : ((Codec.empty : Codec).e (Attr.s "")).isNone = true := rfl
-      accepted
-
-    example (r : KeyRow) : keyRowOk r = keyRowOk' r
-      accepted, where keyRowOk' is keyRowOk with true in place of the term
-
-**Effect.** The term is true for each row. The arm accepts each row where the host and the model
-give no key, and the term adds no check.
-
-**Pin.** None.
-
----
-
 ## Known: the type of a partial key admits a hole, where the run time gives an error value
 
 **Observation.** A partial key is a position: the count `k` of the leading components that print. The
