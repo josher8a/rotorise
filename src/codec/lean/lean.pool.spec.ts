@@ -1882,11 +1882,16 @@ const poolModules = (
     ],
 ]
 
+// A spec that computes the vectors of the gate runs where `EMIT_LEAN_REFUSALS` is set: the gate emit and the CI gate set it.
+const emitOnly = it.skipIf(!process.env.EMIT_LEAN_REFUSALS)
+
 describe('the generated pool, against the model', () => {
     const perSeed = buildPool()
     const pairs = perSeed.flatMap((one) => one.pairs)
+    // The pool is one value, so the files of the pool are one value: each test reads the same files.
+    let typed: ReturnType<typeof typeVectorFiles> | undefined
     const typeFiles = () =>
-        typeVectorFiles({
+        (typed ??= typeVectorFiles({
             slices: [
                 ...perSeed.flatMap((one) => one.slices),
                 ...typeOnlySlices,
@@ -1901,7 +1906,7 @@ describe('the generated pool, against the model', () => {
             meets: [...pairs, ...typeOnlyMeets],
             foreign: typeOnlyForeign,
             clauses: clauseVocabulary,
-        })
+        }))
 
     /**
      * **The item reading and the slice are functions of the term.** The codec that `codecOfTerm`
@@ -2232,7 +2237,7 @@ describe('the generated pool, against the model', () => {
         ).toThrow(/no scope binds/)
     })
 
-    it('emits the kernel vectors for the gate', () => {
+    emitOnly('emits the kernel vectors for the gate', () => {
         const modules = poolModules(perSeed)
         if (process.env.EMIT_LEAN_REFUSALS) {
             const formal = join(process.cwd(), 'formal')
@@ -2337,83 +2342,97 @@ describe('the generated pool, against the model', () => {
         ])
     })
 
-    it('states a value that a slice keeps as an accept row and a value that it refuses as a refuse row, for a member whose drawn values lie on both sides of the narrowing', () => {
-        const rows: readonly {
-            readonly id: string
-            readonly after?: unknown
-        }[] = JSON.parse(
-            typeFiles().find(([file]) => file === 'rows.json')?.[1] ?? '[]',
-        )
-        const values = rows.filter((row) => row.id.startsWith('value|'))
-        const members = new Set(
-            values.map((row) =>
-                row.id
-                    .replace(/ value \d+$/, '')
-                    .split('|')
-                    .slice(2)
-                    .join('|'),
-            ),
-        )
-        expect({
-            accept: values.filter((row) => row.id.startsWith('value|accept|'))
-                .length,
-            refuse: values.filter((row) => row.id.startsWith('value|refuse|'))
-                .length,
-            members: members.size,
-            // the extract of the recursive union entry: the type refuses the value that the run time keeps
-            recursiveEntryAccept: values.filter(
-                (row) =>
-                    row.id.startsWith('value|accept|') &&
-                    row.id.includes('kids: object({ kind: string("leaf") })'),
-            ).length,
-            // each value row reads the call row of its slice
-            withoutAfter: values.filter((row) => row.after === undefined)
-                .length,
-        }).toEqual({
-            accept: 53,
-            refuse: 53,
-            members: 10,
-            recursiveEntryAccept: 4,
-            withoutAfter: 0,
-        })
-    })
+    emitOnly(
+        'states a value that a slice keeps as an accept row and a value that it refuses as a refuse row, for a member whose drawn values lie on both sides of the narrowing',
+        () => {
+            const rows: readonly {
+                readonly id: string
+                readonly after?: unknown
+            }[] = JSON.parse(
+                typeFiles().find(([file]) => file === 'rows.json')?.[1] ?? '[]',
+            )
+            const values = rows.filter((row) => row.id.startsWith('value|'))
+            const members = new Set(
+                values.map((row) =>
+                    row.id
+                        .replace(/ value \d+$/, '')
+                        .split('|')
+                        .slice(2)
+                        .join('|'),
+                ),
+            )
+            expect({
+                accept: values.filter((row) =>
+                    row.id.startsWith('value|accept|'),
+                ).length,
+                refuse: values.filter((row) =>
+                    row.id.startsWith('value|refuse|'),
+                ).length,
+                members: members.size,
+                // the extract of the recursive union entry: the type refuses the value that the run time keeps
+                recursiveEntryAccept: values.filter(
+                    (row) =>
+                        row.id.startsWith('value|accept|') &&
+                        row.id.includes(
+                            'kids: object({ kind: string("leaf") })',
+                        ),
+                ).length,
+                // each value row reads the call row of its slice
+                withoutAfter: values.filter((row) => row.after === undefined)
+                    .length,
+            }).toEqual({
+                accept: 53,
+                refuse: 53,
+                members: 10,
+                recursiveEntryAccept: 4,
+                withoutAfter: 0,
+            })
+        },
+    )
 
-    it('holds one row for each entry of the defects document that the pool reaches: a recursive union entry, two adapters of one type, an object with a rest, a number tag, and a path below two options with a function of a caller', () => {
-        const rows: readonly {
-            readonly id: string
-            readonly after?: string | readonly string[]
-        }[] = JSON.parse(
-            typeFiles().find(([file]) => file === 'rows.json')?.[1] ?? '[]',
-        )
-        const ids = rows.map((row) => row.id)
-        const dissection = 'declaration|accept|ce03a404b2|dissection size'
-        const holding = (text: string) =>
-            ids.filter((id) => id.includes(text)).length
-        expect({
-            // a union slot of refs below the field of a pattern, with a recursive union entry
-            recursiveEntry: holding('kids: object({ kind: string("leaf") })'),
-            // two held parts with distinct functions and one type: the meet that the run time refuses
-            meetRefuse: ids.filter((id) => id.startsWith('meet|refuse|'))
-                .length,
-            // an object with a rest and a value at an undeclared name
-            rest: holding('Decoded of the codec = { a: "x", c: "y" }'),
-            // the line of a union with a discriminator at a number tag and a text tag of one text
-            numberTag: holding('ce03a404b2|dissection size'),
-            // a row of a root that the type refuses reads the line of the root, so it has no verdict
-            readersOfTheNumberTag: rows.filter((row) =>
-                [row.after ?? []].flat(2).includes(dissection),
-            ).length,
-            // a clause below a union of two options that hold one function of a caller
-            callerClause: holding('["r", "op"]), object({ x: string })), [])'),
-        }).toEqual({
-            recursiveEntry: 14,
-            meetRefuse: 4,
-            rest: 1,
-            numberTag: 1,
-            readersOfTheNumberTag: 324,
-            callerClause: 4,
-        })
-    })
+    emitOnly(
+        'holds one row for each entry of the defects document that the pool reaches: a recursive union entry, two adapters of one type, an object with a rest, a number tag, and a path below two options with a function of a caller',
+        () => {
+            const rows: readonly {
+                readonly id: string
+                readonly after?: string | readonly string[]
+            }[] = JSON.parse(
+                typeFiles().find(([file]) => file === 'rows.json')?.[1] ?? '[]',
+            )
+            const ids = rows.map((row) => row.id)
+            const dissection = 'declaration|accept|ce03a404b2|dissection size'
+            const holding = (text: string) =>
+                ids.filter((id) => id.includes(text)).length
+            expect({
+                // a union slot of refs below the field of a pattern, with a recursive union entry
+                recursiveEntry: holding(
+                    'kids: object({ kind: string("leaf") })',
+                ),
+                // two held parts with distinct functions and one type: the meet that the run time refuses
+                meetRefuse: ids.filter((id) => id.startsWith('meet|refuse|'))
+                    .length,
+                // an object with a rest and a value at an undeclared name
+                rest: holding('Decoded of the codec = { a: "x", c: "y" }'),
+                // the line of a union with a discriminator at a number tag and a text tag of one text
+                numberTag: holding('ce03a404b2|dissection size'),
+                // a row of a root that the type refuses reads the line of the root, so it has no verdict
+                readersOfTheNumberTag: rows.filter((row) =>
+                    [row.after ?? []].flat(2).includes(dissection),
+                ).length,
+                // a clause below a union of two options that hold one function of a caller
+                callerClause: holding(
+                    '["r", "op"]), object({ x: string })), [])',
+                ),
+            }).toEqual({
+                recursiveEntry: 14,
+                meetRefuse: 4,
+                rest: 1,
+                numberTag: 1,
+                readersOfTheNumberTag: 324,
+                callerClause: 4,
+            })
+        },
+    )
 
     /**
      * **The type of a slice and of a path states the decision of the run time.** Each check is one
@@ -2421,7 +2440,7 @@ describe('the generated pool, against the model', () => {
      * set of disagreements to its list. The printer throws at a root that it cannot print, so no
      * root leaves the check in silence.
      */
-    it('emits the type vectors for the gate', () => {
+    emitOnly('emits the type vectors for the gate', () => {
         const files = typeFiles()
         if (process.env.EMIT_LEAN_REFUSALS) {
             const types = join(process.cwd(), 'formal', '.pool.types')
