@@ -7,7 +7,7 @@
  * The pool declares names over `owner` (text, or an object with `name` and `id`), `'owner.name'`
  * and `'owner.id'`, reads `owner`, `'owner.name'` and `'owner.id'`
  * as a list and as a key of one attribute, and builds each entry with no codec, with a closed codec,
- * with an open codec that holds the name of a path in the rest, and with a tagged codec. The schema
+ * with an open codec that holds the name of a path in the rest, with a closed codec of optional fields, and with a tagged codec. One part writes `'owner.name'` and the object `owner` in one change. The schema
  * and the pet of a generated entry are cast, because the pool holds entries that the type refuses.
  * An entry that the construction refuses is counted and is no comparison.
  */
@@ -76,7 +76,12 @@ const build = (): Run => {
         for (const flat of flats)
             for (const key of keyNames)
                 for (const form of forms)
-                    for (const mode of ['none', 'closed', 'open'] as const) {
+                    for (const mode of [
+                        'none',
+                        'closed',
+                        'open',
+                        'optional',
+                    ] as const) {
                         const declared = names(owner, flat)
                         if (declared.length === 0) continue
                         const open = mode === 'open'
@@ -99,7 +104,11 @@ const build = (): Run => {
                                       ...Object.fromEntries(
                                           fields.map((name) => [
                                               name,
-                                              fieldOf(name, owner),
+                                              mode === 'optional'
+                                                  ? optional(
+                                                        fieldOf(name, owner),
+                                                    )
+                                                  : fieldOf(name, owner),
                                           ]),
                                       ),
                                   }
@@ -152,6 +161,19 @@ const build = (): Run => {
                             })),
                             // a write of `undefined` takes the value away, so a key can go
                             ...declared.map((name) => ({ [name]: undefined })),
+                            // a write at `owner.name` and a write of the object `owner` in one change: the
+                            // written name is read before the walk into the object, so the two orders of the read differ
+                            ...(owner === 'object' && declared.includes('owner')
+                                ? [
+                                      {
+                                          'owner.name': 'x-flat',
+                                          owner: {
+                                              name: 'x-nested',
+                                              id: 'x-id',
+                                          },
+                                      },
+                                  ]
+                                : []),
                         ]
                         run.entries.push({
                             keyName: key,
@@ -249,7 +271,11 @@ const written = (
     part: Record<string, unknown>,
 ): Record<string, unknown> | undefined => {
     const out = structuredClone(pet)
-    for (const [name, value] of Object.entries(part)) {
+    // The dotted entries go last, because the written name wins over the object that holds its path.
+    const entries = Object.entries(part).sort(
+        ([a], [b]) => Number(a.includes('.')) - Number(b.includes('.')),
+    )
+    for (const [name, value] of entries) {
         const names = name.split('.')
         const last = names.pop() as string
         let at: Record<string, unknown> = out
@@ -260,7 +286,8 @@ const written = (
                 return undefined
             at = at[one] as Record<string, unknown>
         }
-        at[last] = value
+        // A clone: the assignment of a shared object let the next write change the part itself, and a mutant that reads the path first then passed.
+        at[last] = structuredClone(value)
     }
     return out
 }
