@@ -275,6 +275,7 @@ Name the command, and quote the output. A report without both is a claim.
 | formatter, import order and linter clean | `npm run format:ci`, which runs `biome ci --error-on-warnings ./src`. A lint warning fails the check. The spec and test files are not linted |
 | published name set | `bash scripts/surface-names.sh --build`, which compares the export set of the three entries against `scripts/surface/*.txt`. Name each move in the commit message |
 | type-level surface | the attest snapshots in `src/Rotorise.attest.test.ts`, against `.attest/assertions/typescript.json` |
+| each test fails for its rule | `bash scripts/mutants.sh <tree> --files <file> --jobs 3`, which runs each row of `scripts/mutants.tsv` for the file on a copy of `<tree>`: the row changes the rule, and the check of the row must fail with the text of the row. Each row prints `DIED`, or the row names a gap. `<tree>` holds no `.git`. Give each job 5 GB of free memory. `bash scripts/mutants-probe.sh` tests the script |
 | the Lean side | `formal/scripts/gate.sh`, which gates on the exit code, and reports every check rather than the first failure |
 
 Run `npm run format:ci` at HEAD before your pass. A fix that appears after your pass is a
