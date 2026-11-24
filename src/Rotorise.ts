@@ -1807,9 +1807,9 @@ type KeyNameReader = (attributes: object, path: string) => unknown
  * expression: the path reads into objects, one own property for each name, and a missing name gives
  * `undefined`. The item never gives an attribute whose own name holds a `.`.
  */
-const valueAt: KeyNameReader = (attributes, path) => {
+const walk = (attributes: object, segments: readonly string[]): unknown => {
     let current: unknown = attributes
-    for (const segment of path.includes('.') ? pathSegments(path) : [path]) {
+    for (const segment of segments) {
         if (
             typeof current !== 'object' ||
             current === null ||
@@ -1822,15 +1822,42 @@ const valueAt: KeyNameReader = (attributes, path) => {
     return current
 }
 
+const valueAt: KeyNameReader = (attributes, path) =>
+    walk(attributes, path.includes('.') ? pathSegments(path) : [path])
+
+/** The segments of each path of a schema that holds a `.`: a constant of the schema. */
+type Segments = ReadonlyMap<string, readonly string[]>
+
+/**
+ * The reader of an entry: the path of a key component is a constant of the schema, so the entry
+ * parses the path once, where the schema is read, and the reader walks the stored segments. Each
+ * path that the reader reads is a path of the schema, so a path that the table lacks is a broken
+ * invariant.
+ */
+const readerOf =
+    (segments: Segments): KeyNameReader =>
+    (attributes, path) => {
+        if (!path.includes('.')) return walk(attributes, [path])
+        const known = segments.get(path)
+        if (known === undefined) {
+            throw new RotoriseError(
+                `the path '${path}' is not in the table of the schema`,
+            )
+        }
+        return walk(attributes, known)
+    }
+
 /**
  * The value of a key name at the given item of an update. The given item is `{ ...decided, ...changed }`,
  * and a change is a map from a written path to a value: the entry of the change at the flat name
  * comes first, then the walk into a written object. A name above a written path reads no value.
  */
-const givenAt: KeyNameReader = (attributes, path) =>
-    Object.hasOwn(attributes, path)
-        ? (attributes as Record<string, unknown>)[path]
-        : valueAt(attributes, path)
+const givenFrom =
+    (read: KeyNameReader): KeyNameReader =>
+    (attributes, path) =>
+        Object.hasOwn(attributes, path)
+            ? (attributes as Record<string, unknown>)[path]
+            : read(attributes, path)
 
 /**
  * What a component of a list prints for the attributes: the model's `Option Comp`. A component with
@@ -1964,11 +1991,17 @@ const relatedToAny = (path: string, names: Iterable<string>): boolean => {
 const decidedName = (component: string): string =>
     component.split('.')[0] ?? component
 
-/** Refuses each name or path of a schema that is no key path, once, where the schema is read. */
-const checkPaths = (schema: Record<string, unknown>): void => {
+/**
+ * Refuses each name or path of a schema that is no key path, once, where the schema is read, and
+ * gives the segments of each path.
+ */
+const checkPaths = (schema: Record<string, unknown>): Segments => {
+    const segments = new Map<string, readonly string[]>()
     for (const spec of Object.values(schema))
         for (const path of componentsOf(spec, {}, valueAt).components)
-            pathSegments(path)
+            if (path.includes('.')) segments.set(path, pathSegments(path))
+            else pathSegments(path)
+    return segments
 }
 
 /**
@@ -2163,10 +2196,10 @@ const key =
             alone?: boolean,
         ) => Result<unknown>,
         /** How a key name reads a value at the carrier of the call: an item, or the given item of an update. */
-        read: KeyNameReader = valueAt,
+        read: (segments: Segments) => KeyNameReader = readerOf,
     ) => {
         checkComponents(schema, separator)
-        checkPaths(schema)
+        const reading = read(checkPaths(schema))
         return <
             const Key extends keyof Schema,
             const Config extends {
@@ -2198,7 +2231,7 @@ const key =
             const arm = select(
                 case_,
                 attributes as Record<string, unknown>,
-                read,
+                reading,
             )
             if (arm.kind === 'missing') {
                 // an error names the discriminator and holds no value
@@ -2211,7 +2244,7 @@ const key =
             // a `null` arm gives no key, as an attribute key gives none
             if (arm.kind === 'null') return undefined
             if (arm.kind === 'attr') {
-                const value = read(attributes, arm.name)
+                const value = reading(attributes, arm.name)
                 if (value === null) return undefined as never
                 // a key of one attribute holds the stored payload of an attribute under the adapter
                 // of a caller, as the row holds it
@@ -2268,7 +2301,7 @@ const key =
             const printedParts = parts(
                 structure,
                 attributes as Record<string, unknown>,
-                read,
+                reading,
             )
             for (const [at, part] of printedParts.entries()) {
                 if (part === undefined) {
@@ -3382,7 +3415,7 @@ export type KeyComponents<Spec, Given = unknown> = Spec extends string
           : never
 
 /**
- * The value of a name at the given item of an update, as `givenAt` reads it at run time: the entry of
+ * The value of a name at the given item of an update, as `givenFrom` reads it at run time: the entry of
  * the change at the written name comes first, then the walk into a written object.
  */
 type GivenAt<Given, P extends string> = P extends keyof Given
@@ -4499,6 +4532,10 @@ export const tableEntry =
         for (const [index, given] of Object.entries(indexes ?? {}))
             namesOf(`the index '${index}'`, given)
 
+        const pathTable = checkPaths(expanded)
+        const readItem = readerOf(pathTable)
+        const readGiven = givenFrom(readItem)
+
         const buildKey = key()(
             expanded as never,
             sep,
@@ -4516,7 +4553,7 @@ export const tableEntry =
             sep,
             (path, value, given, alone) =>
                 storedText(path, value, given, alone),
-            givenAt,
+            (segments) => givenFrom(readerOf(segments)),
         ) as (
             name: never,
             attributes: never,
@@ -4640,7 +4677,7 @@ export const tableEntry =
                 for (const key of keys) {
                     const components =
                         key.fixed ??
-                        componentsOf(key.spec, given, givenAt).components
+                        componentsOf(key.spec, given, readGiven).components
                     if (![...components].some((c) => relatedToAny(c, block)))
                         continue
                     for (const component of components) {
@@ -4683,7 +4720,7 @@ export const tableEntry =
                 if (!key.ofTable) continue
                 const components =
                     key.fixed ??
-                    componentsOf(key.spec, given, givenAt).components
+                    componentsOf(key.spec, given, readGiven).components
                 const held = [...components].filter((c) =>
                     relatedToAny(c, block),
                 )
@@ -5034,7 +5071,7 @@ export const tableEntry =
             item: Record<string, unknown>,
             value: unknown,
             written?: AttributeMap,
-            read: KeyNameReader = valueAt,
+            read: KeyNameReader = readItem,
         ): Result<Carrying<KeyMember>> => {
             const selected = select(expanded[name], item, read)
             // a list of components and a `null` arm read no attribute of the codec
@@ -5188,7 +5225,7 @@ export const tableEntry =
             for (const key of keys) {
                 const components =
                     key.fixed ??
-                    componentsOf(key.spec, given, givenAt).components
+                    componentsOf(key.spec, given, readGiven).components
 
                 /**
                  * Two questions of the components, as two flags.
@@ -5235,7 +5272,7 @@ export const tableEntry =
                     given,
                     built,
                     undefined,
-                    givenAt,
+                    readGiven,
                 )
                 if (failed(value)) return stepRefusal(value)
                 set.push([key.name, value])
@@ -5278,23 +5315,23 @@ export const tableEntry =
             name: string,
             attributes: Record<string, unknown>,
         ): Result<SortCondition | undefined> => {
-            const arm = select(expanded[name], attributes, valueAt)
+            const arm = select(expanded[name], attributes, readItem)
             const components =
                 arm.kind === 'leaf'
                     ? arm.components
                     : arm.kind === 'attr'
                       ? [arm.name]
                       : []
-            const printed = parts(components, attributes, valueAt)
+            const printed = parts(components, attributes, readItem)
             // a `null` arm and a missing arm have no part, so the names of the spec stand for the parts
             const given =
                 arm.kind === 'null' || arm.kind === 'missing'
                     ? [
-                          ...componentsOf(expanded[name], attributes, valueAt)
+                          ...componentsOf(expanded[name], attributes, readItem)
                               .components,
-                      ].some((c) => isValue(valueAt(attributes, c)))
+                      ].some((c) => isValue(readItem(attributes, c)))
                     : arm.kind === 'attr'
-                      ? isValue(valueAt(attributes, arm.name))
+                      ? isValue(readItem(attributes, arm.name))
                       : printed.some((part) => part !== undefined)
             if (!given) {
                 // the position of no component, closed: the tag of the first component and the
