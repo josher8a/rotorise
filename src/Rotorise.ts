@@ -4047,8 +4047,9 @@ const componentsOf = (
 
     const walk = (value: unknown): void => {
         if (value === null || value === undefined) return
-        if (typeof value === 'string') {
-            components.add(value)
+        // a name of the entity is a string or a number, and a number names an attribute by its text
+        if (typeof value === 'string' || typeof value === 'number') {
+            components.add(String(value))
             return
         }
         if (Array.isArray(value)) {

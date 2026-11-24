@@ -5,6 +5,9 @@
  * name `0` gives the tag `0`. The type read a name that is a string only, and the print of a name
  * that is a number had no label. The type of the key and of the entry now hold the label, and a
  * text with another label is refused.
+ *
+ * A write to the attribute changes the key, as for a name that is a string. `keyUpdates` read a
+ * name that is a string only, so the patch of a write to `0` left the stored key stale.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
@@ -60,5 +63,17 @@ describe('a component whose name is a number prints the number as its tag', () =
         // @ts-expect-error the tag is 0
         const other: typeof key = '~0#zero'
         expect(other).toBe('~0#zero')
+    })
+
+    it('re-keys the key when an update writes the component', () => {
+        const Plain = tableEntry<Rows>()({ PK: ['petId'], SK: [0] })
+        expect(Plain.keyUpdates({ 0: 'one' })).toEqual({
+            set: { SK: { S: '0#one' } },
+            remove: [],
+        })
+        expect(Plain.keyUpdates({ 0: 'one', petId: 'p1' })).toEqual({
+            set: { PK: { S: 'PETID#p1' }, SK: { S: '0#one' } },
+            remove: [],
+        })
     })
 })
