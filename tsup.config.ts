@@ -7,7 +7,7 @@ export default defineConfig({
     // named, because esbuild names an output by its path under the common root, and two of the
     // three entries sit in `src/codec/` while `dist/testing.js` and `dist/native.js` are published
     entry: {
-        Rotorise: './src/Rotorise.ts',
+        Rotorise: './src/index.ts',
         testing: './src/codec/testing.ts',
         native: './src/codec/native.ts',
     },

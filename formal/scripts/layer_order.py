@@ -97,6 +97,7 @@ HOST_ORDER = [
     ("codec/testing.ts", "Dynamo/Alg/Codec.lean and Dynamo/Lang/ScopeSound.lean: the laws, run as checks on a codec that a term gives, where `Closed.sound` proves them"),
     ("codec/typeVectors.ts", "none: the type bridge. The file states each decision of the run time to the type checker, and `type_bridge.py` compares the two"),
     ("Rotorise.ts", "Dynamo/Alg/DerivedKey.lean, Dynamo/Alg/DerivedItem.lean, Dynamo/Alg/KeyMatch.lean, Dynamo/Alg/KeyItem.lean, Dynamo/Alg/KeyUpdate.lean and Dynamo/Alg/KeyCondition.lean: the key layer, over the codecs"),
+    ("index.ts", "none: the published names of the package, re-exported from `./Rotorise` with no declaration"),
     ("attestPin.ts", "none: the floor of an instantiation pin, which the tests call after each pin of attest"),
 ]
 
