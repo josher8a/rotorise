@@ -327,12 +327,14 @@ type PrintOf<C, Value, Partial extends boolean> = C extends {
 /**
  * The values of a component that the builder prints. A partial key ends at a component whose value
  * is `undefined`, `null` or `''`, so the continuation reads the value without these members. A full
- * key throws at such a value, and its type keeps the members. A full key passes `never` for
- * `Partial`, so the test is `true extends Partial` and no distribution over `never`.
+ * key throws at `''` too, so its type drops the empty text: no success value is a text that the run
+ * time refuses. The schema refuses a plain component whose value can be `undefined` or `null`, so a
+ * full key has no such member to drop. A full key passes `never` for `Partial`, so the test is
+ * `true extends Partial` and no distribution over `never`.
  */
 type Printed<Value, Partial extends boolean> = true extends Partial
     ? Exclude<Value, undefined | null | ''>
-    : Value
+    : Exclude<Value, ''>
 
 /**
  * **Whether a component of a partial key is absent**, as the run time reads the value. The partial
@@ -395,7 +397,7 @@ type StopText<
         : [NextLabel<Next>] extends [never]
           ? `${Acc}${Separator}`
           : `${Acc}${Separator}${NextLabel<Next>}${Separator}`
-    : Acc extends null
+    : Acc extends null | ''
       ? never
       : Acc
 
@@ -2686,10 +2688,13 @@ type OptimizedBuiltKey<
               : [Entity] extends [never]
                 ? never
                 : Spec extends NonPath<Entity>
-                  ? Replace<
-                        SingleText<Entity, Spec, CodecSpec>,
-                        null,
-                        undefined
+                  ? Exclude<
+                        Replace<
+                            SingleText<Entity, Spec, CodecSpec>,
+                            null,
+                            undefined
+                        >,
+                        ''
                     >
                   : Spec extends DiscriminatedSchemaShape
                     ? ValueOf<
@@ -2697,10 +2702,13 @@ type OptimizedBuiltKey<
                           ValueOfKey<Entity, Spec['discriminator']>
                       > extends infer Arm
                         ? Arm extends NonPath<Entity>
-                            ? Replace<
-                                  SingleText<Entity, Arm, CodecSpec>,
-                                  null,
-                                  undefined
+                            ? Exclude<
+                                  Replace<
+                                      SingleText<Entity, Arm, CodecSpec>,
+                                      null,
+                                      undefined
+                                  >,
+                                  ''
                               >
                             : Arm extends DiscriminatedSchemaShape
                               ? OptimizedBuiltKey<

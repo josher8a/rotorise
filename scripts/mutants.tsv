@@ -348,3 +348,7 @@ p204_a_number_name_finds_its_member_in_the_type_of_the_entity	src/Rotorise.ts	s/
 p204_a_number_name_is_a_stored_name_in_the_type	src/Rotorise.ts	s/^type StoredName<C> = C extends string \| number$/type StoredName<C> = C extends string/	node ./node_modules/typescript-7/bin/tsc --noEmit	Unused '@ts-expect-error' directive
 p205_a_component_that_is_a_number_names_an_attribute	src/Rotorise.ts	/^    if \(typeof at === 'number'\)$/{n;s/.*/        return undefined/}	npx vitest --run src/codec/spec/object/codec.keyroutes.spec.ts	the routes of a component agree on its name
 p205_a_bare_number_spec_names_its_attribute	src/Rotorise.ts	s/typeof value === 'string' \|\| typeof value === 'number'/typeof value === 'string'/	npx vitest --run src/codec/spec/object/codec.keyroutes.spec.ts	stands alone
+p209_a_full_key_print_keeps_the_empty_text	src/Rotorise.ts	s/^    : Exclude<Value, ''>$/    : Value/	node ./node_modules/typescript-7/bin/tsc --noEmit	codec.keyempty.spec.ts(
+p209_b_stop_text_keeps_the_empty_print	src/Rotorise.ts	s/^    : Acc extends null \| ''$/    : Acc extends null/	node ./node_modules/typescript-7/bin/tsc --noEmit	codec.keyempty.spec.ts(
+p209_c_single_attribute_keeps_the_empty_text	src/Rotorise.ts	s/^ {24}''$/                        never/	node ./node_modules/typescript-7/bin/tsc --noEmit	codec.keyempty.spec.ts(
+p209_d_arm_attribute_keeps_the_empty_text	src/Rotorise.ts	s/^ {34}''$/                                  never/	node ./node_modules/typescript-7/bin/tsc --noEmit	codec.keyempty.spec.ts(

@@ -279,3 +279,95 @@ describe('the type of a key counts the segments that a print holds, and not the 
         expect(key).toBe('PETID#p1#')
     })
 })
+
+describe('the type of a full key has no success value that the run time refuses, because the key is never the empty text', () => {
+    type Blank = {
+        petId: string
+        lit: ''
+        kind: 'x' | ''
+        nick: string
+    }
+    const blank = (_nick: string): '' => ''
+    const same = (nick: string): string => nick
+    const Keys = tableEntry<Blank>()({
+        PK: ['petId'],
+        ONE_LIT: 'lit',
+        ONE_UNION: 'kind',
+        LIST: ['petId', 'lit'],
+        NOTAG: [{ at: 'lit', tag: false }],
+        FN_EMPTY: [{ at: 'nick', tag: false, value: blank }],
+        FN_WIDE: [{ at: 'nick', tag: false, value: same }],
+        FN_TWO: [
+            { at: 'nick', tag: false, value: blank },
+            { at: 'nick', tag: false, value: blank },
+        ],
+        FN_TAG: [{ at: 'nick', value: blank }],
+    })
+
+    it('has no success value for a key of one attribute whose value is the empty literal', () => {
+        const call = () => Keys.unsafeKey('ONE_LIT', { lit: '' })
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
+        expect(call).toThrow(/the attribute 'lit' is empty/)
+    })
+
+    it('drops the empty text from a union that holds it, and keeps the other member', () => {
+        const empty = () => Keys.unsafeKey('ONE_UNION', { kind: '' })
+        expectTypeOf(empty).returns.toEqualTypeOf<never>()
+        expect(empty).toThrow(/the attribute 'kind' is empty/)
+        const key = Keys.unsafeKey('ONE_UNION', { kind: 'x' })
+        expectTypeOf(key).toEqualTypeOf<'x'>()
+        expect(key).toBe('x')
+    })
+
+    it('has no success value for a list that holds a plain component with the empty text', () => {
+        const call = () => Keys.unsafeKey('LIST', { petId: 'p', lit: '' })
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
+        expect(call).toThrow(CodecError)
+    })
+
+    it('has no success value for a record with no tag over the empty text', () => {
+        const call = () => Keys.unsafeKey('NOTAG', { lit: '' })
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
+        expect(call).toThrow(CodecError)
+    })
+
+    it('has no success value for a function that returns the empty text, where no tag follows', () => {
+        const call = () => Keys.unsafeKey('FN_EMPTY', { nick: 'rex' })
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
+        expect(call).toThrow(/the print of the components is empty/)
+    })
+
+    it('keeps the success value `#` where two records with no tag print the empty text, because the key is not empty', () => {
+        const key = Keys.unsafeKey('FN_TWO', { nick: 'rex' })
+        expectTypeOf(key).toEqualTypeOf<'#'>()
+        expect(key).toBe('#')
+    })
+
+    it('keeps the label where a tag follows a function that returns the empty text', () => {
+        const key = Keys.unsafeKey('FN_TAG', { nick: 'rex' })
+        expectTypeOf(key).toEqualTypeOf<'NICK#'>()
+        expect(key).toBe('NICK#')
+    })
+
+    it('has no success value for a key of one attribute at the arm of a match', () => {
+        type Armed =
+            | { id: string; type: 'a'; lit: '' }
+            | { id: string; type: 'b'; nick: string }
+        const Arms = tableEntry<Armed>()({
+            PK: ['id'],
+            ARM: { discriminator: 'type', spec: { a: 'lit', b: 'nick' } },
+        })
+        const call = () => Arms.unsafeKey('ARM', { type: 'a', lit: '' })
+        expectTypeOf(call).returns.toEqualTypeOf<never>()
+        expect(call).toThrow(/the attribute 'lit' is empty/)
+    })
+
+    it('keeps `string` where a function returns a wide text, because the run time decides', () => {
+        const key = Keys.unsafeKey('FN_WIDE', { nick: 'rex' as string })
+        expectTypeOf(key).toEqualTypeOf<string>()
+        expect(key).toBe('rex')
+        expect(() => Keys.unsafeKey('FN_WIDE', { nick: '' as string })).toThrow(
+            /the print of the components is empty/,
+        )
+    })
+})
