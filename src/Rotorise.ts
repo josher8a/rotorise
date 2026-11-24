@@ -2200,6 +2200,15 @@ const key =
     ) => {
         checkComponents(schema, separator)
         const reading = read(checkPaths(schema))
+        // the label of a path is a constant of the schema, so each key builds the text once
+        const labels = new Map<string, string>()
+        const labelOf = (path: string): string => {
+            const known = labels.get(path)
+            if (known !== undefined) return known
+            const label = printedName(path)
+            labels.set(path, label)
+            return label
+        }
         return <
             const Key extends keyof Schema,
             const Config extends {
@@ -2327,7 +2336,7 @@ const key =
                         tag === undefined
                             ? `the name ${path}`
                             : `the tag of ${path}`,
-                        tag ?? printedName(path),
+                        tag ?? labelOf(path),
                     )
                     if (refusedLabel !== undefined) return refusedLabel
                 }
@@ -2387,9 +2396,7 @@ const key =
                         : { at: next }
                 ) as { tag?: string | false; at: unknown }
                 const label =
-                    tag === false
-                        ? undefined
-                        : (tag ?? printedName(String(nextAt)))
+                    tag === false ? undefined : (tag ?? labelOf(String(nextAt)))
                 if (label === undefined && printed === 0) {
                     return keyRefusal(
                         `Key ${key.toString()}: the first component has no tag, so a key of no component has no text. Give the first component, or leave the key out.`,

@@ -236,7 +236,7 @@ p157_C5_tag_that_is_no_text_is_read	src/Rotorise.ts	s/if \(typeof tag !== 'strin
 p157_C6_value_that_is_no_function_is_read	src/Rotorise.ts	s/if \(value !== undefined && typeof value !== 'function'\) \{/if (false) {/	npx vitest --run src/codec/spec/object/codec.keylabel.spec.ts	refuses a value that is no function
 p157_C7_record_without_at_is_read	src/Rotorise.ts	s/if \(typeof at !== 'string' && typeof at !== 'number'\) \{/if (false) {/	npx vitest --run src/codec/spec/object/codec.keylabel.spec.ts	refuses a record with no attribute at `at`
 p157_L1_tag_false_prints_a_label	src/Rotorise.ts	s/^( +)if \(tag !== false\) \{$/\1if (true) {/	npx vitest --run src/codec/spec/object/codec.keylabel.spec.ts	prints one segment where the tag is false
-p157_L2_tag_is_ignored_by_the_builder	src/Rotorise.ts	s/tag \?\? printedName\(path\),/printedName(path),/	npx vitest --run src/codec/spec/object/codec.keylabel.spec.ts	prints the tag at a name
+p157_L2_tag_is_ignored_by_the_builder	src/Rotorise.ts	s/tag \?\? labelOf\(path\),/labelOf(path),/	npx vitest --run src/codec/spec/object/codec.keylabel.spec.ts	prints the tag at a name
 p157_L3_default_is_ignored_by_the_builder	src/Rotorise.ts	s/const value = found === undefined \? Default : found/const value = found/	npx vitest --run src/codec/spec/object/codec.keylabel.spec.ts	prints the default under the tag
 p157_T1_name_reads_the_method_at_of_a_string	src/Rotorise.ts	s/^    readonly at: infer A extends PropertyKey$/    readonly at: infer A/	node ./node_modules/typescript-7/bin/tsc --noEmit	error TS
 p157_T2_label_is_the_name_where_the_tag_is_a_literal	src/Rotorise.ts	/^type LabelOf</,/^\/\*\* What a component prints/s/^        \? T$/        ? Name/	node ./node_modules/typescript-7/bin/tsc --noEmit	error TS
