@@ -86,7 +86,37 @@ export type StoredItem = {
 export const carrying = <K extends AttributeName>(
     name: K,
     value: AttributeCarries[K],
-): Carrying<K> => ({ [name]: value }) as Carrying<K>
+): Carrying<K> => {
+    // one literal for each member, so each result has a fixed shape: a computed key makes an object
+    // that the engine cannot give one shape, and `carrying` runs for each attribute that is written.
+    // The type refuses another name, so the last arm is a broken invariant of the caller
+    switch (name) {
+        case 'S':
+            return { S: value } as Carrying<K>
+        case 'N':
+            return { N: value } as Carrying<K>
+        case 'B':
+            return { B: value } as Carrying<K>
+        case 'SS':
+            return { SS: value } as Carrying<K>
+        case 'NS':
+            return { NS: value } as Carrying<K>
+        case 'BS':
+            return { BS: value } as Carrying<K>
+        case 'M':
+            return { M: value } as Carrying<K>
+        case 'L':
+            return { L: value } as Carrying<K>
+        case 'BOOL':
+            return { BOOL: value } as Carrying<K>
+        case 'NULL':
+            return { NULL: value } as Carrying<K>
+        default:
+            throw new Error(
+                `carrying: '${String(name)}' is no member of an attribute`,
+            )
+    }
+}
 
 /** {@link Attribute}, distributed over a name that is not yet decided. */
 export type Carrying<K extends AttributeName> = K extends unknown

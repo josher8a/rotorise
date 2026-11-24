@@ -340,3 +340,4 @@ p193_a_block_that_measures_no_call_fails_the_pin	src/Rotorise.attest.test.ts	s/^
 p193_the_fall_limit_of_a_pin_is_10_percent	src/attestPin.ts	s/PIN_LIMIT = 0\.1$/PIN_LIMIT = 1/	npx vitest --run src/attestPin.spec.ts	AssertionError
 p195_a_key_path_is_read_from_the_table_of_the_schema	src/Rotorise.ts	s/^    return segments$/    return new Map()/	npx vitest --run src/codec/spec/object/codec.keypath.spec.ts	is not in the table of the schema
 p196_a_literal_option_admits_exactly_its_value	src/codec/denote.ts	s/\(value\) => value === def\.v/(value) => value !== def.v/	npx vitest --run src/codec/spec/union/codec.optionadmits.spec.ts	AssertionError
+p198_each_member_is_carried_under_its_own_name	src/codec/attribute.ts	s/return \{ N: value \}/return { S: value }/	npx vitest --run src/codec/spec/surface/codec.carrying.spec.ts	AssertionError
