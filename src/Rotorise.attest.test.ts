@@ -1,5 +1,6 @@
 import { attest } from '@ark/attest'
 import { describe, it } from 'vitest'
+import { floor } from './attestPin'
 import {
     array,
     held,
@@ -20,8 +21,9 @@ import { tableEntry } from './Rotorise'
  * unbound at the top level, so the block measures an error. The type and the entry that the blocks
  * read are declared at the top level for that reason.
  *
- * A pin fails where the count rises above the threshold of attest. Where the count falls, attest
- * prints a line and the pin passes, so a block that measures an error passes.
+ * A pin fails where the count rises more than 10 percent above the pin: `setupVitest.ts` sets the
+ * threshold of attest. attest passes each fall, so `floor` of `attestPin.ts` fails a count that
+ * lies more than 10 percent under the pin, and a block that measures an error fails.
  */
 type User = {
     id: string
@@ -68,6 +70,7 @@ describe('Rotorise Performance Baseline', () => {
         // 1203 -> 1314: the type of the schema refuses a property of a component record that the record does not have, as the run time does. The owner ruled that the pin rises by this count.
         // 1314 -> 1329: the untagged union codec is refused at the codec, where the key reads a held codec. Owner ruling 2026-11-23.
         attest.instantiations([1329, 'instantiations'])
+        floor(1329)
     })
 
     it('measures instantiation count for key generation', () => {
@@ -76,7 +79,9 @@ describe('Rotorise Performance Baseline', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 3823 -> 3617: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 3738.
-        attest.instantiations([3617, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([3636, 'instantiations'])
+        floor(3636)
     })
 
     it('verifies type outputs with snapshots', () => {

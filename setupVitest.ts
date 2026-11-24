@@ -96,6 +96,8 @@ export default async () => {
     const specs = selectedSpecs(commandArgs(process.argv), root)
     if (specs !== null && !reachesAttest(specs)) return
     const { setup } = await import(ATTEST)
-    return setup({})
+    // The owner limit of a change is 10 percent per pin. attest fails a rise above this threshold.
+    // The default is 20 percent. `floor` of `src/attestPin.ts` fails a fall, which attest passes.
+    return setup({ benchPercentThreshold: 10 })
 }
 

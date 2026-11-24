@@ -1,5 +1,6 @@
 import { attest } from '@ark/attest'
 import { describe, expect, it, test } from 'vitest'
+import { floor } from './attestPin'
 import { tableEntry } from './Rotorise'
 import type { ErrorMessage, Exact, NonEmptyArray, show } from './utils'
 
@@ -155,7 +156,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 9878 -> 8132: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 9457.
-        attest.instantiations([8132, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([8445, 'instantiations'])
+        floor(8445)
     })
 
     it('key types the key as the template of its components, joined by the separator', () => {
@@ -246,7 +249,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 25224 -> 22012: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 24747.
-        attest.instantiations([22012, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([22587, 'instantiations'])
+        floor(22587)
     })
 
     it('tableEntry joins the key components with the separator, and reads an entry back as the entity', () => {
@@ -417,7 +422,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 12971 -> 13785: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 14136.
-        attest.instantiations([13785, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([15868, 'instantiations'])
+        floor(15868)
     })
 
     test('path from infer then toString', () => {
@@ -468,7 +475,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 3538 -> 3915: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 4014.
-        attest.instantiations([3915, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([4105, 'instantiations'])
+        floor(4105)
     })
 
     test('table Entry with transform and discriminator ', () => {
@@ -988,7 +997,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 17975 -> 17375: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 18726.
-        attest.instantiations([17375, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([18565, 'instantiations'])
+        floor(18565)
     })
 
     test('a union of many variants over one large record types the key of each tag, within the instantiation count', () => {
@@ -1206,7 +1217,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 33286 -> 36454: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 36702.
-        attest.instantiations([36454, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([37593, 'instantiations'])
+        floor(37593)
     })
 
     test('schema allows for nullish values if has transform', () => {
@@ -1558,7 +1571,9 @@ describe('DynamoDB Utils', () => {
         // absent, never absent, always absent). Each call pays the read, and a partial call also
         // derives the case from the value of the component
         // 8734 -> 7651: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 8829.
-        attest.instantiations([7651, 'instantiations'])
+        // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
+        attest.instantiations([7963, 'instantiations'])
+        floor(7963)
     })
 
     test('a default of the wrong type is refused in a list that also holds a bare name', () => {

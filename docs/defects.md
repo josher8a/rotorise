@@ -584,28 +584,6 @@ Brushless. The measurement is on DynamoDB Local, and not on the DynamoDB service
 
 ---
 
-## Known: a pin of an instantiation count fails on a rise above 20 percent, and passes on each fall
-
-**Observation.** `src/Rotorise.attest.test.ts` holds two pins of an instantiation count. attest
-0.34.0 fails a pin where the count rises above the pin by more than 20 percent. Where the count
-falls, attest prints a line and the pin passes. Measured 2026-11-11 with `npx vitest --run`, each
-line with one change of the block that the pin measures:
-
-    pin 3751, the block reads an unbound name: 16                 passes
-    pin 2091, the block builds an entry that the file holds: 577  passes
-    pin 2091, one more key in the entry: 2190, 4.73 percent       passes
-    pin 3751, two more calls of key: 4391, 17.06 percent          passes
-    pin 2091, five more keys in the entry: 2747, 31.37 percent    fails
-    pin 3751, three more calls of key: 4624, 23.27 percent        fails
-
-**Effect.** A block that measures no call keeps the pin green. A rise of the cost below 20 percent
-keeps the pin green.
-
-**Pin.** None for a fall. A comment of `src/Rotorise.attest.test.ts` states the two facts. No check
-reads the instantiation count of `npm run check`.
-
----
-
 ## Known: the declaration of a consumer has no name for a cycle of a scope that goes through a list and a union only
 
 **Observation.** A consumer that exports a codec constant with `declaration: true` needs a name for
