@@ -423,8 +423,9 @@ describe('DynamoDB Utils', () => {
         // derives the case from the value of the component
         // 12971 -> 13785: a component is a record that holds its tag, function and default, so the constraint of a name is one record in place of three function arms, and the key type reads the label, the value and the default from named properties. The measured count at the base was 14136.
         // refreshed 2026-11-23: the literal drifted under the 20 percent threshold
-        attest.instantiations([15868, 'instantiations'])
-        floor(15868)
+        // 15868 -> 15244: Chosen reads the contradiction of a member as the never of an intersection
+        attest.instantiations([15244, 'instantiations'])
+        floor(15244)
     })
 
     test('path from infer then toString', () => {

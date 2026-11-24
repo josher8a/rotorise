@@ -254,3 +254,47 @@ export const petPins = {
         Pets.unsafeKeyUpdates({ kind: 'DOG', ownerId: 'o2' }),
     ),
 }
+
+// `ExactDeep` keeps the members of a union that the candidate can be. A name of another member is
+// refused where an intersection of the two objects, with disjoint unit types at one property,
+// reduces to `never`. Each compiler of the matrix must give each refusal.
+type ChosenA = { k: 'a'; x?: number } | { k: 'b'; y?: number }
+export const chosenA = tableEntry<ChosenA>()({})
+export const chosenAKept = chosenA.unsafeToEntry({ k: 'a', x: 1 })
+// @ts-expect-error y belongs to the other member
+export const chosenARefused = chosenA.unsafeToEntry({ k: 'a', y: 1 })
+
+type ChosenB = { t?: 'x'; p: string } | { t?: 'y'; q: string }
+export const chosenB = tableEntry<ChosenB>()({})
+export const chosenBKept = chosenB.unsafeToEntry({ t: 'y', q: 'q' })
+// @ts-expect-error p belongs to the member whose optional literal contradicts
+export const chosenBRefused = chosenB.unsafeToEntry({ t: 'y', p: 'p', q: 'q' })
+// @ts-expect-error p belongs to the member whose optional literal contradicts
+export const chosenBOnly = chosenB.unsafeToEntry({ t: 'y', p: 'p' })
+
+type ChosenC = { n: 1; p: string } | { n: 2; q: string }
+export const chosenC = tableEntry<ChosenC>()({})
+// @ts-expect-error p belongs to the member of the other number
+export const chosenCRefused = chosenC.unsafeToEntry({ n: 2, p: 'p' })
+
+type ChosenD = { f: true; p: string } | { f: false; q: string }
+export const chosenD = tableEntry<ChosenD>()({})
+// @ts-expect-error p belongs to the member of the other boolean
+export const chosenDRefused = chosenD.unsafeToEntry({ f: false, p: 'p' })
+
+type ChosenE = { m: 'a' | 'b'; p: string } | { m: 'c'; q: string }
+export const chosenE = tableEntry<ChosenE>()({})
+export const chosenEKept = chosenE.unsafeToEntry({ m: 'a', p: 'p' })
+// @ts-expect-error p belongs to the member of the other literal
+export const chosenERefused = chosenE.unsafeToEntry({ m: 'c', p: 'p' })
+
+type ChosenF = { z: null; p: string } | { z: 'x'; q: string }
+export const chosenF = tableEntry<ChosenF>()({})
+// @ts-expect-error p belongs to the member that holds null
+export const chosenFRefused = chosenF.unsafeToEntry({ z: 'x', p: 'p' })
+
+type ChosenG = { r: { s: 'a'; p: string } | { s: 'b'; q: string } }
+export const chosenG = tableEntry<ChosenG>()({})
+export const chosenGKept = chosenG.unsafeToEntry({ r: { s: 'a', p: 'p' } })
+// @ts-expect-error q belongs to the member of the other literal, below a name
+export const chosenGRefused = chosenG.unsafeToEntry({ r: { s: 'a', q: 'q' } })

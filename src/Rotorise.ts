@@ -3554,56 +3554,23 @@ type ExactIn<Shape, Candidate> = Candidate & {
         : never
 }
 
-/** Whether a type is one literal, or a union of literals, of a string, a number or a boolean. */
-type IsLiteral<V> = [V] extends [never]
-    ? false
-    : V extends string | number | boolean
-      ? string extends V
-          ? false
-          : number extends V
-            ? false
-            : boolean extends V
-              ? false
-              : true
-      : false
-
-/** Whether no type of a union `Held` shares a value with `Given`. A `Held` with no type is not disjoint. */
-type Disjoint<Held, Given> = [Held] extends [never]
-    ? false
-    : true extends Overlaps<Held, Given>
-      ? false
-      : true
-
-type Overlaps<Held, Given> = Held extends unknown
-    ? [Held] extends [Given]
-        ? true
-        : [Given] extends [Held]
-          ? true
-          : false
-    : never
-
-/** The names where no literal of the candidate is a literal of the member, and the member holds a literal. */
-type Contradicts<Member, Candidate> = {
-    [K in keyof Candidate & keyof Member]: IsLiteral<
-        Exclude<Member[K], undefined>
-    > extends true
-        ? Disjoint<Exclude<Candidate[K], undefined>, Member[K]> extends true
-            ? K
-            : never
-        : never
-}[keyof Candidate & keyof Member]
-
 /**
  * The members of a union of shapes that the candidate can be. The codec chooses a member that admits
  * the value, and such a member holds the literal of the value at each literal name. So a member that
  * shares no literal with the candidate at a literal name is not the member of the codec, and dropping
  * the member never refuses a value that the codec admits. A candidate that holds a union of literals
  * keeps each member that holds one of them, and a union with no literal name drops no member.
+ *
+ * The test is the intersection of the member and the candidate. The rule that it relies on: an
+ * intersection of two objects with disjoint unit types at one property reduces to `never`. A member
+ * with `k: 'a'` and a candidate with `k: 'b'` give `never`, and a candidate with `k: 'a' | 'b'` does
+ * not. The compiler states the rule, and `scripts/consumer` holds the cases that each supported
+ * version of the compiler must refuse.
  */
 type Chosen<Shape, Candidate> = Shape extends unknown
-    ? [Contradicts<Shape, Candidate>] extends [never]
-        ? Shape
-        : never
+    ? [Shape & Candidate] extends [never]
+        ? never
+        : Shape
     : never
 
 /** The attributes of the entity whose own name holds a `.`. */
