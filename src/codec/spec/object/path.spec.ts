@@ -510,3 +510,56 @@ describe('a hop in digits on a union of entities', () => {
         expect(typeof _byKey).toBe('function')
     })
 })
+
+describe('a place that may be a list holds no name of a list', () => {
+    type Visit = { vet: string; weight: number }
+    type Clinic = {
+        clinicId: string
+        records: Visit[] | Record<string, Visit>
+        owned: Visit[] | { owner: Visit }
+        rows: { cells: Visit[] | Record<string, Visit> }[]
+    }
+    const Clinics = tableEntry<Clinic>()({ PK: ['clinicId'] })
+
+    it('offers no method of a list as a hop on a place that is a list or a map', () => {
+        // @ts-expect-error `push` is a method of a list, and no hop
+        const _push = () => Clinics.path().records.push
+        // @ts-expect-error `length` is a property of a list, and no hop
+        const _length = () => Clinics.path().records.length
+        expect(typeof _push).toBe('function')
+        expect(typeof _length).toBe('function')
+    })
+
+    it('offers no method of a list as a hop on a place that is a list or an object', () => {
+        // @ts-expect-error `push` is a method of a list, and no hop
+        const _push = () => Clinics.path().owned.push
+        // @ts-expect-error `length` is a property of a list, and no hop
+        const _length = () => Clinics.path().owned.length
+        expect(typeof _push).toBe('function')
+        expect(typeof _length).toBe('function')
+    })
+
+    it('offers no method of a list as a hop on a place below a list', () => {
+        // @ts-expect-error `push` is a method of a list, and no hop
+        const _push = () => Clinics.path().rows.at(0).cells.push
+        expect(typeof _push).toBe('function')
+    })
+
+    it('offers no `at` on a place that is a list or an object, because the position is not certain', () => {
+        // @ts-expect-error `at` of a list is a position, and an object has none
+        const _at = () => Clinics.path().owned.at
+        expect(typeof _at).toBe('function')
+    })
+
+    it('keeps the key of a map and the name of an object that the place may hold', () => {
+        expect(Clinics.path().records.at('rabies').vet.toString()).toBe(
+            'records.rabies.vet',
+        )
+        expect(Clinics.path().owned.owner.vet.toString()).toBe(
+            'owned.owner.vet',
+        )
+        expect(Clinics.path().rows.at(0).cells.at('x').vet.toString()).toBe(
+            'rows[0].cells.x.vet',
+        )
+    })
+})

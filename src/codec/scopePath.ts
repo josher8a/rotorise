@@ -389,7 +389,8 @@ export const absent: AnyCodec = codecOfTerm({ kind: 'never' })
  * index yields `| undefined` — again about a value, not a path — so `at` is the form that stays
  * clean. A map offers `at(key)` and no bracket hop, because a hop in digits is a position, and only
  * a list holds positions. An attribute named `at`, `narrow` or `toString` is a hop where the path
- * reads it, and the method where the path calls it.
+ * reads it, and the method where the path calls it. A place that may be a list offers no position,
+ * and no name of a list such as `push` or `length`: it offers what its other members offer.
  */
 export type PathOf<T, F = unknown> = PathTerminal<T> &
     PathBody<NonNullable<T>, F>
@@ -401,10 +402,20 @@ export type PathBody<T, F> = [T] extends [readonly unknown[]]
         : PathList<T[number]>
     : [T] extends [object]
       ? {
-            readonly [K in HopNames<T>]: PathOf<ValueAt<T, K>, ChildAt<F, K>>
-        } & PathRecord<T> &
+            readonly [K in HopNames<Unlisted<T>>]: PathOf<
+                ValueAt<T, K>,
+                ChildAt<F, K>
+            >
+        } & PathRecord<Unlisted<T>> &
             PathNarrowing<T, F>
       : Record<never, never>
+
+/**
+ * The members of a place that are no list. A list offers positions and no name, so a place that is
+ * a list or another member offers the names and the keys of the other members only. The names of
+ * `Array.prototype` are no hop.
+ */
+type Unlisted<T> = Exclude<T, readonly unknown[]>
 
 /** The members of a codec: each option of a union, each variant of a tagged union, or the object. */
 export type MembersOf<C> = C extends UnionCodec<infer _T, infer Options>
