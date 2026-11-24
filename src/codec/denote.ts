@@ -336,6 +336,12 @@ export type Option<Item = unknown> = {
     readonly carries: readonly Shape[]
     /** The whole-item reading, for object options only. */
     readonly item: Item | undefined
+    /**
+     * Whether the option writes the value, as `accepts` of its codec decides. The term of a literal
+     * of base `string` or `boolean` decides it by `===`, so the option builds no refusal to drop.
+     * Every other option asks `accepts`.
+     */
+    readonly admits: (value: unknown) => boolean
     /** How it is named in a message — written the way it was declared. */
     readonly describe: string
 }
@@ -848,8 +854,7 @@ export const altSem = (
      * hold a value that only one of them encodes. Asking the option's own admission terminates:
      * it is one level down, and the direction that would not is an `encode` consulting admission.
      */
-    const admitOption = (option: Option, value: unknown) =>
-        accepts(option.codec, value)
+    const admitOption = (option: Option, value: unknown) => option.admits(value)
 
     /**
      * The same, **decided rather than attempted** — the write side only. The first option that
@@ -2629,6 +2634,7 @@ export const optionOfTerm = (def: Term): Option<never> => {
         return {
             codec,
             pair,
+            admits: (value) => accepts(codec, value),
             member: 'M',
             carries: ['map'],
             item: undefined,
@@ -2641,6 +2647,11 @@ export const optionOfTerm = (def: Term): Option<never> => {
         return {
             codec,
             pair,
+            admits:
+                def.kind === 'literal' &&
+                (def.base === 'string' || def.base === 'boolean')
+                    ? (value) => value === def.v
+                    : (value) => accepts(codec, value),
             member: readMember(def),
             carries: valueKinds(def),
             item: undefined,
@@ -2651,6 +2662,7 @@ export const optionOfTerm = (def: Term): Option<never> => {
     return {
         codec,
         pair,
+        admits: (value) => accepts(codec, value),
         member: 'M',
         carries: ['map'],
         item: undefined,

@@ -339,3 +339,4 @@ p192_a_transform_at_a_path_that_the_codec_writes_as_B_prints_its_text	src/Rotori
 p193_a_block_that_measures_no_call_fails_the_pin	src/Rotorise.attest.test.ts	s/^        userSchema\.unsafeKey\('PK', \{ orgId: '123', id: '456' \}\)$/        void 0/	npx vitest --run src/Rotorise.attest.test.ts	percent under the pin of 3636
 p193_the_fall_limit_of_a_pin_is_10_percent	src/attestPin.ts	s/PIN_LIMIT = 0\.1$/PIN_LIMIT = 1/	npx vitest --run src/attestPin.spec.ts	AssertionError
 p195_a_key_path_is_read_from_the_table_of_the_schema	src/Rotorise.ts	s/^    return segments$/    return new Map()/	npx vitest --run src/codec/spec/object/codec.keypath.spec.ts	is not in the table of the schema
+p196_a_literal_option_admits_exactly_its_value	src/codec/denote.ts	s/\(value\) => value === def\.v/(value) => value !== def.v/	npx vitest --run src/codec/spec/union/codec.optionadmits.spec.ts	AssertionError
