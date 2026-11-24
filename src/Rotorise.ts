@@ -1878,27 +1878,38 @@ type Part = {
     readonly value: unknown
 }
 
+/**
+ * A component of a key spec in one form: a name, or a record that holds the name at `at`. A name
+ * that is a number is the text of the number. A value that names no attribute gives `undefined`:
+ * `checkComponents` refuses such a value before a reader runs, and `componentsOf` skips it.
+ */
+type Component = {
+    readonly at: string
+    readonly tag?: string | false
+    readonly value?: (value: never) => unknown
+    readonly default?: unknown
+}
+
+const componentOf = (component: unknown): Component | undefined => {
+    const record =
+        typeof component === 'object' && component !== null
+            ? (component as Record<string, unknown>)
+            : { at: component }
+    const { at } = record
+    if (typeof at === 'string') return record as Component
+    if (typeof at === 'number')
+        return { ...record, at: String(at) } as Component
+    return undefined
+}
+
 const partOf = (
     component: unknown,
     attributes: Record<string, unknown>,
     read: KeyNameReader,
 ): Part | undefined => {
-    const {
-        at: name,
-        tag,
-        value: shape,
-        default: Default,
-    } = (
-        typeof component === 'object' && component !== null
-            ? component
-            : { at: component }
-    ) as {
-        at: unknown
-        tag?: string | false
-        value?: (value: never) => unknown
-        default?: unknown
-    }
-    const path = String(name)
+    const named = componentOf(component)
+    if (named === undefined) return undefined
+    const { at: path, tag, value: shape, default: Default } = named
     const found = read(attributes, path)
     const value = found === undefined ? Default : found
     const prints =
@@ -1918,11 +1929,7 @@ const parts = (
     components.map((component) => partOf(component, attributes, read))
 
 const componentName = (component: unknown): string =>
-    String(
-        typeof component === 'object' && component !== null
-            ? (component as { at: unknown }).at
-            : component,
-    )
+    componentOf(component)?.at ?? String(component)
 
 /**
  * What a key spec gives at the attributes: the model's `Arm`. A list of components is a `leaf`. A
@@ -2395,13 +2402,15 @@ const key =
             }
             if (config?.enforceBoundary && printed < fullLength) {
                 const next = arm.components[printed]
-                const { tag, at: nextAt } = (
-                    typeof next === 'object' && next !== null
-                        ? next
-                        : { at: next }
-                ) as { tag?: string | false; at: unknown }
+                const named = componentOf(next)
+                if (named === undefined) {
+                    throw new RotoriseError(
+                        'a component that follows the print names no attribute',
+                    )
+                }
+                const { tag, at: nextAt } = named
                 const label =
-                    tag === false ? undefined : (tag ?? labelOf(String(nextAt)))
+                    tag === false ? undefined : (tag ?? labelOf(nextAt))
                 if (label === undefined && printed === 0) {
                     return keyRefusal(
                         `Key ${key.toString()}: the first component has no tag, so a key of no component has no text. Give the first component, or leave the key out.`,
@@ -4059,12 +4068,8 @@ const componentsOf = (
         }
         if (Array.isArray(value)) {
             for (const entry of value) {
-                // a record names its attribute at `at`: { at: 'a', value: (x) => x }
-                walk(
-                    typeof entry === 'object' && entry !== null
-                        ? (entry as { at: unknown }).at
-                        : entry,
-                )
+                const named = componentOf(entry)
+                if (named !== undefined) components.add(named.at)
             }
             return
         }
@@ -4965,14 +4970,9 @@ export const tableEntry =
                     // a component with no transform prints the text that the codec writes, so the
                     // codec writes text or a number there
                     for (const component of value) {
-                        const { at, value: transform } = (
-                            typeof component === 'object' && component !== null
-                                ? component
-                                : { at: component }
-                        ) as { at: unknown; value?: unknown }
-                        // a number name prints as its text
-                        const field = typeof at === 'number' ? String(at) : at
-                        if (typeof field !== 'string') continue
+                        const named = componentOf(component)
+                        if (named === undefined) continue
+                        const { at: field, value: transform } = named
                         const slots = slotsAtConstruction(field)
                         if (typeof transform === 'function') continue
                         oneCodec(name, field, slots)
@@ -5321,11 +5321,7 @@ export const tableEntry =
                 // no arm give no text, so they give no condition
                 const [first] = arm.kind === 'leaf' ? arm.components : []
                 if (first === undefined) return undefined
-                const tag =
-                    typeof first === 'object' && first !== null
-                        ? (first as { tag?: unknown }).tag
-                        : undefined
-                if (tag === false) return undefined
+                if (componentOf(first)?.tag === false) return undefined
                 const closed = buildKey(
                     name as never,
                     attributes as never,
