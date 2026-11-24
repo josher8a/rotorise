@@ -778,6 +778,15 @@ type ReadAt<E, P extends string> = E extends unknown
             : never
     : never
 
+/** The value at a name of an entity. A name that is a number prints as its text, so `'0'` finds the key `0`. */
+type PropOf<T, P extends string> = P extends keyof T
+    ? T[P]
+    : P extends `${infer N extends number}`
+      ? N extends keyof T
+          ? T[N]
+          : never
+      : never
+
 /**
  * The value at a name or at a path, through objects and unions of objects, as the run time reads
  * it. A name with a `.` is a path: the type never reads an attribute whose own name holds a `.`.
@@ -793,9 +802,7 @@ type ValueAt<E, P extends string> = P extends `${string}.${string}`
               : R
         : never
     : E extends unknown
-      ? P extends keyof E
-          ? E[P]
-          : never
+      ? PropOf<E, P>
       : never
 
 /**
@@ -1346,9 +1353,7 @@ type NativeMember<V> = [NonNullable<V>] extends [never]
  * is the member of a value that gives no key, so it is no member of a key.
  */
 type CodecMember<Enc, Name extends string> = Enc extends unknown
-    ? Name extends keyof Enc
-        ? Exclude<MemberOf<Enc[Name]>, 'NULL'>
-        : never
+    ? Exclude<MemberOf<PropOf<Enc, Name>>, 'NULL'>
     : never
 
 /**
@@ -4096,12 +4101,12 @@ type PlainComponent = string | number | bigint | boolean | null | undefined
  * holds no function. A tag changes the label only. A transform prints what the function
  * gives, so the name of a transform is no component of this kind.
  */
-type StoredName<C> = C extends string
-    ? C
-    : C extends { readonly at: infer P extends string }
+type StoredName<C> = C extends string | number
+    ? `${C}`
+    : C extends { readonly at: infer P extends string | number }
       ? C extends { readonly value: unknown }
           ? never
-          : P
+          : `${P}`
       : never
 
 /**
@@ -4960,11 +4965,13 @@ export const tableEntry =
                     // a component with no transform prints the text that the codec writes, so the
                     // codec writes text or a number there
                     for (const component of value) {
-                        const { at: field, value: transform } = (
+                        const { at, value: transform } = (
                             typeof component === 'object' && component !== null
                                 ? component
                                 : { at: component }
                         ) as { at: unknown; value?: unknown }
+                        // a number name prints as its text
+                        const field = typeof at === 'number' ? String(at) : at
                         if (typeof field !== 'string') continue
                         const slots = slotsAtConstruction(field)
                         if (typeof transform === 'function') continue
