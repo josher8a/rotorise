@@ -1467,3 +1467,103 @@ describe('the presence lift in the type gives the answer of the run time', () =>
         expect(termOf(none)).toEqual({ kind: 'never' })
     })
 })
+
+describe('two calls of held over one adapter object meet on the pairs that both sides send', () => {
+    const same = { encode: (v: 'b') => v, decode: (_: string) => 'b' as const }
+    const wide = {
+        encode: (_v: 'b' | 'x' | 'y') => 'b' as const,
+        decode: (_: string) => 'b' as const,
+    }
+
+    it('keeps the common stored literal, and reads and writes it through the adapter', () => {
+        const met = meet(
+            held(string('a', 'b'), string('b'), same),
+            held(string('b', 'c'), string('b'), same),
+        )
+        expect(met.encode('b')).toEqual({ S: 'b' })
+        expect(met.decode({ S: 'b' })).toBe('b')
+        expect(failed(met.decode({ S: 'a' }))).toBe(true)
+        expect(failed(met.decode({ S: 'c' }))).toBe(true)
+    })
+
+    it('writes only the values that both outer parts write, where the adapter sends two values to one literal', () => {
+        const met = meet(
+            held(string('b'), string('b', 'x'), wide),
+            held(string('b'), string('b', 'y'), wide),
+        )
+        expect(met.encode('b')).toEqual({ S: 'b' })
+        expect(failed(met.encode('x' as never))).toBe(true)
+        expect(failed(met.encode('y' as never))).toBe(true)
+    })
+
+    it('meets at the bottom where the stored parts are apart', () => {
+        const toA = {
+            encode: (_v: 'b') => 'a' as const,
+            decode: (_: string) => 'b' as const,
+        }
+        const toC = {
+            encode: (_v: 'b') => 'c' as const,
+            decode: (_: string) => 'b' as const,
+        }
+        const none = meet(
+            held(string('a'), string('b'), toA),
+            held(string('c'), string('b'), toC),
+        )
+        expect(termOf(none)).toEqual({ kind: 'never' })
+    })
+
+    it('refuses two adapter objects of one type, because the run time tells them apart by their functions', () => {
+        const one = {
+            encode: (v: 'b') => v,
+            decode: (_: string) => 'b' as const,
+        }
+        const two = {
+            encode: (v: 'b') => v,
+            decode: (_: string) => 'b' as const,
+        }
+        expect(() =>
+            meet(
+                held(string('a', 'b'), string('b'), one),
+                held(string('b', 'c'), string('b'), two),
+            ),
+        ).toThrow(/fits neither side/)
+    })
+
+    it('refuses two calls over one adapter object where the held side is a refinement on each side, because the meet cannot read which values both predicates admit', () => {
+        const notZ = (value: string): value is string => value !== 'z'
+        const isB = (value: string): value is string => value === 'b'
+        const same = {
+            encode: (_: string) => 'b' as const,
+            decode: (_: 'a' | 'b' | 'c') => 'b',
+        }
+        expect(() =>
+            meet(
+                held(string('a', 'b'), refine(string, notZ), same),
+                held(string('b', 'c'), refine(string, isB), same),
+            ),
+        ).toThrow(/fits neither side/)
+    })
+
+    it('refuses two calls over one adapter object where the held side is a foreign schema, because the term of a schema is opaque and names no form', () => {
+        const letter: StandardSchemaV1<'b'> = {
+            '~standard': {
+                version: 1,
+                vendor: 'handwritten',
+                validate: (value) =>
+                    value === 'b'
+                        ? { value }
+                        : { issues: [{ message: 'expected b' }] },
+            },
+        }
+        const same = {
+            encode: (v: 'b') => v,
+            decode: (_: string) => 'b' as const,
+        }
+        expect(() =>
+            meet(
+                held(string('a', 'b'), letter, same),
+                held(string('b', 'c'), letter, same),
+            ),
+        ).toThrow(/fits neither side/)
+    })
+})

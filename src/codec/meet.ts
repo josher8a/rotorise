@@ -1,6 +1,6 @@
 import type { ErrorMessage, show } from '../utils'
 import type { MissingCodec } from './adapters'
-import { fillRefusal } from './adapters'
+import { fillRefusal, heldTerm } from './adapters'
 import type { AttributeValue } from './attribute'
 import type {
     AnyCodec,
@@ -63,6 +63,7 @@ import {
     member as memberOf,
     resolvedTerm,
     sameAdapter,
+    sameOrigin,
     unboundRefs,
 } from './term'
 import { own, sameLiteral } from './value'
@@ -520,8 +521,10 @@ export const meetOptions = (factor: AnyCodec): readonly AnyCodec[] => {
  * **The common literals of two literal sets under one adapter.** The model's `Codec.meet` is the
  * intersection of the two graphs, and one adapter relates one inner literal to one outer literal.
  * So the common pairs are the pairs of the common inner literals, and the held part stays. Two
- * adapters, or one adapter on one side only, give nothing: an opaque function decides which common
- * rows relate one value, so the caller refuses.
+ * calls of `held` over one adapter object are one adapter here, and the result is a new `held` over
+ * the meet of the inner parts and the meet of the outer parts. Two adapter objects, or one adapter
+ * on one side only, give nothing: an opaque function decides which common rows relate one value,
+ * so the caller refuses.
  */
 export const commonHeldLiterals = (
     a: Term,
@@ -529,9 +532,13 @@ export const commonHeldLiterals = (
 ): readonly Term[] | undefined => {
     const A = resolvedTerm(a)
     const B = resolvedTerm(b)
-    if (A?.kind !== 'held' || B?.kind !== 'held' || !sameAdapter(A, B)) {
-        return undefined
-    }
+    if (A?.kind !== 'held' || B?.kind !== 'held') return undefined
+    const identical = sameAdapter(A, B)
+    // The rebuilt held side reads the meet of the two outer parts. A foreign schema has the outer
+    // term `opaque`: the meet cannot read which values both schemas admit, so the call refuses.
+    const rebuilt =
+        sameOrigin(A, B) && clauseForm(A.outer) && clauseForm(B.outer)
+    if (!identical && !rebuilt) return undefined
     const inner = commonLiterals(A.inner, B.inner)
     if (inner === undefined) return undefined
     const outer =
@@ -544,9 +551,21 @@ export const commonHeldLiterals = (
     const [innerTerm, outerTerm] = [inner, outer].map((terms) =>
         termOf(codecOfTerms(terms)),
     )
-    return innerTerm && outerTerm
-        ? [{ ...A, inner: innerTerm, outer: outerTerm }]
-        : undefined
+    if (!innerTerm || !outerTerm) return undefined
+    // one call of `held` is one pair `f` and `g`, and a library adapter has no object of a caller
+    const adapt = A.adapt
+    if (identical || adapt === undefined) {
+        return [{ ...A, inner: innerTerm, outer: outerTerm }]
+    }
+    // one `held` over the meets of the two sides: its held side check reads the meet of the two
+    // outer parts, which are the values that both sides write
+    return [
+        heldTerm(
+            innerTerm,
+            codecOfTerm<unknown, AttributeValue>(outerTerm),
+            adapt,
+        ),
+    ]
 }
 
 /** The common literals of two pinned terms of one form, or nothing where the form differs. */

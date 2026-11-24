@@ -31,6 +31,18 @@ import { asRecord, own, sameLiteral } from './value'
  */
 export type Rng = () => number
 
+/**
+ * **The adapter that a caller gave to `held`, with each type erased.** The two halves take and give
+ * values of types that the term does not carry. So the parameters read `never` and the results
+ * read `unknown`.
+ */
+export type ErasedAdapter = {
+    readonly encode: (value: never) => unknown
+    readonly decode: (held: never) => unknown
+    readonly arbitrary?: ((rng: Rng, size: number) => unknown) | undefined
+    readonly shrink?: ((value: never) => readonly unknown[]) | undefined
+}
+
 /** What {@link refine} narrowed with, for an arbitrary that has to satisfy it. */
 export type Refinement = {
     readonly is: (value: never) => boolean
@@ -225,6 +237,13 @@ export type Term =
            * is read by the emitter. One of them can be known without the other.
            */
           readonly via?: 'decimalText' | 'float' | OpaqueSugar | 'native'
+          /**
+           * **The adapter object that the caller gave to `held`**, where the caller gave one. Two
+           * calls of `held` over one object are two terms with two pairs `f` and `g`, because each
+           * call wraps the conversions with the check of its own held side. {@link sameOrigin} reads
+           * this field, and only `meet` asks it. A library adapter has no such object.
+           */
+          readonly adapt?: ErasedAdapter | undefined
           /**
            * **The arbitrary and the shrinker, where the caller supplies them rather than the inner codec.**
            *
@@ -1274,6 +1293,18 @@ export const sameAdapter = (
     y: Extract<Term, { kind: 'held' }>,
 ): boolean =>
     (namesOnePair(x.via) && x.via === y.via) || (x.f === y.f && x.g === y.g)
+
+/**
+ * **Whether two `held` terms were built over one adapter object of a caller**: two calls of `held`
+ * with one object. The terms differ in the inner part and in the outer part, and each wraps the
+ * object with its own held side check. Only `meet` reads this test, and it rebuilds the held side
+ * of its result from the meet of the two outer parts. `below`, `fits` and `agree` keep
+ * {@link sameAdapter}: their premise is one outer part for each call.
+ */
+export const sameOrigin = (
+    x: Extract<Term, { kind: 'held' }>,
+    y: Extract<Term, { kind: 'held' }>,
+): boolean => x.adapt !== undefined && x.adapt === y.adapt
 
 /**
  * **Whether two terms are one term**: one structure, with each `ref` read as its target, and each

@@ -15,6 +15,7 @@ import type { Result } from './result'
 import { CodecError, failed, HeldSideRefusal } from './result'
 import type { StandardInput, StandardSchemaV1 } from './standard'
 import type {
+    ErasedAdapter,
     Field,
     fillMarker,
     HeldT,
@@ -213,8 +214,23 @@ export const held = <
         >
     > &
     Free<FreeOf<C> | FreeOf<O>> => {
+    return codecOfTerm<HeldOf<O>, AttributeOf<C>>(
+        heldTerm(termOf(inner as unknown as AnyCodec), outer, adapt),
+    )
+}
+
+/**
+ * **The term of a `held` over an erased adapter.** `held` calls this with the adapter that the
+ * caller gave. `meet` calls this with the same adapter over the meets of the two sides. So both
+ * build the conversions and the check of the held side in one way. The term holds `adapt`, so that
+ * `meet` tells two calls over one adapter object apart from two adapter objects.
+ */
+export const heldTerm = (
+    inner: Term,
+    outer: AnyCodec | StandardSchemaV1,
+    adapt: ErasedAdapter,
+): Extract<Term, { kind: 'held' }> => {
     const side = heldSide(outer)
-    const innerTerm = termOf(inner as unknown as AnyCodec)
     /**
      * **A half that cannot convert returns a `CodecError`**, and the signature says so. A refusal
      * is a value here, as it is everywhere else on this surface, so nothing about declining a
@@ -233,21 +249,19 @@ export const held = <
      * occupancy for the JS float adapter and a wrong membership test for it. A library adapter
      * checks the held side in its own conversion, and this checks the side the caller named.
      */
-    return codecOfTerm<HeldOf<O>, AttributeOf<C>>({
+    return {
         kind: 'held',
-        inner: innerTerm,
+        inner,
         outer: side.term,
-        f: (value: HeldOf<O>) =>
-            side.admit(value, 'encode') ?? adapt.encode(value),
-        g: (read: Decoded<C>) => {
+        adapt,
+        f: (value: never) => side.admit(value, 'encode') ?? adapt.encode(value),
+        g: (read: never) => {
             const out = adapt.decode(read)
             return failed(out) ? out : (side.admit(out, 'decode') ?? out)
         },
         arbitrary: adapt.arbitrary,
-        shrink: adapt.shrink as
-            | ((value: never) => readonly unknown[])
-            | undefined,
-    })
+        shrink: adapt.shrink,
+    }
 }
 
 /**
