@@ -4,10 +4,9 @@
 #
 #   scripts/emit-check.sh                 read `dist/` as it stands, compile the project
 #   scripts/emit-check.sh --build         run `npm run build` first
-#   scripts/emit-check.sh --dist <dir>    read the `dist/` at <dir>, and `package.json` beside it
 #
-# The package is copied to `node_modules/rotorise` of a temporary directory, so no path of this
-# repository helps the emitter to name a type. A type that the entry does not publish is an error
+# The packed tarball is extracted to `node_modules/rotorise` of a temporary directory, so no path of
+# this repository helps the emitter to name a type. A type that the entry does not publish is an error
 # there (TS2742, TS2883, TS4023 or TS2527). A type that contains itself and has no name prints as
 # `any` with no error: TypeScript 5.9 and 6 write `/*elided*/ any`, and TypeScript 5.4 writes `any`
 # with no mark. A clean declaration holds no `any`, so the script counts each word `any` as a
@@ -21,17 +20,15 @@ cd "$ROOT" || exit 2
 
 # The versions, which `scripts/tsc-matrix.sh` reads too.
 . scripts/ts-versions.sh || exit 2
+. scripts/packed.sh || exit 2
 
 DO_BUILD=0
-DIST="$ROOT/dist"
-PKG="$ROOT/package.json"
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) DO_BUILD=1 ;;
-    --dist) shift; DIST="$(cd "${1:?--dist needs a directory}" && pwd)"; PKG="$DIST/../package.json" ;;
-    -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "emit-check.sh: unknown argument: $1" >&2
-       echo "usage: emit-check.sh [--build] [--dist <dir>]" >&2
+       echo "usage: emit-check.sh [--build]" >&2
        exit 2 ;;
   esac
   shift
@@ -42,16 +39,14 @@ if [ "$DO_BUILD" -eq 1 ]; then
     echo 'emit-check.sh: the build failed; run `npm run build` alone to see why' >&2; exit 2; }
 fi
 
-if [ ! -f "$DIST/Rotorise.d.ts" ] || [ ! -f "$PKG" ]; then
-  echo 'emit-check.sh: dist/ or package.json is absent; run with --build, or run `npm run build`' >&2
+if [ ! -f dist/Rotorise.d.ts ]; then
+  echo 'emit-check.sh: dist/ is absent; run with --build, or run `npm run build`' >&2
   exit 2
 fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$WORK/node_modules/rotorise"
-cp -R "$DIST" "$WORK/node_modules/rotorise/dist"
-cp "$PKG" "$WORK/node_modules/rotorise/package.json"
+pack_into "$WORK" || { echo 'emit-check.sh: npm pack failed' >&2; exit 2; }
 cp scripts/emit-check/index.mts scripts/emit-check/native.mts scripts/emit-check/tsconfig.json scripts/emit-check/tsconfig.native.json "$WORK/"
 
 failed=0

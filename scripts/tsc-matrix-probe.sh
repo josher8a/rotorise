@@ -14,6 +14,8 @@ cp "$HERE/tsc-matrix.sh" "$HERE/ts-versions.sh" "$WORK/tree/scripts/"
 touch "$WORK/tree/dist/Rotorise.d.ts" "$WORK/tree/dist/Rotorise.d.cts"
 touch "$WORK/tree/scripts/consumer/identity.mjs" "$WORK/tree/scripts/consumer/identity.cjs"
 printf 'VERSIONS=(5.4.5 7.1.0-beta)\n' > "$WORK/tree/scripts/ts-versions.sh"
+# The tarball is no part of this contract: a stub of `pack_into` replaces the pack.
+printf 'pack_into() { mkdir -p "$1/node_modules/rotorise"; }\n' > "$WORK/tree/scripts/packed.sh"
 
 # The stub reads the version from the argument `typescript@<version>`.
 cat > "$WORK/bin/npx" <<'STUB'

@@ -2,8 +2,8 @@
 //
 //   node scripts/readme-check.mjs <README.md> <work dir>
 //
-// `scripts/readme-check.sh` makes the work directory: `node_modules/rotorise` holds a copy of
-// `dist/` and `package.json`, so a sample resolves the package as a consumer does.
+// `scripts/readme-check.sh` makes the work directory: `node_modules/rotorise` holds the packed
+// tarball, so a sample resolves the package as a consumer does.
 // `node_modules/brushless` links the copy that the repository installs, for the samples of the adapters.
 //
 // Each `ts` block becomes one module. The module holds the statements of earlier blocks that the

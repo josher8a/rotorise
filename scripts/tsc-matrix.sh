@@ -8,7 +8,9 @@
 #
 # A consumer compiles the published types with its own compiler, and a type can reach a limit there
 # that the compiler of the lockfile does not reach. The project resolves `rotorise` through the
-# `exports` map, as a consumer does, and checks the `.d.ts` files too (`skipLibCheck` is off).
+# `exports` map of the packed tarball, as a consumer does, and checks the `.d.ts` files too
+# (`skipLibCheck` is off). The check copies the project and the tarball to a directory outside the
+# repository, so a file that the tarball lacks is absent for the check.
 # Every version runs outside the package and prints one line. A line whose compiler prints another
 # version than the requested version fails. Then the published entries run under node, in ESM and
 # in CJS, and one script per format checks that a class has one identity across the entries.
@@ -22,6 +24,7 @@ cd "$ROOT" || exit 2
 
 # The versions, which `scripts/emit-check.sh` reads too.
 . scripts/ts-versions.sh || exit 2
+. scripts/packed.sh || exit 2
 
 DO_BUILD=0
 for arg in "$@"; do
@@ -44,21 +47,21 @@ if [ ! -f dist/Rotorise.d.ts ] || [ ! -f dist/Rotorise.d.cts ]; then
   exit 2
 fi
 
-# The name `rotorise` resolves to this repository, so the `exports` map decides what a file reads.
-mkdir -p scripts/consumer/node_modules
-ln -sfn ../../.. scripts/consumer/node_modules/rotorise
-
 # Each compiler runs in a directory outside the package. Inside the package, the request for a
 # version resolves to the `.bin/tsc` of the package, which is TypeScript 6, and each line would
 # name a compiler that did not run. The line names the version that the compiler printed, and a
 # line whose printed version differs from the requested version fails.
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
+# The project sits in `$WORK/consumer`, and the tarball in `$WORK/node_modules/rotorise`: the lookup
+# of a package walks up from the project to that directory.
+pack_into "$WORK" || { echo 'tsc-matrix.sh: npm pack failed' >&2; exit 2; }
+cp -R scripts/consumer "$WORK/consumer"
 
 failed=0
 for version in "${VERSIONS[@]}"; do
   out=$(cd "$WORK" && npx --yes --package "typescript@$version" -- \
-    sh -c 'tsc --version && tsc -p "$0"' "$ROOT/scripts/consumer" 2>&1)
+    sh -c 'tsc --version && tsc -p "$0"' "$WORK/consumer" 2>&1)
   status=$?
   # npx can print a notice before the compiler, so the version is the first line that names one
   ran=$(printf '%s\n' "$out" | sed -n 's/^Version //p' | head -1)
@@ -76,7 +79,7 @@ for version in "${VERSIONS[@]}"; do
   [ "$failed" -eq 1 ] && [ -n "${TSC_MATRIX_FAIL_FAST:-}" ] && exit 1
 done
 for format in mjs cjs; do
-  if out=$(node "scripts/consumer/identity.$format" 2>&1); then
+  if out=$(node "$WORK/consumer/identity.$format" 2>&1); then
     printf '%s\n' "$out"
   else
     printf '%s\n' "$out"
