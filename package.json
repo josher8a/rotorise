@@ -1,6 +1,6 @@
 {
   "name": "rotorise",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "Supercharge your DynamoDB with Rotorise!",
   "main": "dist/Rotorise.cjs",
   "types": "dist/Rotorise.d.ts",

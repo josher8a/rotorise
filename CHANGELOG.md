@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.4.0 — 2026-11-25
+
+### Breaking
+
+- **`key` and `toEntry` return a `Result`.** 0.3.6 returned the string and the entry. 0.4.0 returns the value or a `CodecError`. `unsafeKey` and `unsafeToEntry` return the value or throw the `CodecError`. `const key: string = Table.key(...)` is a compile error.
+- **A missing attribute is a `CodecError`.** 0.3.6 threw `RotoriseError` at `key` and `toEntry`. 0.4.0 returns a `CodecError`, and a `CodecError` is not a `RotoriseError`. Code that catches `RotoriseError` for a missing attribute must read the `Result`.
+- **A component is a name or a record.** `['orgId', (id) => ({ tag: 'ORG', value: id })]` becomes `{ at: 'orgId', tag: 'ORG', value: (id) => id }`. The type and the schema refuse an array.
+- **The separator is an option.** `tableEntry<User>()(schema, '-')` becomes `tableEntry<User>()(schema, { separator: '-' })`. The type refuses a bare string. `tableEntry` throws a `RotoriseError` for a separator of more than one character.
+- **`enforceBoundary` ends with the next tag.** With `depth: 1`, `PK` gave `ORGID#acme#`. `PK` now gives `ORGID#acme#ID#`.
+- **Five types leave the entry:** `TableEntry`, `CompositeKeyBuilder`, `CompositeKeyParams`, `CompositeKeyParamsImpl` and `TransformShape`. `tableEntry` returns a `TableEntryDefinition`.
+
+### Added
+
+- **Two entry points.** `rotorise/testing` holds `checkRoundTrip`, `checkStable`, `arbitraryOf` and `shrinkOf`. `rotorise/native` holds `native`, a codec that writes the attributes as the AWS SDK marshaller does.
+- **Methods of the entry:** `.keys`, `.keyCondition` and `.keyUpdates`. With the `codec` option, `.toItem` and `.fromItem` write and read the DynamoDB attributes. `unsafeKey`, `unsafeToEntry`, `unsafeKeys`, `unsafeKeyCondition` and `unsafeKeyUpdates` throw where the other form returns a `CodecError`.
+- **Options of `tableEntry`:** `separator`, `key`, `indexes` and `codec`.
+- **Components:** a record holds `at`, `tag`, `value` and `default`. `at` can name a path. `tag: false` prints no label.
+- **Matches:** an arm groups literals with `cases`, and a match nests.
+- **Codec:** `string`, `number`, `decimal`, `boolean`, `binary`, `nullValue`, `object`, `list`, `spread`, `union`, `discriminatedUnion`, `nullable`, `optional`, `refine`, `fill`, `held`, `opaque`, `DynamoNumber`, `item`, `scope` and `ref`.
+- **Results:** `CodecError`, `Result`, `failed`, `andThen` and `orThrow`.
+- **Paths:** `at`, `narrow`, `preconditions`, `extract`, `exclude` and `pin`. `preconditions` states the guards of a narrowed path as data.
+- **Keys:** a key of one attribute can be `S`, `N` or `B`.
+- **Lean:** `formal/` holds a Lean model of the codec. The package does not ship the model.
+
+### Changed
+
+- **`engines`:** `package.json` declares `node >=18`.
+
+### Fixed
+
+- **Key building:** a `depth` of `-1` or `1.5` built the key of the first component. A `depth` of `0` and an empty attribute gave the empty text. A value that held the separator gave a key that reads back as another list. Each is now a refusal.
+- **Partial keys:** with `allowPartial`, a present component after an absent one was dropped and the key was the empty text. The call now returns a `CodecError` that names the hole.
+- **Own attributes:** a key read an attribute of the prototype of the item. A key now reads own attributes only.
+- **The type of a key:** the type states the text that the run time prints, for a name that is a number, for a partial key of no component, and for an empty text.
+- **Discriminated schemas:** a key selects the variant by the stored tag, and the type of a key names the variant of the call.
+- **`path()`:** the type refuses a path string that the run time refuses.
+
+### Performance
+
+- **Keys:** an entry parses the path of each component once, and a key builds the label of each path once.
+
+### Build
+
+- **tsdown builds the package.** The package ships no source map.
+
 ## 0.3.6 — 2026-07-31
 
 ### Fixed
