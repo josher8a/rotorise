@@ -89,6 +89,24 @@ probe 'a check killed with exit 137 gives INVALID with the cause, and the run fa
 probe '--help prints the header to its end, memory line included' 0 'times 5 GB of free memory' --help
 probe 'a --jobs of 0 is refused'                                2 'positive number' "$WORK/tree" --table "$WORK/died.tsv" --jobs 0
 probe 'a --jobs that is no number is refused'                   2 'positive number' "$WORK/tree" --table "$WORK/died.tsv" --jobs many
+# --noop-only runs no check and no control: it names the rows that change nothing, and the rows that cannot run.
+noop_out=$("$RUNNER" "$WORK/tree" --table "$WORK/seeded.tsv" --noop-only 2>&1; echo "exit=$?")
+for word in 'NOOP         noop' 'INVALID      invalid_no_file' 'INVALID      invalid_bad_expression' \
+  'NOOP-ONLY selected=10 noop=1 invalid=2' 'exit=1'; do
+  if printf '%s\n' "$noop_out" | grep -qF -- "$word"; then
+    printf 'PASS  --noop-only gives the word `%s`\n' "$word"
+  else
+    printf 'FAIL  --noop-only gives the word `%s`\n' "$word"; failed=1
+  fi
+done
+for word in 'DIED' 'SURVIVED' 'CONTROL' 'WRONG_DEATH'; do
+  if printf '%s\n' "$noop_out" | grep -qF -- "$word"; then
+    printf 'FAIL  --noop-only gives no word `%s`, because it runs no check\n' "$word"; failed=1
+  else
+    printf 'PASS  --noop-only gives no word `%s`, because it runs no check\n' "$word"
+  fi
+done
+probe '--noop-only on rows that change something gives exit 0'  0 'NOOP-ONLY selected=1 noop=0 invalid=0' "$WORK/tree" --table "$WORK/died.tsv" --noop-only
 mkdir "$WORK/tree/.git"
 probe 'a directory that holds .git is refused'                  2 'holds .git' "$WORK/tree" --table "$WORK/died.tsv"
 exit "$failed"

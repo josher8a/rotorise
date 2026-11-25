@@ -6,6 +6,7 @@
 #   scripts/mutants.sh <tree> --files a,b       run the rows whose file field is in the list
 #   scripts/mutants.sh <tree> --table <file>    read another table
 #   scripts/mutants.sh <tree> --jobs N          run N checks at one time, each in a copy of its own
+#   scripts/mutants.sh <tree> --noop-only       run no check: name each row whose expression changes nothing
 #
 # <tree> holds the files of the repository and no `.git`: the script refuses a directory that holds
 # one, because the check of a row builds and writes in the copy, and the copy must never be a
@@ -33,6 +34,13 @@
 # the table, as each one is done, so the output of N workers equals the output of one.
 # A `vitest` check takes about 5 GB. Give N times 5 GB of free memory: on a smaller machine the kernel
 # kills a check, and the row reads INVALID with exit 137.
+#
+# `--noop-only` applies the expression of each selected row to the file of <tree>, and runs no check
+# and no control. It prints each row that reads NOOP or INVALID (no such file, a bad expression), and
+# a last line with the counts. It takes seconds, and it needs no copy of the tree. A rule moves a
+# line, and the row of the rule then changes nothing: no check can tell, because a run of the
+# checks reports only the rows that it ran. A pass runs this mode on each file that the pass touches.
+# Exit 0 where no selected row is NOOP or INVALID, and exit 1 otherwise.
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,13 +48,15 @@ TABLE="$HERE/mutants.tsv"
 TREE=""
 FILES=""
 JOBS=1
+NOOP_ONLY=0
 
-usage() { echo "usage: mutants.sh <tree> [--files a,b] [--table <file>] [--jobs N]" >&2; exit 2; }
+usage() { echo "usage: mutants.sh <tree> [--files a,b] [--table <file>] [--jobs N] [--noop-only]" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --files) shift; FILES="${1:?--files needs a list}" ;;
     --table) shift; TABLE="${1:?--table needs a file}" ;;
+    --noop-only) NOOP_ONLY=1 ;;
     --jobs) shift; JOBS="${1:?--jobs needs a number}"
       case "$JOBS" in ''|*[!0-9]*|0) echo "mutants.sh: --jobs takes a positive number: $JOBS" >&2; usage ;; esac ;;
     -h|--help) sed -n '2,/^set -uo/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -84,6 +94,28 @@ while IFS= read -r line; do
 done < "$TABLE"
 selected=${#rows[@]}
 [ "$selected" -gt 0 ] || { echo "mutants.sh: the selection holds no row" >&2; exit 2; }
+
+# --noop-only: the expression of each row on the file of the tree, and no check.
+if [ "$NOOP_ONLY" -eq 1 ]; then
+  noop=0
+  invalid=0
+  for line in "${rows[@]}"; do
+    IFS=$'\t' read -r id file expr _ <<<"$line"
+    if [ ! -f "$TREE/$file" ]; then
+      printf 'INVALID      %s: no file %s\n' "$id" "$file"; invalid=$((invalid + 1)); continue
+    fi
+    if ! err="$(sed -E "$expr" "$TREE/$file" 2>&1 > "$WORK/mutant")"; then
+      printf 'INVALID      %s: the expression fails: %s\n' "$id" "$(printf '%s\n' "$err" | head -1)"
+      invalid=$((invalid + 1)); continue
+    fi
+    if cmp -s "$TREE/$file" "$WORK/mutant"; then
+      printf 'NOOP         %s\n' "$id"; noop=$((noop + 1))
+    fi
+  done
+  printf 'NOOP-ONLY selected=%d noop=%d invalid=%d\n' "$selected" "$noop" "$invalid"
+  [ $((noop + invalid)) -eq 0 ]
+  exit $?
+fi
 
 # The controls: each distinct check, once, in the order of the first row that holds it.
 checks=()
