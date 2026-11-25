@@ -493,10 +493,10 @@ export type CoverPieces<
     Keep extends readonly unknown[] = [],
     Rest extends readonly unknown[] = [],
 > = Pieces extends readonly [
-    infer Piece,
+    infer First,
     ...infer Tail extends readonly unknown[],
 ]
-    ? SliceSpecOf<Piece, M> extends {
+    ? SliceSpecOf<First, M> extends {
           keep: infer K extends readonly unknown[]
           rest: infer R extends readonly unknown[]
       }

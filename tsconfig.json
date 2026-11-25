@@ -17,7 +17,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     /* If transpiling with TypeScript: */
-    /* tsc checks and emits nothing; tsup bundles. TypeScript 7 removes the node10 resolution that
+    /* tsc checks and emits nothing; tsdown bundles. TypeScript 7 removes the node10 resolution that
        commonjs implied. */
     "module": "preserve",
     "moduleResolution": "bundler",

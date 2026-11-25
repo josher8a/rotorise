@@ -266,8 +266,8 @@ type StrayIn<S, Depth extends unknown[] = []> = Depth['length'] extends 4
                 cases: infer C extends readonly unknown[]
             }
           ? C[number] extends infer Case
-              ? Case extends readonly [unknown, infer Arm]
-                  ? StrayIn<Arm, [...Depth, 0]>
+              ? Case extends readonly [unknown, infer Branch]
+                  ? StrayIn<Branch, [...Depth, 0]>
                   : never
               : never
           : never
@@ -1194,8 +1194,8 @@ type ValidateDeadArms<Schema, E> = string extends keyof Schema
       ? unknown
       : { [K in keyof Schema]: DeadArms<E, Schema[K]> }
 
-type ArmOfCases<C> = C extends readonly (readonly [unknown, infer Arm])[]
-    ? Arm
+type ArmOfCases<C> = C extends readonly (readonly [unknown, infer Branch])[]
+    ? Branch
     : never
 
 type LiteralOfCases<C> = C extends readonly (readonly [
@@ -1209,10 +1209,10 @@ type ArmOfLiteral<C, L> = C extends readonly unknown[]
     ? C[number] extends infer Case
         ? Case extends readonly [
               infer Literals extends readonly unknown[],
-              infer Arm,
+              infer Branch,
           ]
             ? L extends Literals[number]
-                ? Arm
+                ? Branch
                 : never
             : never
         : never
@@ -1288,7 +1288,7 @@ type NameOfComponent<C> = C extends string
 
 /** One case of a match, against the options that the match reads: the literals it names, then its arm. */
 type ValidateCases<E, D extends string, C, Seen = never> = C extends readonly [
-    readonly [infer Literals extends readonly unknown[], infer Arm],
+    readonly [infer Literals extends readonly unknown[], infer Branch],
     ...infer Rest,
 ]
     ? [
@@ -1300,7 +1300,7 @@ type ValidateCases<E, D extends string, C, Seen = never> = C extends readonly [
                         ? Literals[I]
                         : ErrorMessage<`'${D}' never holds '${Literals[I] & (string | number)}'`>
               },
-              ValidateGroupArm<ExtractVariant<E, D, Literals[number]>, Arm>,
+              ValidateGroupArm<ExtractVariant<E, D, Literals[number]>, Branch>,
           ],
           ...ValidateCases<E, D, Rest, Seen | Literals[number]>,
       ]
@@ -1401,12 +1401,12 @@ type CodecAtPath<
 type CodecMemberAtPath<CodecSpec, Path extends string> = CodecAtPath<
     RootFrontier<CodecSpec>,
     Path
-> extends infer Field
-    ? [Field] extends [never]
+> extends infer Found
+    ? [Found] extends [never]
         ? never
-        : unknown extends Field
+        : unknown extends Found
           ? never
-          : Exclude<MemberOf<AttributeOf<Field>>, 'NULL'>
+          : Exclude<MemberOf<AttributeOf<Found>>, 'NULL'>
     : never
 
 /**
@@ -1556,7 +1556,7 @@ type ValidateKeyCarrier<
                 cases: {
                     [I in keyof C]: C[I] extends readonly [
                         infer Literals,
-                        infer Arm,
+                        infer Branch,
                     ]
                         ? [
                               Literals,
@@ -1565,7 +1565,7 @@ type ValidateKeyCarrier<
                                   Enc,
                                   CodecSpec,
                                   KeyName,
-                                  Arm,
+                                  Branch,
                                   All
                               >,
                           ]
@@ -2700,27 +2700,27 @@ type OptimizedBuiltKey<
                     ? ValueOf<
                           Spec['spec'],
                           ValueOfKey<Entity, Spec['discriminator']>
-                      > extends infer Arm
-                        ? Arm extends NonPath<Entity>
+                      > extends infer Branch
+                        ? Branch extends NonPath<Entity>
                             ? Exclude<
                                   Replace<
-                                      SingleText<Entity, Arm, CodecSpec>,
+                                      SingleText<Entity, Branch, CodecSpec>,
                                       null,
                                       undefined
                                   >,
                                   ''
                               >
-                            : Arm extends DiscriminatedSchemaShape
+                            : Branch extends DiscriminatedSchemaShape
                               ? OptimizedBuiltKey<
                                     Entity,
-                                    Arm,
+                                    Branch,
                                     Separator,
                                     Config,
                                     CodecSpec
                                 >
                               : ProcessKey<
                                     Entity,
-                                    Arm,
+                                    Branch,
                                     Separator,
                                     Config,
                                     CodecSpec
@@ -2758,18 +2758,18 @@ type TextAt<
                 ? VariantFor<Entity, CodecSpec>
                 : CodecSpec,
             K
-        > extends infer Field
-      ? [Field] extends [never]
+        > extends infer Found
+      ? [Found] extends [never]
           ? Entity[K & keyof Entity]
-          : Marks<Field> extends { readonly spec: infer Nested }
+          : Marks<Found> extends { readonly spec: infer Nested }
             ? Entity[K & keyof Entity] extends infer Value
                 ? Value extends object
                     ? TextView<Value, Nested, Whole>
                     : Value
                 : never
             : Whole extends true
-              ? KeyText<Entity[K & keyof Entity], Field>
-              : DigitsOf<KeyText<Entity[K & keyof Entity], Field>>
+              ? KeyText<Entity[K & keyof Entity], Found>
+              : DigitsOf<KeyText<Entity[K & keyof Entity], Found>>
       : never
 
 /** The text that a `DynamoNumber` component prints: its digits. A key of one attribute holds the value itself. */
@@ -3462,8 +3462,8 @@ type VariantComponents<Variants, Discriminator extends string, Given> = [
     GivenAt<Given, Discriminator>,
 ] extends [never]
     ? KeyComponents<Variants[keyof Variants], Given>
-    : GivenAt<Given, Discriminator> extends infer Chosen extends keyof Variants
-      ? KeyComponents<Variants[Chosen], Given>
+    : GivenAt<Given, Discriminator> extends infer Picked extends keyof Variants
+      ? KeyComponents<Variants[Picked], Given>
       : KeyComponents<Variants[keyof Variants], Given>
 
 /**
@@ -3621,10 +3621,10 @@ type ChangeRefusal<Entity, Schema, Roles, Changed, Decided> = (
     Changed extends unknown
         ? OptionRefusal<Entity, Schema, Roles, Changed, Decided>
         : never
-) extends infer Refused
-    ? [Refused] extends [never]
+) extends infer Refusal
+    ? [Refusal] extends [never]
         ? unknown
-        : Refused
+        : Refusal
     : never
 
 /** The refusal of one option: `never` where the option is accepted. */
@@ -4175,10 +4175,10 @@ type RefuseComponents<E, Enc, CodecSpec, Spec> = Spec extends readonly unknown[]
       : Spec extends { readonly cases: infer C }
         ? {
               cases: {
-                  [I in keyof C]: C[I] extends readonly [unknown, infer Arm]
+                  [I in keyof C]: C[I] extends readonly [unknown, infer Branch]
                       ? readonly [
                             unknown,
-                            RefuseComponents<E, Enc, CodecSpec, Arm>,
+                            RefuseComponents<E, Enc, CodecSpec, Branch>,
                         ]
                       : unknown
               }

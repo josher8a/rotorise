@@ -33,39 +33,10 @@ if [ "$DO_BUILD" -eq 1 ]; then
     echo 'surface-names.sh: the build failed; run `npm run build` alone to see why' >&2; exit 2; }
 fi
 
-# Every `export { … };` statement, one published name per line.
-#
-# In `python3` and not in `sed`, for the same reason the guards under `formal/scripts` are:
-# this extraction is where the row went wrong three times, and BSD `sed` and GNU `sed` do not
-# agree on `\?`. Bash runs the build and reads the exit codes; Python does the parsing.
-names() {
-  python3 - "$1" <<'PYEOF'
-import re, sys
-
-# A clause is one line. `tsup` writes the re-export and the local export as a line each, so this
-# reads lines and does not accumulate. An earlier version accumulated to the next `};` and
-# swallowed thirty-six lines of declarations, which is why it answered 145.
-CLAUSE = re.compile(r"^export \{(.*?)\}(?: from .*)?;\s*$")
-
-names = set()
-for line in open(sys.argv[1], encoding="utf-8"):
-    clause = CLAUSE.match(line.rstrip("\n"))
-    if clause is None:
-        continue
-    for member in clause.group(1).split(","):
-        member = member.strip()
-        if not member:
-            continue
-        member = re.sub(r"^type\s+", "", member)
-        # the published name is the right of ` as `, never the left: the re-export line aliases
-        # every name (`k as AllObjects`) and the left is the bundler's mangled local, which is
-        # why the row once answered 215
-        member = re.sub(r"^.*\s+as\s+", "", member)
-        names.add(member)
-for name in sorted(names):
-    print(name)
-PYEOF
-}
+# The export names of a declaration file, one per line. `surface-names.mjs` asks the compiler, so
+# the layout that the bundler writes (`export declare` in place, or one `export { … }` clause) does
+# not change the answer.
+names() { node scripts/surface-names.mjs "$1"; }
 
 fail=0
 for entry in "${ENTRIES[@]}"; do

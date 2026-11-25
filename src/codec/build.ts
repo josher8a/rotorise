@@ -312,10 +312,10 @@ export type AttributeOf<C> = C extends {
 }
     ? Nesting
     : // the same for a field: the attribute is the one the codec it marks writes
-      C extends { readonly codec: AttributeCodec<infer _Marked, infer Marks> }
-      ? Marks
-      : C extends AttributeCodec<infer _Held, infer Written>
-        ? Written
+      C extends { readonly codec: AttributeCodec<infer _Marked, infer MarkOf> }
+      ? MarkOf
+      : C extends AttributeCodec<infer _Held, infer WrittenOf>
+        ? WrittenOf
         : never
 
 /**
