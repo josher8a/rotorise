@@ -112,7 +112,8 @@ Strips the computed keys of a table entry and returns the raw entity. A read nev
 a row with a correct key, a stale key, or no key gives one entity.
 
 ```ts
-const user = UserTable.fromEntry(item)
+const entry = UserTable.unsafeToEntry({ orgId: 'acme', id: '123', role: 'admin', email: 'a@b.com' })
+const user = UserTable.fromEntry(entry)
 // user => { orgId: 'acme', id: '123', role: 'admin', email: 'a@b.com' }
 ```
 
@@ -156,7 +157,7 @@ do not declare is refused by the type, so the call throws a `RotoriseError`.
   a missing component gives a `CodecError`.
 - Where the attributes give the whole sort key, the sort condition is `equals`.
 - Where the attributes give a leading part of a list sort key, the sort condition is `beginsWith`,
-  with a trailing separator. The separator keeps `STATUS#AVAILABLE` from selecting
+  with the tag of the next component and a trailing separator. The separator keeps `STATUS#AVAILABLE` from selecting
   `STATUS#AVAILABLE_SOON`.
 - Where the attributes hold no component of the sort key, the sort condition is `beginsWith` of the
   first tag and the separator, so the query selects each item of that key spec in the partition. A
@@ -178,15 +179,24 @@ const PetTable = tableEntry<Pet>()(
 PetTable.keyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
 // => { index: 'GSI1',
 //      partition: { name: 'GSI1PK', value: { S: 'SHELTERID#s1' } },
-//      sort: { name: 'GSI1SK', beginsWith: { S: 'SPECIES#CAT#' } } }
+//      sort: { name: 'GSI1SK', beginsWith: { S: 'SPECIES#CAT#PETID#' } } }
 ```
 
 `BETWEEN` and the comparisons `<`, `<=`, `>` and `>=` are not built. An adapter to
 [Brushless](https://github.com/josher8a/Brushless) is a few lines:
 
 ```ts
-import { AttributeName, AttributeValue, KeyCondition, Register } from 'brushless'
 import type { KeyCondition as Condition } from 'rotorise'
+
+// The names that the adapter reads from 'brushless'. The sample declares them, and runs no call of them.
+declare const AttributeName: { make(name: string): unknown }
+declare const AttributeValue: { make(input: { value: unknown; alias: string }): unknown }
+declare const KeyCondition: {
+  equals(name: unknown, value: unknown): unknown
+  beginsWith(name: unknown, value: unknown): unknown
+  build(condition: unknown, register: unknown): string
+}
+declare const Register: { make(): unknown }
 
 const toBrushless = ({ partition, sort }: Condition) => ({
   pk: {
@@ -444,7 +454,7 @@ HandoffsByOwner.key('GSI1PK', { type: 'ADOPTION', to: { ownerId: 'u1' } })
 
 ### Preconditions of a Narrowed Path
 
-`at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, gives a codec that returns a `CodecError` on use.
+`at` on an item codec gives the codec at a path, together with the path. A path through a union resolves where each option that the path reaches stores one codec there. A name that only some options declare, or that options declare with different codecs, is refused by the type. A cast that passes the refusal gives a codec that returns a `CodecError` on use.
 
 `narrow(located, pattern)` narrows a path through a union to the options that the pattern does not separate. The pattern is an object codec, read as `extract` reads an object pattern: each object of the pattern is open. The narrowing acts at run time and in the type, and adds no segment to the path. The table can still hold an item of a dropped option. A write at the narrowed path is safe only under the preconditions of the path: put the preconditions in the `ConditionExpression` of the write.
 
@@ -461,19 +471,32 @@ const Order = item(object({
 }))
 
 const cardId = at(narrow(at(Order, ['pay']), object({ tender: string('CARD') })), ['cardId'])
-path(cardId)           // 'pay.cardId'
-preconditions(cardId)  // the Result of [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
-cardId.encode('c-1')   // { S: 'c-1' }
+path(cardId)           // => 'pay.cardId'
+preconditions(cardId)  // => [{ segments: ['pay', 'tender'], in: [{ S: 'CARD' }] }]
+cardId.encode('c-1')   // => { S: 'c-1' }
 
-// only the CARD option declares `cardId`
-at(Order, ['pay', 'cardId']).encode('c-1')   // a CodecError that names `narrow`
+// only the CARD option declares `cardId`, so the type refuses the path
+// @ts-expect-error
+const unnarrowed = at(Order, ['pay', 'cardId'])
+unnarrowed.encode('c-1')   // a CodecError that names `narrow`
 ```
 
 Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the alias of each value, with no leading `:`, because Brushless adds the `:`.
 
 ```ts
-import { Condition as C, AttributePath, AttributeValue, Register } from 'brushless'
 import type { Precondition } from 'rotorise'
+
+// The names that the adapter reads from 'brushless'. The sample declares them, and runs no call of them.
+declare const C: {
+  inList(path: unknown, values: unknown[]): unknown
+  attributeType(path: unknown, type: unknown): unknown
+  attributeExists(path: unknown): unknown
+  and(left: unknown, right: unknown): unknown
+  build(condition: unknown, register: unknown): string
+}
+declare const AttributePath: { fromString(path: string): unknown }
+declare const AttributeValue: { make(input: { value: unknown; alias: string }): unknown }
+declare const Register: { make(): unknown }
 
 const pathOf = (segments: readonly (string | number)[]) =>
   AttributePath.fromString(
@@ -535,8 +558,10 @@ before `'9'`.
 ### Custom Separator
 
 ```ts
-const Table = tableEntry<User>()(schema, { separator: '-' })
-// Keys use '-' instead of '#': 'ORGID-acme-ID-123'
+const Table = tableEntry<User>()({ PK: ['orgId', 'id'], SK: ['role'] }, { separator: '-' })
+
+Table.key('PK', { orgId: 'acme', id: '123' })
+// => 'ORGID-acme-ID-123'
 ```
 
 The separator is a slot of `options`, so the type of a key holds the default `'#'` where `options`
@@ -549,7 +574,7 @@ names no separator. A bare string as the second argument is refused.
 Each error holds a `kind`. A `CodecError` that `toItem`, `toEntry`, `key`, `keys`, `keyCondition` or `keyUpdates` returns for a key is `'separator'`, `'decided'` or `'rewrite'` where the refusal has one of those causes, and `'key'` otherwise. A `RotoriseError` is the error of a refusal at construction and of a broken call, and its kind is `'refused'`. A `CodecError` from `at` is `'vacant'`, `'someVariants'` or `'ambiguous'`, and `'refused'` otherwise. Branch on `kind`, not on the message text.
 
 ```ts
-import { RotoriseError } from 'rotorise'
+import { CodecError } from 'rotorise'
 
 // a segment holds the separator
 const key = UserTable.key('PK', { orgId: 'acme#eu', id: '123' })

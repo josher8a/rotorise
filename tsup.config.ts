@@ -17,7 +17,7 @@ export default defineConfig({
     // `rotorise` refuses.
     // A shared chunk holds one copy. `scripts/tsc-matrix.sh` runs the entries and checks it
     splitting: true,
-    sourcemap: true,
+    sourcemap: false,
     outDir: 'dist',
     clean: true,
     format: ['cjs', 'esm'],
