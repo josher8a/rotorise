@@ -26,7 +26,7 @@
 
 ### Changed
 
-- **`engines`:** `package.json` declares `node >=18`.
+- **`engines`:** `package.json` declares `node >=20`. Node 18 is past its end of life.
 
 ### Fixed
 
