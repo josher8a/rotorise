@@ -171,6 +171,9 @@ LINE_ANCHOR = re.compile(r"^[A-Za-z0-9_./-]+\.(lean|ts|md):[0-9]+$")
 # exempts every path under it, so a fourth entry would need a fourth producer.
 GENERATED = ("dist/",      # npm run build
              ".attest/")   # the attest snapshot run
+# What each machine holds outside the tree, and no remote has. One entry per directory, with the rule
+# that keeps the directory local.
+LOCAL = ("memory/",)     # the record of past arcs: CLAUDE.md Rule 30 forbids a push of it
 # and the five vector artifacts, cited by path or by their leading-dot basename (the vector emit)
 SPEC_DOC = "docs/blueprint/src/content.tex"
 SECTION_HEADING = re.compile(r"^\\section\{§(\d+)", re.M)
@@ -410,8 +413,8 @@ def tree_files():
 
 
 def path_resolves(tok, full, base):
-    """Whether a cited path names a file the tree holds, or one a producer writes."""
-    if any(tok.startswith(pre) for pre in GENERATED) or os.path.basename(tok).startswith("."):
+    """Whether a cited path names a file the tree holds, one a producer writes, or one a machine holds."""
+    if any(tok.startswith(pre) for pre in GENERATED + LOCAL) or os.path.basename(tok).startswith("."):
         return True
     if "*" in tok:
         return any(fnmatch.fnmatch(p, tok) or fnmatch.fnmatch(p, "formal/" + tok) for p in full)
