@@ -47,4 +47,11 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/node_modules/rotorise"
 cp -R "$DIST" "$WORK/node_modules/rotorise/dist"
 cp "$PKG" "$WORK/node_modules/rotorise/package.json"
+# `brushless` is a dev dependency of the repository. A sample imports the real package, so the work
+# directory links the copy that `npm ci` installed.
+if [ ! -d "$ROOT/node_modules/brushless" ]; then
+  echo 'readme-check.sh: node_modules/brushless is absent; run `npm ci`' >&2
+  exit 2
+fi
+ln -s "$ROOT/node_modules/brushless" "$WORK/node_modules/brushless"
 node scripts/readme-check.mjs "$README" "$WORK"

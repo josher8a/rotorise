@@ -186,17 +186,8 @@ PetTable.keyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
 [Brushless](https://github.com/josher8a/Brushless) is a few lines:
 
 ```ts
+import { AttributeName, AttributeValue, KeyCondition, Register } from 'brushless'
 import type { KeyCondition as Condition } from 'rotorise'
-
-// The names that the adapter reads from 'brushless'. The sample declares them, and runs no call of them.
-declare const AttributeName: { make(name: string): unknown }
-declare const AttributeValue: { make(input: { value: unknown; alias: string }): unknown }
-declare const KeyCondition: {
-  equals(name: unknown, value: unknown): unknown
-  beginsWith(name: unknown, value: unknown): unknown
-  build(condition: unknown, register: unknown): string
-}
-declare const Register: { make(): unknown }
 
 const toBrushless = ({ partition, sort }: Condition) => ({
   pk: {
@@ -219,9 +210,16 @@ const toBrushless = ({ partition, sort }: Condition) => ({
 
 const condition = PetTable.unsafeKeyCondition('GSI1', { shelterId: 's1', species: 'CAT' })
 const register = Register.make()
-KeyCondition.build(toBrushless(condition), register)
-// => '#GSI1PK = :GSI1PK AND begins_with(#GSI1SK, :GSI1SK)', and `IndexName` is `condition.index`
+const expression = KeyCondition.build(toBrushless(condition), register)
+expression
+// => '#GSI1PK = :GSI1PK AND begins_with(#GSI1SK, :GSI1SK)'
+
+register
+// => { names: { '#GSI1PK': 'GSI1PK', '#GSI1SK': 'GSI1SK' },
+//      values: { ':GSI1PK': { S: 'SHELTERID#s1' }, ':GSI1SK': { S: 'SPECIES#CAT#PETID#' } } }
 ```
+
+The `IndexName` of the query is `condition.index`.
 
 ### `.keyUpdates(changed)`
 
@@ -484,19 +482,8 @@ unnarrowed.encode('c-1')   // a CodecError that names `narrow`
 Rotorise builds no expression string. An adapter to [Brushless](https://github.com/josher8a/Brushless) is a few lines. The caller supplies the alias of each value, with no leading `:`, because Brushless adds the `:`.
 
 ```ts
+import { AttributePath, AttributeValue, C, Register } from 'brushless'
 import type { Precondition } from 'rotorise'
-
-// The names that the adapter reads from 'brushless'. The sample declares them, and runs no call of them.
-declare const C: {
-  inList(path: unknown, values: unknown[]): unknown
-  attributeType(path: unknown, type: unknown): unknown
-  attributeExists(path: unknown): unknown
-  and(left: unknown, right: unknown): unknown
-  build(condition: unknown, register: unknown): string
-}
-declare const AttributePath: { fromString(path: string): unknown }
-declare const AttributeValue: { make(input: { value: unknown; alias: string }): unknown }
-declare const Register: { make(): unknown }
 
 const pathOf = (segments: readonly (string | number)[]) =>
   AttributePath.fromString(
@@ -521,8 +508,12 @@ const guards = preconditions(cardId)
 if (failed(guards)) throw guards
 let n = 0
 const register = Register.make()
-C.build(conditionOf(guards, () => `v${n++}`), register)
-// => '#pay.#tender IN (:v0)', and `register` holds the names and the value
+const expression = C.build(conditionOf(guards, () => `v${n++}`), register)
+expression
+// => '#pay.#tender IN (:v0)'
+
+register
+// => { names: { '#pay': 'pay', '#tender': 'tender' }, values: { ':v0': { S: 'CARD' } } }
 ```
 
 A write with an empty precondition list needs no condition. Check the list before the fold.

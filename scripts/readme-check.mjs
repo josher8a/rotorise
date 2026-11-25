@@ -4,6 +4,7 @@
 //
 // `scripts/readme-check.sh` makes the work directory: `node_modules/rotorise` holds a copy of
 // `dist/` and `package.json`, so a sample resolves the package as a consumer does.
+// `node_modules/brushless` links the copy that the repository installs, for the samples of the adapters.
 //
 // Each `ts` block becomes one module. The module holds the statements of earlier blocks that the
 // block uses: the latest declaration of a name wins. A name that means two things inside one module
@@ -39,7 +40,8 @@ for (let i = 0, open = null; i < rows.length; i++) {
 }
 
 // ---- 2. the statements of each block ---------------------------------------------------------
-const rotorise = (mod) => mod === 'rotorise' || mod.startsWith('rotorise/')
+// the packages that a sample can import: the package itself, and `brushless`, a dev dependency whose adapters the README shows
+const readable = (mod) => mod === 'rotorise' || mod.startsWith('rotorise/') || mod === 'brushless'
 const uses = (node, out) => {
   const walk = (n) => {
     if (ts.isIdentifier(n)) {
@@ -71,8 +73,8 @@ const parsed = blocks.map((b, bi) => {
   sf.statements.forEach((s, k) => {
     if (ts.isImportDeclaration(s)) {
       const mod = s.moduleSpecifier.text
-      if (!rotorise(mod)) {
-        fail(bi + 1, lineOf(s.getStart()), `imports \`${mod}\`. The check reads imports of \`rotorise\` only. Declare the names that the sample needs with \`declare const\``)
+      if (!readable(mod)) {
+        fail(bi + 1, lineOf(s.getStart()), `imports \`${mod}\`. The check reads imports of \`rotorise\` and \`brushless\` only. Declare the names that the sample needs with \`declare const\``)
         return
       }
       const c = s.importClause

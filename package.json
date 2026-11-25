@@ -76,6 +76,7 @@
     "@aws-sdk/util-dynamodb": "^3.981.0",
     "@biomejs/biome": "2.0.0",
     "@types/node": "^18.19.34",
+    "brushless": "0.4.0",
     "tsdown": "0.23.7",
     "typescript": "6.0.3",
     "typescript-7": "npm:typescript@7.1.0-beta",
