@@ -50,6 +50,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: bash scripts/readme-check.sh
+      - run: bash scripts/tsc-matrix.sh
+      - run: bash scripts/emit-check.sh
+      - run: bash scripts/surface-names.sh
 
   gate:
     runs-on: ubuntu-latest
