@@ -30,6 +30,10 @@ jobs:
     strategy:
       matrix:
         node-version: [20, 22, 24]
+    # The attest setup type-checks the whole project in the main vitest process, and needs more
+    # than 2 GB of heap. Node takes the default limit from the memory of the runner, which varies.
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
