@@ -1,10 +1,10 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import ts from 'typescript'
 
 /**
- * The setup of `@ark/attest` type-checks the whole project, which costs more time and memory than
- * most of the specs. A spec needs the setup where the import closure of the spec reaches
+ * The setup of `@ark/attest` type-checks each root file of its tsconfig in TypeScript 6, in the main
+ * process, and costs more time and memory than most of the specs. A spec needs the setup where the import closure of the spec reaches
  * `@ark/attest`. The closure follows each relative import, through `import`, `export from`,
  * `import()` and `require`, as the scanner of the compiler reads them. A call with a computed
  * argument, and a relative specifier that names no file, count as a reach, so a doubt keeps the
@@ -26,6 +26,8 @@ const SWAP = [
 // A call whose argument starts with a name or a template is no literal. A comment that writes
 // `import(...)` has no such argument.
 const COMPUTED = /\b(?:import|require)\s*\(\s*[^'")\s.]/
+
+const isAttest = (spec: string): boolean => spec === ATTEST || spec.startsWith(`${ATTEST}/`)
 
 /** The specifiers of a file, or null where a call has an argument that is no literal. The compiler
  * scans the text, so a comment holds no import. */
@@ -54,7 +56,7 @@ export const reachesAttest = (files: readonly string[]): boolean => {
         const specs = specifiers(readFileSync(file, 'utf8'))
         if (specs === null) return true
         for (const spec of specs) {
-            if (spec === ATTEST || spec.startsWith(`${ATTEST}/`)) return true
+            if (isAttest(spec)) return true
             if (!spec.startsWith('.')) continue
             const next = resolveFile(file, spec)
             if (next === null) return true
@@ -88,6 +90,38 @@ export const selectedSpecs = (args: readonly string[], root: string): string[] |
     return [...chosen]
 }
 
+/**
+ * The files of `src` that import `@ark/attest`, or that hold an import the scanner cannot read. Only
+ * such a file holds an assertion of attest. The other files of `src` hold most of the type cost of
+ * the project, and attest reads no type of them. A file with an assertion that this list drops
+ * fails the run: attest throws "Found no assertion data" for the file.
+ */
+const attestFiles = (root: string): string[] =>
+    readdirSync(join(root, 'src'), { recursive: true, encoding: 'utf8' })
+        .filter(f => f.endsWith('.ts'))
+        .map(f => join(root, 'src', f))
+        .filter(f => specifiers(readFileSync(f, 'utf8'))?.some(isAttest) ?? true)
+
+/**
+ * A tsconfig whose root files are the attest files. The imports of a root file still load. A
+ * composite project must list each file that loads, so the tsconfig sets `composite` off. The file
+ * lives under the root, so the lookup of `@types` finds `node_modules/@types`. The setup of attest
+ * deletes `.attest`, so the file cannot live there.
+ */
+const attestTsconfig = (root: string): string => {
+    const dir = join(root, 'node_modules', '.cache', 'attest')
+    mkdirSync(dir, { recursive: true })
+    const path = join(dir, 'tsconfig.json')
+    const config = {
+        extends: join(root, 'tsconfig.json'),
+        compilerOptions: { composite: false },
+        include: [],
+        files: attestFiles(root),
+    }
+    writeFileSync(path, JSON.stringify(config))
+    return path
+}
+
 /** The arguments of the command after the name of the runner, with the words `run` and `--run` dropped. */
 const commandArgs = (argv: readonly string[]): string[] => argv.slice(2).filter(a => a !== 'run' && a !== '--run')
 
@@ -98,6 +132,6 @@ export default async () => {
     const { setup } = await import(ATTEST)
     // The owner limit of a change is 10 percent per pin. attest fails a rise above this threshold.
     // The default is 20 percent. `floor` of `src/attestPin.ts` fails a fall, which attest passes.
-    return setup({ benchPercentThreshold: 10 })
+    return setup({ benchPercentThreshold: 10, tsconfig: attestTsconfig(root) })
 }
 
