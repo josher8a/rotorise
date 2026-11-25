@@ -4852,7 +4852,25 @@ export const tableEntry =
         const componentSlots = (
             name: string,
             item?: Record<string, unknown>,
-        ): Result<ObjectSlot[]> => {
+        ): Result<readonly ObjectSlot[]> => {
+            // the slots of a name are a fact of the schema. Only a tagged codec reads the tags of the
+            // item, so only that call is no fact of the schema. A refusal is not held: each call
+            // builds its own error, as before
+            const ofSchema =
+                item === undefined ||
+                attributes === undefined ||
+                !isTagged(attributes)
+            const held = ofSchema ? slotMemo.get(name) : undefined
+            if (held !== undefined) return held
+            const slots = slotsOf(name, item)
+            if (ofSchema && !failed(slots)) slotMemo.set(name, slots)
+            return slots
+        }
+        const slotMemo = new Map<string, readonly ObjectSlot[]>()
+        const slotsOf = (
+            name: string,
+            item?: Record<string, unknown>,
+        ): Result<readonly ObjectSlot[]> => {
             if (!name.includes('.')) return fieldSlots(name, item)
             // a key cannot print the stored text at a path that is refused
             const slot = pathAt(name)
@@ -4865,7 +4883,7 @@ export const tableEntry =
          * and so is a name that the codec declares no field of, and holds no rest for. The run time
          * gives an error value for each item of such a key, so the refusal moves to the schema.
          */
-        const slotsAtConstruction = (name: string): ObjectSlot[] => {
+        const slotsAtConstruction = (name: string): readonly ObjectSlot[] => {
             const slots = componentSlots(name)
             if (failed(slots)) throw new RotoriseError(slots.message)
             if (attributes !== undefined && slots.length === 0)
@@ -5119,6 +5137,17 @@ export const tableEntry =
          * change holds the discriminator. With no codec, the entry refuses only a name that is no
          * path, or that holds a position, because a key does not read into a list, and no name lands.
          */
+        // The segments of a name that parsed. A name is the text of a caller, so the table stops at a
+        // bound: a name past the bound parses on each call, as before. A refusal is never held.
+        const parsedNames = new Map<string, readonly Segment[]>()
+        const parsedName = (name: string): readonly Segment[] | CodecError => {
+            const held = parsedNames.get(name)
+            if (held !== undefined) return held
+            const read = parsePathResult(name)
+            if (!(read instanceof CodecError) && parsedNames.size < 256)
+                parsedNames.set(name, read)
+            return read
+        }
         const landedBy = (
             changed: Record<string, unknown>,
         ):
@@ -5134,7 +5163,7 @@ export const tableEntry =
             const landed: (readonly [string, readonly Segment[], Reached])[] =
                 []
             for (const name of Object.keys(changed)) {
-                const read = parsePathResult(name)
+                const read = parsedName(name)
                 if (read instanceof CodecError) return read
                 if (root === undefined) {
                     if (
