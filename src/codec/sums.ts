@@ -125,9 +125,7 @@ export const nullable = <
     // fragment, and the scope that binds the names checks the union on its closed copy. A `ref`
     // whose entry owns the null point fails that check, as a second option that writes `NULL`
     if (owns === undefined && unboundRefs([t]).size > 0)
-        return codecOfTerm<T | null, A | Attribute<'NULL'>>(
-            union([inner, nullValue]).def,
-        )
+        return joined<T | null, A | Attribute<'NULL'>>([inner, nullValue])
     if (owns === undefined) {
         throw new CodecError(
             `nullable: ${t.kind} decides the null point by running a function this cannot read, ` +
@@ -141,10 +139,8 @@ export const nullable = <
     if (holdsNoValue(t)) {
         return nullValue as AttributeCodec<T | null, A | Attribute<'NULL'>>
     }
-    return codecOfTerm<T | null, A | Attribute<'NULL'>>({
-        kind: 'union',
-        options: [t, { kind: 'null' }],
-    })
+    // the options are the codec of the caller and the null point, so the pair is the pair of the union
+    return joined<T | null, A | Attribute<'NULL'>>([inner, nullValue])
 }
 
 /**
@@ -936,18 +932,30 @@ export const discriminatedUnion = <
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
+    return joined(options) as unknown as UnionCodec<
+        DerivedUnion<Options>,
+        Options
+    >
+}
+
+/**
+ * The join of the options that the caller gave, as a codec of the type that the caller names. The
+ * pair is a function of the pairs of the options, so a bundle of a union holds no switch over the
+ * kinds. `item` reads the whole-item reading of the union from the term.
+ */
+const joined = <T, A extends AttributeValue>(
+    options: readonly AnyCodec[],
+): AttributeCodec<T, A> => {
     const declared = { kind: 'union', options: options.map(termOf) } as const
     judgedBy(declared, judgeUnion(declared))
-    // the pair is a function of the pairs of the options, so a bundle of `union` holds no switch
-    // over the kinds. `item` reads the whole-item reading of the union from the term
     return Object.assign(
-        codecOfPair(
+        codecOfPair<T, A>(
             declared,
             altSem(options.map((o) => optionFrom(termOf(o), o, pairOfCodec(o))))
                 .pair,
         ),
         { [unionSlot]: union },
-    ) as unknown as UnionCodec<DerivedUnion<Options>, Options>
+    )
 }
 
 /** The whole-item reading of a union, a function of the term. The memo is a cache only. */
