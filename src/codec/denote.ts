@@ -459,7 +459,10 @@ export const carriedCodec = <Payload, Written, Read>(
  * asked per item: {@link copiedPerRead} is a fact about this runtime and not about the term, which
  * is why it lives in the compiled form and not in {@link Field}.
  */
-export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
+export const bodySem = (
+    { fields: of, rest }: Body,
+    pairFor: (t: Term) => Pair,
+): ItemPair => {
     const declared: {
         readonly name: string
         readonly pair: Pair
@@ -471,12 +474,12 @@ export const bodySem = ({ fields: of, rest }: Body): ItemPair => {
         if (field === undefined) continue
         declared.push({
             name,
-            pair: pairOf(field.t),
+            pair: pairFor(field.t),
             field,
             copy: field.mark === 'fill' && copiedPerRead(field.v),
         })
     }
-    const restPair = rest && pairOf(rest)
+    const restPair = rest && pairFor(rest)
     return {
         encode: (held, enclosing = 0, partial = false) => {
             const out: Record<string, AttributeValue> = {}
@@ -1294,9 +1297,14 @@ const itemPairs = new WeakMap<ItemTerm, ItemPair>()
 export const itemSem = (def: ItemTerm): ItemPair => {
     const built = itemPairs.get(def)
     if (built) return built
-    const made = bodySem(def.body)
+    const made = bodySem(def.body, pairOf)
     itemPairs.set(Object.freeze(def), made)
     return made
+}
+
+/** Records the item pair of an object term that a constructor built from the pairs of its fields. */
+export const seedItemPair = (def: ItemTerm, pair: ItemPair): void => {
+    itemPairs.set(Object.freeze(def), pair)
 }
 
 /**
@@ -1577,6 +1585,26 @@ export const setPair = (
     }
 }
 
+/**
+ * The pair of an object, from the pair of its body: {@link bodySem} carried into an `M`. The row is
+ * the wrapper and the body is the content, which is the split of the attributes — a codec writes
+ * the attributes of that codec, and `item` is the one place that writes no map. `denote` reads the
+ * body of the term, and `object` reads the body that it composed from the pairs of its fields.
+ */
+export const objectPair = (body: ItemPair): Pair =>
+    carriedCodec(
+        (value): value is Record<string, unknown> =>
+            asRecord(value) !== undefined,
+        'M',
+        (value) =>
+            new CodecError(
+                `${describeShape(value)} is not a plain object, and an object writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+            ),
+        body.encode,
+        (carried: Readonly<Record<string, AttributeValue>>, enclosing) =>
+            body.decode(carried, enclosing),
+    )
+
 export const denote = (def: Term): Pair => {
     switch (def.kind) {
         case 'string':
@@ -1644,23 +1672,8 @@ export const denote = (def: Term): Pair => {
          * the content, which is the split of the attributes — a codec writes the attributes of that codec,
          * and `item` is the one place that writes no map.
          */
-        case 'object': {
-            const body = itemSem(def)
-            return carriedCodec(
-                (value): value is Record<string, unknown> =>
-                    asRecord(value) !== undefined,
-                'M',
-                (value) =>
-                    new CodecError(
-                        `${describeShape(value)} is not a plain object, and an object writes an 'M' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                    ),
-                body.encode,
-                (
-                    carried: Readonly<Record<string, AttributeValue>>,
-                    enclosing,
-                ) => body.decode(carried, enclosing),
-            )
-        }
+        case 'object':
+            return objectPair(itemSem(def))
         /** The rule `(held)`. `Lawful.held1` is the lemma; the adapter is data the term carries. */
         case 'held':
             return heldThrough(pairOf(def.inner), {
@@ -1952,6 +1965,22 @@ export const judgeSet = (
 }
 
 /**
+ * **A name that the row always writes, at a node that holds no value.** The model gives such an
+ * object an empty held set. The host refuses the object for the reason of the list. `optional` is
+ * the mark that makes the name a non-slot.
+ */
+export const judgeObject = (
+    t: Extract<Term, { kind: 'object' }>,
+): CodecError | undefined => {
+    for (const [name, field] of Object.entries(t.body.fields))
+        if (alwaysWritten(field) && holdsNoValue(field.t))
+            return new CodecError(
+                `'${name}' is declared at \`never\` and the row always writes it, so the object holds no value at all — mark it \`optional\`, or use \`never\` itself`,
+            )
+    return undefined
+}
+
+/**
  * **The judgment of a container at its declaration**: the refusal of its own kind, then the guard
  * of the model. Each constructor passes the judge of its own kind, so a bundle of one container
  * holds the judge of that kind and no other. A refusal throws.
@@ -1962,7 +1991,6 @@ export const judgedBy = (t: Term, own: CodecError | undefined): void => {
 }
 
 const judge = (t: Term, declaring: boolean): CodecError | undefined => {
-    const empty = (child: Term): boolean => holdsNoValue(child)
     switch (t.kind) {
         // **A declared position that nothing fills makes the whole list unconstructible.** The
         // model types such a list and gives it an empty held set, which is correct as a model. The
@@ -1978,11 +2006,8 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
         // such an object an empty held set. The host refuses the object for the reason of the
         // list. `optional` is the mark that makes the name a non-slot
         case 'object': {
-            for (const [name, field] of Object.entries(t.body.fields))
-                if (alwaysWritten(field) && empty(field.t))
-                    return new CodecError(
-                        `'${name}' is declared at \`never\` and the row always writes it, so the object holds no value at all — mark it \`optional\`, or use \`never\` itself`,
-                    )
+            const refusal = judgeObject(t)
+            if (refusal) return refusal
             break
         }
         // **The DynamoDB set obligation, and a law.** A stored set holds elements of one member of

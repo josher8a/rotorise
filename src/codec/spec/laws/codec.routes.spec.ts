@@ -32,6 +32,7 @@ import {
     set,
     spread,
     string,
+    undefinable,
     union,
 } from '../../codec'
 import { termOf } from '../../denote'
@@ -99,6 +100,15 @@ const constructed: Record<string, AnyCodec> = {
     setOfLiterals: set(string('A', 'B')),
     setOfBinary: set(binary),
     ofObjects: array(A),
+    open: object({ a: string }, [string, optional(number)]),
+    marks: object({
+        a: undefinable(string),
+        b: optional(boolean),
+        c: fill(number, 1),
+    }),
+    deep: object({
+        inner: object({ list: array(string('A', 'B')), tags: set(string) }),
+    }),
     ofTagged: array(discriminatedUnion('kind', [A, B])),
     ofMulti: list(mdunion(['kind'], [A, B])),
     setOfRefined: set(refine(string, (s): s is string => s.length > 1)),
@@ -136,7 +146,14 @@ describe('a codec of a constructor and the codec of its term agree', () => {
         })
     }
 
-    for (const name of ['object', 'objects', 'tagged', 'inObject']) {
+    for (const name of [
+        'object',
+        'objects',
+        'tagged',
+        'inObject',
+        'open',
+        'marks',
+    ]) {
         it(`${name}: the item reading agrees on each drawn value`, () => {
             const codec = constructed[name] as AnyCodec
             const rebuilt = codecOfTerm(
@@ -276,5 +293,22 @@ describe('a codec of a constructor and the codec of its term agree', () => {
             def: string.def,
         }
         expect(() => array(bare as never)).toThrow(/carries none/)
+    })
+
+    it('an object with a field that nothing fills is refused with one text', () => {
+        const constructed = refusal(() =>
+            // @ts-expect-error a field at `never` is refused in the type too
+            object({ a: never }),
+        )
+        const term = refusal(() =>
+            codecOfTerm({
+                kind: 'object',
+                body: {
+                    fields: { a: { mark: 'req', t: { kind: 'never' } } },
+                },
+            }),
+        )
+        expect(constructed).toMatch(/'a' is declared at `never`/)
+        expect(constructed).toBe(term)
     })
 })

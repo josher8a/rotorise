@@ -9,8 +9,18 @@ import type {
     Marks,
     ObjectSlot,
 } from './build'
-import { codecOfTerm } from './capabilities'
-import { defOf, pairOfCodec, termOf } from './denote'
+import { codecOfPair } from './capabilities'
+import type { Pair } from './denote'
+import {
+    bodySem,
+    defOf,
+    judgedBy,
+    judgeObject,
+    objectPair,
+    pairOfCodec,
+    seedItemPair,
+    termOf,
+} from './denote'
 import type {
     AnyObjectEntry,
     DerivedItem,
@@ -31,7 +41,7 @@ import type {
     UndefinableCodec,
     UnionCodec,
 } from './scope'
-import type { Body, Field, optionsMarker, TermMark, TermOf } from './term'
+import type { Body, Field, optionsMarker, Term, TermMark, TermOf } from './term'
 import { pairSlot, pinnedValue, resolvedTerm, storedPin } from './term'
 
 /* ── the readers ──────────────────────────────────────────────────────────────────────── */
@@ -152,6 +162,13 @@ export const undefinable = <const C extends AnyCodec>(
     }) as unknown as UndefinableCodec<Decoded<C>, AttributeOf<C>, C>
 
 /**
+ * The codec that a slot holds. A marked slot is `{ codec, def }` at run time, and its type names
+ * `def` alone, because `def` is all that a reader of the type needs, so the read casts once here.
+ */
+const codecOfSlot = (slot: ObjectSlot): AnyCodec =>
+    'codec' in slot ? (slot.codec as AnyCodec) : (slot as AnyCodec)
+
+/**
  * Declares how an entity is stored, once, in both directions.
  *
  * The spec is the declaration, and the entity is derived from it. Nothing has to be named twice, and
@@ -197,6 +214,9 @@ export const objectFromMap = <
     // not: whether a fill value has to be copied per read, a fact about this runtime and not about
     // the declaration.
     const fields: Record<string, Field> = {}
+    // the pair of each child codec, by the term of the child: the body is composed from these, and
+    // reads no term
+    const pairs = new Map<Term, Pair>()
     const declaredSpec = spec as unknown as Record<string, ObjectSlot>
     for (const name in declaredSpec) {
         if (isEmptyName(name)) {
@@ -204,17 +224,34 @@ export const objectFromMap = <
                 `the object declares the field '${name}', which has no character in its name: ${emptyNameReason}`,
             )
         }
-        setOwn(fields, name, fieldOf(declaredSpec[name] as ObjectSlot))
+        const slot = declaredSpec[name] as ObjectSlot
+        const field = fieldOf(slot)
+        setOwn(fields, name, field)
+        pairs.set(field.t, pairOfCodec(codecOfSlot(slot)))
     }
 
+    const restTerm = rest === undefined ? undefined : termOf(rest)
+    if (rest !== undefined && restTerm !== undefined)
+        pairs.set(restTerm, pairOfCodec(rest))
     const declaredBody: Body =
-        rest === undefined ? { fields } : { fields, rest: termOf(rest) }
+        restTerm === undefined ? { fields } : { fields, rest: restTerm }
     const itemDef = { kind: 'object', body: declaredBody } as const
     // the judgment of the node runs before the item pair is built
-    const nested = codecOfTerm(itemDef) as unknown as AttributeCodec<
+    judgedBy(itemDef, judgeObject(itemDef))
+    const body = bodySem(declaredBody, (child) => {
+        const found = pairs.get(child)
+        if (found === undefined) {
+            throw new CodecError(
+                'an object field has no pair: the field was declared with a codec that this object did not read',
+            )
+        }
+        return found
+    })
+    seedItemPair(itemDef, body)
+    const nested = codecOfPair<
         DerivedItem<Spec, Rest>,
         M<EncodedBy<Spec, Rest>>
-    >
+    >(itemDef, objectPair(body))
     // the `M` is what this codec writes; `item` is the same two directions with the wrapper taken
     // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
     // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
