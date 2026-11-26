@@ -23,7 +23,6 @@ import { codecOfTerm, slotsOf } from './capabilities'
 import type { ItemTerm } from './denote'
 import { byTagSem, guard, itemSem, judged, membersOf, termOf } from './denote'
 import type { AnyObjectCodec, ItemOf, KnownKeys, SpecsOf } from './derivedItem'
-import { keySets } from './derivedItem'
 import type { DecodeTerm, ScopeWallCycle } from './pathModel'
 import { checkFill } from './prisms'
 import type { ArrayOver, ListCodec, SpreadOver } from './products'
@@ -362,16 +361,10 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
             )
     // **A scope closes a copy.** Each `ref` of the copy is bound in `record`, and no slot that a
     // caller holds changes. So a scope reads its own arguments only, and a fragment stays open.
-    // The key set of a dissection is the one fact that the term does not carry, so the copy of a
-    // dissection takes the key set of the node that it replaces
     const record: Record<string, Term> = {}
     const [close, copies] = closedCopy(record)
     for (const [name, t] of Object.entries(terms))
         setOwn(record, name, close(t))
-    for (const [was, copy] of copies) {
-        const ks = keySets.get(was)
-        if (ks !== undefined) keySets.set(copy, ks)
-    }
     // The refusal of the guard carries the term of the entry, so a checker states the model's
     // guard on that term. Then each copy is judged one time, with each name bound
     for (const [name, t] of Object.entries(record)) {
@@ -383,9 +376,8 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
         if (copy.kind === 'object')
             for (const f of Object.values(copy.body.fields))
                 if (f.mark === 'fill') checkFill(codecOfTerm(f.t), f.v)
-        const ks = keySets.get(copy)
-        if (ks !== undefined && copy.kind === 'union')
-            dissectionOf(copy, ks).resolution()
+        if (copy.kind === 'union' && copy.keys !== undefined)
+            dissectionOf(copy, copy.keys).resolution()
     }
     // **An entry is the codec of its closed term.** An entry that reaches no free name is the
     // codec that the caller declared. An object entry reads its spec and its open block from the

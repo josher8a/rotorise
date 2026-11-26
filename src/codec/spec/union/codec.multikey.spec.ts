@@ -2,7 +2,7 @@
  * The multi-key `dunion`: a dissection is a key set and a set of members, and a member carries one
  * tag per key.
  *
- * `discriminatedUnion` builds one at any arity, and `discriminatedUnion` is `discriminatedUnion` at one key. The term
+ * `discriminatedUnion` builds one at any arity, and a bare key is a key set of one. The term
  * it builds is a `Term.union` of objects; the tag table is the builder's own index, and each test
  * below names one rule that index needs.
  */

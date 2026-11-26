@@ -10,7 +10,7 @@ import type {
     DerivedVariants,
     VariantOf,
 } from './derivedItem'
-import { entryCodec, keySets } from './derivedItem'
+import { entryCodec } from './derivedItem'
 import type { UnionKeys } from './frontier'
 import { objectFromMap } from './objects'
 import type { DecodeTerm, NodeOf, Norm, OpenT, Same } from './pathModel'
@@ -1494,7 +1494,7 @@ export const sliced = (
     const open = openRefusal(t)
     if (open) throw open
     const options = t.options.map((option) => codecOfTerm(option))
-    const ks = keySets.get(t)
+    const ks = t.keys
     return ks
         ? slicedDissection(ks, options, pattern, keep)
         : slicedUnion(options, pattern, keep)

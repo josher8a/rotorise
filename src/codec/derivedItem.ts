@@ -9,7 +9,7 @@ import type {
 } from './build'
 import { defOf } from './denote'
 import type { Norm } from './pathModel'
-import type { Field, Itemable, OfParts, Term } from './term'
+import type { Field, Itemable, OfParts } from './term'
 
 // ── items ───────────────────────────────────────────────────────────
 
@@ -57,12 +57,6 @@ export const fieldOf = (declared: ObjectSlot): Field => {
     const def = defOf(declared)
     return 'mark' in def ? def : { mark: 'req', t: def }
 }
-
-/**
- * **The key set of each dissection**, keyed by the term. The term of a dissection is a `union`
- * term, and only the builder holds the key set: the one fact of a reading that the term lacks.
- */
-export const keySets = new WeakMap<Term, readonly string[]>()
 
 export type ObjectEntry<
     Key extends string = string,

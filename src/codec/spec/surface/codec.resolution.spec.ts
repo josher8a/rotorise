@@ -113,7 +113,9 @@ describe('a meet reads the node that each factor names', () => {
             ]),
             object({ n: decimal }),
         )
-        expect(merged.def).toEqual(plain.def)
+        // each variant meets the pattern in one option, so the meet is a dissection at the same keys
+        // and the join of the same options is that term without the key set
+        expect(merged.def).toEqual({ ...plain.def, keys: ['kind'] })
         const written: {
             readonly kind: 'b'
             readonly y: boolean

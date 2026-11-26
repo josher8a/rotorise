@@ -38,7 +38,6 @@ import type {
     SpecsOf,
     TagIntersection,
 } from './derivedItem'
-import { keySets } from './derivedItem'
 import type { DecodeTerm, OwnsNull } from './pathModel'
 import { nullValue } from './prisms'
 import type { Result } from './result'
@@ -50,7 +49,7 @@ import type {
     Reading,
     UnionCodec,
 } from './scope'
-import { dissectionOf, itemMark, objectItem, objectNamed } from './scope'
+import { dissectionOf, itemMark, objectItem } from './scope'
 import type {
     BaseT,
     FreeTerm,
@@ -280,7 +279,7 @@ export const readingOf = (t: Term): Reading | undefined => {
 
 /** The whole-item reading of a union node: a dissection where a key set indexes it. */
 const unionReadingOf = (node: Extract<Term, { kind: 'union' }>): Reading => {
-    const ks = keySets.get(node)
+    const ks = node.keys
     return ks ? dissectionOf(node, ks).self : unionOf(node)
 }
 
@@ -425,6 +424,16 @@ export type Tagged<T, D extends string = keyof T & string, Spec = unknown> = {
 }
 
 /**
+ * **An option that the index of a dissection can hold**: an object node, or a `ref` that a scope
+ * binds and the index reads on the closed copy. `dissect` refuses any other option, and `meet` reads
+ * the same rule to choose between a dissection and a join.
+ */
+export const indexable = (option: AnyCodec): boolean => {
+    const node = resolvedTerm(termOf(option))
+    return node?.kind === 'object' || node?.kind === 'ref'
+}
+
+/**
  * How an entity that is a union of objects is stored.
  *
  * **Discriminated, not a bare `oneOf`.** Trying each member until one parses is ambiguous, order-
@@ -459,8 +468,7 @@ export const dissect = <T extends Record<string, unknown>>(
     // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
     // that no scope binds is read by the scope, where the index reads the node of the closed copy
     for (const option of options) {
-        const node = resolvedTerm(termOf(option as unknown as AnyCodec))
-        if (node?.kind !== 'ref' && !(node && objectNamed(node))) {
+        if (!indexable(option as unknown as AnyCodec)) {
             throw new CodecError(
                 'every option must be an object codec, and one of them is not',
             )
@@ -478,9 +486,7 @@ export const dissect = <T extends Record<string, unknown>>(
     const memberTerms = options.map((option) =>
         termOf(option as unknown as AnyCodec),
     )
-    const unionDef = { kind: 'union', options: memberTerms } as const
-
-    keySets.set(unionDef, ks)
+    const unionDef = { kind: 'union', options: memberTerms, keys: ks } as const
     // **A tag that a member reads through an unbound `ref` is indexed by the scope**, on the closed
     // copy, because the index reads the literal of each tag through the `ref`
     if (unboundRefs(memberTerms).size === 0)

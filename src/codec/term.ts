@@ -297,7 +297,17 @@ export type Term =
      */
     | { readonly kind: 'opaq' }
     | { readonly kind: 'object'; readonly body: Body }
-    | { readonly kind: 'union'; readonly options: readonly Term[] }
+    | {
+          readonly kind: 'union'
+          readonly options: readonly Term[]
+          /**
+           * The key set of a dissection: the host index of a sum that `viewsDisjoint` certifies,
+           * and no second sum. `Term.union` of the model has no key set, because the model reads a
+           * dissection as the union of its members, so the emit prints the options and no key.
+           * A copy of the term keeps the key set, so a dissection stays a dissection.
+           */
+          readonly keys?: readonly string[]
+      }
     /**
      * The bottom: the term that admits no value.
      *
@@ -1186,7 +1196,7 @@ export const mapChildren = (
             }
         }
         case 'union':
-            return { kind: 'union', options: t.options.map(view) }
+            return { ...t, options: t.options.map(view) }
         case 'set':
             return { kind: 'set', elem: view(t.elem) }
         case 'held':

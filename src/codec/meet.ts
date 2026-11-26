@@ -45,7 +45,7 @@ import {
     blockOf,
     walkAt,
 } from './separation'
-import { union } from './sums'
+import { dissect, indexable, union } from './sums'
 import type {
     elementMarker,
     Field,
@@ -900,6 +900,12 @@ export const meetOfTwo = (
     }
 }
 
+/** The key set of a factor that is a dissection, read through its `ref`s. */
+const keysOf = (factor: AnyCodec): readonly string[] | undefined => {
+    const node = resolvedTerm(termOf(factor))
+    return node?.kind === 'union' ? node.keys : undefined
+}
+
 /**
  * A union distributes, outer over the options of the first factor, and two parts meet. **A factor
  * that lies below the other is the meet**, at the readings of the walk, so the walk distributes a
@@ -930,17 +936,44 @@ export const meetFactors = (
     const readSecond = readAs(termOf(second), walk.readings[1])
     if (below(readFirst, readSecond, walk.order)) return first
     if (below(readSecond, readFirst, walk.order)) return second
-    const meets = lefts.flatMap((left) =>
-        rights.flatMap((right) => {
+    // the distribution as a grid: a row for each option of the first factor, a column for each option
+    // of the second, and a cell holds the meet of the two options, or nothing where it is `never`
+    const grid = lefts.map((left) =>
+        rights.map((right) => {
             const one = meetOfTwo(left, right, walk)
-            return resolvedTerm(termOf(one))?.kind === 'never' ? [] : [one]
+            return resolvedTerm(termOf(one))?.kind === 'never' ? undefined : one
         }),
     )
-    // one meet needs no union around it; several are one flat union, built through `union`
-    // itself so `agrees` runs over the meets
+    const meets = grid.flat().filter((one) => one !== undefined)
+    // one meet needs no union around it. Several are one flat union, built through `union` itself
+    // so `agrees` runs over the meets
     const [only] = meets
     if (only === undefined) return never
-    return meets.length === 1 ? only : union(meets)
+    if (meets.length === 1) return only
+    // **A dissection factor keeps its key set exactly where each of its options gives at most one
+    // option of the result**: the index needs one result option for each assignment. A result option
+    // lies below one option of each factor, so it names a literal at every key of each factor that
+    // is a dissection, and the count of a row or of a column is the whole condition
+    const atMostOne = (cells: readonly unknown[][]) =>
+        cells.every((cell) => cell.length <= 1)
+    const keptFirst = atMostOne(
+        grid.map((row) => row.filter((one) => one !== undefined)),
+    )
+        ? keysOf(first)
+        : undefined
+    const keptSecond = atMostOne(
+        rights.map((_, at) =>
+            grid.map((row) => row[at]).filter((one) => one !== undefined),
+        ),
+    )
+        ? keysOf(second)
+        : undefined
+    // a dissection holds objects, so a result option that is a union, a refinement or any other term
+    // leaves the join: `dissect` reads each option as an object, or as a `ref` that a scope binds
+    const keys = meets.every(indexable)
+        ? [...new Set([...(keptFirst ?? []), ...(keptSecond ?? [])])]
+        : []
+    return keys.length === 0 ? union(meets) : dissect(keys, meets)
 }
 
 /**
