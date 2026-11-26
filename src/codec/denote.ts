@@ -1730,16 +1730,7 @@ export const denote = (def: Term): Pair => {
          * empty. A refusal in both directions and a value rather than a throw, as every other row.
          */
         case 'never':
-            return {
-                encode: () =>
-                    new CodecError(
-                        '`never` admits no value, so there is nothing to write through it',
-                    ),
-                decode: () =>
-                    new CodecError(
-                        '`never` admits no value, so no stored attribute reads back through it',
-                    ),
-            }
+            return neverPair
         /**
          * The rule `(opaque)`: the recursive union of everything self-identifying, and total: a number
          * is a `DynamoNumber`. The two numeric policies are `held` over this row. `lawful_opaq` is the lemma, and it is a *theorem* rather
@@ -1794,16 +1785,7 @@ export const denote = (def: Term): Pair => {
          * the same reason.
          */
         case 'null':
-            return {
-                encode: (value) =>
-                    value === null
-                        ? carrying('NULL', true)
-                        : new CodecError(
-                              `${describeShape(value)} is not null, and this codec holds nothing else`,
-                          ),
-                decode: (attribute) =>
-                    andThen(expect('NULL', attribute), () => null),
-            }
+            return nullPair
     }
 }
 
@@ -1969,6 +1951,29 @@ export const judgeUnion = (
                     `${describeOf(x)} and ${describeOf(y)} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
                 )
     return undefined
+}
+
+/** The pair of the `NULL` point: the one value `null`. */
+export const nullPair: Pair = {
+    encode: (value) =>
+        value === null
+            ? carrying('NULL', true)
+            : new CodecError(
+                  `${describeShape(value)} is not null, and this codec holds nothing else`,
+              ),
+    decode: (attribute) => andThen(expect('NULL', attribute), () => null),
+}
+
+/** The pair of the bottom: a refusal in both directions. */
+export const neverPair: Pair = {
+    encode: () =>
+        new CodecError(
+            '`never` admits no value, so there is nothing to write through it',
+        ),
+    decode: () =>
+        new CodecError(
+            '`never` admits no value, so no stored attribute reads back through it',
+        ),
 }
 
 /** The pair of a `held`: the pair of the inner term, through the adapter that the term carries. */

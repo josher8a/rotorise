@@ -15,12 +15,19 @@ import {
     asJsNumber,
     codecOfGround,
     codecOfPair,
-    codecOfTerm,
     literalCapability,
     numericAdapter,
     storedOnly,
 } from './capabilities'
-import { groundOf, judgedBy, pairOfCodec, refinePair, termOf } from './denote'
+import {
+    groundOf,
+    judgedBy,
+    neverPair,
+    nullPair,
+    pairOfCodec,
+    refinePair,
+    termOf,
+} from './denote'
 import type { IsUnion } from './derivedItem'
 import { CodecError } from './result'
 import type {
@@ -305,9 +312,10 @@ export const boolean: BooleanCodec = /* @__PURE__ */ codecOfGround(
  * so `literal .null` can say nothing this codec does not already say.
  */
 export const nullValue: AttributeCodec<null, Attribute<'NULL'>> &
-    TermMark<BaseT<'null'>> = /* @__PURE__ */ codecOfTerm({
-    kind: 'null',
-})
+    TermMark<BaseT<'null'>> = /* @__PURE__ */ codecOfPair(
+    { kind: 'null' },
+    nullPair,
+) as never
 
 /**
  * Binary, as `B`.
@@ -522,4 +530,4 @@ export type LibraryInner<N> = N extends [
  * (`Closed.pairwiseCompat_never_left`, `Closed.pairwiseCompat_never_right`), so `union([X, never])` is `X`.
  */
 export const never: AttributeCodec<never, never> & TermMark<['never']> =
-    /* @__PURE__ */ codecOfTerm<never, never>({ kind: 'never' })
+    /* @__PURE__ */ codecOfPair<never, never>({ kind: 'never' }, neverPair)

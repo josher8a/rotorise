@@ -26,6 +26,7 @@ import {
     mdunion,
     never,
     nullable,
+    nullValue,
     number,
     object,
     optional,
@@ -118,6 +119,7 @@ const constructed: Record<string, AnyCodec> = {
     nested: array(array(number)),
     object: object({ a: string, b: optional(number), c: fill(string, 'z') }),
     nullable: nullable(string),
+    nullValue,
     refined: refine(string, (s): s is string => s.length > 1),
     held: held(string, string, {
         encode: (s: string) => s.toUpperCase(),
@@ -351,5 +353,26 @@ describe('a codec of a constructor and the codec of its term agree', () => {
         expect(item(outer as never).decode(stored.M as never)).toEqual(
             item(rebuilt as never).decode(stored.M as never),
         )
+    })
+
+    it('never refuses each write and each read with one text on the two routes', () => {
+        const rebuilt = codecOfTerm({ kind: 'never' }) as AnyCodec
+        const text = (r: unknown): unknown =>
+            r instanceof Error ? r.message : r
+        expect(text(never.encode(1 as never))).toMatch(
+            /`never` admits no value/,
+        )
+        expect(text(never.encode(1 as never))).toBe(
+            text(rebuilt.encode(1 as never)),
+        )
+        expect(text(never.decode({ S: 'a' } as never))).toBe(
+            text(rebuilt.decode({ S: 'a' } as never)),
+        )
+    })
+
+    it('nullValue writes null as NULL and refuses another value', () => {
+        expect(nullValue.encode(null)).toEqual({ NULL: true })
+        expect(nullValue.decode({ NULL: true })).toBeNull()
+        expect(nullValue.encode('x' as never)).toBeInstanceOf(Error)
     })
 })
