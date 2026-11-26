@@ -142,7 +142,9 @@ describe('tableEntry has the same pair', () => {
     const Pets = tableEntry<Pet>()(
         { PK: ['TAG', 'id'] },
         {
-            codec: { TAG: string('PET'), id: string, name: string },
+            codec: item(
+                object({ TAG: string('PET'), id: string, name: string }),
+            ),
         },
     )
 

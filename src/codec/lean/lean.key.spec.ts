@@ -18,7 +18,15 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../attribute'
-import { CodecError, decimal, number, object, optional, string } from '../codec'
+import {
+    CodecError,
+    decimal,
+    item as itemCodecOf,
+    number,
+    object,
+    optional,
+    string,
+} from '../codec'
 import {
     type AttrText,
     type ConditionOutcome,
@@ -1275,13 +1283,15 @@ type ItemSpec = {
 const itemSpecs: readonly ItemSpec[] = [
     {
         name: 'all',
-        codec: {
-            petId: string,
-            nick: string,
-            age: number,
-            weight: decimal,
-            owner: object({ age: number }),
-        },
+        codec: itemCodecOf(
+            object({
+                petId: string,
+                nick: string,
+                age: number,
+                weight: decimal,
+                owner: object({ age: number }),
+            }),
+        ),
         keys: [
             { name: 'PK', numeric: false, spec: ['petId'] },
             { name: 'GSI1SK', numeric: true, spec: 'age' },
@@ -1294,7 +1304,7 @@ const itemSpecs: readonly ItemSpec[] = [
     },
     {
         name: 'composite',
-        codec: { petId: string, nick: optional(string) },
+        codec: itemCodecOf(object({ petId: string, nick: optional(string) })),
         keys: [
             { name: 'PK', numeric: false, spec: ['petId'] },
             { name: 'GSI1SK', numeric: false, spec: ['petId', 'nick'] },
@@ -1302,11 +1312,13 @@ const itemSpecs: readonly ItemSpec[] = [
     },
     {
         name: 'owners',
-        codec: {
-            petId: string,
-            'owner.name': string,
-            owner: object({ name: string }),
-        },
+        codec: itemCodecOf(
+            object({
+                petId: string,
+                'owner.name': string,
+                owner: object({ name: string }),
+            }),
+        ),
         keys: [
             { name: 'PK', numeric: false, spec: ['petId'] },
             { name: 'GSI1SK', numeric: false, spec: ['petId', 'owner.name'] },
@@ -1315,7 +1327,9 @@ const itemSpecs: readonly ItemSpec[] = [
     },
     {
         name: 'sparse',
-        codec: { petId: string, nick: optional(string), age: number },
+        codec: itemCodecOf(
+            object({ petId: string, nick: optional(string), age: number }),
+        ),
         keys: [
             { name: 'PK', numeric: false, spec: ['petId'] },
             { name: 'GSI1SK', numeric: false, spec: 'nick' },

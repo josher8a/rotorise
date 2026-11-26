@@ -341,7 +341,7 @@ add({
             codec: 'record',
             schema: "{ PK: ['petId'], SK: ['shelterId', 'name'] }",
             options:
-                "{ key: { partition: 'PK', sort: 'SK' }, codec: { petId: string, shelterId: string, name: string, note: optional(string) } }",
+                "{ key: { partition: 'PK', sort: 'SK' }, codec: item(object({ petId: string, shelterId: string, name: string, note: optional(string) })) }",
             items: ['ok', 'nonote', 'blank', 'sep'],
             args: ['ok', 'blank', 'none'],
             refused: ['none'],
@@ -844,7 +844,7 @@ add({
             codec: 'record',
             schema: "{ PK: ['id'], SK: ['meta.note'] }",
             options:
-                '{ codec: { id: string, meta: nullable(object({ note: string })) } }',
+                '{ codec: item(object({ id: string, meta: nullable(object({ note: string })) })) }',
             keys: ['SK'],
             keyArgs: ['noted', 'nulled'],
             configs: ['none'],
@@ -1153,7 +1153,7 @@ const armDraws = (): void => {
                 options:
                     c === 'none'
                         ? undefined
-                        : `{ codec: { petId: string, status: string('IN', 'OUT'), kennel: string${arm.codec} } }`,
+                        : `{ codec: item(object({ petId: string, status: string('IN', 'OUT'), kennel: string${arm.codec} })) }`,
                 keys: ['SK'],
                 keyArgs: litItems,
                 configs: ['none'],

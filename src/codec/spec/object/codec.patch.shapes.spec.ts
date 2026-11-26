@@ -38,16 +38,18 @@ describe('shipments', () => {
             GSI2SK: ['TAG', 'vendorShipmentId'],
         },
         {
-            codec: {
-                TAG: string('SHIPMENT'),
-                userId: string,
-                shipmentId: string,
-                status: string('PENDING', 'SETTLED'),
-                createdAt: string,
-                provider: string,
-                vendorShipmentId: string,
-                amount: string,
-            },
+            codec: item(
+                object({
+                    TAG: string('SHIPMENT'),
+                    userId: string,
+                    shipmentId: string,
+                    status: string('PENDING', 'SETTLED'),
+                    createdAt: string,
+                    provider: string,
+                    vendorShipmentId: string,
+                    amount: string,
+                }),
+            ),
         },
     )
 
@@ -275,12 +277,14 @@ describe('a discriminator that the codec decides', () => {
             SK: ['userId'],
         },
         {
-            codec: {
-                TAG: string('EMAIL'),
-                userId: string,
-                email: string,
-                phone: string,
-            },
+            codec: item(
+                object({
+                    TAG: string('EMAIL'),
+                    userId: string,
+                    email: string,
+                    phone: string,
+                }),
+            ),
         },
     )
 
@@ -308,12 +312,14 @@ describe('a discriminator that the codec decides', () => {
                 },
             },
             {
-                codec: {
-                    TAG: string('EMAIL'),
-                    userId: string,
-                    email: string,
-                    phone: string,
-                },
+                codec: item(
+                    object({
+                        TAG: string('EMAIL'),
+                        userId: string,
+                        email: string,
+                        phone: string,
+                    }),
+                ),
             },
         )
         expect(Wider.unsafeKeyUpdates({ email: 'a@b' })).toEqual({
@@ -328,7 +334,13 @@ describe('a single-key table', () => {
     const Otps = tableEntry<Otp>()(
         { PK: ['otpIdentifier'], SK: ['otpIdentifier'] },
         {
-            codec: { otpIdentifier: string, code: string, attempts: number },
+            codec: item(
+                object({
+                    otpIdentifier: string,
+                    code: string,
+                    attempts: number,
+                }),
+            ),
         },
     )
 
@@ -357,12 +369,14 @@ describe('a literal decides a component only when it admits one value', () => {
             GSI2PK: ['kind', 'label'],
         },
         {
-            codec: {
-                TAG: string('ROW'),
-                kind: string('A', 'B'),
-                id: string,
-                label: string,
-            },
+            codec: item(
+                object({
+                    TAG: string('ROW'),
+                    kind: string('A', 'B'),
+                    id: string,
+                    label: string,
+                }),
+            ),
         },
     )
 
@@ -405,7 +419,9 @@ describe('a constant is only ever as good as the codec that claims it', () => {
                 { PK: ['id'], GSI1PK: ['TAG', 'label'] },
                 {
                     // @ts-expect-error one map describes one variant and mis-describes the rest
-                    codec: { TAG: string('A'), id: string, label: string },
+                    codec: item(
+                        object({ TAG: string('A'), id: string, label: string }),
+                    ),
                 },
             )
         expect(typeof _single).toBe('function')
@@ -422,11 +438,13 @@ describe('a constant is only ever as good as the codec that claims it', () => {
         const Rows = tableEntry<Row>()(
             { PK: ['id'], GSI1PK: ['TAG', 'label'] },
             {
-                codec: {
-                    TAG: string('A'),
-                    id: string,
-                    label: string,
-                } as never,
+                codec: item(
+                    object({
+                        TAG: string('A'),
+                        id: string,
+                        label: string,
+                    }),
+                ) as never,
             },
         )
         const b: Row = { TAG: 'B', id: 'i', label: 'l' }

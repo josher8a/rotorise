@@ -186,7 +186,7 @@ describe('a discriminator that holds null', () => {
 describe('a key named __proto__', () => {
     const Pets = tableEntry<{ petId: string }>()(
         { PK: ['petId'], ['__proto__']: ['petId'] } as never,
-        { codec: { petId: string } } as never,
+        { codec: item(object({ petId: string })) } as never,
     ) as unknown as {
         toEntry: (item: object) => Record<string, unknown> | CodecError
         unsafeToEntry: (item: object) => Record<string, unknown>
@@ -206,7 +206,7 @@ describe('a key named __proto__', () => {
 describe('a row that a closed entry wrote', () => {
     const Pets = tableEntry<{ petId: string }>()(
         { PK: ['petId'] },
-        { codec: { petId: string } },
+        { codec: item(object({ petId: string })) },
     ) as unknown as {
         unsafeToItem: (item: object) => Record<string, unknown>
         fromItem: (row: object) => unknown
@@ -230,7 +230,7 @@ describe('an entity that holds the name of a key', () => {
         },
     } as never
     const closed = tableEntry<Pet>()(keys, {
-        codec: { petId: string, status: string },
+        codec: item(object({ petId: string, status: string })),
     } as never) as unknown as {
         toItem: (item: object) => unknown
         toEntry: (item: object) => Record<string, unknown> | CodecError

@@ -88,7 +88,7 @@ export const Families = scope({ Family: object({ name: string, children: optiona
 export const { Family } = Families
 export const CodedPets = tableEntry<{ petId: string; name: string }>()(
     { PK: ['petId'], GSI1SK: 'name' },
-    { codec: { petId: string, name: string }, key: { partition: 'PK' } },
+    { codec: item(object({ petId: string, name: string })), key: { partition: 'PK' } },
 )
 export const TaggedPets = tableEntry<PetRow>()(
     { PK: ['petId'], SK: { discriminator: 'kind', spec: { DOG: ['ownerId'], CAT: null } } },
@@ -262,7 +262,7 @@ export const TaggedPins = {
 // the form of `keyCondition` with the name of an index
 export const IndexedPets = tableEntry<{ petId: string; name: string }>()(
     { PK: ['petId'], GSI1PK: 'name' },
-    { codec: { petId: string, name: string }, key: { partition: 'PK' }, indexes: { GSI1: { partition: 'GSI1PK' } } },
+    { codec: item(object({ petId: string, name: string })), key: { partition: 'PK' }, indexes: { GSI1: { partition: 'GSI1PK' } } },
 )
 export const IndexedCondition = IndexedPets.keyCondition('GSI1', { name: 'Rex' })
 

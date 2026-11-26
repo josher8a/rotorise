@@ -4,6 +4,7 @@ import { floor } from './attestPin'
 import {
     array,
     held,
+    item as itemOf,
     never,
     nullable,
     object,
@@ -154,10 +155,12 @@ describe('a path that the type does not see', () => {
                 // @ts-expect-error the type does not see below nullable
                 { PK: ['id'], GSI1SK: 'meta.note' },
                 {
-                    codec: {
-                        id: string,
-                        meta: nullable(object({ note: string })),
-                    },
+                    codec: itemOf(
+                        object({
+                            id: string,
+                            meta: nullable(object({ note: string })),
+                        }),
+                    ),
                 },
             ),
         ).type.errors.snap(
@@ -174,10 +177,12 @@ describe('a path that the type does not see', () => {
                     GSI1SK: ['meta.note'],
                 },
                 {
-                    codec: {
-                        id: string,
-                        meta: union([object({ note: string }), string]),
-                    },
+                    codec: itemOf(
+                        object({
+                            id: string,
+                            meta: union([object({ note: string }), string]),
+                        }),
+                    ),
                 },
             ),
         ).type.errors.snap(
@@ -217,7 +222,7 @@ describe('a path that the type does not see', () => {
                     // @ts-expect-error a list is none of S, N and B
                     GSI1SK: 'tags',
                 },
-                { codec: { id: string, tags: array(string) } },
+                { codec: itemOf(object({ id: string, tags: array(string) })) },
             ),
         ).type.errors.snap(
             "Type '\"tags\"' is not assignable to type '\"tags\" & ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'tags', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.Type 'string' is not assignable to type 'ErrorMessage<\"[tableEntry] 'GSI1SK' is built from 'tags', which is stored as none of S, N and B. A key attribute of DynamoDB is S, N or B\">'.",
@@ -275,6 +280,18 @@ describe('an entity that is a union', () => {
         )
     })
 
+    it('refuses a record of attributes where the entity is no union, because a record carries no reader of paths', () => {
+        attest(() =>
+            tableEntry<{ id: string }>()(
+                { PK: ['id'] },
+                // @ts-expect-error a record of attributes is no codec
+                { codec: { id: string } },
+            ),
+        ).type.errors.snap(
+            "Type '{ id: StringCodec; }' is not assignable to type '({ readonly id: StringCodec; } & ErrorMessage<\"[tableEntry] a record of attributes is no codec. Pass a codec that `item` builds, as item(object({ ... }))\">) | (Omit<...> & ... 1 more ... & Closed) | undefined'.Type '{ id: StringCodec; }' is not assignable to type '{ readonly id: StringCodec; } & ErrorMessage<\"[tableEntry] a record of attributes is no codec. Pass a codec that `item` builds, as item(object({ ... }))\">'.Property '[errorMessage]' is missing in type '{ id: StringCodec; }' but required in type 'ErrorMessage<\"[tableEntry] a record of attributes is no codec. Pass a codec that `item` builds, as item(object({ ... }))\">'.",
+        )
+    })
+
     it('refuses a key of a boolean attribute where the entry has no codec, because native stores no member for a boolean', () => {
         attest(() =>
             tableEntry<Housed | Kennelled>()({
@@ -298,10 +315,12 @@ describe('a key element that two rules refuse', () => {
                     SK: ['meta.note'],
                 },
                 {
-                    codec: {
-                        id: string,
-                        meta: nullable(object({ note: string })),
-                    },
+                    codec: itemOf(
+                        object({
+                            id: string,
+                            meta: nullable(object({ note: string })),
+                        }),
+                    ),
                 },
             ),
         ).type.errors.snap(

@@ -92,7 +92,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
 
     const Litters = tableEntry<Litter>()(
         { PK: ['litterId'], GSI1SK: 'weight' },
-        { codec: { litterId: string, weight: decimal } },
+        { codec: item(object({ litterId: string, weight: decimal })) },
     )
 
     it('writes N in toItem, where the codec writes a decimal as N', () => {
@@ -159,7 +159,7 @@ describe('the codec decides the member of a key of one top-level attribute', () 
                 // @ts-expect-error the codec writes BOOL at this field, and a boolean is no key
                 GSI1SK: 'weaned',
             },
-            { codec: { litterId: string, weaned: boolean } },
+            { codec: item(object({ litterId: string, weaned: boolean })) },
         )
     })
 

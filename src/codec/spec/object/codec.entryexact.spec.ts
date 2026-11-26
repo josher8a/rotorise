@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { number, optional, string } from '../../codec'
+import { item as itemOf, number, object, optional, string } from '../../codec'
 
 type Pet = { petId: string; age: number; nick?: string }
 const Pets = tableEntry<Pet>()({ PK: ['petId'], GSI1SK: 'age' })
@@ -25,7 +25,11 @@ const Visits = tableEntry<Visit>()({ PK: ['id'] })
 
 const Coded = tableEntry<Pet>()(
     { PK: ['petId'] },
-    { codec: { petId: string, age: number, nick: optional(string) } },
+    {
+        codec: itemOf(
+            object({ petId: string, age: number, nick: optional(string) }),
+        ),
+    },
 )
 
 type Dog = { kind: 'dog'; petId: string; bark: string }

@@ -6,7 +6,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
-import { number, string, union } from '../../codec'
+import { item as itemOf, number, object, string, union } from '../../codec'
 
 /** The entry, without the types that a cast would otherwise ask for. */
 const loose = (schema: unknown, options?: unknown) =>
@@ -15,7 +15,10 @@ const loose = (schema: unknown, options?: unknown) =>
 describe('a codec writes no key name', () => {
     it('refuses a codec that declares a name that the schema computes as a key, at construction', () => {
         const build = () =>
-            loose({ PK: ['petId'] }, { codec: { PK: string, petId: string } })
+            loose(
+                { PK: ['petId'] },
+                { codec: itemOf(object({ PK: string, petId: string })) },
+            )
         expect(build).toThrow(RotoriseError)
         expect(build).toThrow(
             /'PK' is a key of the schema and a field of the codec/,
@@ -27,7 +30,7 @@ describe('a codec writes no key name', () => {
             tableEntry<{ PK: string; petId: string }>()(
                 // @ts-expect-error the codec declares PK, which the schema computes
                 { PK: ['petId'] },
-                { codec: { PK: string, petId: string } },
+                { codec: itemOf(object({ PK: string, petId: string })) },
             ),
         ).toThrow(RotoriseError)
     })
@@ -38,7 +41,13 @@ describe('the codec decides a component, so no caller passes it', () => {
     const Pets = tableEntry<Pet>()(
         { PK: ['TAG', 'petId'], SK: ['TAG', 'createdAt'] },
         {
-            codec: { TAG: string('PET'), petId: string, createdAt: string },
+            codec: itemOf(
+                object({
+                    TAG: string('PET'),
+                    petId: string,
+                    createdAt: string,
+                }),
+            ),
             key: { partition: 'PK', sort: 'SK' },
         },
     )
@@ -194,7 +203,10 @@ describe('a key value has one owner of its rule', () => {
 describe('the label of a key attribute that stores two members', () => {
     it('names one field stored as more than one type, where one slot stores both', () => {
         const build = () =>
-            loose({ PK: 'id' }, { codec: { id: union([string, number]) } })
+            loose(
+                { PK: 'id' },
+                { codec: itemOf(object({ id: union([string, number]) })) },
+            )
         expect(build).toThrow(/stored as more than one type \(S and N\)/)
         expect(build).not.toThrow(/another variant/)
     })

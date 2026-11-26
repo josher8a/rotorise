@@ -201,7 +201,7 @@ describe('a key of one attribute at a path is the attribute that the codec write
     const entryOf = (v: unknown) =>
         route(
             { PK: ['litterId'], GSI1SK: 'body.v' },
-            { litterId: string, body: object({ v: v as never }) },
+            item(object({ litterId: string, body: object({ v: v as never }) })),
         )
 
     it('is N for a number, on each route, as the entry with no codec writes it', () => {

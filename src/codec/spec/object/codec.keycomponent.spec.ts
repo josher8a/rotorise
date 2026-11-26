@@ -138,7 +138,7 @@ describe('a key component with a codec', () => {
             tableEntry<{ id: string; tags: readonly string[] }>()(
                 // @ts-expect-error the codec writes the list as L, and a component is S or N
                 { PK: ['id'], SK: ['tags'] },
-                { codec: { id: string, tags: array(string) } },
+                { codec: item(object({ id: string, tags: array(string) })) },
             ),
         ).toThrow(/as a component/)
     })
@@ -152,7 +152,11 @@ describe('a key component with a codec', () => {
                     // @ts-expect-error a component is text or a number, and the codec writes B at the path
                     SK: ['tag.chip'],
                 },
-                { codec: { id: string, tag: object({ chip: binary }) } },
+                {
+                    codec: item(
+                        object({ id: string, tag: object({ chip: binary }) }),
+                    ),
+                },
             ),
         ).toThrow(/writes it as B/)
     })
@@ -166,7 +170,11 @@ describe('a key component with a codec', () => {
                     // @ts-expect-error a tag prints the stored value, so the codec must write S or N at the path
                     SK: [{ at: 'tag.chip', tag: 'CHIP' }],
                 },
-                { codec: { id: string, tag: object({ chip: binary }) } },
+                {
+                    codec: item(
+                        object({ id: string, tag: object({ chip: binary }) }),
+                    ),
+                },
             ),
         ).toThrow(/writes it as B/)
     })
@@ -183,7 +191,11 @@ describe('a key component with a codec', () => {
                     },
                 ],
             },
-            { codec: { id: string, tag: object({ chip: binary }) } },
+            {
+                codec: item(
+                    object({ id: string, tag: object({ chip: binary }) }),
+                ),
+            },
         )
         const pet = { id: 'p1', tag: { chip: new Uint8Array([1, 2, 3]) } }
         expect(Pets.unsafeKey('SK', pet)).toBe('CHIP#3')
@@ -193,7 +205,7 @@ describe('a key component with a codec', () => {
     it('accepts a component that the codec writes as S or N', () => {
         const Aged = tableEntry<{ id: string; age: number }>()(
             { PK: ['id'], SK: ['age'] },
-            { codec: { id: string, age: number } },
+            { codec: item(object({ id: string, age: number })) },
         )
         expect(Aged.unsafeKey('SK', { age: 3 })).toBe('AGE#3')
     })
@@ -202,10 +214,12 @@ describe('a key component with a codec', () => {
         const Held = tableEntry<Owner>()(
             { PK: ['id'], SK: ['owner.born'] },
             {
-                codec: {
-                    id: string,
-                    owner: object({ name: string, born: Born }),
-                },
+                codec: item(
+                    object({
+                        id: string,
+                        owner: object({ name: string, born: Born }),
+                    }),
+                ),
             },
         )
         const born = new Date(0)
@@ -231,14 +245,14 @@ describe('a key component with a codec', () => {
             tableEntry<Noted>()(
                 // @ts-expect-error a path cannot go into refine
                 { PK: ['id'], SK: ['meta.note'] },
-                { codec },
+                { codec: item(object(codec)) },
             ),
         ).toThrow(refused)
         expect(() =>
             tableEntry<Noted>()(
                 // @ts-expect-error a key of one attribute at a path is a component too, and a path cannot go into refine
                 { PK: ['id'], SK: 'meta.note' },
-                { codec },
+                { codec: item(object(codec)) },
             ),
         ).toThrow(refused)
     })
@@ -309,7 +323,7 @@ describe('a key component with a codec', () => {
             tableEntry<{ id: string; meta: { readonly note: string } }>()(
                 // @ts-expect-error a path cannot go into an adapter
                 { PK: ['id'], SK: ['meta.note'] },
-                { codec: { id: string, meta: wholeNote } },
+                { codec: item(object({ id: string, meta: wholeNote })) },
             ),
         ).toThrow(
             /'meta\.note' is a component of a key, and the codec cannot address that path.*a path cannot go into an adapter/,
@@ -323,10 +337,12 @@ describe('a key component with a codec', () => {
                 // @ts-expect-error the codec writes the map `site`, and a component is S or N
                 { PK: ['id'], SK: ['chip.site'] },
                 {
-                    codec: {
-                        id: string,
-                        chip: object({ site: object({ zone: string }) }),
-                    },
+                    codec: item(
+                        object({
+                            id: string,
+                            chip: object({ site: object({ zone: string }) }),
+                        }),
+                    ),
                 },
             ),
         ).toThrow(/as a component/)
@@ -352,11 +368,13 @@ describe('a key component with a codec', () => {
                     },
                 },
                 {
-                    codec: {
-                        id: string,
-                        kind: string('big', 'small'),
-                        tags: array(string),
-                    },
+                    codec: item(
+                        object({
+                            id: string,
+                            kind: string('big', 'small'),
+                            tags: array(string),
+                        }),
+                    ),
                 },
             ),
         ).toThrow(/as a component/)
@@ -393,7 +411,7 @@ describe('a name of a key that holds a dot is a path', () => {
         })
         const Coded = tableEntry<Kennel>()(
             { PK: ['petId'], GSI1SK: ['owner.name'] },
-            { codec: codecOf },
+            { codec: item(object(codecOf)) },
         )
         expect(None.unsafeToEntry(kennel).GSI1SK).toBe('NAME#bob')
         expect(Coded.unsafeToItem(kennel).GSI1SK).toEqual({ S: 'NAME#bob' })
@@ -406,7 +424,7 @@ describe('a name of a key that holds a dot is a path', () => {
         })
         const Coded = tableEntry<Kennel>()(
             { PK: ['petId'], GSI1SK: ['owner.name'] },
-            { codec: codecOf },
+            { codec: item(object(codecOf)) },
         )
         const bea = {
             set: { GSI1SK: { S: 'NAME#bea' } },
@@ -535,11 +553,13 @@ describe('a name of a key that holds a dot is a path', () => {
                     GSI1PK: 'owner.name',
                 },
                 {
-                    codec: {
-                        petId: string,
-                        'owner.name': optional(string),
-                        owner: Owner,
-                    },
+                    codec: item(
+                        object({
+                            petId: string,
+                            'owner.name': optional(string),
+                            owner: Owner,
+                        }),
+                    ),
                 },
             ),
         ).toThrow(/cannot address that path/)
@@ -598,7 +618,15 @@ describe('a name of a key that holds a dot is a path', () => {
         })
         const Coded = tableEntry<Housed>()(
             { PK: ['petId'], GSI1SK: ['owner'] },
-            { codec: { petId: string, owner: string, 'owner.name': number } },
+            {
+                codec: item(
+                    object({
+                        petId: string,
+                        owner: string,
+                        'owner.name': number,
+                    }),
+                ),
+            },
         )
         {
             // @ts-expect-error the change writes below 'owner', and the change lacks 'owner'
@@ -632,7 +660,11 @@ describe('a name of a key that holds a dot is a path', () => {
                     // @ts-expect-error a `.` in a key name is a path separator, as in DynamoDB
                     GSI1SK: ['owner.name'],
                 },
-                { codec: { petId: string, 'owner.name': string } },
+                {
+                    codec: item(
+                        object({ petId: string, 'owner.name': string }),
+                    ),
+                },
             ),
         ).toThrow(/a `\.` in a key name is a path separator, as in DynamoDB/)
     })
@@ -646,11 +678,13 @@ describe('a name of a key that holds a dot is a path', () => {
         const Pets = tableEntry<Decided>()(
             { PK: ['petId'], GSI1SK: ['owner.name'] },
             {
-                codec: {
-                    petId: string,
-                    'owner.name': string('x'),
-                    owner: object({ name: string }),
-                },
+                codec: item(
+                    object({
+                        petId: string,
+                        'owner.name': string('x'),
+                        owner: object({ name: string }),
+                    }),
+                ),
             },
         )
         expect(
@@ -675,10 +709,12 @@ describe('a name of a key that holds a dot is a path', () => {
                     SK: ['petId', 'owner.flag'],
                 },
                 {
-                    codec: {
-                        petId: string,
-                        owner: object({ flag: boolean }),
-                    },
+                    codec: item(
+                        object({
+                            petId: string,
+                            owner: object({ flag: boolean }),
+                        }),
+                    ),
                 },
             ),
         ).toThrow(/writes it as BOOL/)

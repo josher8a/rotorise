@@ -13,13 +13,17 @@ import {
     RotoriseError,
     tableEntry,
 } from '../../../Rotorise'
-import { string } from '../../codec'
+import { item as itemOf, object, string } from '../../codec'
 
 type User = { orgId: string; id: string; role: string; email: string }
 
 const Users = tableEntry<User>()(
     { PK: ['orgId', 'id'], SK: ['role'], GSI1PK: ['role'], GSI1SK: ['email'] },
-    { codec: { orgId: string, id: string, role: string, email: string } },
+    {
+        codec: itemOf(
+            object({ orgId: string, id: string, role: string, email: string }),
+        ),
+    },
 )
 
 const user: User = { orgId: 'acme', id: '1', role: 'admin', email: 'a@b.c' }

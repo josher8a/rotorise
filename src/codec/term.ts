@@ -1876,3 +1876,11 @@ export declare const writesMarker: unique symbol
  * readers. The slot is a property, so a spread keeps it.
  */
 export const locatedSlot = Symbol('located')
+
+/**
+ * **The readers of a path that an item codec carries, at run time only**: `at` and `reachAt`. The
+ * codec layer fills the slot where the item codec and the tagged codec are built, so `tableEntry`
+ * reads a path through the codec that the caller passes and imports no reader. A bundle that builds
+ * `tableEntry` and no codec then holds no interpreter. The slot is a property, so a spread keeps it.
+ */
+export const readSlot = Symbol('read')

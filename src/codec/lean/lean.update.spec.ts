@@ -18,7 +18,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CodecError, keyComponents, tableEntry } from '../../Rotorise'
-import { number, string } from '../codec'
+import { item, number, object, string } from '../codec'
 import {
     leanUpdateModule,
     type UpdateKey,
@@ -170,7 +170,7 @@ const entryOf = (schema: Schema): Host => {
         .filter((key) => key.ofTable)
         .map((key) => key.name)
     return make(keys, {
-        ...(schema.plain ? {} : { codec }),
+        ...(schema.plain ? {} : { codec: item(object(codec)) }),
         ...(partition === undefined ? {} : { key: { partition, sort } }),
     })
 }

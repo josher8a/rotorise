@@ -529,7 +529,7 @@ entry. Measured 2026-11-19 with `tsc --noEmit` on TypeScript 7 and `npx vitest -
 
     type Pet = { id: string; meta: { note: string } | null }
     tableEntry<Pet>()({ PK: ['id'], SK: ['meta.note'] },
-                      { codec: { id: string, meta: nullable(object({ note: string })) } })
+                      { codec: item(object({ id: string, meta: nullable(object({ note: string })) })) })
       type checker: refused at 'meta.note': the codec cannot address that path. A record with a
                     default for the component gives the same refusal
       runtime:      builds. toEntry gives the SK NOTE#n where meta is an object, and a CodecError,
@@ -816,10 +816,10 @@ a value that holds the names of two members. Measured 2026-11-19 with `npx vites
 src/codec/spec/object/codec.exactunion.spec.ts` and `tsc --noEmit` on TypeScript 7:
 
     type Plain = { petId: string; plain: { x: number } | { y: string } }
-    const Plains = tableEntry<Plain>()({ PK: ['petId'] }, { codec: {
+    const Plains = tableEntry<Plain>()({ PK: ['petId'] }, { codec: item(object({
         petId: string,
         plain: union([object({ x: number }), object({ y: string })]),
-    } })
+    })) })
 
     Plains.toEntry({ petId: 'p', plain: { x: 1, y: 's' } })
       type checker: builds

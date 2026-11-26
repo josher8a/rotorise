@@ -24,11 +24,13 @@ const Plain = tableEntry<Owned>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
 const Coded = tableEntry<Owned>()(
     { PK: ['petId'], GSI1PK: ['owner.name'] },
     {
-        codec: {
-            petId: string,
-            note: string,
-            owner: object({ name: string }),
-        },
+        codec: item(
+            object({
+                petId: string,
+                note: string,
+                owner: object({ name: string }),
+            }),
+        ),
     },
 )
 

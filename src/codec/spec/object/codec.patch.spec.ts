@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { number, optional, string } from '../../codec'
+import { item as itemOf, number, object, optional, string } from '../../codec'
 
 type Adoption = {
     adoptionId: string
@@ -38,14 +38,16 @@ const Adoption = tableEntry<Adoption>()(
         GSI3SK: ['adoptionId'],
     },
     {
-        codec: {
-            adoptionId: string,
-            userId: string,
-            status: string('DRAFT', 'READY', 'PACKING', 'CANCELED'),
-            updatedAt: string,
-            currentLegIndex: number,
-            adoptionGroupId: optional(string),
-        },
+        codec: itemOf(
+            object({
+                adoptionId: string,
+                userId: string,
+                status: string('DRAFT', 'READY', 'PACKING', 'CANCELED'),
+                updatedAt: string,
+                currentLegIndex: number,
+                adoptionGroupId: optional(string),
+            }),
+        ),
     },
 )
 

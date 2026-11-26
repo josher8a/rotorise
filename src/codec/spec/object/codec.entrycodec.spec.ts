@@ -29,7 +29,7 @@ const spec = {
 }
 const Coded = tableEntry<Pet>()(
     { PK: ['petId'], GSI1PK: ['owner.name'] },
-    { codec: spec },
+    { codec: item(object(spec)) },
 )
 const Plain = tableEntry<Pet>()({ PK: ['petId'], GSI1PK: ['owner.name'] })
 const pet: Pet = { petId: 'p', note: 'n', owner: { name: 'b', nick: 'k' } }

@@ -39,12 +39,14 @@ const AB = discriminatedUnion('kind', [
 const Pets = tableEntry<Pet>()(
     { PK: ['petId'] },
     {
-        codec: {
-            petId: string,
-            pet: AB,
-            mix: array(AB),
-            deep: object({ in: AB }),
-        },
+        codec: item(
+            object({
+                petId: string,
+                pet: AB,
+                mix: array(AB),
+                deep: object({ in: AB }),
+            }),
+        ),
     },
 )
 const base: Pet = {
@@ -261,10 +263,15 @@ describe('a union that holds no literal name chooses every member', () => {
     const Plains = tableEntry<Plain>()(
         { PK: ['petId'] },
         {
-            codec: {
-                petId: string,
-                plain: union([object({ x: number }), object({ y: string })]),
-            },
+            codec: item(
+                object({
+                    petId: string,
+                    plain: union([
+                        object({ x: number }),
+                        object({ y: string }),
+                    ]),
+                }),
+            ),
         },
     )
 
@@ -289,13 +296,15 @@ describe('a union of members that hold the same literal drops no member', () => 
     const Sames = tableEntry<Same>()(
         { PK: ['petId'] },
         {
-            codec: {
-                petId: string,
-                same: union([
-                    object({ kind: string('a'), x: number }),
-                    object({ kind: string('a'), y: string }),
-                ]),
-            },
+            codec: item(
+                object({
+                    petId: string,
+                    same: union([
+                        object({ kind: string('a'), x: number }),
+                        object({ kind: string('a'), y: string }),
+                    ]),
+                }),
+            ),
         },
     )
 

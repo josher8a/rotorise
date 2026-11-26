@@ -5,8 +5,16 @@
  * hand-written `getKeys` — every one of them `tableEntry` and a codec each doing half the job.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { tableEntry } from '../../../Rotorise'
-import { decimal, held, number, optional, string } from '../../codec'
+import { RotoriseError, tableEntry } from '../../../Rotorise'
+import {
+    decimal,
+    held,
+    item as itemOf,
+    number,
+    object,
+    optional,
+    string,
+} from '../../codec'
 import { CodecError } from '../../result'
 import type { StandardSchemaV1 } from '../../standard'
 import {
@@ -28,14 +36,16 @@ type Pet = {
 const Pet = tableEntry<Pet>()(
     { PK: ['userId'], SK: ['TAG', 'salt'] },
     {
-        codec: {
-            TAG: string('PET'),
-            userId: string,
-            salt: string,
-            balance: decimal,
-            status: string('ACTIVE', 'CLOSED'),
-            closedAt: optional(string),
-        },
+        codec: itemOf(
+            object({
+                TAG: string('PET'),
+                userId: string,
+                salt: string,
+                balance: decimal,
+                status: string('ACTIVE', 'CLOSED'),
+                closedAt: optional(string),
+            }),
+        ),
     },
 )
 
@@ -162,6 +172,51 @@ describe('tableEntry with a codec', () => {
     })
 })
 
+describe('the codec option is a codec that carries the readers of a path', () => {
+    const attributes = { petId: string, name: string }
+
+    it('refuses a record of attributes at construction, and names the call that builds a codec', () => {
+        expect(() =>
+            tableEntry<{ petId: string; name: string }>()(
+                { PK: ['petId'] },
+                { codec: attributes as never },
+            ),
+        ).toThrow(RotoriseError)
+        expect(() =>
+            tableEntry<{ petId: string; name: string }>()(
+                { PK: ['petId'] },
+                { codec: attributes as never },
+            ),
+        ).toThrow('item(object({ ... }))')
+    })
+
+    it('refuses an item codec that carries no reader of a path, because a key component is read by path', () => {
+        const built = itemOf(object(attributes))
+        const { spec, rest, def, encode, decode } = built
+        // a spread keeps each own property, so the copy that drops the symbol slots is built by hand
+        const handBuilt = {
+            [Object.getOwnPropertySymbols(built).find(
+                (symbol) => symbol.description === 'item reading',
+            ) as symbol]: true,
+            spec,
+            rest,
+            def,
+            encode,
+            decode,
+            unsafeEncode: built.unsafeEncode,
+            unsafeDecode: built.unsafeDecode,
+            unsafeEncodePartial: built.unsafeEncodePartial,
+            encodePartial: built.encodePartial,
+        }
+        expect(() =>
+            tableEntry<{ petId: string; name: string }>()(
+                { PK: ['petId'] },
+                { codec: handBuilt as never },
+            ),
+        ).toThrow('carries no reader of paths')
+    })
+})
+
 describe('the law, over generated pets', () => {
     it('decode ∘ encode = id for the entity attributes', () => {
         // `Pet.codec` is the attribute half; keys are computed by the schema, not generated
@@ -186,7 +241,7 @@ describe('the separator is a slot of the options, and the default is in the type
     it('an entry whose options name no separator joins with the default, in the value and the type', () => {
         const Pets = tableEntry<{ petId: string }>()(
             { PK: ['petId'] },
-            { codec: { petId: string } },
+            { codec: itemOf(object({ petId: string })) },
         )
         const entry = Pets.unsafeToEntry({ petId: 'p1' } as const)
         expect(entry.PK).toBe('PETID#p1')
@@ -231,11 +286,13 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         const Owners = tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    // @ts-expect-error age decodes to a string, and the entity holds a number
-                    age: string,
-                },
+                // @ts-expect-error age decodes to a string, and the entity holds a number
+                codec: itemOf(
+                    object({
+                        petId: string,
+                        age: string,
+                    }),
+                ),
             },
         )
         // the run time builds the entry, and reads a number as the string that the codec decodes
@@ -249,8 +306,16 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
     it('refuses an omitted attribute', () => {
         tableEntry<Owner>()(
             { PK: ['petId'] },
-            // @ts-expect-error the codec omits name
-            { codec: { petId: string, age: number, nick: optional(string) } },
+            {
+                // @ts-expect-error the codec omits name
+                codec: itemOf(
+                    object({
+                        petId: string,
+                        age: number,
+                        nick: optional(string),
+                    }),
+                ),
+            },
         )
     })
 
@@ -258,13 +323,15 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    name: string,
-                    // @ts-expect-error age decodes to a string
-                    age: string,
-                    nick: optional(string),
-                },
+                // @ts-expect-error age decodes to a string
+                codec: itemOf(
+                    object({
+                        petId: string,
+                        name: string,
+                        age: string,
+                        nick: optional(string),
+                    }),
+                ),
             },
         )
     })
@@ -273,14 +340,16 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    name: string,
-                    age: number,
-                    nick: optional(string),
-                    // @ts-expect-error the entity has no attribute extra
-                    extra: string,
-                },
+                // @ts-expect-error the entity has no attribute extra
+                codec: itemOf(
+                    object({
+                        petId: string,
+                        name: string,
+                        age: number,
+                        nick: optional(string),
+                        extra: string,
+                    }),
+                ),
             },
         )
     })
@@ -289,13 +358,15 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    // @ts-expect-error name is optional in the codec and required in the entity
-                    name: optional(string),
-                    age: number,
-                    nick: optional(string),
-                },
+                // @ts-expect-error name is optional in the codec and required in the entity
+                codec: itemOf(
+                    object({
+                        petId: string,
+                        name: optional(string),
+                        age: number,
+                        nick: optional(string),
+                    }),
+                ),
             },
         )
     })
@@ -304,12 +375,14 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         const Owners = tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    name: string,
-                    age: number,
-                    nick: optional(string),
-                },
+                codec: itemOf(
+                    object({
+                        petId: string,
+                        name: string,
+                        age: number,
+                        nick: optional(string),
+                    }),
+                ),
             },
         )
         expect(
@@ -321,7 +394,9 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         type Role = { id: string; role: 'admin' | 'user' }
         const Roles = tableEntry<Role>()(
             { PK: ['id'] },
-            { codec: { id: string, role: string('admin') } },
+            {
+                codec: itemOf(object({ id: string, role: string('admin') })),
+            },
         )
         expect(Roles.toItem({ id: 'a', role: 'admin' })).not.toBeInstanceOf(
             Error,
@@ -348,12 +423,12 @@ describe('a codec entry decodes to the entity: it declares every attribute, with
         })
         tableEntry<{ petId: string; at: Date }>()(
             { PK: ['petId'] },
-            { codec: { petId: string, at } },
+            { codec: itemOf(object({ petId: string, at })) },
         )
         tableEntry<{ petId: string; at: string }>()(
             { PK: ['petId'] },
             // @ts-expect-error the held field decodes to a Date, and the entity holds a string
-            { codec: { petId: string, at } },
+            { codec: itemOf(object({ petId: string, at })) },
         )
     })
 })

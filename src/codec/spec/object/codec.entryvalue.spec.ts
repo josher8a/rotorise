@@ -8,18 +8,18 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, tableEntry } from '../../../Rotorise'
-import { decimal, string } from '../../codec'
+import { decimal, item as itemOf, object, string } from '../../codec'
 
 type Pet = { petId: string; nick: string }
 
 const Pets = tableEntry<Pet>()({ PK: ['petId'], SK: 'nick' })
 const Coded = tableEntry<Pet>()(
     { PK: ['petId'], SK: 'nick' },
-    { codec: { petId: string, nick: string } },
+    { codec: itemOf(object({ petId: string, nick: string })) },
 )
 const Weights = tableEntry<{ id: string; weight: string }>()(
     { PK: ['id'], SK: 'weight' },
-    { codec: { id: string, weight: decimal } },
+    { codec: itemOf(object({ id: string, weight: decimal })) },
 )
 const rex: Pet = { petId: 'p1', nick: 'rex' }
 

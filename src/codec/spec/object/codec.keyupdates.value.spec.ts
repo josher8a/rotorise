@@ -31,14 +31,16 @@ type Pet = {
 const Coded = tableEntry<Pet>()(
     { PK: ['petId'], GSI1PK: ['owner.name'] },
     {
-        codec: {
-            petId: string,
-            note: string,
-            nick: optional(string),
-            owner: object({ name: string, alias: optional(string) }),
-            address: object({ street: string, zip: string }),
-            legs: array(object({ id: number })),
-        } as never,
+        codec: item(
+            object({
+                petId: string,
+                note: string,
+                nick: optional(string),
+                owner: object({ name: string, alias: optional(string) }),
+                address: object({ street: string, zip: string }),
+                legs: array(object({ id: number })),
+            }),
+        ) as never,
     },
 )
 const Plain = tableEntry<Pet>()({ PK: ['petId'], GSI1PK: ['owner.name'] })

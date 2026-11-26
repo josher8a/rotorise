@@ -115,12 +115,14 @@ describe('a refusal of the key builder', () => {
             GSI1SK: ['status', 'updatedAt'],
         },
         {
-            codec: {
-                adoptionId: string,
-                petId: string,
-                status: string('OPEN', 'CLOSED'),
-                updatedAt: string,
-            },
+            codec: itemOf(
+                object({
+                    adoptionId: string,
+                    petId: string,
+                    status: string('OPEN', 'CLOSED'),
+                    updatedAt: string,
+                }),
+            ),
             key: { partition: 'PK', sort: 'SK' },
         },
     )
@@ -161,11 +163,13 @@ describe('a refusal of the key builder', () => {
         const Litters = tableEntry<Litter>()(
             { PK: ['litterId'], GSI1PK: ['species', 'born'] },
             {
-                codec: {
-                    litterId: string,
-                    species: string('DOG'),
-                    born: string,
-                },
+                codec: itemOf(
+                    object({
+                        litterId: string,
+                        species: string('DOG'),
+                        born: string,
+                    }),
+                ),
             },
         )
         const untyped = Litters.keyUpdates as (c: object) => unknown

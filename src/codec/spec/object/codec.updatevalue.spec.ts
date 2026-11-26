@@ -10,7 +10,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, tableEntry } from '../../../Rotorise'
-import { string } from '../../codec'
+import { item as itemOf, object, string } from '../../codec'
 
 type Pet = { petId: string; shelterId: string; nick: string }
 
@@ -26,7 +26,7 @@ const Pets = tableEntry<Pet>()(
 type Decided = { TAG: 'PET'; id: string }
 const Tagged = tableEntry<Decided>()(
     { PK: ['TAG', 'id'] },
-    { codec: { TAG: string('PET'), id: string } },
+    { codec: itemOf(object({ TAG: string('PET'), id: string })) },
 )
 
 // a change in a variable of the declared type, so no literal check of the type refuses it

@@ -11,7 +11,13 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { RotoriseError, tableEntry } from '../../../Rotorise'
-import { boolean, CodecError, string } from '../../codec'
+import {
+    boolean,
+    CodecError,
+    item as itemOf,
+    object,
+    string,
+} from '../../codec'
 
 type Rows = { 0: string; petId: string }
 const row: Rows = { 0: 'zero', petId: 'p1' }
@@ -85,7 +91,7 @@ describe('a component whose name is a number obeys the codec refusal of a compon
             tableEntry<{ id: string; 0: boolean }>()(
                 // @ts-expect-error a component is text or a number, and the codec writes BOOL
                 { PK: ['id'], SK: [0] },
-                { codec: { id: string, 0: boolean } },
+                { codec: itemOf(object({ id: string, 0: boolean })) },
             )
         expect(refused).toThrow(RotoriseError)
         expect(refused).toThrow(/A component is text or a number/)
@@ -94,7 +100,7 @@ describe('a component whose name is a number obeys the codec refusal of a compon
     it('builds a number name that the codec writes as S, and prints the number as its tag', () => {
         const Coded = tableEntry<Rows>()(
             { PK: ['petId'], SK: [0] },
-            { codec: { petId: string, 0: string } },
+            { codec: itemOf(object({ petId: string, 0: string })) },
         )
         expect(Coded.unsafeKey('SK', row)).toBe('0#zero')
     })

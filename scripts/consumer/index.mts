@@ -102,7 +102,7 @@ type Kennel = { petId: string; shelterId: string; name: string; age: number }
 export const Kennels = tableEntry<Kennel>()(
     { PK: ['petId'], SK: ['name'], GSI1PK: 'shelterId', GSI1SK: ['age'] },
     {
-        codec: { petId: string, shelterId: string, name: string, age: number },
+        codec: item(object({ petId: string, shelterId: string, name: string, age: number })),
         key: { partition: 'PK', sort: 'SK' },
         indexes: { GSI1: { partition: 'GSI1PK', sort: 'GSI1SK' } },
     },

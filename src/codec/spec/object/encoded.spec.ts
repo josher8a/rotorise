@@ -325,7 +325,7 @@ describe('a patch types the attributes it names', () => {
 describe('an entry types the row it writes', () => {
     const Entry = tableEntry<Pet>()(
         { PK: ['id'], GSI1PK: ['TAG'] },
-        { codec: spec, key: { partition: 'PK' } },
+        { codec: item(object(spec)), key: { partition: 'PK' } },
     )
 
     it('carries the declared attributes and the computed keys', () => {
@@ -509,7 +509,7 @@ describe('an entry pins the row it writes', () => {
     it('accepts an entry that writes it', () => {
         const Entry = tableEntry<Row, RowItem>()(
             { PK: ['id'], GSI1PK: ['TAG'] },
-            { codec: rowSpec, key: { partition: 'PK' } },
+            { codec: item(object(rowSpec)), key: { partition: 'PK' } },
         )
         const written = Entry.unsafeToItem(row)
         expect(written.PK).toEqual({ S: 'ID#p' })
@@ -523,7 +523,7 @@ describe('an entry pins the row it writes', () => {
                 { PK: ['id'], GSI1PK: ['TAG'] },
                 // @ts-expect-error `price` writes S here, where the row pins N
                 {
-                    codec: { ...rowSpec, price: string },
+                    codec: item(object({ ...rowSpec, price: string })),
                     key: { partition: 'PK' },
                 },
             )

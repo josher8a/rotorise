@@ -56,7 +56,7 @@ type Litter = { litterId: string; born: number; name: string }
 
 const Litters = tableEntry<Litter>()(
     { PK: ['litterId'], GSI1SK: 'born' },
-    { codec: { litterId: string, born: number, name: string } },
+    { codec: item(object({ litterId: string, born: number, name: string })) },
 )
 
 describe('a key of one number attribute is N in every path that writes a row', () => {
@@ -121,7 +121,7 @@ describe('null gives no key in every path, as undefined does', () => {
         type Owned = { petId: string; owner: string | null }
         const Owned = tableEntry<Owned>()(
             { PK: ['petId'], GSI1PK: 'owner' },
-            { codec: { petId: string, owner: nullable(string) } },
+            { codec: item(object({ petId: string, owner: nullable(string) })) },
         )
         const written = Owned.toItem({ petId: 'p1', owner: null })
         if (isError(written)) return expect.unreachable()
@@ -161,7 +161,7 @@ type Tag = { tagId: Uint8Array; petId: string; nick: string }
 
 const Tags = tableEntry<Tag>()(
     { PK: 'tagId', SK: 'nick' },
-    { codec: { tagId: binary, petId: string, nick: string } },
+    { codec: item(object({ tagId: binary, petId: string, nick: string })) },
 )
 
 describe('a key of one Uint8Array attribute is B in every path that writes a row', () => {
@@ -199,7 +199,11 @@ describe('a key attribute of DynamoDB is S, N or B, at a path as at a name', () 
     })
     const Coded = tableEntry<Chipped>()(
         { PK: ['petId'], GSI1PK: 'tag.chip' },
-        { codec: { petId: string, tag: object({ chip: binary }) } },
+        {
+            codec: item(
+                object({ petId: string, tag: object({ chip: binary }) }),
+            ),
+        },
     )
 
     it('writes B in keys, with a codec and with none', () => {
@@ -311,7 +315,14 @@ describe('a key has the one member that construction decided', () => {
     it('refuses a write at another member than the decided member, and names the key', () => {
         const Mixed = tableEntry<{ id: string; name: string }>()(
             { PK: 'id' },
-            { codec: { id: union([string, opaque]) as never, name: string } },
+            {
+                codec: item(
+                    object({
+                        id: union([string, opaque]) as unknown as typeof string,
+                        name: string,
+                    }),
+                ),
+            },
         )
         const past = new Uint8Array([1]) as never
         const refused = Mixed.toItem({ id: past, name: 'x' })
@@ -340,7 +351,7 @@ describe('a key follows its attribute in every path that writes a row', () => {
     })
     const Born = tableEntry<{ petId: string; bornAt: Date }>()(
         { PK: ['petId'], SK: 'bornAt' },
-        { codec: { petId: string, bornAt } },
+        { codec: item(object({ petId: string, bornAt })) },
     )
     const day = new Date('2020-01-01T00:00:00.000Z')
 
@@ -647,7 +658,12 @@ describe('keys and toItem write one key for each key name, over generated entiti
             entry: () =>
                 route(
                     { PK: ['litterId'], GSI1SK: 'body.grams' },
-                    { litterId: string, body: object({ grams: number }) },
+                    item(
+                        object({
+                            litterId: string,
+                            body: object({ grams: number }),
+                        }),
+                    ),
                 ),
             names: ['PK', 'GSI1SK'],
             attribute: { GSI1SK: 'body.grams' },
@@ -656,7 +672,12 @@ describe('keys and toItem write one key for each key name, over generated entiti
             entry: () =>
                 route(
                     { PK: ['litterId'], GSI1SK: 'body.chip' },
-                    { litterId: string, body: object({ chip: binary }) },
+                    item(
+                        object({
+                            litterId: string,
+                            body: object({ chip: binary }),
+                        }),
+                    ),
                 ),
             names: ['PK', 'GSI1SK'],
             attribute: { GSI1SK: 'body.chip' },
@@ -679,7 +700,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
             entry: () =>
                 tableEntry<{ petId: string; at: Date }>()(
                     { PK: ['petId'], SK: ['at'] },
-                    { codec: { petId: string, at: isoAt } },
+                    { codec: item(object({ petId: string, at: isoAt })) },
                 ) as unknown as Route,
             names: ['PK', 'SK'],
         },
@@ -687,7 +708,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
             entry: () =>
                 tableEntry<{ petId: string; bornAt: Date }>()(
                     { PK: ['petId'], SK: 'bornAt' },
-                    { codec: { petId: string, bornAt: bornOn } },
+                    { codec: item(object({ petId: string, bornAt: bornOn })) },
                 ) as unknown as Route,
             names: ['PK', 'SK'],
             attribute: { SK: 'bornAt' },
@@ -701,7 +722,7 @@ describe('keys and toItem write one key for each key name, over generated entiti
             entry: () =>
                 tableEntry<{ id: string; price: string }>()(
                     { PK: ['id', 'price'] },
-                    { codec: { id: string, price: decimal } },
+                    { codec: item(object({ id: string, price: decimal })) },
                 ) as unknown as Route,
             names: ['PK'],
         },
@@ -1085,7 +1106,7 @@ describe('a key component is the stored text of its attribute, over generated en
         HeldComposite: {
             entry: tableEntry<{ petId: string; at: Date }>()(
                 { PK: ['petId'], SK: ['at'] },
-                { codec: { petId: string, at: isoAt } },
+                { codec: item(object({ petId: string, at: isoAt })) },
             ) as unknown as Route,
             key: 'SK',
             fields: ['at'],
@@ -1093,7 +1114,7 @@ describe('a key component is the stored text of its attribute, over generated en
         Prices: {
             entry: tableEntry<{ id: string; price: string }>()(
                 { PK: ['id', 'price'] },
-                { codec: { id: string, price: decimal } },
+                { codec: item(object({ id: string, price: decimal })) },
             ) as unknown as Route,
             key: 'PK',
             fields: ['id', 'price'],

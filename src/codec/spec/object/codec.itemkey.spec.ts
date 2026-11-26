@@ -17,7 +17,7 @@ const Pets = tableEntry<Pet>()(
     { PK: ['petId'], SK: 'nick' },
     {
         key: { partition: 'PK', sort: 'SK' },
-        codec: { petId: string, nick: string },
+        codec: item(object({ petId: string, nick: string })),
     },
 )
 

@@ -24,26 +24,28 @@ import type {
 } from './codec/codec'
 import {
     andThen,
-    at,
     CodecError,
     failed,
-    item as itemOf,
-    object,
     orThrow,
     pathBuilder,
 } from './codec/codec'
 import type { KnownKeys } from './codec/derivedItem'
 import { parsePath, parsePathResult } from './codec/documentPath'
 import type { Reached, Segment } from './codec/frontier'
-import { native } from './codec/native'
+import { keyValueOf } from './codec/nativeWrite'
 import { constantOf } from './codec/objects'
 import { setOwn } from './codec/result'
 import type { itemMark, Untagged } from './codec/scope'
-import type { ChildAt, CodecAt } from './codec/scopePath'
-import { reachAt } from './codec/scopePath'
+import type { ChildAt, CodecAt, PathReads } from './codec/scopePath'
 import type { KeyText } from './codec/sums'
 import type { Field, Term } from './codec/term'
-import { isCallerPin, member, sameTerm, storedPin } from './codec/term'
+import {
+    isCallerPin,
+    member,
+    readSlot,
+    sameTerm,
+    storedPin,
+} from './codec/term'
 import { own } from './codec/value'
 import type {
     DistributiveOmit,
@@ -3801,8 +3803,15 @@ type AgreedAttributes<Variants> = {
  * a `Uint8Array` is `B`, so an `N` sort key orders by number. `native` writes the value, so a value
  * that the store refuses is refused here too. The refusal names the key and never the value.
  */
-const asKey = (name: string, value: unknown): Result<Carrying<KeyMember>> =>
-    keyOfAttribute(name, native.encode(value))
+const asKey = (name: string, value: unknown): Result<Carrying<KeyMember>> => {
+    const written = keyValueOf(value)
+    if (typeof written === 'string' && written !== '')
+        return carrying('S', written)
+    if (written instanceof DynamoNumber) return carrying('N', written.digits)
+    if (written instanceof Uint8Array && written.length > 0)
+        return carrying('B', written)
+    return notAKey(name)
+}
 
 /**
  * The refusal of a separator passed as the bare second argument. The type refuses the form, and a
@@ -3970,6 +3979,24 @@ type TaggedRuntime = TaggedCodec<
         item: Record<string, unknown>,
     ) => ItemCodecRuntime | CodecError
     readonly variants: () => readonly ItemCodecRuntime[]
+}
+
+/**
+ * The readers of a path that a codec carries, or nothing. The item codec and the tagged codec of the
+ * library carry them, and a codec that a caller builds by hand may not.
+ */
+const carriedReads = (codec: object): PathReads | undefined =>
+    (codec as { readonly [readSlot]?: PathReads })[readSlot]
+
+/** The readers of a path of a codec that the entry accepted. The entry refuses a codec with none at construction. */
+const pathReadsOf = (codec: object): PathReads => {
+    const reads = carriedReads(codec)
+    if (reads === undefined) {
+        throw new RotoriseError(
+            'a codec of the entry carries no reader of paths. The entry refuses such a codec at construction',
+        )
+    }
+    return reads
 }
 
 /** A codec that decides its variant from the item, rather than having one set of attributes. */
@@ -4270,33 +4297,58 @@ type ManyCharacters<S extends string> = string extends S
       : false
 
 /**
- * The check of a short codec: the spec decodes to the entity.
- *
- * Each field decodes to a key that the entity admits, as a key and not only as a value: the object
- * that holds the one key is assignable to the entity. `optional` is a key that the type may lack,
- * and `undefinable` is a key that is always there and may hold `undefined`. Under
- * `exactOptionalPropertyTypes` the two are two types, so `optional` is refused where the entity
- * requires the key, and `undefinable` where the entity makes the key optional. A required field is
- * admitted where the entity makes the key optional. Each attribute that the entity states has a
- * field. The spec names no
- * attribute that the entity lacks. A refusal lands on the field that is wrong, or on the spec where
- * a field is missing. A built codec states its own decoded type, so it passes unchecked here.
+ * The refusal of a record of attributes where a codec is wanted. A built codec carries the readers
+ * of a path, and a record carries none, so the entry takes no record. A built codec states its own
+ * decoded type, so it passes unchecked here.
  */
-type ShortCodecCheck<E, S> = [S] extends [undefined]
+type BuiltCodecOnly<S> = [S] extends [undefined]
     ? unknown
     : S extends { readonly [itemMark]: true }
       ? unknown
-      : {
-            readonly [K in keyof S]: K extends keyof E
-                ? [Pick<ObjectOf<S>, K & keyof ObjectOf<S>>] extends [
-                      Pick<E, K>,
-                  ]
-                    ? unknown
-                    : ErrorMessage<`[tableEntry] '${K & string}' decodes to a type that the entity does not admit`>
-                : ErrorMessage<`[tableEntry] the entity has no attribute '${K & string}'`>
-        } & ([Exclude<KnownKeys<E>, keyof S>] extends [never]
-            ? unknown
-            : ErrorMessage<`[tableEntry] the codec omits '${Exclude<KnownKeys<E>, keyof S> & string}'`>)
+      : ErrorMessage<'[tableEntry] a record of attributes is no codec. Pass a codec that `item` builds, as item(object({ ... }))'>
+
+/**
+ * A built item codec that decodes to the entity or to a narrower type. The decode side is
+ * covariant, so a narrower decoded type passes. The encode side takes the entity at the call, and a
+ * codec of a narrower type refuses a value outside it as a value, so the encode parameters are not
+ * compared.
+ */
+type NarrowerItemCodec<Entity, Spec, Rest> = Omit<
+    ItemCodec<Entity, Spec, Rest>,
+    'encode' | 'unsafeEncode' | 'encodePartial' | 'unsafeEncodePartial'
+> & {
+    readonly encode: (this: Closed, item: never) => unknown
+    readonly unsafeEncode: (this: Closed, item: never) => unknown
+    readonly encodePartial: (this: Closed, patch: never) => unknown
+    readonly unsafeEncodePartial: (this: Closed, patch: never) => unknown
+}
+
+/**
+ * The refusal of a field of the codec that the entity does not admit. Each message names the field.
+ * A field that decodes to a type outside the entity's type, a field the entity lacks, and an
+ * attribute of the entity that the codec omits are each refused at the field.
+ */
+type FieldsCheck<E, S> = [S] extends [undefined]
+    ? unknown
+    : [LackedBy<E, S>] extends [never]
+      ? [MismatchedIn<E, S>] extends [never]
+          ? [Exclude<KnownKeys<E>, keyof S>] extends [never]
+              ? unknown
+              : ErrorMessage<`[tableEntry] the codec omits '${Exclude<KnownKeys<E>, keyof S> & string}'`>
+          : ErrorMessage<`[tableEntry] '${MismatchedIn<E, S> & string}' decodes to a type that the entity does not admit`>
+      : ErrorMessage<`[tableEntry] the entity has no attribute '${LackedBy<E, S> & string}'`>
+
+/** The fields of the codec that the entity lacks. */
+type LackedBy<E, S> = Exclude<keyof S, keyof E>
+
+/** The fields of the codec that decode to a type outside the type of the entity. */
+type MismatchedIn<E, S> = {
+    [K in keyof S & keyof E]: [
+        Pick<ObjectOf<S>, K & keyof ObjectOf<S>>,
+    ] extends [Pick<E, K>]
+        ? never
+        : K
+}[keyof S & keyof E]
 
 /**
  * Whether the option `codec` is refused at the codec: the entity is a union, and the codec names no
@@ -4412,12 +4464,11 @@ export const tableEntry =
                      */
                     options?: {
                         /**
-                         * The attributes, as a spec or as a codec already built from one.
+                         * The attributes, as a codec built with `item`.
                          *
-                         * A spec is the short form and takes the defaults. Pass a built codec
-                         * where a default is not what you want — `item` is where a rest policy
-                         * is chosen, and anything else it grows is reached the same way,
-                         * without this signature needing to learn about it.
+                         * A record of attributes is no codec, and the entry refuses it. The
+                         * entry reads a path through the codec, so the codec carries the readers
+                         * of a path, and a bundle of an entry with no codec holds none.
                          *
                          * Where the entity is a union this must be a codec `union` built with
                          * a discriminator, for the reason `item` refuses one: a single map of
@@ -4430,11 +4481,13 @@ export const tableEntry =
                             ? TaggedOrRefused<Entity, CodecSpec>
                             :
                                   | (CodecSpec &
-                                        ShortCodecCheck<
+                                        BuiltCodecOnly<NoInfer<CodecSpec>>)
+                                  | (FieldsCheck<Entity, NoInfer<CodecSpec>> &
+                                        NarrowerItemCodec<
                                             Entity,
-                                            NoInfer<CodecSpec>
-                                        >)
-                                  | (ItemCodec<Entity, CodecSpec, CodecRest> &
+                                            CodecSpec,
+                                            CodecRest
+                                        > &
                                         Closed)
                         readonly separator?: Separator
                         /**
@@ -4566,6 +4619,11 @@ export const tableEntry =
             (() => {
                 if (codecSpec === undefined) return undefined
                 if (isItemCodec(codecSpec) || isTagged(codecSpec)) {
+                    if (carriedReads(codecSpec) === undefined) {
+                        throw new RotoriseError(
+                            'the codec passed here carries no reader of paths, and a key component is read by path. Build the codec with `item` or `tagged`, and pass that codec',
+                        )
+                    }
                     return codecSpec
                 }
                 if (isCodecLike(codecSpec)) {
@@ -4573,9 +4631,9 @@ export const tableEntry =
                         'the codec passed here is neither an item codec nor a tagged one. A union of maps only knows which attributes an item has once it knows which variant the item is, so it has to be able to say — which is what `tagged` adds and a bare union codec does not.',
                     )
                 }
-                return itemOf(
-                    object(codecSpec as never),
-                ) as unknown as ItemCodecRuntime
+                throw new RotoriseError(
+                    'the codec passed here is no codec. A record of attributes is no codec: wrap the record, as `item(object({ ... }))`, and pass that',
+                )
             })()
 
         /**
@@ -4789,7 +4847,10 @@ export const tableEntry =
             const refused = (error: CodecError) => pathRefusal(path, error)
             let found: AnyCodec
             try {
-                found = at(attributes as never, path as never) as never
+                found = pathReadsOf(attributes).at(
+                    attributes as never,
+                    path as never,
+                ) as never
             } catch (error) {
                 if (!(error instanceof CodecError)) throw error
                 return refused(error)
@@ -5179,7 +5240,11 @@ export const tableEntry =
                     continue
                 }
                 // the erased TaggedRuntime states no `def`, and each codec that the library builds holds one, as for `at` above
-                const reached = reachAt(root as never, read, name)
+                const reached = pathReadsOf(root).reachAt(
+                    root as never,
+                    read,
+                    name,
+                )
                 if (reached instanceof CodecError) return reached
                 landed.push([name, read, reached])
             }

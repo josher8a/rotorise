@@ -9,7 +9,14 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { held, number, object, refine, string } from '../../codec'
+import {
+    held,
+    item as itemOf,
+    number,
+    object,
+    refine,
+    string,
+} from '../../codec'
 import type { StandardSchemaV1 } from '../../standard'
 
 type Noted = { id: string; meta: { note: string; grams: number } }
@@ -43,7 +50,7 @@ describe('a key of one attribute at a path', () => {
     it('holds the number that the codec writes at the path, and writes it as an N in the row', () => {
         const Notes = tableEntry<Noted>()(
             { PK: ['id'], SK: 'meta.grams' },
-            { codec: { id: string, meta } },
+            { codec: itemOf(object({ id: string, meta })) },
         )
         const key = Notes.unsafeKey('SK', { meta: { grams: 90 } })
         expect(key).toBe(90)
@@ -60,7 +67,11 @@ describe('a key of one attribute at a path', () => {
         type Weighed = { id: string; meta: { grams: number } }
         const Notes = tableEntry<Weighed>()(
             { PK: ['id'], SK: 'meta.grams' },
-            { codec: { id: string, meta: object({ grams: Hexed }) } },
+            {
+                codec: itemOf(
+                    object({ id: string, meta: object({ grams: Hexed }) }),
+                ),
+            },
         )
         const key = Notes.unsafeKey('SK', { meta: { grams: 255 } })
         expect(key).toBe('ff')
@@ -87,7 +98,7 @@ describe('a key of one attribute at a path', () => {
             tableEntry<Noted>()(
                 // @ts-expect-error a path cannot go into refine
                 { PK: ['id'], SK: 'meta.note' },
-                { codec: { id: string, meta: Meta } },
+                { codec: itemOf(object({ id: string, meta: Meta })) },
             ),
         ).toThrow(/cannot address/)
     })

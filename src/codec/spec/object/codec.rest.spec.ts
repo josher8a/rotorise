@@ -495,7 +495,7 @@ describe('a built codec passed to tableEntry', () => {
         const Short = tableEntry<Closed>()(
             { PK: ['id'] },
             {
-                codec: { id: string, name: string },
+                codec: itemOf(object({ id: string, name: string })),
             },
         )
         expect(Short.unsafeToItem({ id: 'a', name: 'n' })).toEqual({

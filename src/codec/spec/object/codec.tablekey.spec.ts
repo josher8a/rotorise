@@ -10,7 +10,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
 import type { Attribute } from '../../attribute'
-import { number, string } from '../../codec'
+import { item as itemOf, number, object, string } from '../../codec'
 
 type Adoption = {
     adoptionId: string
@@ -29,13 +29,15 @@ const Adoption = tableEntry<Adoption>()(
         GSI2PK: ['status'],
     },
     {
-        codec: {
-            adoptionId: string,
-            userId: string,
-            status: string('DRAFT', 'PACKING', 'CANCELED'),
-            updatedAt: string,
-            currentLegIndex: number,
-        },
+        codec: itemOf(
+            object({
+                adoptionId: string,
+                userId: string,
+                status: string('DRAFT', 'PACKING', 'CANCELED'),
+                updatedAt: string,
+                currentLegIndex: number,
+            }),
+        ),
         key: { partition: 'PK', sort: 'SK' },
     },
 )
@@ -225,7 +227,9 @@ describe('the key option names the keys, and each spec keeps the type that the c
         const Litters = tableEntry<Litter>()(
             { PK: 'litterId', SK: 'born' },
             {
-                codec: { litterId: string, born: number, name: string },
+                codec: itemOf(
+                    object({ litterId: string, born: number, name: string }),
+                ),
                 key: { partition: 'PK', sort: 'SK' },
             },
         )

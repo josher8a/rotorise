@@ -24,11 +24,13 @@ describe('the optionality of a key in a short codec', () => {
         const Owners = tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    // @ts-expect-error the entity may lack `nick`, and the codec always holds the key
-                    nick: undefinable(string),
-                },
+                // @ts-expect-error the entity may lack `nick`, and the codec always holds the key
+                codec: item(
+                    object({
+                        petId: string,
+                        nick: undefinable(string),
+                    }),
+                ),
             },
         )
         const read = Owners.unsafeFromItem({ petId: { S: 'p1' } } as never)
@@ -40,11 +42,13 @@ describe('the optionality of a key in a short codec', () => {
         const Owners = tableEntry<Owner>()(
             { PK: ['petId'] },
             {
-                codec: {
-                    petId: string,
-                    // @ts-expect-error the entity holds `nick`, and the codec may lack the key
-                    nick: optional(string),
-                },
+                // @ts-expect-error the entity holds `nick`, and the codec may lack the key
+                codec: item(
+                    object({
+                        petId: string,
+                        nick: optional(string),
+                    }),
+                ),
             },
         )
         const read = Owners.unsafeFromItem({ petId: { S: 'p1' } } as never)
@@ -56,11 +60,15 @@ describe('the optionality of a key in a short codec', () => {
         type Undefinable = { petId: string; nick: string | undefined }
         const Optionals = tableEntry<Optional>()(
             { PK: ['petId'] },
-            { codec: { petId: string, nick: optional(string) } },
+            { codec: item(object({ petId: string, nick: optional(string) })) },
         )
         const Undefinables = tableEntry<Undefinable>()(
             { PK: ['petId'] },
-            { codec: { petId: string, nick: undefinable(string) } },
+            {
+                codec: item(
+                    object({ petId: string, nick: undefinable(string) }),
+                ),
+            },
         )
         const row = { petId: { S: 'p1' } } as never
         // each mark reads a row with no attribute as the entity states it

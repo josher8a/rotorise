@@ -354,7 +354,7 @@ describe('a key component whose adapter throws', () => {
         try {
             tableEntry<{ kind: 'dog'; petId: string }>()(
                 { PK: ['kind', 'petId'] },
-                { codec: { kind: Kind, petId: string } },
+                { codec: item(object({ kind: Kind, petId: string })) },
             )
         } catch (error) {
             thrown = error

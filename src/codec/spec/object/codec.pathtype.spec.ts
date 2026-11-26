@@ -64,7 +64,11 @@ describe('the member of a key of one attribute at a path is the member that the 
     it('admits a held Date at a path, which the codec writes as S', () => {
         const Visits = tableEntry<{ id: string; meta: { at: Date } }>()(
             { PK: ['id'], SK: 'meta.at' },
-            { codec: { id: string, meta: object({ at: isoAt }) } },
+            {
+                codec: item(
+                    object({ id: string, meta: object({ at: isoAt }) }),
+                ),
+            },
         )
         expect(Visits.unsafeKey('SK', { meta: { at: new Date(0) } })).toBe(
             '1970-01-01T00:00:00.000Z',
@@ -74,7 +78,11 @@ describe('the member of a key of one attribute at a path is the member that the 
     it('types the row member S where an adapter writes text for a number', () => {
         const Weighed = tableEntry<{ id: string; meta: { grams: number } }>()(
             { PK: ['id'], SK: 'meta.grams' },
-            { codec: { id: string, meta: object({ grams: Hexed }) } },
+            {
+                codec: item(
+                    object({ id: string, meta: object({ grams: Hexed }) }),
+                ),
+            },
         )
         const row = Weighed.unsafeToItem({ id: 'a', meta: { grams: 255 } })
         expect(row.SK).toEqual({ S: 'ff' })
@@ -84,7 +92,11 @@ describe('the member of a key of one attribute at a path is the member that the 
     it('types the row member N where decimal writes N for a string', () => {
         const Priced = tableEntry<{ id: string; body: { price: string } }>()(
             { PK: ['id'], SK: 'body.price' },
-            { codec: { id: string, body: object({ price: decimal }) } },
+            {
+                codec: item(
+                    object({ id: string, body: object({ price: decimal }) }),
+                ),
+            },
         )
         const row = Priced.unsafeToItem({ id: 'a', body: { price: '1.5' } })
         expect(row.SK).toEqual({ N: '1.5' })
@@ -97,10 +109,12 @@ describe('a path goes below each field that the codec walks at run time, and the
         const Notes = tableEntry<{ id: string; meta: { note: string } }>()(
             { PK: ['id'], SK: ['meta.note'] },
             {
-                codec: {
-                    id: string,
-                    meta: fill(object({ note: string }), { note: 'none' }),
-                },
+                codec: item(
+                    object({
+                        id: string,
+                        meta: fill(object({ note: string }), { note: 'none' }),
+                    }),
+                ),
             },
         )
         expect(Notes.unsafeKey('SK', { meta: { note: 'n' } })).toBe('NOTE#n')
@@ -110,13 +124,15 @@ describe('a path goes below each field that the codec walks at run time, and the
         const Notes = tableEntry<{ id: string; meta: { a: string } }>()(
             { PK: ['id'], SK: ['meta.a'] },
             {
-                codec: {
-                    id: string,
-                    meta: union([
-                        object({ a: string }),
-                        object({ a: string, b: string }),
-                    ]),
-                },
+                codec: item(
+                    object({
+                        id: string,
+                        meta: union([
+                            object({ a: string }),
+                            object({ a: string, b: string }),
+                        ]),
+                    }),
+                ),
             },
         )
         expect(Notes.unsafeKey('SK', { meta: { a: 'z' } })).toBe('A#z')
@@ -129,13 +145,15 @@ describe('a path goes below each field that the codec walks at run time, and the
         }>()(
             { PK: ['id'], SK: ['meta.note'] },
             {
-                codec: {
-                    id: string,
-                    meta: discriminatedUnion('kind', [
-                        object({ kind: string('a'), note: string }),
-                        object({ kind: string('b'), note: string }),
-                    ]),
-                },
+                codec: item(
+                    object({
+                        id: string,
+                        meta: discriminatedUnion('kind', [
+                            object({ kind: string('a'), note: string }),
+                            object({ kind: string('b'), note: string }),
+                        ]),
+                    }),
+                ),
             },
         )
         expect(Notes.unsafeKey('SK', { meta: { kind: 'a', note: 'n' } })).toBe(
@@ -182,7 +200,7 @@ describe('a path below a field that a wrapper blocks is refused, whatever the wr
             tableEntry<{ id: string; meta: Note }>()(
                 // @ts-expect-error a path cannot go into refine
                 { PK: ['id'], SK: ['meta.note'] },
-                { codec: { id: string, meta: Checked } },
+                { codec: item(object({ id: string, meta: Checked })) },
             ),
         ).toThrow(/cannot address/)
     })
@@ -201,7 +219,7 @@ describe('a path below a field that a wrapper blocks is refused, whatever the wr
             tableEntry<{ id: string; meta: { readonly note: string } }>()(
                 // @ts-expect-error a path cannot go into an adapter
                 { PK: ['id'], SK: ['meta.note'] },
-                { codec: { id: string, meta: noteText } },
+                { codec: item(object({ id: string, meta: noteText })) },
             ),
         ).toThrow(/cannot address/)
     })
@@ -211,7 +229,11 @@ describe('a path below a field that a wrapper blocks is refused, whatever the wr
             tableEntry<{ id: string; meta: { flag: boolean } }>()(
                 // @ts-expect-error a component is text or a number
                 { PK: ['id'], SK: ['meta.flag'] },
-                { codec: { id: string, meta: object({ flag: boolean }) } },
+                {
+                    codec: item(
+                        object({ id: string, meta: object({ flag: boolean }) }),
+                    ),
+                },
             ),
         ).toThrow(/A component is text or a number/)
     })
@@ -221,7 +243,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
     it('types an optional caller adapter as its stored text, alone', () => {
         const Visits = tableEntry<{ petId: string; at?: Date }>()(
             { PK: ['petId'], GSI2SK: 'at' },
-            { codec: { petId: string, at: optional(isoAt) } },
+            { codec: item(object({ petId: string, at: optional(isoAt) })) },
         )
         const at = new Date(0)
         expect(Visits.unsafeKey('GSI2SK', { at })).toBe(
@@ -233,7 +255,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
     it('types the absent value of an undefinable caller adapter, as the run time gives it', () => {
         const Visits = tableEntry<{ petId: string; at: Date | undefined }>()(
             { PK: ['petId'], GSI2SK: 'at' },
-            { codec: { petId: string, at: undefinable(isoAt) } },
+            { codec: item(object({ petId: string, at: undefinable(isoAt) })) },
         )
         const at = undefined as Date | undefined
         const key = Visits.unsafeKey('GSI2SK', { at })
@@ -245,10 +267,12 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
         const Chipped = tableEntry<{ petId: string; chip: { code: number } }>()(
             { PK: ['petId'], SK: ['chip.code'] },
             {
-                codec: {
-                    petId: string,
-                    chip: fill(object({ code: Hexed }), { code: 0 }),
-                },
+                codec: item(
+                    object({
+                        petId: string,
+                        chip: fill(object({ code: Hexed }), { code: 0 }),
+                    }),
+                ),
             },
         )
         const key = Chipped.unsafeKey('SK', { chip: { code: 255 } })
@@ -259,7 +283,14 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
     it('types a key of one attribute below an optional object as the stored text', () => {
         const Visits = tableEntry<{ id: string; meta?: { at: Date } }>()(
             { PK: ['id'], GSI1SK: 'meta.at' },
-            { codec: { id: string, meta: optional(object({ at: isoAt })) } },
+            {
+                codec: item(
+                    object({
+                        id: string,
+                        meta: optional(object({ at: isoAt })),
+                    }),
+                ),
+            },
         )
         const key = Visits.unsafeKey('GSI1SK', { meta: { at: new Date(0) } })
         expect(key).toBe('1970-01-01T00:00:00.000Z')
@@ -269,7 +300,7 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
     it('holds the DynamoNumber in a key of one attribute, as the run time does', () => {
         const Prices = tableEntry<{ id: string; price: DynamoNumber }>()(
             { PK: ['id'], SK: 'price' },
-            { codec: { id: string, price: dynamoNumber } },
+            { codec: item(object({ id: string, price: dynamoNumber })) },
         )
         const price = orThrow(DynamoNumber.from('1.5'))
         const key = Prices.unsafeKey('SK', { price })
@@ -283,7 +314,14 @@ describe('a key of one attribute reads the codec under a presence mark and a Dyn
             meta: { price: DynamoNumber }
         }>()(
             { PK: ['id'], SK: 'meta.price' },
-            { codec: { id: string, meta: object({ price: dynamoNumber }) } },
+            {
+                codec: item(
+                    object({
+                        id: string,
+                        meta: object({ price: dynamoNumber }),
+                    }),
+                ),
+            },
         )
         const price = orThrow(DynamoNumber.from('1.5'))
         const key = Prices.unsafeKey('SK', { meta: { price } })

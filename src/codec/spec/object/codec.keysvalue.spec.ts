@@ -10,7 +10,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { CodecError, RotoriseError, tableEntry } from '../../../Rotorise'
-import { string } from '../../codec'
+import { item as itemOf, object, string } from '../../codec'
 
 type Pet = { petId: string; shelterId: string; nick: string }
 
@@ -24,7 +24,9 @@ const Pets = tableEntry<Pet>()(
     {
         key: { partition: 'PK', sort: 'SK' },
         indexes: { G1: { partition: 'GSI1PK', sort: 'GSI1SK' } },
-        codec: { petId: string, shelterId: string, nick: string },
+        codec: itemOf(
+            object({ petId: string, shelterId: string, nick: string }),
+        ),
     },
 )
 const rex: Pet = { petId: 'p1', shelterId: 's1', nick: 'rex' }

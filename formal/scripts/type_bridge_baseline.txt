@@ -78,8 +78,8 @@
 # either keys refused 0 built 6
 # either toEntry refused 0 built 31
 # either toItem refused 1 built 2
-construct|accept|01c2f117|nullableMeta.codecPath
 construct|accept|13c58e39|flatdot.attr
+construct|accept|99f84c23|nullableMeta.codecPath
 construct|accept|bd98ba26|nullableMeta.noCodec
 declaration|accept|ce03a404b2|dissection size
 decoded|refuse|b3aa5bd4bf|Decoded of the codec = { a: "x", c: "y" }

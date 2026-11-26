@@ -8,7 +8,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import { tableEntry } from '../../../Rotorise'
-import { array, CodecError, number, object, string } from '../../codec'
+import {
+    array,
+    CodecError,
+    item as itemOf,
+    number,
+    object,
+    string,
+} from '../../codec'
 
 type Pet = {
     petId: string
@@ -19,12 +26,14 @@ type Pet = {
 const Coded = tableEntry<Pet>()(
     { PK: ['petId'] },
     {
-        codec: {
-            petId: string,
-            legs: array(object({ id: number })),
-            grid: array(object({ cell: array(object({ v: number })) })),
-            tags: array(string),
-        },
+        codec: itemOf(
+            object({
+                petId: string,
+                legs: array(object({ id: number })),
+                grid: array(object({ cell: array(object({ v: number })) })),
+                tags: array(string),
+            }),
+        ),
     },
 )
 const pet: Pet = {

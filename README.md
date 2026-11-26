@@ -246,13 +246,16 @@ and adds its keys. `fromItem` deletes the keys and decodes the rest. Each return
 value, or a `CodecError`.
 
 ```ts
-import { number, string, tableEntry } from 'rotorise'
+import { item, number, object, string, tableEntry } from 'rotorise'
 
 type Pet = { petId: string; age: number; name: string }
 
 const PetTable = tableEntry<Pet>()(
   { PK: ['petId'], GSI1SK: 'age' },
-  { codec: { petId: string, age: number, name: string }, key: { partition: 'PK' } },
+  {
+    codec: item(object({ petId: string, age: number, name: string })),
+    key: { partition: 'PK' },
+  },
 )
 
 PetTable.toItem({ petId: 'p1', age: 3, name: 'Rex' })

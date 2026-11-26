@@ -36,11 +36,13 @@ const makePets = () =>
     tableEntry<Pet>()(
         { PK: ['petId'], GSI1PK: ['owner.name'] },
         {
-            codec: {
-                petId: string,
-                note: string,
-                owner: object({ name: string }),
-            },
+            codec: item(
+                object({
+                    petId: string,
+                    note: string,
+                    owner: object({ name: string }),
+                }),
+            ),
         },
     )
 const Pets = makePets()

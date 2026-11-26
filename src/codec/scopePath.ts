@@ -1293,6 +1293,13 @@ export const preconditions = (located: {
     )
 
 /**
+ * The readers that an item codec and a tagged codec carry in {@link readSlot}. A table entry reads
+ * the path of a key component through the codec, and the codec carries these two.
+ */
+export const pathReads = { at, reachAt }
+export type PathReads = typeof pathReads
+
+/**
  * A builder for document paths into `T`.
  *
  * The builder behind `tableEntry(...).path()`. A table entry holds no codec to walk, so a path of

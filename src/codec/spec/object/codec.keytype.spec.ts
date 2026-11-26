@@ -55,7 +55,11 @@ describe('a component under a refine prints the text of its field', () => {
     it('prints the string, where the refinement is over a string', () => {
         const Pets = tableEntry<Pet>()(
             { PK: ['petId'] },
-            { codec: { petId: refine(string, isPetId), name: string } },
+            {
+                codec: item(
+                    object({ petId: refine(string, isPetId), name: string }),
+                ),
+            },
         )
         const key = Pets.unsafeKey('PK', { petId: 'p1' })
         expect(key).toBe('PETID#p1')
@@ -70,10 +74,12 @@ describe('a component under a refine prints the text of its field', () => {
         const Pets = tableEntry<{ petId: string; kind: 'dog' }>()(
             { PK: ['petId'], SK: ['kind'] },
             {
-                codec: {
-                    petId: string,
-                    kind: refine(DogTag, (_: 'dog'): _ is 'dog' => true),
-                },
+                codec: item(
+                    object({
+                        petId: string,
+                        kind: refine(DogTag, (_: 'dog'): _ is 'dog' => true),
+                    }),
+                ),
             },
         )
         expect(Pets.unsafeKey('SK', { kind: 'dog' })).toBe('KIND#D')
@@ -127,7 +133,7 @@ describe('a DynamoNumber component prints its digits', () => {
     it('prints the digits that the run time prints, and the type is a text', () => {
         const Prices = tableEntry<{ id: string; price: DynamoNumber }>()(
             { PK: ['id'], SK: ['price'] },
-            { codec: { id: string, price: dynamoNumber } },
+            { codec: item(object({ id: string, price: dynamoNumber })) },
         )
         const key = Prices.unsafeKey('SK', {
             price: orThrow(DynamoNumber.from('1.5')),

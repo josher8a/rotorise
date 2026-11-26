@@ -13,15 +13,15 @@ import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { describe, expect, it } from 'vitest'
 import { CodecError, tableEntry } from '../../../Rotorise'
 import type { AttributeMap, AttributeValue } from '../../attribute'
-import { decimal, number, string } from '../../codec'
+import { decimal, item as itemOf, number, object, string } from '../../codec'
 
 const Measures = tableEntry<{ id: string; value: number }>()(
     { PK: ['id'], SK: 'value' },
-    { codec: { id: string, value: number } },
+    { codec: itemOf(object({ id: string, value: number })) },
 )
 const Weights = tableEntry<{ id: string; weight: string }>()(
     { PK: ['id'], SK: 'weight' },
-    { codec: { id: string, weight: decimal } },
+    { codec: itemOf(object({ id: string, weight: decimal })) },
 )
 
 /** The attribute that the SDK writes for the key alone: the entity holds its own number, past the range. */

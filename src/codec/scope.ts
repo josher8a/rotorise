@@ -28,6 +28,7 @@ import { checkFill } from './prisms'
 import type { ArrayOver, ListCodec, SetCapable, SpreadOver } from './products'
 import type { Result } from './result'
 import { andThen, CodecError, failed, orThrow, setOwn } from './result'
+import { pathReads } from './scopePath'
 import type {
     DefOf,
     ElementMark,
@@ -55,6 +56,7 @@ import {
     closedCopy,
     isCallerPin,
     openRefusal,
+    readSlot,
     resolvedTerm,
     storedPin,
     unboundRefs,
@@ -610,6 +612,8 @@ export const objectItem = (itemDef: ItemTerm): ObjectItem => {
         rest,
         def: itemDef,
     }
+    // the codec carries the readers of a path, for the reason at {@link readSlot}
+    Object.assign(self, { [readSlot]: pathReads })
     objectReadings.set(itemDef, self)
     return self
 }
@@ -779,6 +783,8 @@ export const dissectionOf = (
                   )
         },
         def: unionDef,
+        // the readers of a path, for the reason at {@link readSlot}
+        [readSlot]: pathReads,
     }
     const made = { self, resolution }
     dissections.set(unionDef, made)

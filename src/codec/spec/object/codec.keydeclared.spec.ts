@@ -21,12 +21,12 @@ describe('a component of a key that the codec declares no attribute of is refuse
     it('refuses a name in a list of components, with the name and the reason', () => {
         expect(() =>
             tableEntry<Pet>()({ PK: ['id'], SK: ['ghost'] } as never, {
-                codec,
+                codec: item(object(codec)),
             }),
         ).toThrow(RotoriseError)
         expect(() =>
             tableEntry<Pet>()({ PK: ['id'], SK: ['ghost'] } as never, {
-                codec,
+                codec: item(object(codec)),
             }),
         ).toThrow(`'ghost' ${refusal}`)
     })
@@ -34,7 +34,7 @@ describe('a component of a key that the codec declares no attribute of is refuse
     it('refuses a key of one attribute that the codec does not declare', () => {
         expect(() =>
             tableEntry<Pet>()({ PK: ['id'], GSI1PK: 'ghost' } as never, {
-                codec,
+                codec: item(object(codec)),
             }),
         ).toThrow(`'ghost' ${refusal}`)
     })
@@ -46,7 +46,7 @@ describe('a component of a key that the codec declares no attribute of is refuse
                     PK: ['id'],
                     SK: [{ at: 'ghost', value: (v: string) => v }],
                 } as never,
-                { codec },
+                { codec: item(object(codec)) },
             ),
         ).toThrow(`'ghost' ${refusal}`)
     })
@@ -56,7 +56,7 @@ describe('a component of a key that the codec can write is accepted', () => {
     it('builds a key at a declared name, and gives the same entry as before', () => {
         const Declared = tableEntry<Pet>()(
             { PK: ['id'], SK: ['note'] },
-            { codec },
+            { codec: item(object(codec)) },
         )
         expect(Declared.toEntry({ id: 'i', note: 'n' })).toMatchObject({
             PK: 'ID#i',
