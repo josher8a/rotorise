@@ -18,7 +18,13 @@ import type {
 } from './build'
 import { codecOfTerm } from './capabilities'
 import type { Option } from './denote'
-import { altSem, membersTooDeeply, optionOfTerm, termOf } from './denote'
+import {
+    altSem,
+    membersTooDeeply,
+    optionOfTerm,
+    pairOfCodec,
+    termOf,
+} from './denote'
 import type {
     AnyObjectCodec,
     DecodedTags,
@@ -61,6 +67,7 @@ import {
     holdsNoValue,
     openRefusal,
     ownsNullOf,
+    pairSlot,
     readingSlot,
     resolvedTerm,
     unboundRefs,
@@ -483,6 +490,8 @@ export const dissect = <T extends Record<string, unknown>>(
             unsafeEncode: nested.unsafeEncode,
             unsafeDecode: nested.unsafeDecode,
             def: nested.def,
+            // a container reads the pair of its element here
+            [pairSlot]: pairOfCodec(nested),
         },
         unionDef,
     ) as unknown as DiscriminatedCodec<T, string, Record<string, unknown>>

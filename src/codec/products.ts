@@ -12,8 +12,16 @@ import type {
     ListTermOf,
     SetAttribute,
 } from './build'
-import { codecOfTerm } from './capabilities'
-import { termOf } from './denote'
+import { codecOfPair } from './capabilities'
+import {
+    judgedBy,
+    judgeList,
+    judgeSet,
+    listPair,
+    pairOfCodec,
+    setPair,
+    termOf,
+} from './denote'
 import type { WidensRead } from './pathModel'
 import { CodecError } from './result'
 import type {
@@ -21,9 +29,12 @@ import type {
     ElementsMark,
     elementsMarker,
     spreadMarker,
+    Term,
     TermMark,
     TermOf,
 } from './term'
+
+type ListTerm = Extract<Term, { kind: 'list' }>
 
 /** The declared positions of a list with no spread, or `never`. */
 export type FixedElements<C> = C extends {
@@ -64,12 +75,19 @@ export type HasSpreadIn<Cs extends readonly unknown[]> =
  */
 export const array = <const C extends AnyCodec>(element: C): ArrayOver<C> => {
     type T = Decoded<C>
-    return codecOfTerm<readonly T[], L<AttributeOf<C>>>({
+    const def: ListTerm = {
         kind: 'list',
         pre: [],
         spread: termOf(element as unknown as AnyCodec),
         suf: [],
-    })
+    }
+    // the judgment and the pair come from the kind alone, so a bundle of `array` holds no switch
+    // over the other kinds
+    judgedBy(def, judgeList(def))
+    return codecOfPair<readonly T[], L<AttributeOf<C>>>(
+        def,
+        listPair([], pairOfCodec(element), []),
+    )
 }
 
 /** The codec that {@link array} returns, and the one that a scope rebuilds below a `ref`. */
@@ -164,18 +182,25 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
     const at = all.findIndex(isSpread)
     const marked = at === -1 ? undefined : (all[at] as AnySpread)
 
+    const pre = (at === -1 ? all : all.slice(0, at)) as readonly AnyCodec[]
+    const suf = (at === -1 ? [] : all.slice(at + 1)) as readonly AnyCodec[]
+    const def: ListTerm = {
+        kind: 'list',
+        pre: pre.map(termOf),
+        ...(marked ? { spread: termOf(marked.spread) } : {}),
+        suf: suf.map(termOf),
+    }
+    judgedBy(def, judgeList(def))
     // as with `map`, the cast keeps the shape each position writes, which
     // `Attribute<'L'>` would flatten to "some list"
-    return codecOfTerm({
-        kind: 'list',
-        pre: (at === -1 ? all : all.slice(0, at)).map((c) =>
-            termOf(c as AnyCodec),
+    return codecOfPair(
+        def,
+        listPair(
+            pre.map(pairOfCodec),
+            marked && pairOfCodec(marked.spread),
+            suf.map(pairOfCodec),
         ),
-        ...(marked ? { spread: termOf(marked.spread) } : {}),
-        suf: (at === -1 ? [] : all.slice(at + 1)).map((c) =>
-            termOf(c as AnyCodec),
-        ),
-    }) as unknown as ListCodec<Cs>
+    ) as unknown as ListCodec<Cs>
 }
 
 /** The codec that {@link list} returns, and the one that a slice at a position rebuilds. */
@@ -410,11 +435,17 @@ export type SetElement<C> = [SetAttribute<AttributeOf<C>>] extends [never]
  */
 export const set = <const C extends AnyCodec & SetElement<C>>(
     element: C,
-): SetOver<C> =>
-    codecOfTerm<ReadonlySet<Decoded<C>>, SetAttribute<AttributeOf<C>>>({
+): SetOver<C> => {
+    const def: Extract<Term, { kind: 'set' }> = {
         kind: 'set',
         elem: termOf(element as unknown as AnyCodec),
-    })
+    }
+    judgedBy(def, judgeSet(def))
+    return codecOfPair<ReadonlySet<Decoded<C>>, SetAttribute<AttributeOf<C>>>(
+        def,
+        setPair(def.elem, element),
+    )
+}
 
 /** The codec that {@link set} returns, and the one that a scope rebuilds below a `ref`. */
 export type SetOver<C extends AnyCodec> = AttributeCodec<

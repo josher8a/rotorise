@@ -26,6 +26,7 @@ import type {
     undefinableMarker,
     writesMarker,
 } from './term'
+import { pairSlot } from './term'
 
 /*
  * **The free names of a codec, in its type**: the names that its term reads through a `ref` and
@@ -134,17 +135,22 @@ export type Codec<T, A extends AttributeValue> = {
  * end up with `unsafeEncode` disagreeing with `encode` — a divergence nothing else would catch, since
  * both round-trip perfectly on their own.
  */
-export const codec = <T, A extends AttributeValue>({
-    encode,
-    decode,
-    def,
-}: Codec<T, A>): AttributeCodec<T, A> => ({
-    encode,
-    decode,
-    unsafeEncode: (value) => orThrow(encode(value)),
-    unsafeDecode: (attribute) => orThrow(decode(attribute)),
-    def,
-})
+export const codec = <T, A extends AttributeValue>(
+    { encode, decode, def }: Codec<T, A>,
+    // the pair of the codec, written into the one object that this builds: a container reads it
+    // from {@link pairSlot}, and a write after the build costs a second shape per codec
+    pair?: unknown,
+): AttributeCodec<T, A> => {
+    const built = {
+        encode,
+        decode,
+        unsafeEncode: (value: T) => orThrow(encode(value)),
+        unsafeDecode: (attribute: AttributeValue) => orThrow(decode(attribute)),
+        def,
+        [pairSlot]: pair,
+    }
+    return built
+}
 
 export type Free<F extends string> = { readonly [freeMarker]?: [F] }
 export type FreeOf<C> = C extends {

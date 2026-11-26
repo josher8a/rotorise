@@ -64,6 +64,7 @@ import {
     literalForm,
     occV,
     openRefusal,
+    pairSlot,
     RecursionRefused,
     readMember,
     recursionUse,
@@ -1444,6 +1445,138 @@ export const literalsPair = (
     }
 }
 
+/**
+ * The pair of a list, from the pairs of its positions: `denote` reads the pairs of the child terms,
+ * and `array` and `list` read the pairs that the child codecs carry. The shape word of a message
+ * comes from the positions: no declared position and one spread is what `array` builds, an empty
+ * suffix is what `tuple` builds, and everything else only `list` can spell.
+ */
+export const listPair = (
+    pre: readonly Pair[],
+    spread: Pair | undefined,
+    suf: readonly Pair[],
+): Pair => {
+    const declared = pre.length + suf.length
+    const shape =
+        declared === 0 && spread ? 'array' : suf.length === 0 ? 'tuple' : 'list'
+    /** `align`: the arity test, which comes before any position is read. */
+    const aligned = (
+        length: number,
+        say: (arity: number) => string,
+    ): CodecError | undefined =>
+        (spread ? length < declared : length !== declared)
+            ? new CodecError(`${say(declared)}, found ${length}`)
+            : undefined
+    const atLeast = spread ? 'at least ' : ''
+    /**
+     * The codec at one position, which needs the **length** as well as the index: the
+     * suffix aligns from the right, so which positions it holds depends on how long the
+     * value is. The prefix and the suffix cannot overlap here, because `aligned` has
+     * already turned down every length below `declared`.
+     */
+    const at = (index: number, length: number): Pair =>
+        index < pre.length
+            ? (pre[index] as Pair)
+            : index >= length - suf.length
+              ? (suf[index - (length - suf.length)] as Pair)
+              : (spread as Pair)
+    return carriedCodec(
+        (value): value is readonly never[] => Array.isArray(value),
+        'L',
+        (value) =>
+            new CodecError(
+                `${describeShape(value)} is not an array, and \`${shape}\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+            ),
+        (held, enclosing) =>
+            aligned(
+                held.length,
+                (arity) => `expected ${atLeast}${arity} elements`,
+            ) ??
+            every(held, (one, index) =>
+                at(index, held.length).encode(one, enclosing),
+            ),
+        (carried: readonly AttributeValue[], enclosing) =>
+            aligned(
+                carried.length,
+                (arity) => `expected a list of ${atLeast}${arity}`,
+            ) ??
+            every(carried, (one, index) =>
+                at(index, carried.length).decode(one, enclosing),
+            ),
+    )
+}
+
+/**
+ * The pair of a set, over the term of its element and the codec of the element. `denote` reads the
+ * codec of the child term, and `set` reads the codec that the caller passed. Which wire set follows
+ * from the member of the element, which `judge` checked is `S`, `N` or `B`.
+ */
+export const setPair = (
+    elem: Term,
+    inner: Pick<AnyCodec, 'encode' | 'decode'>,
+): Pair => {
+    const one = elementMember(elem)
+    if (one !== 'S' && one !== 'N' && one !== 'B') {
+        // `judge` refuses a set of any other member first, so this narrows `one` for `setMember`
+        throw new CodecError(
+            'codecOfTerm received a set that the judge did not refuse',
+        )
+    }
+    const member = one
+    const setMember = setMembers[one]
+    const carried = (value: unknown): Result<string | Uint8Array> =>
+        andThen(
+            inner.encode(value as never),
+            (written) =>
+                (written as Record<string, unknown>)[member] as
+                    | string
+                    | Uint8Array,
+        )
+    return {
+        encode: (value: unknown) =>
+            !(value instanceof Set)
+                ? new CodecError(
+                      `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
+                  )
+                : andThen(every([...value], carried), (written) =>
+                      // two members that write one stored member make a set that DynamoDB
+                      // refuses, and a merge would decode to a smaller set
+                      wireSet(setMember, written, {
+                          empty: `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
+                          repeated: `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
+                      }),
+                  ),
+        decode: (attribute) =>
+            andThen(
+                andThen(expect(setMember, attribute), (carried) => {
+                    const members = carried as readonly (string | Uint8Array)[]
+                    const fault = faultOfSet(setMember, members)
+                    if (fault !== undefined) {
+                        return setFaultError(setMember, fault)
+                    }
+                    return every(members, (raw) =>
+                        inner.decode(carrying(member, raw as never)),
+                    )
+                }),
+                (read) => {
+                    // the model's `setImage` refuses an image that is not injective, and
+                    // `Set` would merge the two members into one value
+                    const first = new Map<unknown, number>()
+                    for (const [at, one] of read.entries()) {
+                        const earlier = first.get(one)
+                        if (earlier !== undefined) {
+                            return new CodecError(
+                                `members ${earlier} and ${at} of this ${setMember} read to one value, and a set holds each value one time, so the value read would not write back as this attribute`,
+                            )
+                        }
+                        first.set(one, at)
+                    }
+                    return new Set(read)
+                },
+            ),
+    }
+}
+
 export const denote = (def: Term): Pair => {
     switch (def.kind) {
         case 'string':
@@ -1475,63 +1608,12 @@ export const denote = (def: Term): Pair => {
          * no declared position and one spread is what `array` builds, an empty suffix is what
          * `tuple` builds, and everything else only `list` can spell.
          */
-        case 'list': {
-            const pre = def.pre.map((element) => pairOf(element))
-            const suf = def.suf.map((element) => pairOf(element))
-            const spread = def.spread ? pairOf(def.spread) : undefined
-            const declared = pre.length + suf.length
-            const shape =
-                declared === 0 && spread
-                    ? 'array'
-                    : suf.length === 0
-                      ? 'tuple'
-                      : 'list'
-            /** `align`: the arity test, which comes before any position is read. */
-            const aligned = (
-                length: number,
-                say: (arity: number) => string,
-            ): CodecError | undefined =>
-                (spread ? length < declared : length !== declared)
-                    ? new CodecError(`${say(declared)}, found ${length}`)
-                    : undefined
-            const atLeast = spread ? 'at least ' : ''
-            /**
-             * The codec at one position, which needs the **length** as well as the index: the
-             * suffix aligns from the right, so which positions it holds depends on how long the
-             * value is. The prefix and the suffix cannot overlap here, because `aligned` has
-             * already turned down every length below `declared`.
-             */
-            const at = (index: number, length: number): Pair =>
-                index < pre.length
-                    ? (pre[index] as Pair)
-                    : index >= length - suf.length
-                      ? (suf[index - (length - suf.length)] as Pair)
-                      : (spread as Pair)
-            return carriedCodec(
-                (value): value is readonly never[] => Array.isArray(value),
-                'L',
-                (value) =>
-                    new CodecError(
-                        `${describeShape(value)} is not an array, and \`${shape}\` writes an 'L' — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                    ),
-                (held, enclosing) =>
-                    aligned(
-                        held.length,
-                        (arity) => `expected ${atLeast}${arity} elements`,
-                    ) ??
-                    every(held, (one, index) =>
-                        at(index, held.length).encode(one, enclosing),
-                    ),
-                (carried: readonly AttributeValue[], enclosing) =>
-                    aligned(
-                        carried.length,
-                        (arity) => `expected a list of ${atLeast}${arity}`,
-                    ) ??
-                    every(carried, (one, index) =>
-                        at(index, carried.length).decode(one, enclosing),
-                    ),
+        case 'list':
+            return listPair(
+                def.pre.map(pairOf),
+                def.spread && pairOf(def.spread),
+                def.suf.map(pairOf),
             )
-        }
         /**
          * The rule `(set)`, and the one product that is **not** a {@link carriedCodec}. The model says
          * why: its attribute side is a choice among three wire sets rather than one member, so
@@ -1555,70 +1637,7 @@ export const denote = (def: Term): Pair => {
             // a slice, a meet or an opening builds a term whose children no former built, so this
             // row is where the judgment of such an element runs
             judged(def.elem)
-            const inner = codecAtLevel(def.elem, 0)
-            const one = elementMember(def.elem)
-            if (one !== 'S' && one !== 'N' && one !== 'B') {
-                // `judge` refuses a set of any other member first, so this narrows `one` for `setMember`
-                throw new CodecError(
-                    'codecOfTerm received a set that the judge did not refuse',
-                )
-            }
-            const member = one
-            const setMember = setMembers[one]
-            const carried = (value: unknown): Result<string | Uint8Array> =>
-                andThen(
-                    inner.encode(value as never),
-                    (written) =>
-                        (written as Record<string, unknown>)[member] as
-                            | string
-                            | Uint8Array,
-                )
-            return {
-                encode: (value: unknown) =>
-                    !(value instanceof Set)
-                        ? new CodecError(
-                              `${describeShape(value)} is not a \`Set\`, and a ${setMember} is written from one — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
-                          )
-                        : andThen(every([...value], carried), (written) =>
-                              // two members that write one stored member make a set that DynamoDB
-                              // refuses, and a merge would decode to a smaller set
-                              wireSet(setMember, written, {
-                                  empty: `DynamoDB has no empty ${setMember}; omit the attribute or use array(...)`,
-                                  repeated: `two members of this set write one ${member}, and DynamoDB refuses a ${setMember} that repeats a member`,
-                              }),
-                          ),
-                decode: (attribute) =>
-                    andThen(
-                        andThen(expect(setMember, attribute), (carried) => {
-                            const members = carried as readonly (
-                                | string
-                                | Uint8Array
-                            )[]
-                            const fault = faultOfSet(setMember, members)
-                            if (fault !== undefined) {
-                                return setFaultError(setMember, fault)
-                            }
-                            return every(members, (raw) =>
-                                inner.decode(carrying(member, raw as never)),
-                            )
-                        }),
-                        (read) => {
-                            // the model's `setImage` refuses an image that is not injective, and
-                            // `Set` would merge the two members into one value
-                            const first = new Map<unknown, number>()
-                            for (const [at, one] of read.entries()) {
-                                const earlier = first.get(one)
-                                if (earlier !== undefined) {
-                                    return new CodecError(
-                                        `members ${earlier} and ${at} of this ${setMember} read to one value, and a set holds each value one time, so the value read would not write back as this attribute`,
-                                    )
-                                }
-                                first.set(one, at)
-                            }
-                            return new Set(read)
-                        },
-                    ),
-            }
+            return setPair(def.elem, codecAtLevel(def.elem, 0))
         }
         /**
          * The object: {@link bodySem} carried into an `M`. The row is the wrapper and the body is
@@ -1893,6 +1912,55 @@ const guardReason = (subject: string, use: 2 | 3): string =>
  * declaration. A scope runs the guard on each entry, then the judgment of each copy. Each case
  * states its reason.
  */
+/**
+ * **A declared position that nothing fills makes the whole list unconstructible.** The model types
+ * such a list and gives it an empty held set, which is correct as a model. The host refuses the
+ * list, because the declaration is a second spelling of `never`, and the trap is that the
+ * declaration looks like a schema. The spread is not a slot: a value of exactly the declared
+ * length omits every spread position, as in the model's `Term.list`. `array` and `list` run this
+ * and {@link guard} at the declaration, so they reach no judgment of another kind.
+ */
+export const judgeList = (
+    t: Extract<Term, { kind: 'list' }>,
+): CodecError | undefined => {
+    const at = [...t.pre, ...t.suf].findIndex((child) => holdsNoValue(child))
+    return at === -1
+        ? undefined
+        : new CodecError(
+              `position ${at} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
+          )
+}
+
+/**
+ * **The DynamoDB set obligation, and a law.** A stored set holds elements of one member of `S`,
+ * `N` or `B`, the model's `SetElem`. `TOp.rule` answers `none` at `legacy`, because a read widening
+ * is not a partial bijection, and `lawful_setCodec` needs a lawful element.
+ */
+export const judgeSet = (
+    t: Extract<Term, { kind: 'set' }>,
+): CodecError | undefined => {
+    const member = elementMember(t.elem)
+    if (member !== 'S' && member !== 'N' && member !== 'B')
+        return new CodecError(
+            `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
+        )
+    if (widensRead(t.elem))
+        return new CodecError(
+            `a set's element cannot carry \`legacy\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`legacy\` around the whole set`,
+        )
+    return undefined
+}
+
+/**
+ * **The judgment of a container at its declaration**: the refusal of its own kind, then the guard
+ * of the model. Each constructor passes the judge of its own kind, so a bundle of one container
+ * holds the judge of that kind and no other. A refusal throws.
+ */
+export const judgedBy = (t: Term, own: CodecError | undefined): void => {
+    const refusal = own ?? guard(t)
+    if (refusal) throw refusal
+}
+
 const judge = (t: Term, declaring: boolean): CodecError | undefined => {
     const empty = (child: Term): boolean => holdsNoValue(child)
     switch (t.kind) {
@@ -1902,11 +1970,8 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
         // trap is that the declaration looks like a schema. The spread is not a slot: a value of
         // exactly the declared length omits every spread position, as in the model's `Term.list`
         case 'list': {
-            const at = [...t.pre, ...t.suf].findIndex(empty)
-            if (at !== -1)
-                return new CodecError(
-                    `position ${at} of the declared positions is \`never\`, so nothing fills it and the list holds no value at all — use \`never\` itself if that is what you meant`,
-                )
+            const refusal = judgeList(t)
+            if (refusal) return refusal
             break
         }
         // **A name that the row always writes, at a node that holds no value.** The model gives
@@ -1924,15 +1989,8 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
         // `S`, `N` or `B`, the model's `SetElem`. `TOp.rule` answers `none` at `legacy`, because a
         // read widening is not a partial bijection, and `lawful_setCodec` needs a lawful element
         case 'set': {
-            const member = elementMember(t.elem)
-            if (member !== 'S' && member !== 'N' && member !== 'B')
-                return new CodecError(
-                    `a set holds strings, numbers or binary, and this element writes ${member ? `'${member}'` : 'no single member'}`,
-                )
-            if (widensRead(t.elem))
-                return new CodecError(
-                    `a set's element cannot carry \`legacy\`: a read widening is not a lawful element, so no law covers the set of it; declare the set of the current codec, and read the older form with \`legacy\` around the whole set`,
-                )
+            const refusal = judgeSet(t)
+            if (refusal) return refusal
             break
         }
         // **A wall reaches no cycle.** A wall is a `held` or a `legacy` with an older
@@ -2020,6 +2078,21 @@ export const judged = (t: Term, declaring = true): void => {
  * `codecOfTerm` of `capabilities.ts`.
  */
 const pairs = new WeakMap<Term, Pair>()
+
+/**
+ * The pair that a codec carries in {@link pairSlot}. Every codec of this library has it, because
+ * `codecWithPair` fills it. A codec without the slot is none that this library built, and a
+ * container cannot take its pair, so the read refuses.
+ */
+export const pairOfCodec = (codec: AnyCodec): Pair => {
+    const carried = (codec as { readonly [pairSlot]?: Pair })[pairSlot]
+    if (carried === undefined) {
+        throw new CodecError(
+            'a container needs the pair of its element, and this codec carries none: build the element with a constructor of this library',
+        )
+    }
+    return carried
+}
 
 /** Records the pair of a term that a constructor built, so a container reads that pair. */
 export const seedPair = (def: Term, pair: Pair): void => {
@@ -2115,10 +2188,13 @@ export const codecWithPair = <T, A extends AttributeValue>(
         decode: (attribute) =>
             openRefusal(def) ?? pair.decode(attribute, enclosing),
     }
-    return codec<T, A>({
-        def,
-        ...(atTop as Pick<Codec<T, A>, 'encode' | 'decode'>),
-    })
+    return codec<T, A>(
+        {
+            def,
+            ...(atTop as Pick<Codec<T, A>, 'encode' | 'decode'>),
+        },
+        pair,
+    )
 }
 
 const unrecoverable = (what: string, instead: string) =>

@@ -20,6 +20,9 @@ import {
     discriminatedUnion,
     fill,
     item,
+    list,
+    mdunion,
+    never,
     nullable,
     number,
     object,
@@ -27,6 +30,7 @@ import {
     orThrow,
     refine,
     set,
+    spread,
     string,
     union,
 } from '../../codec'
@@ -88,6 +92,16 @@ const constructed: Record<string, AnyCodec> = {
     literal: string('x', 'y'),
     list: array(string),
     strings: set(string),
+    tuple: list(string, number),
+    tail: list(string, spread(number), boolean),
+    middle: list(string, spread(number), boolean, binary),
+    listOfLiterals: list(string('A', 'B'), spread(string('C'))),
+    setOfLiterals: set(string('A', 'B')),
+    setOfBinary: set(binary),
+    ofObjects: array(A),
+    ofTagged: array(discriminatedUnion('kind', [A, B])),
+    ofMulti: list(mdunion(['kind'], [A, B])),
+    setOfRefined: set(refine(string, (s): s is string => s.length > 1)),
     numbers: set(number),
     nested: array(array(number)),
     object: object({ a: string, b: optional(number), c: fill(string, 'z') }),
@@ -215,4 +229,52 @@ describe('a codec of a constructor and the codec of its term agree', () => {
             }
         })
     }
+
+    /**
+     * The refusals of a container at its declaration are one text on the two routes: the
+     * constructor runs the judgment of its own kind, and the all-kinds route runs the judgment of
+     * the term, and a list that nothing fills or a set of another member is refused by both.
+     */
+    const refusal = (build: () => unknown): string | undefined => {
+        try {
+            build()
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error)
+        }
+        return undefined
+    }
+    it('a list with a position that nothing fills is refused with one text', () => {
+        const constructed = refusal(() =>
+            // @ts-expect-error a declared position at `never` is refused in the type too
+            list(never, string),
+        )
+        const term = refusal(() =>
+            codecOfTerm({
+                kind: 'list',
+                pre: [{ kind: 'never' }, { kind: 'string' }],
+                suf: [],
+            }),
+        )
+        expect(constructed).toMatch(/position 0 of the declared positions/)
+        expect(constructed).toBe(term)
+    })
+    it('a set of an element that writes no S, N or B is refused with one text', () => {
+        const constructed = refusal(() => set(boolean as never))
+        const term = refusal(() =>
+            codecOfTerm({ kind: 'set', elem: { kind: 'boolean' } }),
+        )
+        expect(constructed).toMatch(/a set holds strings, numbers or binary/)
+        expect(constructed).toBe(term)
+    })
+
+    it('a container refuses an element that carries no pair, because it cannot take the pair from a term', () => {
+        const bare = {
+            encode: string.encode,
+            decode: string.decode,
+            unsafeEncode: string.unsafeEncode,
+            unsafeDecode: string.unsafeDecode,
+            def: string.def,
+        }
+        expect(() => array(bare as never)).toThrow(/carries none/)
+    })
 })

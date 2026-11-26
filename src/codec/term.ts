@@ -1899,3 +1899,10 @@ export const readingSlot = Symbol('reading')
  * the constructor, so `at` holds no reference to the code of a union.
  */
 export const unionSlot = Symbol('union')
+
+/**
+ * The slot where a codec carries its pair, the two halves that take a level. A container reads the
+ * pair of a child codec here, so a constructor of a container holds no reference to the switch
+ * that denotes a term of any other kind. The slot is a symbol, so a spread of the codec copies it.
+ */
+export const pairSlot = Symbol('pair')

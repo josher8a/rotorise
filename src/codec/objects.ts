@@ -10,7 +10,7 @@ import type {
     ObjectSlot,
 } from './build'
 import { codecOfTerm } from './capabilities'
-import { defOf, termOf } from './denote'
+import { defOf, pairOfCodec, termOf } from './denote'
 import type {
     AnyObjectEntry,
     DerivedItem,
@@ -32,7 +32,7 @@ import type {
     UnionCodec,
 } from './scope'
 import type { Body, Field, optionsMarker, TermMark, TermOf } from './term'
-import { pinnedValue, resolvedTerm, storedPin } from './term'
+import { pairSlot, pinnedValue, resolvedTerm, storedPin } from './term'
 
 /* ── the readers ──────────────────────────────────────────────────────────────────────── */
 
@@ -219,7 +219,7 @@ export const objectFromMap = <
     // off. Named member by member rather than spread so the cast keeps the *shape* the map carries —
     // `Attribute<'M'>` would flatten it to "some map" — and so that a call to `object` stays a plain
     // object literal, which is what lets a bundler drop an unused one
-    return {
+    const built = {
         encode: nested.encode,
         decode: nested.decode,
         unsafeEncode: nested.unsafeEncode,
@@ -227,7 +227,10 @@ export const objectFromMap = <
         def: nested.def,
         spec,
         rest,
+        // a container reads the pair of its element here
+        [pairSlot]: pairOfCodec(nested),
     }
+    return built
 }
 
 export type OptionalObjectSlot = {
