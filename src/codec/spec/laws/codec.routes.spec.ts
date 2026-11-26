@@ -8,8 +8,10 @@
  * result by the codec of the copied term, and the item reading agrees where the codec has one.
  * The copy is a new object, so the cache of the identity of a term gives no answer.
  */
+import * as sdk from '@aws-sdk/util-dynamodb'
 import { describe, expect, it } from 'vitest'
 import { codecOfTerm } from '../../allKinds'
+import type { AttributeMap } from '../../attribute'
 import { DynamoNumber } from '../../attribute'
 import type { AnyCodec } from '../../codec'
 import {
@@ -43,7 +45,14 @@ import { termOf } from '../../denote'
 import { native } from '../../native'
 import { dynamoNumber } from '../../prisms'
 import type { Term } from '../../term'
-import { arbitraryOf, rngFrom, structuralEquals } from '../../testing'
+import type { Checkable, Reference } from '../../testing'
+import {
+    arbitraryOf,
+    checkAgainst,
+    firstDifference,
+    rngFrom,
+    structuralEquals,
+} from '../../testing'
 
 /** A deep copy of a term, which keeps each `ref` and each function by identity. */
 const copyOf = (t: unknown, seen = new Map<object, unknown>()): unknown => {
@@ -61,8 +70,16 @@ const copyOf = (t: unknown, seen = new Map<object, unknown>()): unknown => {
     return out
 }
 
-/** A named codec of the pool. A list of entries holds each name, so a name that two entries share is visible. */
-type Entry = readonly [name: string, codec: AnyCodec]
+/**
+ * A named codec of the pool, and the values that the intended meaning admits. A list of entries holds
+ * each name, so a name that two entries share is visible. The intended values come from the reading
+ * of the constructor and not from the term of the codec, so a wrong term cannot hide behind them.
+ */
+type Entry = readonly [
+    name: string,
+    codec: AnyCodec,
+    ...intended: readonly unknown[],
+]
 
 const A = object({ kind: string('A'), a: string })
 const B = object({ kind: string('B'), b: number })
@@ -78,37 +95,62 @@ const bytes = [Uint8Array.of(1), Uint8Array.of(2, 3)] as const
  * The two statements of one meaning must agree on each value and on the text of each refusal.
  */
 const literals: readonly Entry[] = [
-    ['one', string('A')],
-    ['choice', string('A', 'B')],
-    ['flags', boolean(true, false)],
-    ['oneBinary', binary(bytes[0])],
-    ['binaries', binary(...bytes)],
+    ['one', string('A'), 'A'],
+    ['choice', string('A', 'B'), 'A', 'B'],
+    ['flags', boolean(true, false), true, false],
+    ['oneBinary', binary(bytes[0]), bytes[0]],
+    ['binaries', binary(...bytes), ...bytes],
     ['oneNumber', dynamoNumber(numOne)],
     ['numbers', dynamoNumber(numOne, twoAndAHalf)],
-    ['floats', number(1, 2)],
+    ['floats', number(1, 2), 1, 2],
     ['decimals', decimal('1', '2.5')],
-    ['inObject', object({ kind: string('A', 'B'), n: number(1, 2) })],
-    ['inArray', array(string('A', 'B'))],
+    [
+        'inObject',
+        object({ kind: string('A', 'B'), n: number(1, 2) }),
+        { kind: 'A', n: 1 },
+        { kind: 'B', n: 2 },
+    ],
+    ['inArray', array(string('A', 'B')), ['A', 'B'], []],
 ]
 
 const constructed: readonly Entry[] = [
     ...literals,
-    ['string', string],
-    ['number', number],
+    ['string', string, 'x', ''],
+    ['number', number, 1.5, 0],
     ['decimal', decimal],
-    ['boolean', boolean],
-    ['binary', binary],
-    ['literal', string('x', 'y')],
-    ['list', array(string)],
-    ['strings', set(string)],
-    ['tuple', list(string, number)],
-    ['tail', list(string, spread(number), boolean)],
-    ['middle', list(string, spread(number), boolean, binary)],
-    ['listOfLiterals', list(string('A', 'B'), spread(string('C')))],
-    ['setOfLiterals', set(string('A', 'B'))],
-    ['setOfBinary', set(binary)],
-    ['ofObjects', array(A)],
-    ['open', object({ a: string }, [string, optional(number)])],
+    ['boolean', boolean, true, false],
+    ['binary', binary, bytes[1]],
+    ['literal', string('x', 'y'), 'x', 'y'],
+    ['list', array(string), ['a', 'b'], []],
+    ['strings', set(string), new Set(['a', 'b'])],
+    ['tuple', list(string, number), ['a', 1]],
+    [
+        'tail',
+        list(string, spread(number), boolean),
+        ['a', 1, 2, true],
+        ['a', true],
+    ],
+    [
+        'middle',
+        list(string, spread(number), boolean, binary),
+        ['a', 1, 2, true, bytes[0]],
+        ['a', true, bytes[0]],
+    ],
+    [
+        'listOfLiterals',
+        list(string('A', 'B'), spread(string('C'))),
+        ['A', 'C', 'C'],
+        ['B'],
+    ],
+    ['setOfLiterals', set(string('A', 'B')), new Set(['A', 'B'])],
+    ['setOfBinary', set(binary), new Set(bytes)],
+    ['ofObjects', array(A), [{ kind: 'A', a: 'x' }]],
+    [
+        'open',
+        object({ a: string }, [string, optional(number)]),
+        { a: 'x' },
+        { a: 'x', k: 1 },
+    ],
     [
         'marks',
         object({
@@ -116,28 +158,48 @@ const constructed: readonly Entry[] = [
             b: optional(boolean),
             c: fill(number, 1),
         }),
+        { a: undefined, b: true, c: 2 },
+        { a: 'x', c: 1 },
     ],
     [
         'deep',
         object({
             inner: object({ list: array(string('A', 'B')), tags: set(string) }),
         }),
+        { inner: { list: ['A'], tags: new Set(['a']) } },
     ],
-    ['ofTagged', array(discriminatedUnion('kind', [A, B]))],
-    ['ofMulti', list(mdunion(['kind'], [A, B]))],
-    ['setOfRefined', set(refine(string, (s): s is string => s.length > 1))],
-    ['setOfNumbers', set(number)],
-    ['nested', array(array(number))],
+    [
+        'ofTagged',
+        array(discriminatedUnion('kind', [A, B])),
+        [
+            { kind: 'A', a: 'x' },
+            { kind: 'B', b: 1 },
+        ],
+    ],
+    [
+        'ofMulti',
+        list(mdunion(['kind'], [A, B])),
+        [{ kind: 'A', a: 'x' }],
+        [{ kind: 'B', b: 1 }],
+    ],
+    [
+        'setOfRefined',
+        set(refine(string, (s): s is string => s.length > 1)),
+        new Set(['ab', 'cd']),
+    ],
+    ['setOfNumbers', set(number), new Set([1, 2.5])],
+    ['nested', array(array(number)), [[1], [2, 3]]],
     [
         'object',
         object({ a: string, b: optional(number), c: fill(string, 'z') }),
+        { a: 'x', b: 1, c: 'y' },
     ],
-    ['nullable', nullable(string)],
-    ['nullValue', nullValue],
+    ['nullable', nullable(string), 'x', null],
+    ['nullValue', nullValue, null],
     ['opaque', opaque],
-    ['lossy', opaque('lossy')],
-    ['refuse', opaque('refuse')],
-    ['refined', refine(string, (s): s is string => s.length > 1)],
+    ['lossy', opaque('lossy'), 'x', 1, { a: [true, null] }],
+    ['refuse', opaque('refuse'), 'x', { a: [true, null] }],
+    ['refined', refine(string, (s): s is string => s.length > 1), 'ab'],
     [
         'held',
         held(string, string, {
@@ -151,16 +213,23 @@ const constructed: readonly Entry[] = [
             current: string,
             older: { decode: (attribute: unknown) => String(attribute) },
         }),
+        'x',
     ],
     [
         'refinedObject',
         object({
             name: refine(string, (s): s is string => s.length > 1),
         }),
+        { name: 'ab' },
     ],
-    ['union', union([string, number])],
-    ['objects', union([A, B])],
-    ['tagged', discriminatedUnion('kind', [A, B])],
+    ['union', union([string, number]), 'x', 1],
+    ['objects', union([A, B]), { kind: 'A', a: 'x' }, { kind: 'B', b: 1 }],
+    [
+        'tagged',
+        discriminatedUnion('kind', [A, B]),
+        { kind: 'A', a: 'x' },
+        { kind: 'B', b: 1 },
+    ],
 ]
 
 describe('a codec of a constructor and the codec of its term agree', () => {
@@ -422,4 +491,93 @@ describe('a codec of a constructor and the codec of its term agree', () => {
         expect(rebuilt.encode(value as never)).toEqual(written)
         expect(native.decode(written as never)).toEqual(value)
     })
+})
+
+/**
+ * The SDK marshaller is the external anchor for the attribute format, and the two routes above
+ * compare one term with itself. A constructor that builds a wrong term passes the routes, because
+ * both routes read the wrong term. The SDK reads no term of ours, so a wrong term writes bytes that
+ * the SDK does not write.
+ *
+ * The adaptations are the ones of `conformance.spec.ts`: a set sorts its elements, and a value
+ * beyond `MAX_SAFE_INTEGER` is out of the range of the SDK. One more: the SDK refuses `undefined`
+ * unless the call asks for the removal, and a codec omits an attribute that holds `undefined`.
+ */
+const beyondSafe = (value: unknown): boolean =>
+    typeof value === 'number'
+        ? Math.abs(value) > Number.MAX_SAFE_INTEGER
+        : value instanceof Set || Array.isArray(value)
+          ? [...value].some(beyondSafe)
+          : typeof value === 'object' &&
+            value !== null &&
+            !(value instanceof Uint8Array) &&
+            Object.values(value).some(beyondSafe)
+
+const withSortedSets = (value: unknown): unknown =>
+    value instanceof Set
+        ? new Set([...value].sort())
+        : Array.isArray(value)
+          ? value.map(withSortedSets)
+          : typeof value === 'object' &&
+              value !== null &&
+              !(value instanceof Uint8Array)
+            ? Object.fromEntries(
+                  Object.entries(value).map(([k, v]) => [k, withSortedSets(v)]),
+              )
+            : value
+
+const theSdk: Reference<unknown> = {
+    marshall: (entity) =>
+        sdk.marshall(withSortedSets(entity) as Record<string, unknown>, {
+            removeUndefinedValues: true,
+        }) as AttributeMap,
+}
+
+/** The codecs of the pool that the SDK cannot express, each with the reason. */
+const beyondTheSdk = new Map<string, string>([
+    ['oneNumber', 'the SDK has no value for a DynamoNumber'],
+    ['numbers', 'the SDK has no value for a DynamoNumber'],
+    ['decimals', 'the SDK writes a string as S and never as N'],
+    ['decimal', 'the SDK writes a string as S and never as N'],
+    [
+        'opaque',
+        'the drawn value holds a DynamoNumber, which the SDK has no value for',
+    ],
+    ['held', 'the adapter of the codec is unknown to the SDK'],
+])
+
+describe('the bytes of a codec of the pool are the bytes of the SDK', () => {
+    it('each skipped name is a name of the pool', () => {
+        const names = constructed.map(([name]) => name)
+        expect(
+            [...beyondTheSdk.keys()].filter((n) => !names.includes(n)),
+        ).toEqual([])
+    })
+
+    for (const [name, codec, ...intended] of constructed) {
+        const reason = beyondTheSdk.get(name)
+        if (reason !== undefined) {
+            it.skip(`${name}: skipped, ${reason}`, () => {})
+            continue
+        }
+        it(`${name}: the SDK writes the bytes of the codec over the intended values and the drawn values`, () => {
+            expect(intended.length).toBeGreaterThan(0)
+            const subject = item(
+                object({ v: codec as never }),
+            ) as unknown as Checkable<unknown>
+            for (const v of intended) {
+                expect(
+                    firstDifference(
+                        subject.unsafeEncode({ v }),
+                        theSdk.marshall({ v }),
+                    ),
+                ).toBeUndefined()
+            }
+            checkAgainst(subject, theSdk, {
+                count: 40,
+                seed: 20261128,
+                filter: (entity) => !beyondSafe(entity),
+            })
+        })
+    }
 })
