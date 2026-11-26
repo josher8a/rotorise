@@ -15,9 +15,13 @@ import type { Pair } from './denote'
 import {
     codecAtLevel,
     codecWithPair,
+    heldPair,
     judged,
+    judgedBy,
+    judgeWall,
     literalOf,
     literalTermOf,
+    pairOfCodec,
     seedPair,
     termOf,
 } from './denote'
@@ -259,20 +263,29 @@ export const literalCallOf = (
  * cannot be the membership test for a JS float.
  */
 export const numericAdapter = <T>(
-    inner: Term,
+    inner: AnyCodec,
     outer: Term,
     into: (value: T) => Result<DynamoNumber>,
     outOf: (held: DynamoNumber) => Result<T>,
     via?: 'decimalText' | 'float',
-): AttributeCodec<T, Attribute<'N'>> =>
-    codecOfTerm<T, Attribute<'N'>>({
+): AttributeCodec<T, Attribute<'N'>> => {
+    const term: Extract<Term, { kind: 'held' }> = {
         kind: 'held',
-        inner,
+        inner: termOf(inner),
         outer,
         f: into as (value: never) => unknown,
         g: outOf as (held: never) => unknown,
         ...(via ? { via } : {}),
-    })
+    }
+    // the judgment and the pair come from the kind alone, so a bundle of a numeric adapter holds
+    // no switch over the other kinds
+    judgedBy(term, judgeWall(term))
+    return codecOfPair<T, Attribute<'N'>>(
+        term,
+        heldPair(pairOfCodec(inner), term),
+        literalCallOf(term),
+    )
+}
 
 /**
  * The digits a caller wrote, refused rather than re-spelled.
@@ -297,7 +310,7 @@ export const storedOnly = (value: string): Result<DynamoNumber> =>
 export const decimalCall = (...allowed: readonly string[]) => {
     const stored = allowed.map((one) => orThrow(storedOnly(one)))
     return numericAdapter<string>(
-        termOf(literalCapability('number', 'decimal')(...stored) as AnyCodec),
+        literalCapability('number', 'decimal')(...stored) as AnyCodec,
         // the held side is the texts the adapter hands the caller, so the view is exact
         literalTermOf(
             'string',
@@ -375,11 +388,9 @@ export const asJsNumber = (held: DynamoNumber): Result<number> => {
 /** The literal call of {@link number}: each alternative is refused at the caller's level first. */
 export const numberCall = (...allowed: readonly number[]) =>
     numericAdapter<number>(
-        termOf(
-            literalCapability('number')(
-                ...numericAlternatives(allowed),
-            ) as AnyCodec,
-        ),
+        literalCapability('number')(
+            ...numericAlternatives(allowed),
+        ) as AnyCodec,
         { kind: 'number' },
         asFloat,
         asJsNumber,

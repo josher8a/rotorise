@@ -16,6 +16,7 @@ import {
     codecOfGround,
     codecOfPair,
     codecOfTerm,
+    literalCapability,
     numericAdapter,
     storedOnly,
 } from './capabilities'
@@ -170,7 +171,11 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
             ...allowed: T & SomeValue<'dynamoNumber', T>
         ): AttributeCodec<T[number], Attribute<'N'>> &
             TermMark<LitsT<'number', NumTexts<T>>>
-    } = /* @__PURE__ */ codecOfTerm({ kind: 'number' }) as never
+    } = /* @__PURE__ */ codecOfPair(
+    { kind: 'number' },
+    /* @__PURE__ */ groundOf('number'),
+    literalCapability('number', 'dynamoNumber'),
+) as never
 
 /**
  * The refusal in the type of a decimal literal that is not the stored spelling: the run time of
@@ -223,7 +228,7 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> &
             >
     }
 export const decimal: DecimalCodec = /* @__PURE__ */ numericAdapter<string>(
-    { kind: 'number' },
+    dynamoNumber,
     { kind: 'string' },
     storedOnly,
     (held) => held.toString(),
@@ -250,7 +255,7 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> &
             TermMark<FloatT<LitsT<'number', FloatTexts<L>>>>
     }
 export const number: NumberCodec = /* @__PURE__ */ numericAdapter<number>(
-    { kind: 'number' },
+    dynamoNumber,
     { kind: 'number' },
     asFloat,
     asJsNumber,
