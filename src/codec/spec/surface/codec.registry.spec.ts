@@ -116,7 +116,7 @@ describe('a definition generates what the codec generated', () => {
     // here are now `number` and `number(0, 1, 2)`, whose kinds were already covered), and
     // `nullValue` was added, giving the `NULL` point a codec for the first time
     //
-    // 17: `dunion` went. `mdunion` and `discriminatedUnion` still build a codec, and the term they
+    // 17: `dunion` went. `discriminatedUnion` and `discriminatedUnion` still build a codec, and the term they
     // build is a `union` — there is one sum, and the tag table is the builder's own index rather
     // than a second kind a term can be
     //

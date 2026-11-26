@@ -228,12 +228,11 @@ export type DissectedCodec<
 }
 
 /**
- * What {@link mdunion} returns, read at the arity the caller wrote.
+ * What {@link discriminatedUnion} returns, read at the arity the caller wrote.
  *
- * **At one key it is today's type, exactly.** `discriminatedUnion` is `mdunion` at one
- * discriminator, so the two have to be the same type and not merely compatible ones — a caller
- * who swaps the call changes no annotation, and `discriminator`, `spec` and the
- * `Writes` pin all read as they did.
+ * **At one key it is `DiscriminatedCodec`, exactly.** A bare key is a tuple of one key, so the two
+ * spellings have to be the same type and not merely compatible ones — a caller who swaps the call
+ * changes no annotation, and `discriminator`, `spec` and the `Writes` pin all read as they did.
  */
 export type Dissection<
     Ks extends readonly string[],
@@ -814,19 +813,17 @@ export type MembersTagged<
           : ErrorMessage<`[discriminatedUnion] ${MultiTaggedAnywhere<Specs, Ks>} names the discriminator with a literal admitting several values, and a variant answers to exactly one tag — split it into one option per value`>
       : ErrorMessage<'[discriminatedUnion] every option must name the discriminator with a literal at `string`, `number` or `decimal`, or a lookup cannot find it'>
 
-/**
- * The one-key gate, as the instance of {@link MembersTagged} at a one-element key set.
- *
- * One rule and not two: the messages are the same strings at one key, so the surface a caller
- * reads did not move, and a change to the rule cannot reach one arity and miss the other.
- */
-export type EveryOptionTagged<
-    Specs extends readonly unknown[],
-    D extends PropertyKey,
-> = MembersTagged<Specs, readonly [D]>
+/** The key set that a call spells: a bare key is the key set of one. */
+type KeysOf<K extends string | readonly string[]> = K extends string
+    ? readonly [K]
+    : K
 
 /**
- * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
+ * A union of objects told apart by one attribute or by several — `zod`'s `discriminatedUnion`, over
+ * an item.
+ *
+ * The first argument is a key, or a non-empty tuple of keys. A key is the key set of one, so the
+ * two spellings at one key build the same term, the same table and the same codec.
  *
  * The stored value of the discriminator chooses the option, and each option says which value it is by
  * naming that attribute with a literal — `string('CHECKUP')`, `number(1)`, `decimal('1')`. A
@@ -837,45 +834,6 @@ export type EveryOptionTagged<
  * The options are *codecs*, not bare specs, so an option that already has a name can be handed over
  * by it and a nested union reads the same as a nested anything else. What the union needs of an
  * option — its attributes, and what its discriminator admits — an object codec already carries.
- *
- * @example
- * ```ts
- * discriminatedUnion('type', [
- *     object({ type: string('CHECKUP'), petId: string, vetId: string }),
- *     object({ type: string('SHOT'), petId: string, vaccine: string }),
- * ])
- * ```
- */
-export const mdunion = <
-    const Ks extends readonly [string, ...string[]],
-    const Options extends readonly AnyObjectCodec[],
->(
-    ks: Ks,
-    options: Options & MembersTagged<SpecsOf<Options>, Ks>,
-): Dissection<Ks, Options> &
-    TermMark<['union', TermsOf<Options>]> &
-    OptionsMark<Options> =>
-    // one cast, at the one place where a runtime table meets a type computed from the specs: the
-    // builder is written once over `readonly string[]`, and {@link Dissection} is what that builder
-    // produces read at the arity the caller wrote
-    dissect(ks, options as readonly AnyObjectCodec[]) as never
-
-/**
- * A union of objects told apart by one attribute — `zod`'s `discriminatedUnion`, over an item.
- *
- * The stored value of the discriminator chooses the option, and each option says which value it is by
- * naming that attribute with a literal — `string('CHECKUP')`, `number(1)`, `decimal('1')`. A
- * lookup rather than a search: it cannot be ambiguous,
- * and it is the only union that can encode a *patch*, because a subset of the attributes does not say
- * which option it belongs to.
- *
- * The options are *codecs*, not bare specs, so an option that already has a name can be handed over
- * by it and a nested union reads the same as a nested anything else. What the union needs of an
- * option — its attributes, and what its discriminator admits — an object codec already carries.
- *
- * **{@link mdunion} at one discriminator**, and nothing else: the two spellings build the same term,
- * the same table and the same codec, so a caller can replace one with the other and change no other
- * line. This name is the one-key case because one discriminator is what almost every entity needs.
  *
  * @example
  * ```ts
@@ -886,26 +844,21 @@ export const mdunion = <
  * ```
  */
 export const discriminatedUnion = <
-    const D extends string,
+    const K extends string | readonly [string, ...string[]],
     const Options extends readonly AnyObjectCodec[],
 >(
-    discriminator: D,
-    options: Options & EveryOptionTagged<SpecsOf<Options>, D>,
-): DiscriminatedCodec<
-    DerivedVariants<SpecsOf<Options>, RestsOf<Options>>,
-    D,
-    ByTag<SpecsOf<Options>, D>,
-    FreeOf<Options[number]>
-> &
+    key: K,
+    options: Options & MembersTagged<SpecsOf<Options>, KeysOf<K>>,
+): Dissection<KeysOf<K>, Options> &
     TermMark<['union', TermsOf<Options>]> &
     OptionsMark<Options> =>
-    // **the type arguments are given, not inferred, and that is what makes the alias cast-free.**
-    // Inferring them from `options` would take `Options` to be the *intersection* the parameter
-    // declares — `Options & MembersTagged<…>` — and the return type computed from that intersection
-    // is not the one this signature promises. Pinned, `Dissection<readonly [D], Options>` reduces to
-    // exactly the `DiscriminatedCodec` below, and `EveryOptionTagged<SpecsOf<Options>, D>` is
-    // `MembersTagged<SpecsOf<Options>, readonly [D]>` by definition, so the argument needs nothing.
-    mdunion<readonly [D], Options>([discriminator], options)
+    // one cast, at the one place where a runtime table meets a type computed from the specs: the
+    // builder is written once over `readonly string[]`, and {@link Dissection} is what that builder
+    // produces read at the arity the caller wrote
+    dissect(
+        typeof key === 'string' ? [key] : key,
+        options as readonly AnyObjectCodec[],
+    ) as never
 
 /**
  * A union told apart by what each option holds, with no tag to switch on — `zod`'s `union`.

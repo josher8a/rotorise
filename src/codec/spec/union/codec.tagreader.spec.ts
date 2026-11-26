@@ -13,7 +13,6 @@ import {
     discriminatedUnion,
     held,
     item,
-    mdunion,
     number,
     object,
     ref,
@@ -196,7 +195,7 @@ describe('two members that decode their tag to one value', () => {
     it('are refused where the two differ at another key, because the write reads each key alone', () => {
         expect(() =>
             item(
-                mdunion(
+                discriminatedUnion(
                     ['kind', 'size'],
                     // @ts-expect-error two options decode 'kind' to 'dog', and store two texts
                     [
@@ -278,7 +277,7 @@ describe('two members that decode their tag to one value', () => {
     it('are refused where a tag that is a union of one literal decodes to the value of the other tag', () => {
         expect(() =>
             item(
-                mdunion(['kind', 'size'], [
+                discriminatedUnion(['kind', 'size'], [
                     object({
                         kind: DogTag,
                         size: string('small'),
@@ -296,7 +295,7 @@ describe('two members that decode their tag to one value', () => {
 
     it('write back the row that each reads, where the write gives each member its own text', () => {
         const Pets = item(
-            mdunion(['kind', 'size'], [
+            discriminatedUnion(['kind', 'size'], [
                 object({ kind: DogTag, size: string('small'), bark: string }),
                 object({
                     kind: string('cat'),
@@ -395,7 +394,7 @@ describe('the write of a tag that refuses', () => {
         const none = (v: 'small'): v is 'small' => v !== 'small'
         const refused = () =>
             item(
-                mdunion(['kind', 'size'], [
+                discriminatedUnion(['kind', 'size'], [
                     object({
                         kind: DogTag,
                         size: refine(string('small'), none),

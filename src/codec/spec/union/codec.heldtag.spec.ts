@@ -14,7 +14,6 @@ import {
     exclude,
     held,
     item,
-    mdunion,
     number,
     object,
     string,
@@ -64,7 +63,7 @@ describe('a tag under a caller adapter', () => {
 
     it('answers a plain key by the variants that carry it, and not by the literal of a member that holds an adapter at another key', () => {
         const Sized = item(
-            mdunion(['kind', 'size'], [
+            discriminatedUnion(['kind', 'size'], [
                 object({ kind: Dog, size: string('small'), bark: string }),
                 object({
                     kind: string('cat'),

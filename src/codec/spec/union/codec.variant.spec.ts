@@ -197,7 +197,7 @@ describe('tagged', () => {
      * Asserted at the *declaration* rather than at a read, which is the whole point: a union built
      * from a bare codec cannot be used at all, rather than failing on the first item that reaches it.
      *
-     * **Reached past a cast, deliberately.** `EveryOptionTagged` refuses both of these in the
+     * **Reached past a cast, deliberately.** `MembersTagged` refuses both of these in the
      * *type*, landing on the option that is wrong, and that is the gate a caller meets. The cast is
      * how this test gets to the second one. Both are needed and neither is redundant: a cast defeats
      * the type and nothing defeats the throw, which is why `dissectionOf` may take every variant's

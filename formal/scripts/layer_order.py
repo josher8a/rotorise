@@ -84,7 +84,7 @@ HOST_ORDER = [
     ("codec/prisms.ts", "Dynamo/Alg/Prisms.lean and Dynamo/Lang/Term.lean: the prism and the ground codec (`literalCodec`) of each scalar term, with `refine` and `fill` over them, as the primitives `Ground` and the predicate `Pred`"),
     ("codec/scope.ts", "Lang/Scope.lean and Dynamo/Lang/Scope.lean: a closed codec as one scope, with `ref`, the entries of a scope, and the object and union terms"),
     ("codec/opaque.ts", "Dynamo/Alg/Opaque.lean and Dynamo/Lang/Term.lean: `opaque` as the identity codec of the carrier, as an operation of `dynSig`"),
-    ("codec/sums.ts", "Alg/Combinators.lean, Dynamo/Alg/Sums.lean and Dynamo/Lang/Scope.lean: `altCodec`, the first option that acts, for `union`, `discriminatedUnion` and `mdunion`, as the term `Term.union`"),
+    ("codec/sums.ts", "Alg/Combinators.lean, Dynamo/Alg/Sums.lean and Dynamo/Lang/Scope.lean: `altCodec`, the first option that acts, for `union` and `discriminatedUnion`, as the term `Term.union`"),
     ("codec/objects.ts", "Dynamo/Alg/Objects.lean and Dynamo/Lang/Scope.lean: `objectCodec` over a field table, with the open block of the rule (record), as the terms `Term.object` and `Term.record`"),
     ("codec/scopePath.ts", "Lang/ScopePath.lean and Dynamo/Analysis/ScopePath.lean: `Rooted.at`, the frames at a path into a closed codec, and `narrowC`, the narrowing by a clause"),
     ("codec/separation.ts", "Alg/Relations.lean and Dynamo/Lang/Clause.lean: `Sub`, the graph inclusion, and `VSub`, the value order, as `below` decides them on terms, with `altsSub` for the literals. The model has no decision of the order on terms"),

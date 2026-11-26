@@ -950,7 +950,7 @@ const sliceRoot = (
         p.line(
             `dissection ${keys.join(',')}`,
             def,
-            `export const ${p.full('root')} = ${keys.length === 1 ? `discriminatedUnion(${quoted(key)}, ${list})` : `mdunion([${keys.map(quoted).join(', ')}], ${list})`}`,
+            `export const ${p.full('root')} = ${keys.length === 1 ? `discriminatedUnion(${quoted(key)}, ${list})` : `discriminatedUnion([${keys.map(quoted).join(', ')}], ${list})`}`,
         )
         const line = p.declarations.at(-1)
         if (line !== undefined)
@@ -1445,7 +1445,7 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, set, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, fill, held, item, legacy, list, never, nullValue, number, object, opaque, optional, ref, refine, scope, set, spread, string, undefinable, union } from '${library}/codec'`,
     `import { dynamoNumber } from '${library}/prisms'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { native } from '${library}/native'`,

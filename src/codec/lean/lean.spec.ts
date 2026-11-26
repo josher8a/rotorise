@@ -45,7 +45,6 @@ import {
     item as itemOf,
     legacy,
     list,
-    mdunion,
     meet,
     never,
     nullable,
@@ -1266,12 +1265,12 @@ export const sampleVectors: readonly Vector[] = [
         value: { p: 'x', q: true, r: '1' },
     },
     // **a two-key dissection**, which is a union of three objects each pinning two required
-    // literals. Built through `mdunion`, where it used to be a hand-written term: there is one sum
+    // literals. Built through `discriminatedUnion`, where it used to be a hand-written term: there is one sum
     // now, so the builder's result is an ordinary union and the public surface makes it
     {
         name: 'dunion_two_keys',
         codec: erase(
-            mdunion(
+            discriminatedUnion(
                 ['kind', 'size'],
                 [
                     object({
@@ -2008,7 +2007,7 @@ const dissections = (): readonly (readonly [
         [
             'two_keys',
             dissection(
-                mdunion(
+                discriminatedUnion(
                     ['k', 'j'],
                     [
                         object({ k: string('A'), j: string('X'), x: string }),

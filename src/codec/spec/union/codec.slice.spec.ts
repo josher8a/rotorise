@@ -25,7 +25,6 @@ import {
     held,
     item,
     list,
-    mdunion,
     narrow,
     never,
     number,
@@ -48,7 +47,7 @@ const food = object({
     gram: boolean,
 })
 
-const twoKey = mdunion(['kind', 'size'], [pet, dog, food])
+const twoKey = discriminatedUnion(['kind', 'size'], [pet, dog, food])
 
 describe('the extraction keeps the members a clause describes', () => {
     /**
@@ -156,7 +155,7 @@ describe('the extraction keeps the members a clause describes', () => {
      * does not describe, which is why the model's `altsSub` reads containment and not membership.
      */
     it('drops a member whose tags reach outside the clause', () => {
-        // a `union` and not an `mdunion`: a dissection refuses a member spanning two tags at a key,
+        // a `union` and not an `discriminatedUnion`: a dissection refuses a member spanning two tags at a key,
         // because a lookup reaches one member per tag. A union has no such rule, so it is where the
         // containment reading can be seen at all
         const tiers = union([
@@ -453,7 +452,7 @@ describe('the clause carries no order', () => {
     })
 
     it('gives the same members whichever order they were declared in', () => {
-        const reversed = mdunion(['kind', 'size'], [food, dog, pet])
+        const reversed = discriminatedUnion(['kind', 'size'], [food, dog, pet])
         const fromOne = extract(twoKey, object({ kind: string('pet') }))
             .def as {
             readonly options: readonly unknown[]
@@ -504,7 +503,7 @@ describe('a clause key no member pins extracts never', () => {
             }),
             Colour: string('red', 'blue'),
         })
-        const viaRef = mdunion(['kind', 'size'], [pet, Large])
+        const viaRef = discriminatedUnion(['kind', 'size'], [pet, Large])
         const kept = extract(viaRef, object({ colour: string('red', 'blue') }))
         // the type keeps the member `Large` alone: `pet` declares no `colour`
         expectTypeOf<Decoded<typeof kept>['size']>().toEqualTypeOf<'large'>()
@@ -537,7 +536,7 @@ describe('a clause key no member pins extracts never', () => {
             }),
             Colour: string,
         })
-        const viaRef = mdunion(['kind', 'size'], [pet, Large])
+        const viaRef = discriminatedUnion(['kind', 'size'], [pet, Large])
         const kept = extract(viaRef, object({ colour: string('red', 'blue') }))
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
         expect(kept.def.kind).toBe('never')
@@ -574,7 +573,7 @@ describe('a clause key no member pins extracts never', () => {
             Chain: array(ref('Tail')),
             Tail: union([never, ref('Chain')]),
         })
-        const viaEntry = mdunion(
+        const viaEntry = discriminatedUnion(
             ['kind', 'size'],
             [
                 pet,
@@ -608,7 +607,7 @@ describe('a clause key no member pins extracts never', () => {
             }),
             Red: string('red'),
         })
-        const viaOption = mdunion(['kind', 'size'], [pet, Large])
+        const viaOption = discriminatedUnion(['kind', 'size'], [pet, Large])
         const kept = extract(
             viaOption,
             object({ colour: string('red', 'blue') }),
@@ -639,7 +638,7 @@ describe('a clause key no member pins extracts never', () => {
             }),
             Red: string('red'),
         })
-        const viaOption = mdunion(['kind', 'size'], [pet, Large])
+        const viaOption = discriminatedUnion(['kind', 'size'], [pet, Large])
         const kept = extract(viaOption, object({ colour: string('green') }))
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<never>()
         expect(kept.def.kind).toBe('never')

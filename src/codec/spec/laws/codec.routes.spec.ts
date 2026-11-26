@@ -26,7 +26,6 @@ import {
     item,
     legacy,
     list,
-    mdunion,
     never,
     nullable,
     nullValue,
@@ -179,7 +178,7 @@ const constructed: readonly Entry[] = [
     ],
     [
         'ofMulti',
-        list(mdunion(['kind'], [A, B])),
+        list(discriminatedUnion(['kind'], [A, B])),
         [{ kind: 'A', a: 'x' }],
         [{ kind: 'B', b: 1 }],
     ],

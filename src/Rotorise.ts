@@ -5859,7 +5859,6 @@ export {
     item,
     legacy,
     list,
-    mdunion,
     meet,
     narrow,
     never,

@@ -22,7 +22,6 @@ import {
     item,
     legacy,
     list,
-    mdunion,
     meet,
     nullable,
     number,
@@ -677,10 +676,10 @@ describe('a union refuses a thunk it must read at its own input, because the mod
                     ]),
             ],
             [
-                'an mdunion member with a legacy',
+                'an discriminatedUnion member with a legacy',
                 () =>
                     u([
-                        (mdunion as (...x: unknown[]) => unknown)(
+                        (discriminatedUnion as (...x: unknown[]) => unknown)(
                             ['k'],
                             [
                                 object({ k: string('a'), x: leg(unbound) }),

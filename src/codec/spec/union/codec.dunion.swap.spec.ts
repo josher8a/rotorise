@@ -1,9 +1,9 @@
 /**
- * `discriminatedUnion(d, options)` and `mdunion([d], options)` are one codec.
+ * `discriminatedUnion(d, options)` and `discriminatedUnion([d], options)` are one codec.
  *
  * **The delegation is the first half of this and the stronger half.** `discriminatedUnion` is
- * `mdunion` at a one-element key set and holds no code of its own, so every one-key assertion in
- * every other spec already runs through `mdunion`'s builder: there is one implementation rather
+ * `discriminatedUnion` at a one-element key set and holds no code of its own, so every one-key assertion in
+ * every other spec already runs through `discriminatedUnion`'s builder: there is one implementation rather
  * than two that agree.
  *
  * What that leaves is the caller's own half — that writing the other spelling changes nothing a
@@ -15,7 +15,6 @@ import {
     decimal,
     discriminatedUnion,
     item,
-    mdunion,
     number,
     object,
     optional,
@@ -98,7 +97,10 @@ describe.each(cases)('$name', ({ d, options, values }) => {
         d as never,
         options as never,
     ) as unknown as Swappable
-    const many = mdunion([d] as never, options as never) as unknown as Swappable
+    const many = discriminatedUnion(
+        [d] as never,
+        options as never,
+    ) as unknown as Swappable
 
     /** The term is what every other stratum reads, so two spellings of one term is the claim. */
     it('builds the same term', () => {
@@ -146,7 +148,7 @@ describe.each(cases)('$name', ({ d, options, values }) => {
 /**
  * **The swap is a type fact, not only a runtime one.**
  *
- * `mdunion` at a one-element key set resolves to the type `discriminatedUnion` returns, so each is
+ * `discriminatedUnion` at a one-element key set resolves to the type `discriminatedUnion` returns, so each is
  * assignable to the other. A caller replacing one call with the other rewrites no annotation, and
  * `tsc` is what checks this: the two bindings below are the assertion.
  */
@@ -157,7 +159,7 @@ describe('the two spellings have one type', () => {
             object({ type: string('SHOT'), vaccine: string }),
         ] as const
         const one = discriminatedUnion('type', options)
-        const many = mdunion(['type'], options)
+        const many = discriminatedUnion(['type'], options)
 
         const there: typeof one = many
         const back: typeof many = one

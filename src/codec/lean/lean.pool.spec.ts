@@ -37,7 +37,6 @@ import {
     item,
     legacy,
     list,
-    mdunion,
     meet,
     narrow,
     never,
@@ -513,12 +512,12 @@ const draw = (depth: number): Entry => {
                     }),
                 ),
             }
-            const name = `mdunion(k,s:${small.name}|${large.name})`
+            const name = `discriminatedUnion(k,s:${small.name}|${large.name})`
             const whole = declare(
                 small,
                 large,
                 () =>
-                    (mdunion as (...x: unknown[]) => unknown)(
+                    (discriminatedUnion as (...x: unknown[]) => unknown)(
                         ['k', 's'],
                         [small.codec, large.codec],
                     ),

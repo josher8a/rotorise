@@ -11,7 +11,6 @@ import {
     held,
     legacy,
     list,
-    mdunion,
     meet,
     narrow,
     never,
@@ -117,7 +116,7 @@ export const Filled = object({ a: fill(string, 'x') })
 export const CountAgain = held(string, number, { encode: (n: number) => String(n), decode: (t: string) => Number(t) })
 export const Old = legacy({ current: object({ name: string }), older: object({ name: string }) })
 export const Route = list(string, number)
-export const Multi = mdunion(['kind'], [Dog, Cat])
+export const Multi = discriminatedUnion(['kind'], [Dog, Cat])
 export const Both = meet(object({ name: string }), object({ age: number }))
 export const Nope = never
 export const Nick = nullable(string)

@@ -22,7 +22,6 @@ import {
     decimal,
     discriminatedUnion,
     item,
-    mdunion,
     number,
     object,
     ref,
@@ -251,7 +250,7 @@ describe('a tag declared through a ref', () => {
 
     it('keys a dissection the same way', () => {
         const pet = string('pet')
-        const byKind = mdunion(
+        const byKind = discriminatedUnion(
             ['kind'],
             [
                 object({

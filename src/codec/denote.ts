@@ -1187,7 +1187,7 @@ const decodedTagOf = (tags: readonly Tag[]): Result<Decoded> => {
  * decides the text. The refusal and the write read one function.
  *
  * The one caller is `dissectionOf`. It reads the term and not the constructor, so a term that was
- * not built through `mdunion` meets the same rule.
+ * not built through `discriminatedUnion` meets the same rule.
  */
 export const membersOf = <V>(
     ks: readonly string[],

@@ -113,7 +113,7 @@ export type {
     Tagged,
     TaggedCodec,
 } from './sums'
-export { discriminatedUnion, item, mdunion, nullable, union } from './sums'
+export { discriminatedUnion, item, nullable, union } from './sums'
 export type {
     BaseT,
     ElementMark,

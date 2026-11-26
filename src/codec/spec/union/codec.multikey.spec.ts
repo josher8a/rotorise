@@ -2,7 +2,7 @@
  * The multi-key `dunion`: a dissection is a key set and a set of members, and a member carries one
  * tag per key.
  *
- * `mdunion` builds one at any arity, and `discriminatedUnion` is `mdunion` at one key. The term
+ * `discriminatedUnion` builds one at any arity, and `discriminatedUnion` is `discriminatedUnion` at one key. The term
  * it builds is a `Term.union` of objects; the tag table is the builder's own index, and each test
  * below names one rule that index needs.
  */
@@ -11,8 +11,8 @@ import {
     at,
     boolean,
     CodecError,
+    discriminatedUnion,
     item,
-    mdunion,
     narrow,
     object,
     string,
@@ -35,7 +35,7 @@ const unionTerm = (codec: { readonly def: Term }) =>
     codec.def as Extract<Term, { readonly kind: 'union' }>
 
 /** Two discriminators, `kind` and `size`, and three members over their assignments. */
-const twoKey = mdunion(['kind', 'size'], [pet, dog, food])
+const twoKey = discriminatedUnion(['kind', 'size'], [pet, dog, food])
 // the untyped item pair, which is what these tests are about: several of them feed a partial or a
 // mistyped entity on purpose, to assert the runtime refusal the tag index gives. The typed
 // `Dissected` reading refuses those at the call, where the rule under test is the run-time one
@@ -93,7 +93,7 @@ describe('the members of a dissection form a set', () => {
         })
         expect(() =>
             // @ts-expect-error the type refuses the pair; this asserts the runtime half too
-            mdunion(['kind', 'size'], [pet, twin]),
+            discriminatedUnion(['kind', 'size'], [pet, twin]),
         ).toThrow(/two options answer to 'kind' = 'pet' and 'size' = 'small'/)
     })
 
@@ -101,7 +101,7 @@ describe('the members of a dissection form a set', () => {
     it('refuses two members carrying the same tag at one key', () => {
         expect(() =>
             // @ts-expect-error the same refusal at one key, on both levels
-            mdunion(['kind'], [pet, dog]),
+            discriminatedUnion(['kind'], [pet, dog]),
         ).toThrow(/two options answer to 'kind' = 'pet'/)
     })
 })
@@ -207,7 +207,7 @@ describe('neither the keys nor the members carry an order', () => {
      */
     it('reads the same dissection declared with the keys the other way round', () => {
         const swapped = item(
-            mdunion(['size', 'kind'], [pet, dog, food]),
+            discriminatedUnion(['size', 'kind'], [pet, dog, food]),
         ) as unknown as ItemPair
         for (const entity of [
             { kind: 'pet', size: 'small', toy: 'ball' },
@@ -223,7 +223,7 @@ describe('neither the keys nor the members carry an order', () => {
     /** …and a *set* of members, so the order the caller listed them in reaches nothing. */
     it('reads the same dissection with the members declared in another order', () => {
         const reordered = item(
-            mdunion(['kind', 'size'], [food, dog, pet]),
+            discriminatedUnion(['kind', 'size'], [food, dog, pet]),
         ) as unknown as ItemPair
         for (const entity of [
             { kind: 'pet', size: 'small', toy: 'ball' },
@@ -269,6 +269,14 @@ describe('a member is selected by its assignment', () => {
     it('carries the key set', () => {
         expect(item(twoKey).keys).toEqual(['kind', 'size'])
     })
+
+    /** A tuple of one key is the bare key: the one name stays, because one key has a single name to give. */
+    it('gives a tuple of one key the discriminator of the bare key', () => {
+        const options = [pet, food] as const
+        expect(item(discriminatedUnion(['kind'], options)).discriminator).toBe(
+            'kind',
+        )
+    })
 })
 
 /**
@@ -290,33 +298,35 @@ describe('the type refuses what a lookup could not reach', () => {
     it('refuses a member that names no tag at one key', () => {
         expect(() =>
             // @ts-expect-error `noSize` declares no `size`, so no assignment reaches it
-            mdunion(['kind', 'size'], [pet, noSize]),
+            discriminatedUnion(['kind', 'size'], [pet, noSize]),
         ).toThrow(/must name 'size' with a literal/)
     })
 
     it('refuses a member whose literal admits several values at one key', () => {
         expect(() =>
             // @ts-expect-error arity one: a member answers to one tag at each key
-            mdunion(['kind', 'size'], [pet, twoTags]),
+            discriminatedUnion(['kind', 'size'], [pet, twoTags]),
         ).toThrow(/names 2 values at one option/)
     })
 
     it('refuses an empty member list, which is `never` and not a dissection', () => {
         expect(() =>
             // @ts-expect-error an empty list is a typo, and the bottom has its own name
-            mdunion(['kind'], []),
+            discriminatedUnion(['kind'], []),
         ).toThrow(/needs at least one option/)
     })
 
     it('refuses an empty key set, because every value carries the empty assignment', () => {
         const run = () =>
             // @ts-expect-error a dissection names at least one key
-            mdunion([], [pet, dog])
+            discriminatedUnion([], [pet, dog])
         expect(run).toThrow(CodecError)
         expect(run).toThrow(/needs at least one discriminator/)
     })
 
     it('admits a dissection whose members are pairwise distinct', () => {
-        expect(() => mdunion(['kind', 'size'], [pet, dog, food])).not.toThrow()
+        expect(() =>
+            discriminatedUnion(['kind', 'size'], [pet, dog, food]),
+        ).not.toThrow()
     })
 })

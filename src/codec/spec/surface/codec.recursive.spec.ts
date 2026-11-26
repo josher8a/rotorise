@@ -17,7 +17,6 @@ import {
     item as itemOf,
     legacy,
     list,
-    mdunion,
     nullable,
     object,
     opaque,
@@ -390,7 +389,7 @@ describe('a former directly over a ref', () => {
         expect(read).toEqual({ type: 'CHECKUP', petId: 'p' })
         const { Byway } = scope({
             Pet: string('pet'),
-            Byway: mdunion(
+            Byway: discriminatedUnion(
                 ['kind'],
                 // @ts-expect-error the type of a ref carries no literal for the tag
                 [

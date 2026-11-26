@@ -8,7 +8,6 @@ import { CodecError } from '../../../Rotorise'
 import {
     discriminatedUnion,
     item,
-    mdunion,
     number,
     object,
     optional,
@@ -30,7 +29,7 @@ const readings = {
     object: item(cat),
     union: item(union([cat, dog])),
     tagged: item(discriminatedUnion('kind', [cat, dog])),
-    dissection: item(mdunion(['kind', 'size'], sized)),
+    dissection: item(discriminatedUnion(['kind', 'size'], sized)),
 } as const
 
 describe('the marker of a whole-item reading', () => {
@@ -46,7 +45,7 @@ describe('the marker of a whole-item reading', () => {
             cat,
             union([cat, dog]),
             discriminatedUnion('kind', [cat, dog]),
-            mdunion(['kind', 'size'], sized),
+            discriminatedUnion(['kind', 'size'], sized),
         ]) {
             expect(itemMark in codec).toBe(false)
         }

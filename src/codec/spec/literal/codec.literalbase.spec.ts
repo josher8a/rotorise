@@ -279,7 +279,7 @@ describe('bases as union options', () => {
             object({ v: boolean(true), a: string }),
             object({ v: boolean(false), b: string }),
         ] as const
-        // the type refuses it too — `EveryOptionTagged` reads the discriminator's definition — so
+        // the type refuses it too — `MembersTagged` reads the discriminator's definition — so
         // the runtime refusal is what a cast one line away would otherwise walk straight past
         // @ts-expect-error a `BOOL` names no tag a lookup could find
         expect(() => discriminatedUnion('v', options)).toThrow(CodecError)

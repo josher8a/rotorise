@@ -22,7 +22,6 @@ import {
     item,
     legacy,
     list,
-    mdunion,
     meet,
     never,
     nullable,
@@ -164,7 +163,7 @@ describe('a slice keeps the rest of each variant that it keeps', () => {
         object({ kind: string('dog') }, [string, optional(string)]),
         object({ kind: string('cat'), lives: number }),
     ])
-    const Sized = mdunion(
+    const Sized = discriminatedUnion(
         ['kind', 'size'],
         [
             object({ kind: string('dog'), size: string('big') }, [

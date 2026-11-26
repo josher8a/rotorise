@@ -24,7 +24,6 @@ import {
     discriminatedUnion,
     held,
     item,
-    mdunion,
     number,
     object,
     optional,
@@ -104,7 +103,7 @@ const pool: Record<string, Entry> = {
     'a union of two tags': {
         codec: routes(
             item(
-                mdunion(['kind', 'size'], [
+                discriminatedUnion(['kind', 'size'], [
                     object({ kind: Dog, size: string('small'), bark: string }),
                     object({
                         kind: string('cat'),
