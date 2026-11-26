@@ -1981,6 +1981,32 @@ export const judgeObject = (
 }
 
 /**
+ * **Each two options of a union are compatible**, the model's obligation `TOp.obl` at `union`. A
+ * pair that the declaration cannot show compatible is refused, and so is an option on a recursive
+ * spine. The test runs where the options reach no unbound `ref`, or on the closed copy that a
+ * scope judges.
+ */
+export const judgeUnion = (
+    t: Extract<Term, { kind: 'union' }>,
+): CodecError | undefined => {
+    if (unboundRefs(t.options).size > 0) return undefined
+    for (const [at, option] of t.options.entries()) {
+        const use = recursionUse(option)
+        if (use === 2 || use === 3)
+            return new CodecError(
+                guardReason(`option ${at + 1} of this union`, use),
+            )
+    }
+    for (const [at, x] of t.options.entries())
+        for (const y of t.options.slice(at + 1))
+            if (!agrees(x, y))
+                return new CodecError(
+                    `${describeOf(x)} and ${describeOf(y)} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
+                )
+    return undefined
+}
+
+/**
  * **The judgment of a container at its declaration**: the refusal of its own kind, then the guard
  * of the model. Each constructor passes the judge of its own kind, so a bundle of one container
  * holds the judge of that kind and no other. A refusal throws.
@@ -2048,21 +2074,9 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
         // the options reach no unbound `ref`, or on the closed copy that a scope judges. A `union`
         // guards its options here, so the guard below skips the union itself
         case 'union': {
-            if (unboundRefs(t.options).size > 0) return undefined
-            for (const [at, option] of t.options.entries()) {
-                const use = recursionUse(option)
-                if (use === 2 || use === 3)
-                    return new CodecError(
-                        guardReason(`option ${at + 1} of this union`, use),
-                    )
-            }
-            for (const [at, x] of t.options.entries())
-                for (const y of t.options.slice(at + 1))
-                    if (!agrees(x, y))
-                        return new CodecError(
-                            `${optionOfTerm(x).describe} and ${optionOfTerm(y).describe} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
-                        )
-            return undefined
+            const refusal = judgeUnion(t)
+            if (refusal) return refusal
+            break
         }
         // **A `ref` is guarded where a scope binds it.** An unbound `ref` closes no cycle, so the
         // guard reads nothing of it here, and the scope that binds the name runs the walk with every
@@ -2829,18 +2843,22 @@ export const optionOfTerm = (def: Term): Option<never> => {
     // a slice, a meet or an opening builds a term whose options no former built, so this is where
     // the judgment of such an option runs
     judged(def)
-    const codec = codecAtLevel(def, 0)
-    const pair = pairOf(def)
-    /**
-     * **A union of objects is an object option too**, and its names are its members' taken
-     * together. A message names them: a name that every member always writes is named as
-     * required, and any other name as optional. The names select nothing.
-     */
-    if (
-        def.kind === 'union' &&
-        def.options.length > 0 &&
-        def.options.every((o) => o.kind === 'object')
-    ) {
+    return optionFrom(def, codecAtLevel(def, 0), pairOf(def))
+}
+
+/** **The union of objects is an object option too**: the term, the codec and the pair give the option. */
+const isObjectUnion = (def: Term): def is Extract<Term, { kind: 'union' }> =>
+    def.kind === 'union' &&
+    def.options.length > 0 &&
+    def.options.every((o) => o.kind === 'object')
+
+/**
+ * How a message names an option, from the term. A union of objects is named by its members' names
+ * taken together: a name that every member always writes is required, and any other name is
+ * optional.
+ */
+export const describeOf = (def: Term): string => {
+    if (isObjectUnion(def)) {
         const bodies = def.options.map(
             (o) => (o as Extract<Term, { kind: 'object' }>).body,
         )
@@ -2854,47 +2872,43 @@ export const optionOfTerm = (def: Term): Option<never> => {
                 return !!field && alwaysWritten(field)
             }),
         )
-        return {
-            codec,
-            pair,
-            admits: (value) => accepts(codec, value),
-            member: 'M',
-            carries: ['map'],
-            item: undefined,
-            describe: `${namedKind(def)} { ${[...names]
-                .map((name) => (requires.includes(name) ? name : `${name}?`))
-                .join(', ')} }`,
-        }
+        return `${namedKind(def)} { ${[...names]
+            .map((name) => (requires.includes(name) ? name : `${name}?`))
+            .join(', ')} }`
     }
-    if (def.kind !== 'object') {
-        return {
-            codec,
-            pair,
-            admits:
-                def.kind === 'literal' &&
-                (def.base === 'string' || def.base === 'boolean')
-                    ? (value) => value === def.v
-                    : (value) => accepts(codec, value),
-            member: readMember(def),
-            carries: valueKinds(def),
-            item: undefined,
-            describe: namedKind(def),
-        }
-    }
-    const fields = def.body.fields
+    if (def.kind !== 'object') return namedKind(def)
+    // an open block holds every undeclared name, and `...` names it
+    return `{ ${[
+        ...Object.keys(def.body.fields).map((name) =>
+            alwaysWritten(def.body.fields[name] as Field) ? name : `${name}?`,
+        ),
+        ...(def.body.rest === undefined ? [] : ['...']),
+    ].join(', ')} }`
+}
+
+/**
+ * The option of a term whose codec and pair the caller holds. A constructor passes the codec that
+ * it was given and the pair that the codec carries, so the option reads no `denote`.
+ * **A union of objects is an object option too**, and the names select nothing.
+ */
+export const optionFrom = (
+    def: Term,
+    codec: AnyCodec,
+    pair: Pair,
+): Option<never> => {
+    const objectLike = def.kind === 'object' || isObjectUnion(def)
     return {
         codec,
         pair,
-        admits: (value) => accepts(codec, value),
-        member: 'M',
-        carries: ['map'],
+        admits:
+            !objectLike &&
+            def.kind === 'literal' &&
+            (def.base === 'string' || def.base === 'boolean')
+                ? (value) => value === def.v
+                : (value) => accepts(codec, value),
+        member: objectLike ? 'M' : readMember(def),
+        carries: objectLike ? ['map'] : valueKinds(def),
         item: undefined,
-        // an open block holds every undeclared name, and `...` names it
-        describe: `{ ${[
-            ...Object.keys(fields).map((name) =>
-                alwaysWritten(fields[name] as Field) ? name : `${name}?`,
-            ),
-            ...(def.body.rest === undefined ? [] : ['...']),
-        ].join(', ')} }`,
+        describe: describeOf(def),
     }
 }

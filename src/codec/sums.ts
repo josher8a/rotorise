@@ -16,11 +16,14 @@ import type {
     ObjectSlot,
     WritesVariantsPin,
 } from './build'
-import { codecOfTerm } from './capabilities'
+import { codecOfPair, codecOfTerm } from './capabilities'
 import type { Option } from './denote'
 import {
     altSem,
+    judgedBy,
+    judgeUnion,
     membersTooDeeply,
+    optionFrom,
     optionOfTerm,
     pairOfCodec,
     termOf,
@@ -358,7 +361,12 @@ export function item(codec: object): unknown {
     ]
     const node = resolvedTerm(term)
     const reading =
-        carried?.() ?? (node?.kind === 'object' ? objectItem(node) : undefined)
+        carried?.() ??
+        (node?.kind === 'object'
+            ? objectItem(node)
+            : node?.kind === 'union'
+              ? unionReadingOf(node)
+              : undefined)
     // an option that is no object has no reading as an item. An option behind a `ref` that no scope
     // binds is read where the scope binds it
     const stray = nonMapOption(term)
@@ -929,10 +937,16 @@ export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
     const declared = { kind: 'union', options: options.map(termOf) } as const
-    // the judgment of the node runs here, and the item reading is a function of the term
-    return carryingReading(
-        codecOfTerm(declared),
-        declared,
+    judgedBy(declared, judgeUnion(declared))
+    // the pair is a function of the pairs of the options, so a bundle of `union` holds no switch
+    // over the kinds. `item` reads the whole-item reading of the union from the term
+    return Object.assign(
+        codecOfPair(
+            declared,
+            altSem(options.map((o) => optionFrom(termOf(o), o, pairOfCodec(o))))
+                .pair,
+        ),
+        { [unionSlot]: union },
     ) as unknown as UnionCodec<DerivedUnion<Options>, Options>
 }
 

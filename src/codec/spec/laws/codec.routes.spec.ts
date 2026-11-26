@@ -311,4 +311,32 @@ describe('a codec of a constructor and the codec of its term agree', () => {
         expect(constructed).toMatch(/'a' is declared at `never`/)
         expect(constructed).toBe(term)
     })
+
+    it('a union with two options that are not shown compatible is refused with one text', () => {
+        const options = [decimal, string('A', 'B')] as const
+        const constructed = refusal(() =>
+            union(options as unknown as readonly AnyCodec[]),
+        )
+        const term = refusal(() =>
+            codecOfTerm({
+                kind: 'union',
+                options: options.map((o) => copyOf(termOf(o)) as Term),
+            }),
+        )
+        expect(constructed).toMatch(/are not shown compatible/)
+        expect(constructed).toBe(term)
+    })
+
+    it('a union of a union and an object reads the same item on the two routes', () => {
+        const inner = union([A, B])
+        const outer = union([inner, object({ other: string })])
+        const rebuilt = codecOfTerm(copyOf(termOf(outer)) as Term) as AnyCodec
+        const stored = { M: { kind: { S: 'B' }, b: { N: '3' } } }
+        expect(outer.decode(stored as never)).toEqual(
+            rebuilt.decode(stored as never),
+        )
+        expect(item(outer as never).decode(stored.M as never)).toEqual(
+            item(rebuilt as never).decode(stored.M as never),
+        )
+    })
 })
