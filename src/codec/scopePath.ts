@@ -1343,10 +1343,11 @@ export const methodAt = (
             return () => expressionPath(segmentsIn(steps))
         case 'at':
             return (index: number | string) => recordPath([...steps, index])
-        // a clause narrows the frontier of `at`; the document path is unchanged
+        // a clause narrows the frontier of `at`, and the document path is unchanged. A recorder
+        // holds a path and nothing else, so it records no clause, and reads no term of the pattern.
+        // The bundle of `tableEntry` then holds no interpreter
         case 'narrow':
-            return (pattern: ClausePattern) =>
-                recordPath([...steps, clauseOf(pattern)])
+            return () => recordPath(steps)
         default:
             return undefined
     }
