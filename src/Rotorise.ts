@@ -36,6 +36,7 @@ import type { KnownKeys } from './codec/derivedItem'
 import type { Reached, Segment } from './codec/frontier'
 import { native } from './codec/native'
 import { constantOf } from './codec/objects'
+import { setOwn } from './codec/result'
 import type { itemMark, Untagged } from './codec/scope'
 import type { ChildAt, CodecAt } from './codec/scopePath'
 import { parsePath, parsePathResult, reachAt } from './codec/scopePath'
@@ -5234,8 +5235,8 @@ export const tableEntry =
         ): Result<KeyUpdate<string>> => {
             const landed = landedBy(changed)
             if (landed instanceof CodecError) return landed
-            // an entry list, so a key named `__proto__` is an own attribute of the result
-            const set: [string, AttributeValue][] = []
+            // `setOwn`, so a key named `__proto__` is an own attribute of the result
+            const set: Record<string, AttributeValue> = {}
             const remove: string[] = []
             const given = overDecided(changed)
             if (failed(given)) return given
@@ -5294,12 +5295,12 @@ export const tableEntry =
                     readGiven,
                 )
                 if (failed(value)) return stepRefusal(value)
-                set.push([key.name, value])
+                setOwn(set, key.name, value)
             }
 
             const wrong = valueRefusal(changed, landed)
             if (wrong !== undefined) return wrong
-            return { set: Object.fromEntries(set), remove }
+            return { set, remove }
         }
 
         /** The names the schema computes, as opposed to the attributes the codec declares. */
