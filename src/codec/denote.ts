@@ -95,6 +95,26 @@ import {
 } from './value'
 
 /**
+ * The term of a literal call and the pair that answers for the term: a one-value literal, or a
+ * union of one-value literals of one base. The term is what {@link literalTermOf} builds, so the
+ * Lean bridge reads the same term, and only the pair takes the route of the literal.
+ */
+export const literalOf = (
+    base: LiteralBase,
+    allowed: readonly LiteralValue[],
+): { readonly def: Term; readonly pair: Pair } => {
+    const [head, ...rest] = allowed.map((value) => literalTerm(base, value))
+    if (head === undefined) {
+        throw new CodecError(
+            'a literal was built from no value, and the call that names the values refuses that first',
+        )
+    }
+    if (rest.length === 0) return { def: head, pair: literalPair(head) }
+    const options: [Literal, ...Literal[]] = [head, ...rest]
+    return { def: { kind: 'union', options }, pair: literalsPair(options) }
+}
+
+/**
  * **One literal, or a union of them.** A literal carries one value, so several alternatives are a
  * union of singletons — a certified union, because two singletons with different values are
  * disjoint.
@@ -778,6 +798,23 @@ const storedKeyAt = (
  * and a sum resolved twice by two copies of one rule is the drift this phase exists to end.
  * So the resolution is the return value and the pair is one of its uses.
  */
+/**
+ * What was being matched, named by the names it had.
+ *
+ * The names are the actionable half of both messages — "no option admits this item" says nothing
+ * a reader can act on, while the set of attributes it turned up with says exactly which option
+ * was expected to declare them. A value that is not a record has no names, and then there is
+ * nothing to add.
+ */
+const naming = (label: string, names: ReadonlySet<string> | undefined) =>
+    names
+        ? `${label} with attributes ${[...names].map((x) => `'${x}'`).join(', ') || '(none)'}`
+        : label
+
+/** The refusal of a choice that no option answers, with the options that were available. */
+const unmatchedAmong = (what: string, listed: string) =>
+    new CodecError(`no option admits ${what}; options are ${listed}`)
+
 export const altSem = (
     all: readonly Option[],
     dispatch = true,
@@ -803,21 +840,7 @@ export const altSem = (
     /** Every option, for a message that says what was available. */
     const listed = () => all.map((option) => option.describe).join(' | ')
 
-    const unmatched = (what: string) =>
-        new CodecError(`no option admits ${what}; options are ${listed()}`)
-
-    /**
-     * What was being matched, named by the names it had.
-     *
-     * The names are the actionable half of both messages — "no option admits this item" says nothing
-     * a reader can act on, while the set of attributes it turned up with says exactly which option
-     * was expected to declare them. A value that is not a record has no names, and then there is
-     * nothing to add.
-     */
-    const naming = (label: string, names: ReadonlySet<string> | undefined) =>
-        names
-            ? `${label} with attributes ${[...names].map((x) => `'${x}'`).join(', ') || '(none)'}`
-            : label
+    const unmatched = (what: string) => unmatchedAmong(what, listed())
 
     /**
      * The option this is for, or why no option is.
@@ -1296,14 +1319,138 @@ export const itemSem = (def: ItemTerm): ItemPair => {
  * than `never` at the end of the switch and stops the build. A thrown default would replace that
  * with a runtime message, which is the weaker of the two and the one a test has to go looking for.
  */
-export const denote = (def: Term): Pair => {
-    switch (def.kind) {
+/**
+ * The pair of a ground term, and the one description of it: `denote` reads it for the three terms,
+ * and the constructor of each reads it with no switch over the other kinds.
+ */
+export const groundOf = (
+    kind: 'string' | 'boolean' | 'binary' | 'number',
+): Pair => {
+    switch (kind) {
+        /**
+         * The rule `(number)`. The model's row is the ground base at `N`, and `lawful_baseCodec .number`
+         * is the lemma. The write asks the kind. The read gates the stored form through
+         * {@link storedNumber}. The model states the stored form at the port (`storeCodec`), not
+         * in this row.
+         *
+         * **The carrier is `DynamoNumber`**, which proves the numeral gate at construction and is
+         * already in the spelling the store returns, so this row asks the kind and nothing else. It
+         * is DynamoDB's own `N` and the one native numeric term; `number` and `decimal` are
+         * adapters over it and carry their own conversions.
+         */
+        case 'number':
+            return {
+                encode: (value: unknown) =>
+                    value instanceof DynamoNumber
+                        ? carrying('N', value.digits)
+                        : new CodecError(
+                              `${rendered(value)} is not a DynamoNumber; build one with DynamoNumber.from or DynamoNumber.fromNumber`,
+                          ),
+                decode: (attribute) =>
+                    andThen(expect('N', attribute), storedNumber),
+            }
         case 'string':
             return groundCodec('string', 'S', 'a string', "an 'S'")
         case 'boolean':
             return groundCodec('boolean', 'BOOL', 'a boolean', "a 'BOOL'")
         case 'binary':
             return groundCodec('binary', 'B', 'a `Uint8Array`', "a 'B'")
+    }
+}
+
+/**
+ * The pair of a literal of one value: the ground pair of its base, and the membership test.
+ * `denote` reads it for the `literal` term, and `literalCodec` reads it for a one-value literal,
+ * so one statement answers for both routes.
+ */
+export const literalPair = (def: Literal): Pair => {
+    const allowed: readonly LiteralValue[] = [def.v]
+    /**
+     * `inL`, answering with the **member of `ℓ`** rather than with `true`.
+     *
+     * The model's is a `Bool` and it does not need to be more: Lean has no reference
+     * identity, so two `ByteArray`s with the same octets *are* one value and `p` returning
+     * "the value" is unambiguous. JS has two objects for that one value, and returning the
+     * declared one is how this language spells the model's answer — a `decode` that handed
+     * back the array off the wire would answer with a value the type says is one of `ℓ`
+     * and `===` says is not.
+     */
+    const member = (value: unknown): LiteralValue | undefined =>
+        allowed.find((one) => sameLiteral(one, value as LiteralValue))
+    const refuse = (value: unknown) =>
+        new CodecError(
+            `${namedLiteral(value as LiteralValue)} is not one of ${allowed
+                .map(namedLiteral)
+                .join(', ')}`,
+        )
+    const base = groundOf(def.base)
+    return {
+        encode: (value: unknown, enclosing) =>
+            member(value) === undefined
+                ? refuse(value)
+                : base.encode(value as never, enclosing),
+        decode: (attribute, enclosing) =>
+            andThen(base.decode(attribute, enclosing), (read) => {
+                const found = member(read)
+                return found === undefined ? refuse(read) : found
+            }),
+    }
+}
+
+/**
+ * The pair of a choice among one-value literals of one base: a membership test on the ground pair
+ * of the base. The general union reads the same choice through `altSem`, and its refusals are the
+ * sentences of {@link naming} and {@link unmatchedAmong}, so the two routes give one text. The
+ * ground pair of the base refuses an attribute of another member, so the read needs no filter by
+ * member, and the attempt of each option is one test of membership.
+ */
+export const literalsPair = (
+    options: readonly [Literal, ...Literal[]],
+): Pair => {
+    const [head] = options
+    const base = head.base
+    const values = options.map((one) => one.v)
+    const ground = groundOf(base)
+    const member = (value: unknown): LiteralValue | undefined =>
+        values.find((one) => sameLiteral(one, value as LiteralValue))
+    const listed = values
+        .map((one) => `${literalForm(base, undefined)}(${namedLiteral(one)})`)
+        .join(' | ')
+    return {
+        encode: (value: unknown, enclosing) => {
+            if (member(value) !== undefined)
+                return ground.encode(value as never, enclosing)
+            const held = asRecord(value)
+            return unmatchedAmong(
+                naming('this value', held ? namesOf(held) : undefined),
+                listed,
+            )
+        },
+        decode: (attribute, enclosing) => {
+            const carried = memberOf(attribute)
+            const map =
+                carried === 'M'
+                    ? (attribute as { readonly M: AttributeMap }).M
+                    : undefined
+            const refused = () =>
+                unmatchedAmong(
+                    naming('this attribute', map ? namesOf(map) : undefined),
+                    listed,
+                )
+            const read = ground.decode(attribute, enclosing)
+            if (failed(read)) return refused()
+            return member(read) ?? refused()
+        },
+    }
+}
+
+export const denote = (def: Term): Pair => {
+    switch (def.kind) {
+        case 'string':
+        case 'boolean':
+        case 'binary':
+        case 'number':
+            return groundOf(def.kind)
         /**
          * The rule `(list)`: the one positional container, with the arity test before any position.
          *
@@ -1632,60 +1779,8 @@ export const denote = (def: Term): Pair => {
          * the model's `inL` at that base and the one place where the two literal rules part: a string
          * literal's stored text *is* its value, a numeric literal's is not.
          */
-        case 'literal': {
-            const allowed: readonly LiteralValue[] = [def.v]
-            /**
-             * `inL`, answering with the **member of `ℓ`** rather than with `true`.
-             *
-             * The model's is a `Bool` and it does not need to be more: Lean has no reference
-             * identity, so two `ByteArray`s with the same octets *are* one value and `p` returning
-             * "the value" is unambiguous. JS has two objects for that one value, and returning the
-             * declared one is how this language spells the model's answer — a `decode` that handed
-             * back the array off the wire would answer with a value the type says is one of `ℓ`
-             * and `===` says is not.
-             */
-            const member = (value: unknown): LiteralValue | undefined =>
-                allowed.find((one) => sameLiteral(one, value as LiteralValue))
-            const refuse = (value: unknown) =>
-                new CodecError(
-                    `${namedLiteral(value as LiteralValue)} is not one of ${allowed
-                        .map(namedLiteral)
-                        .join(', ')}`,
-                )
-            const base = denote({ kind: def.base })
-            return {
-                encode: (value: unknown, enclosing) =>
-                    member(value) === undefined
-                        ? refuse(value)
-                        : base.encode(value as never, enclosing),
-                decode: (attribute, enclosing) =>
-                    andThen(base.decode(attribute, enclosing), (read) => {
-                        const found = member(read)
-                        return found === undefined ? refuse(read) : found
-                    }),
-            }
-        }
-        /**
-         * The rule `(number)`. The model's row is the ground base at `N`, and `lawful_baseCodec .number`
-         * is the lemma. The write asks the kind. The read gates the stored form through
-         * {@link storedNumber}. The model states the stored form at the port (`storeCodec`), not
-         * in this row.
-         */
-        case 'number':
-            return {
-                // **The carrier is `DynamoNumber`**, which proves the numeral gate at construction
-                // and is already in the spelling the store returns, so this row asks the kind and
-                // nothing else. It is DynamoDB's own `N` and the one native numeric term;
-                // `number` and `decimal` are adapters over it and carry their own conversions
-                encode: (value: unknown) =>
-                    value instanceof DynamoNumber
-                        ? carrying('N', value.digits)
-                        : new CodecError(
-                              `${rendered(value)} is not a DynamoNumber; build one with DynamoNumber.from or DynamoNumber.fromNumber`,
-                          ),
-                decode: (attribute) =>
-                    andThen(expect('N', attribute), storedNumber),
-            }
+        case 'literal':
+            return literalPair(def)
         /**
          * **The `NULL` point, and it is not a {@link groundCodec} here.** The reason is this
          * library's and not the model's: the model has one construction for all five bases,
@@ -1926,6 +2021,11 @@ export const judged = (t: Term, declaring = true): void => {
  */
 const pairs = new WeakMap<Term, Pair>()
 
+/** Records the pair of a term that a constructor built, so a container reads that pair. */
+export const seedPair = (def: Term, pair: Pair): void => {
+    pairs.set(def, pair)
+}
+
 const pairOf = (def: Term): Pair => {
     const built = pairs.get(def)
     if (built) return built
@@ -1992,12 +2092,21 @@ export const membersTooDeeply = (
 export const codecAtLevel = <T, A extends AttributeValue>(
     def: Term,
     enclosing: number,
+): AttributeCodec<T, A> => codecWithPair(def, pairOf(def), enclosing)
+
+/**
+ * The codec of a term at a level, over the pair that the caller holds. A constructor that already
+ * has the pair of its kind passes the pair, and no switch over the other kinds is reached.
+ */
+export const codecWithPair = <T, A extends AttributeValue>(
+    def: Term,
+    pair: Pair,
+    enclosing: number,
 ): AttributeCodec<T, A> => {
     // **A codec is its pair and its term, and nothing else.** `arbitrary` and `shrink` were copied
     // onto the object here for `custom`, which made one fact reachable two ways; they are on the
     // term, `arbitraryOf` and `shrinkOf` read them there, and a caller that wants to share a
     // arbitrary names it rather than reading it back off a pair.
-    const pair = pairOf(def)
     // a term that reads a name that no scope binds refuses each use
     const atTop: Pick<Pair, 'decode'> & {
         readonly encode: (value: never) => Result<AttributeValue>

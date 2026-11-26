@@ -11,7 +11,16 @@
 import type { Attribute, AttributeValue } from './attribute'
 import { DynamoNumber, isStoredNumeral } from './attribute'
 import type { AnyCodec, AttributeCodec } from './build'
-import { codecAtLevel, judged, literalTermOf, termOf } from './denote'
+import type { Pair } from './denote'
+import {
+    codecAtLevel,
+    codecWithPair,
+    judged,
+    literalOf,
+    literalTermOf,
+    seedPair,
+    termOf,
+} from './denote'
 import type { Result } from './result'
 import { CodecError, failed, orThrow } from './result'
 import type { Body, LiteralBase, LiteralValue, Term } from './term'
@@ -72,7 +81,8 @@ export const literalCodec = <T extends LiteralValue>(
      * the refusal happens where the value is made. The `decimal` premise went the same way, and it
      * was narrower still: a stored spelling is what the carrier normalises to.
      */
-    return codecOfTerm<T, AttributeValue>(literalTermOf(base, allowed))
+    const { def, pair } = literalOf(base, allowed)
+    return codecOfPair<T, AttributeValue>(def, pair)
 }
 
 /**
@@ -162,9 +172,50 @@ export const equip = (codec: AnyCodec, term: Term): unknown => {
             },
         )
     }
+    return literalEquip(codec, term)
+}
+
+/** The literal call of a term that has one, over the codec of the term. */
+const literalEquip = (codec: AnyCodec, term: Term): unknown => {
     const call = literalCallOf(term)
     return call === undefined ? codec : Object.assign(call, codec)
 }
+
+/**
+ * The codec of a term, from the pair that the constructor of its kind holds, with the literal call
+ * that the constructor names. The judgment of a ground term and of a literal choice has no premise
+ * that the constructor leaves open, so this skips it, and no switch over the other kinds is reached.
+ */
+export const codecOfPair = <T, A extends AttributeValue>(
+    def: Term,
+    pair: Pair,
+    call?: (...allowed: never[]) => AnyCodec,
+): AttributeCodec<T, A> => {
+    const built = codecs.get(def)
+    if (built) return built as unknown as AttributeCodec<T, A>
+    seedPair(def, pair)
+    const bare = codecWithPair<never, AttributeValue>(
+        Object.freeze(def),
+        pair,
+        0,
+    )
+    const made = (
+        call === undefined ? bare : Object.assign(call, bare)
+    ) as AttributeCodec<never, AttributeValue>
+    codecs.set(def, made)
+    return made as unknown as AttributeCodec<T, A>
+}
+
+/** The codec of a ground term that has the literal call of its own kind. */
+export const codecOfGround = <T, A extends AttributeValue>(
+    def: Term & { readonly kind: 'string' | 'boolean' | 'binary' },
+    pair: Pair,
+): AttributeCodec<T, A> =>
+    codecOfPair(
+        def,
+        pair,
+        literalCapability(def.kind) as (...allowed: never[]) => AnyCodec,
+    )
 
 /**
  * The literal call that a term has, or nothing. Each call is a function of its own: the carrier

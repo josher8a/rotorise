@@ -1884,3 +1884,18 @@ export const locatedSlot = Symbol('located')
  * `tableEntry` and no codec then holds no interpreter. The slot is a property, so a spread keeps it.
  */
 export const readSlot = Symbol('read')
+
+/**
+ * The slot where a codec of a union carries its whole-item reading, as a function. `item` reads a
+ * union through the slot, so `item` holds no reference to the code of a union. The slot is
+ * a symbol, so a spread of the codec copies it, and a record of the codec lists no key for it.
+ */
+export const readingSlot = Symbol('reading')
+
+/**
+ * The slot where a codec of a union carries the constructor of a union, `union`. The walk of `at`
+ * keeps the options that a clause does not separate, and builds the union of those options through
+ * this slot. A walk that meets more than one option starts at a union, and the union carries
+ * the constructor, so `at` holds no reference to the code of a union.
+ */
+export const unionSlot = Symbol('union')

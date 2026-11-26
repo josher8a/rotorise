@@ -1,5 +1,6 @@
 import type { ErrorMessage } from '../utils'
 import type { MissingCodec } from './adapters'
+import { codecOfTerm as allKinds } from './allKinds'
 import type { AttributeMap, AttributeValue, M, StoredItem } from './attribute'
 import type {
     AnyCodec,
@@ -29,6 +30,7 @@ import type { ArrayOver, ListCodec, SpreadOver } from './products'
 import type { Result } from './result'
 import { andThen, CodecError, failed, orThrow, setOwn } from './result'
 import { pathReads } from './scopePath'
+import { union } from './sums'
 import type {
     DefOf,
     ElementMark,
@@ -60,6 +62,7 @@ import {
     resolvedTerm,
     storedPin,
     unboundRefs,
+    unionSlot,
 } from './term'
 import { itemRefusal, own, readTags } from './value'
 
@@ -391,7 +394,7 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
         Object.entries(defs).map(([name, def]) => {
             const t = record[name]
             if (t === undefined || t === terms[name]) return [name, def]
-            const codec: AnyCodec = codecOfTerm(t)
+            const codec: AnyCodec = allKinds(t)
             if (t.kind !== 'object') return [name, codec]
             const { spec, rest } = objectItem(t)
             return [name, { ...codec, spec, rest }]
@@ -770,6 +773,7 @@ export const dissectionOf = (
         def: unionDef,
         // the readers of a path, for the reason at {@link readSlot}
         [readSlot]: pathReads,
+        [unionSlot]: union,
     }
     const made = { self, resolution }
     dissections.set(unionDef, made)

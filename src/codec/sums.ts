@@ -61,8 +61,10 @@ import {
     holdsNoValue,
     openRefusal,
     ownsNullOf,
+    readingSlot,
     resolvedTerm,
     unboundRefs,
+    unionSlot,
 } from './term'
 import { itemRefusal, namesOf } from './value'
 
@@ -268,9 +270,27 @@ export const readingOf = (t: Term): Reading | undefined => {
     const node = resolvedTerm(t)
     if (node?.kind === 'object') return objectItem(node)
     if (node?.kind !== 'union') return undefined
+    return unionReadingOf(node)
+}
+
+/** The whole-item reading of a union node: a dissection where a key set indexes it. */
+const unionReadingOf = (node: Extract<Term, { kind: 'union' }>): Reading => {
     const ks = keySets.get(node)
     return ks ? dissectionOf(node, ks).self : unionOf(node)
 }
+
+/**
+ * The codec of a union term, with the reading of the union in the slot {@link readingSlot}. A
+ * union carries its own reading, so `item` reads a union through the slot and holds no reference
+ * to the code of a union. A bundle that builds no union holds none of that code.
+ */
+export const carryingReading = <C extends object>(codec: C, def: Term): C =>
+    def.kind === 'union'
+        ? Object.assign(codec, {
+              [readingSlot]: () => unionReadingOf(def),
+              [unionSlot]: union,
+          })
+        : codec
 
 /** The refusal of a union that holds an option that is no object: the message of its marker. */
 type ItemRefusal<C> = C extends Itemable<infer X>
@@ -326,7 +346,12 @@ export function item<C extends Itemable<unknown>>(
 ): ReadingOf<C>
 export function item(codec: object): unknown {
     const term = termOf(codec as AnyCodec)
-    const reading = readingOf(term)
+    const carried = (codec as { readonly [readingSlot]?: () => Reading })[
+        readingSlot
+    ]
+    const node = resolvedTerm(term)
+    const reading =
+        carried?.() ?? (node?.kind === 'object' ? objectItem(node) : undefined)
     // an option that is no object has no reading as an item. An option behind a `ref` that no scope
     // binds is read where the scope binds it
     const stray = nonMapOption(term)
@@ -451,13 +476,16 @@ export const dissect = <T extends Record<string, unknown>>(
     if (unboundRefs(memberTerms).size === 0)
         dissectionOf(unionDef, ks).resolution()
     const nested = codecOfTerm<T, Attribute<'M'>>(unionDef)
-    return {
-        encode: nested.encode,
-        decode: nested.decode,
-        unsafeEncode: nested.unsafeEncode,
-        unsafeDecode: nested.unsafeDecode,
-        def: nested.def,
-    } as unknown as DiscriminatedCodec<T, string, Record<string, unknown>>
+    return carryingReading(
+        {
+            encode: nested.encode,
+            decode: nested.decode,
+            unsafeEncode: nested.unsafeEncode,
+            unsafeDecode: nested.unsafeDecode,
+            def: nested.def,
+        },
+        unionDef,
+    ) as unknown as DiscriminatedCodec<T, string, Record<string, unknown>>
 }
 
 export const optionOf = (
@@ -893,10 +921,10 @@ export const union = <const Options extends readonly AnyCodec[]>(
 ): UnionCodec<DerivedUnion<Options>, Options> => {
     const declared = { kind: 'union', options: options.map(termOf) } as const
     // the judgment of the node runs here, and the item reading is a function of the term
-    return codecOfTerm(declared) as unknown as UnionCodec<
-        DerivedUnion<Options>,
-        Options
-    >
+    return carryingReading(
+        codecOfTerm(declared),
+        declared,
+    ) as unknown as UnionCodec<DerivedUnion<Options>, Options>
 }
 
 /** The whole-item reading of a union, a function of the term. The memo is a cache only. */
@@ -995,6 +1023,7 @@ export const unionOf = (
         // an object option declares its spec, and a tagged option declares its tag map
         spec: declared.options.map((option) => readingOf(option)?.spec),
         def: declared,
+        [unionSlot]: union,
     }
 
     unions.set(declared, self)

@@ -68,8 +68,8 @@ import type { Marked, UnionCodec } from './scope'
 import { itemMark } from './scope'
 import type { Precondition } from './scoped'
 import { childAt, flatOf, guardAt, sideOf, storedApart } from './scoped'
-import type { DiscriminatedCodec } from './sums'
-import { item, union } from './sums'
+import type { DiscriminatedCodec, union } from './sums'
+import { item } from './sums'
 import type {
     itemOfMarker,
     itemTermMarker,
@@ -85,6 +85,7 @@ import {
     openRefusal,
     targetOf,
     unanimous,
+    unionSlot,
     usedTargetOf,
 } from './term'
 import { own } from './value'
@@ -1178,6 +1179,13 @@ export const reachAt = (
     return walked.kind === 'reached' ? walked.reached : walked.error
 }
 
+/**
+ * The constructor of a union that a codec carries in {@link unionSlot}, or `undefined`. The type of
+ * the slot is the type of `union`, and a codec of another kind has no slot.
+ */
+const unionBuilderOf = (codec: object): typeof union | undefined =>
+    (codec as { readonly [unionSlot]?: typeof union })[unionSlot]
+
 /** The codec at the steps of a path from a root, with its place. */
 export const locate = (
     root: AnyCodec,
@@ -1212,7 +1220,13 @@ export const locate = (
         if (segments.length === 0) {
             const [only, ...others] = frontier as [AnyCodec, ...AnyCodec[]]
             if (frontier.length === 1 && only === root) return root
-            const kept = others.length === 0 ? only : union(frontier as never)
+            // more than one option means that the root is a union, and a union carries the constructor
+            const build = unionBuilderOf(root)
+            if (build === undefined && others.length > 0)
+                throw new CodecError(
+                    'broken invariant: a root with more than one option is a union, and each codec of a union carries the constructor of a union. A codec of a union that no constructor of union and no route of a bare term built has no slot',
+                )
+            const kept = others.length === 0 ? only : build?.(frontier as never)
             // the walk carries each codec as an `AnyCodec`, and the codec of the kept options is
             // one, which it is at run time as the root is
             return (whole ? item(kept as never) : kept) as unknown as AnyCodec

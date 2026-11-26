@@ -13,11 +13,12 @@ import type {
 import {
     asFloat,
     asJsNumber,
+    codecOfGround,
     codecOfTerm,
     numericAdapter,
     storedOnly,
 } from './capabilities'
-import { termOf } from './denote'
+import { groundOf, termOf } from './denote'
 import type { IsUnion } from './derivedItem'
 import { CodecError } from './result'
 import type {
@@ -130,9 +131,10 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
 /* ── the terms, denoted ───────────────────────────────────────────────────────────────── */
 
 /** @see {@link StringCodec} */
-export const string: StringCodec = /* @__PURE__ */ codecOfTerm({
-    kind: 'string',
-}) as unknown as StringCodec
+export const string: StringCodec = /* @__PURE__ */ codecOfGround(
+    { kind: 'string' },
+    /* @__PURE__ */ groundOf('string'),
+) as unknown as StringCodec
 
 /**
  * **`N` itself, and the one native numeric term.** DynamoDB's own number, held as
@@ -272,9 +274,10 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
     }
 
 /** @see {@link BooleanCodec} */
-export const boolean: BooleanCodec = /* @__PURE__ */ codecOfTerm({
-    kind: 'boolean',
-}) as unknown as BooleanCodec
+export const boolean: BooleanCodec = /* @__PURE__ */ codecOfGround(
+    { kind: 'boolean' },
+    /* @__PURE__ */ groundOf('boolean'),
+) as unknown as BooleanCodec
 
 /**
  * The `NULL` point: the one value `null`, stored as `⟨NULL, ∗⟩`.
@@ -320,9 +323,10 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
     }
 
 /** @see {@link BinaryCodec} */
-export const binary: BinaryCodec = /* @__PURE__ */ codecOfTerm({
-    kind: 'binary',
-}) as unknown as BinaryCodec
+export const binary: BinaryCodec = /* @__PURE__ */ codecOfGround(
+    { kind: 'binary' },
+    /* @__PURE__ */ groundOf('binary'),
+) as unknown as BinaryCodec
 
 // ── narrowing ───────────────────────────────────────────────────────
 

@@ -17,9 +17,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { codecOfTerm } from '../allKinds'
 import type { AttributeValue } from '../attribute'
 import { DynamoNumber, isNumeral, isStoredNumeral } from '../attribute'
-import { codecOfTerm } from '../capabilities'
 import { opened } from '../clause'
 import type { AnyCodec } from '../codec'
 import {

@@ -34,6 +34,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     union,
@@ -99,6 +100,13 @@ describe('a scope', () => {
             // @ts-expect-error the scope declares no 'Z'
             scope({ A: object({ b: optional(ref('Z')) }) }),
         ).toThrow(/a ref names 'Z', which this scope does not declare/)
+    })
+
+    it('refuses a set of a bare ref, in the type and at construction, because a ref writes no known member', () => {
+        // @ts-expect-error a ref writes no known member, so the type declines the element
+        expect(() => set(ref('Z'))).toThrow(
+            'a set holds strings, numbers or binary, and this element writes no single member',
+        )
     })
 
     it('refuses a recursion with no list or object on its path, at construction', () => {

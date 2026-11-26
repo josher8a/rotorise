@@ -1,6 +1,7 @@
 import type { ErrorMessage, show } from '../utils'
 import type { MissingCodec } from './adapters'
 import { fillRefusal, heldTerm } from './adapters'
+import { codecOfTerm as allKinds } from './allKinds'
 import type { AttributeValue } from './attribute'
 import type {
     AnyCodec,
@@ -595,9 +596,9 @@ export const commonLiterals = (
 export const codecOfTerms = (terms: readonly Term[]): AnyCodec => {
     const [only] = terms
     if (only === undefined) return never
-    return codecOfTerm(
-        terms.length === 1 ? only : { kind: 'union', options: terms },
-    )
+    const def: Term =
+        terms.length === 1 ? only : { kind: 'union', options: terms }
+    return allKinds(def)
 }
 
 /**
