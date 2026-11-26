@@ -14,31 +14,42 @@ import type {
     SS,
 } from './attribute'
 import type { AttributeCodec } from './build'
-import { codecOfTerm } from './capabilities'
+import { codecOfPair } from './capabilities'
 import type { OpaqueNumbers } from './denote'
 import {
     canonicalOpaqueTerm,
+    heldPair,
+    judgedBy,
+    judgeWall,
     lossyOpaqueTerm,
+    opaquePair,
     refuseOpaqueTerm,
 } from './denote'
 import type { EveryButNumberT } from './prisms'
-import type { HeldT, TermMark } from './term'
+import type { HeldT, Term, TermMark } from './term'
 
 // ── the escape hatch ────────────────────────────────────────────────
 
-export const canonicalOpaque = /* @__PURE__ */ codecOfTerm<
+export const canonicalOpaque = /* @__PURE__ */ codecOfPair<
     unknown,
     AttributeValue
->(canonicalOpaqueTerm)
+>(canonicalOpaqueTerm, opaquePair)
+/** The codec of a numeric policy: the held term over the pair of `opaque`. */
+const policyCodec = (
+    term: Extract<Term, { kind: 'held' }>,
+): AttributeCodec<unknown> => {
+    judgedBy(term, judgeWall(term))
+    return codecOfPair<unknown, AttributeValue>(
+        term,
+        heldPair(opaquePair, term),
+    )
+}
+
 export const opaquePolicies: {
     readonly [Of in opaque.Numbers]: AttributeCodec<unknown>
 } = {
-    lossy: /* @__PURE__ */ codecOfTerm<unknown, AttributeValue>(
-        lossyOpaqueTerm,
-    ),
-    refuse: /* @__PURE__ */ codecOfTerm<unknown, AttributeValue>(
-        refuseOpaqueTerm,
-    ),
+    lossy: /* @__PURE__ */ policyCodec(lossyOpaqueTerm),
+    refuse: /* @__PURE__ */ policyCodec(refuseOpaqueTerm),
 }
 
 export function opaqueOf(): AttributeCodec<unknown> & TermMark<['opaq']>

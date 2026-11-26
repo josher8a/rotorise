@@ -1744,12 +1744,7 @@ export const denote = (def: Term): Pair => {
          * input, and the row asks it.
          */
         case 'opaq':
-            return {
-                encode: (value: unknown, enclosing) =>
-                    encodeUnknown(value, enclosing),
-                decode: (attribute, enclosing) =>
-                    decodeUnknown(attribute, enclosing),
-            }
+            return opaquePair
         /**
          * The rule `(literal)`, and it is **not** a sixth ground term: `literalCodec k x` is
          * `(baseCodec k).restrict (inL k x)`, the base's pair narrowed to membership of `x`. The
@@ -1951,6 +1946,12 @@ export const judgeUnion = (
                     `${describeOf(x)} and ${describeOf(y)} are not shown compatible: an adapter or a \`ref\` is on a side, and the declaration cannot show that a value both admit is written to one attribute, or that an attribute both read is read to one value. Write the overlap as an option of its own and exclude it from the other two, for example with an \`optional(never)\` name, or give the entity a discriminator and use discriminatedUnion`,
                 )
     return undefined
+}
+
+/** The pair of `opaque`: the recursion over the input, which a policy and the marshaller read through. */
+export const opaquePair: Pair = {
+    encode: (value: unknown, enclosing) => encodeUnknown(value, enclosing),
+    decode: (attribute, enclosing) => decodeUnknown(attribute, enclosing),
 }
 
 /** The pair of the `NULL` point: the one value `null`. */
@@ -2682,7 +2683,9 @@ const everyButNumber: Term = {
     ],
 }
 
-const policyTerm = (numbers: OpaqueNumbers): Term => {
+const policyTerm = (
+    numbers: OpaqueNumbers,
+): Extract<Term, { kind: 'held' }> => {
     const { f, g } = numberPolicy(numbers)
     return {
         kind: 'held',
@@ -2700,8 +2703,10 @@ const policyTerm = (numbers: OpaqueNumbers): Term => {
  * One object per term, so the codec cache and the identity of `def` hold across calls.
  */
 export const canonicalOpaqueTerm: Term = canonicalOpaque
-export const lossyOpaqueTerm: Term = /* @__PURE__ */ policyTerm('lossy')
-export const refuseOpaqueTerm: Term = /* @__PURE__ */ policyTerm('refuse')
+export const lossyOpaqueTerm: Extract<Term, { kind: 'held' }> =
+    /* @__PURE__ */ policyTerm('lossy')
+export const refuseOpaqueTerm: Extract<Term, { kind: 'held' }> =
+    /* @__PURE__ */ policyTerm('refuse')
 export const opaqueTerms: {
     readonly canonical: Term
     readonly lossy: Term

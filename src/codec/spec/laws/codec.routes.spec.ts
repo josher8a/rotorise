@@ -29,6 +29,7 @@ import {
     nullValue,
     number,
     object,
+    opaque,
     optional,
     orThrow,
     refine,
@@ -39,6 +40,7 @@ import {
     union,
 } from '../../codec'
 import { termOf } from '../../denote'
+import { native } from '../../native'
 import { dynamoNumber } from '../../prisms'
 import type { Term } from '../../term'
 import { arbitraryOf, rngFrom, structuralEquals } from '../../testing'
@@ -120,6 +122,9 @@ const constructed: Record<string, AnyCodec> = {
     object: object({ a: string, b: optional(number), c: fill(string, 'z') }),
     nullable: nullable(string),
     nullValue,
+    opaque,
+    lossy: opaque('lossy'),
+    refuse: opaque('refuse'),
     refined: refine(string, (s): s is string => s.length > 1),
     held: held(string, string, {
         encode: (s: string) => s.toUpperCase(),
@@ -374,5 +379,16 @@ describe('a codec of a constructor and the codec of its term agree', () => {
         expect(nullValue.encode(null)).toEqual({ NULL: true })
         expect(nullValue.decode({ NULL: true })).toBeNull()
         expect(nullValue.encode('x' as never)).toBeInstanceOf(Error)
+    })
+
+    it('native writes the marshaller form of a plain value, on the two routes', () => {
+        const rebuilt = codecOfTerm(copyOf(termOf(native)) as Term) as AnyCodec
+        const value = { a: 'x', b: [true, null] }
+        const written = {
+            M: { a: { S: 'x' }, b: { L: [{ BOOL: true }, { NULL: true }] } },
+        }
+        expect(native.encode(value)).toEqual(written)
+        expect(rebuilt.encode(value as never)).toEqual(written)
+        expect(native.decode(written as never)).toEqual(value)
     })
 })

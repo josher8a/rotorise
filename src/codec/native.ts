@@ -63,12 +63,19 @@ import type {
     S,
     SS,
 } from './attribute'
-import { codecOfTerm } from './capabilities'
+import { codecOfPair } from './capabilities'
 import type { AttributeCodec, Result } from './codec'
 import { andThen, CodecError, every } from './codec'
-import { mapNumberLeaves, opaqueTerms } from './denote'
+import {
+    heldPair,
+    judgedBy,
+    judgeWall,
+    mapNumberLeaves,
+    opaquePair,
+    opaqueTerms,
+} from './denote'
 import { numberWriter, toCanonical } from './nativeWrite'
-import type { HeldT, TermMark } from './term'
+import type { HeldT, Term, TermMark } from './term'
 
 /**
  * A stored number, as `convertToNative` reads it — a `bigint` outside the safe range.
@@ -139,14 +146,19 @@ const configured = (
     // the caller's writer receives the number alone, and `ranged` reaches the port's own writer only
     const write = numberWriter(options, deviations.writeNumber)
     const read = deviations.readNumber ?? fromNativeNumber
-    return codecOfTerm<unknown, AttributeValue>({
+    const term: Extract<Term, { kind: 'held' }> = {
         kind: 'held',
         inner: opaqueTerms.canonical,
         outer: opaqueTerms.canonical,
         f: (value: unknown) => toCanonical(value, options, write),
         g: (held: unknown) => toHeld(held, read),
         via: 'native',
-    })
+    }
+    judgedBy(term, judgeWall(term))
+    return codecOfPair<unknown, AttributeValue>(
+        term,
+        heldPair(opaquePair, term),
+    )
 }
 
 /**
