@@ -161,7 +161,68 @@ type NumeralValue = {
     readonly point: number
 }
 
+/** The code of `0` and of `9`: `\d` of a regular expression without the `u` flag is these ten. */
+const ZERO = 48
+const NINE = 57
+
+/**
+ * The value of a numeral with no exponent, read by a scan and not by a regular expression: a sign,
+ * digits, and a point with digits. `null` for any other text, which the regular expression of
+ * {@link numeralValue} reads, so the scan decides only what it has fully matched.
+ */
+const plainNumeralValue = (s: string): NumeralValue | undefined | null => {
+    const end = s.length
+    const signed = s.charCodeAt(0)
+    const negative = signed === 45
+    let at = negative || signed === 43 ? 1 : 0
+    const wholeAt = at
+    while (at < end && s.charCodeAt(at) >= ZERO && s.charCodeAt(at) <= NINE)
+        at++
+    const wholeEnd = at
+    if (wholeEnd === wholeAt) return null
+    let fractionAt = end
+    let fractionEnd = end
+    if (at < end) {
+        if (s.charCodeAt(at) !== 46) return null
+        fractionAt = ++at
+        while (at < end && s.charCodeAt(at) >= ZERO && s.charCodeAt(at) <= NINE)
+            at++
+        if (at !== end || at === fractionAt) return null
+        fractionEnd = at
+    }
+    // the first and the last digit that is not a zero, among the digits of the whole part and then of the fraction
+    const wholeLength = wholeEnd - wholeAt
+    const count = wholeLength + (fractionEnd - fractionAt)
+    const digitAt = (n: number): number =>
+        s.charCodeAt(
+            n < wholeLength ? wholeAt + n : fractionAt + n - wholeLength,
+        )
+    let first = 0
+    while (first < count && digitAt(first) === ZERO) first++
+    if (first === count)
+        return {
+            sign: negative ? '-' : '',
+            digits: '',
+            point: wholeLength - first,
+        }
+    let last = count
+    while (digitAt(last - 1) === ZERO) last--
+    const digits =
+        last <= wholeLength
+            ? s.slice(wholeAt + first, wholeAt + last)
+            : first >= wholeLength
+              ? s.slice(
+                    fractionAt + first - wholeLength,
+                    fractionAt + last - wholeLength,
+                )
+              : s.slice(wholeAt + first, wholeEnd) +
+                s.slice(fractionAt, fractionAt + last - wholeLength)
+    return { sign: negative ? '-' : '', digits, point: wholeLength - first }
+}
+
 const numeralValue = (s: string): NumeralValue | undefined => {
+    const plain = plainNumeralValue(s)
+    if (plain !== null) return plain
     const parts = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(s)
     if (!parts) return undefined
     const whole = parts[2] as string

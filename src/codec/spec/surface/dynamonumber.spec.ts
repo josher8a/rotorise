@@ -39,6 +39,20 @@ describe('construction refuses what DynamoDB refuses', () => {
         expect(failed(DynamoNumber.from('1.2.3'))).toBe(true)
     })
 
+    it('refuses a point with no digit on one side, and a second sign', () => {
+        for (const text of [
+            '1.',
+            '-1.',
+            '.5',
+            '+.5',
+            '1.e5',
+            '--1',
+            '+-1',
+            '-',
+        ])
+            expect(failed(DynamoNumber.from(text)), text).toBe(true)
+    })
+
     it('refuses more than 38 significant digits, which the service will not store', () => {
         expect(failed(DynamoNumber.from('1'.repeat(38)))).toBe(false)
         expect(failed(DynamoNumber.from('1'.repeat(39)))).toBe(true)
