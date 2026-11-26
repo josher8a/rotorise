@@ -15,7 +15,7 @@
 
 - **Two entry points.** `rotorise/testing` holds `checkRoundTrip`, `checkStable`, `arbitraryOf` and `shrinkOf`. `rotorise/native` holds `native`, a codec that writes the attributes as the AWS SDK marshaller does.
 - **Methods of the entry:** `.keys`, `.keyCondition` and `.keyUpdates`. With the `codec` option, `.toItem` and `.fromItem` write and read the DynamoDB attributes. `unsafeKey`, `unsafeToEntry`, `unsafeKeys`, `unsafeKeyCondition` and `unsafeKeyUpdates` throw where the other form returns a `CodecError`.
-- **Options of `tableEntry`:** `separator`, `key`, `indexes` and `codec`.
+- **Options of `tableEntry`:** `separator`, `key`, `indexes` and `codec`. `codec` takes a codec that `item` builds, as `item(object({ ... }))`, or a tagged codec. An entry with no codec bundles no codec code.
 - **Components:** a record holds `at`, `tag`, `value` and `default`. `at` can name a path. `tag: false` prints no label.
 - **Matches:** an arm groups literals with `cases`, and a match nests.
 - **Codec:** `string`, `number`, `decimal`, `boolean`, `binary`, `nullValue`, `object`, `list`, `spread`, `union`, `discriminatedUnion`, `nullable`, `optional`, `refine`, `fill`, `held`, `opaque`, `DynamoNumber`, `item`, `scope` and `ref`.
