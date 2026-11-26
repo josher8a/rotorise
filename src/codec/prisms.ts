@@ -148,7 +148,7 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
 /* ── the terms, denoted ───────────────────────────────────────────────────────────────── */
 
 /** @see {@link StringCodec} */
-export const string: StringCodec = codecOfTerm({
+export const string: StringCodec = /* @__PURE__ */ codecOfTerm({
     kind: 'string',
 }) as unknown as StringCodec
 
@@ -193,7 +193,7 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
             ): AttributeCodec<ReadonlySet<T[number]>, NS> &
                 TermMark<['set', LitsT<'number', NumTexts<T>>]>
         }
-    } = codecOfTerm({ kind: 'number' }) as never
+    } = /* @__PURE__ */ codecOfTerm({ kind: 'number' }) as never
 
 /**
  * The refusal in the type of a decimal literal that is not the stored spelling: the run time of
@@ -262,7 +262,7 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> &
                 >
         }
     }
-export const decimal: DecimalCodec = numericAdapter<string>(
+export const decimal: DecimalCodec = /* @__PURE__ */ numericAdapter<string>(
     { kind: 'number' },
     { kind: 'string' },
     storedOnly,
@@ -297,7 +297,7 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> &
                 TermMark<['set', FloatT<LitsT<'number', FloatTexts<L>>>]>
         }
     }
-export const number: NumberCodec = numericAdapter<number>(
+export const number: NumberCodec = /* @__PURE__ */ numericAdapter<number>(
     { kind: 'number' },
     { kind: 'number' },
     asFloat,
@@ -324,7 +324,7 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
     }
 
 /** @see {@link BooleanCodec} */
-export const boolean: BooleanCodec = codecOfTerm({
+export const boolean: BooleanCodec = /* @__PURE__ */ codecOfTerm({
     kind: 'boolean',
 }) as unknown as BooleanCodec
 
@@ -347,7 +347,7 @@ export const boolean: BooleanCodec = codecOfTerm({
  * so `literal .null` can say nothing this codec does not already say.
  */
 export const nullValue: AttributeCodec<null, Attribute<'NULL'>> &
-    TermMark<BaseT<'null'>> = codecOfTerm({
+    TermMark<BaseT<'null'>> = /* @__PURE__ */ codecOfTerm({
     kind: 'null',
 })
 
@@ -380,7 +380,7 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
     }
 
 /** @see {@link BinaryCodec} */
-export const binary: BinaryCodec = codecOfTerm({
+export const binary: BinaryCodec = /* @__PURE__ */ codecOfTerm({
     kind: 'binary',
 }) as unknown as BinaryCodec
 
@@ -574,4 +574,4 @@ export type LibraryInner<N> = N extends [
  * (`Closed.pairwiseCompat_never_left`, `Closed.pairwiseCompat_never_right`), so `union([X, never])` is `X`.
  */
 export const never: AttributeCodec<never, never> & TermMark<['never']> =
-    codecOfTerm<never, never>({ kind: 'never' })
+    /* @__PURE__ */ codecOfTerm<never, never>({ kind: 'never' })

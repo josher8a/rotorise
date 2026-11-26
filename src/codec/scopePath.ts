@@ -375,7 +375,7 @@ export const unresolvedAt = (path: string, partial: boolean): AnyCodec =>
  * holds it agrees with no writer, and the walk refuses on use. One term, so the frontier keeps one
  * copy.
  */
-export const absent: AnyCodec = codecOfTerm({ kind: 'never' })
+export const absent: AnyCodec = /* @__PURE__ */ codecOfTerm({ kind: 'never' })
 
 /**
  * An attribute path, which is a string and exists whether or not the attribute does.
