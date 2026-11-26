@@ -18,6 +18,7 @@ import {
     array,
     binary,
     boolean,
+    CodecError,
     decimal,
     discriminatedUnion,
     fill,
@@ -44,7 +45,7 @@ import {
 import { termOf } from '../../denote'
 import { native } from '../../native'
 import { dynamoNumber } from '../../prisms'
-import type { Term } from '../../term'
+import type { Rng, Term } from '../../term'
 import type { Checkable, Reference } from '../../testing'
 import {
     arbitraryOf,
@@ -232,16 +233,132 @@ const constructed: readonly Entry[] = [
     ],
 ]
 
+/**
+ * A pool of codecs drawn from the public constructors, to a depth bound, from a seed. Each draw
+ * carries the values that its construction admits, built from the values of its parts, so a wrong
+ * term cannot hide behind them. The seeds are the inputs that break a carrier. A name is the
+ * construction in words, so two draws of one construction are one entry.
+ */
+const leaves: readonly Entry[] = [
+    ['string', string, 'x'],
+    ['number', number, 1.5],
+    ['boolean', boolean, true],
+    ['binary', binary, bytes[0]],
+    ["'A'|'B'", string('A', 'B'), 'A', 'B'],
+    ['null', nullValue, null],
+]
+
+const seeds: readonly Entry[] = [
+    ['object()', object({}), {}],
+    ['array(never)', array(never as never), []],
+    ['union(never,string)', union([never as never, string]), 'x'],
+    ['nullable(never)', nullable(never as never), null],
+    ["'A'", string('A'), 'A'],
+    ['set(binary)', set(binary), new Set(bytes)],
+    [
+        'list(string,spread(number))',
+        list(string, spread(number)),
+        ['a', 1, 2],
+        ['a'],
+    ],
+    [
+        'list(string,spread(number),boolean)',
+        list(string, spread(number), boolean),
+        ['a', 1, true],
+        ['a', true],
+    ],
+    [
+        'object(inner:object(v:string))',
+        object({ inner: object({ v: string }) }),
+        { inner: { v: 'x' } },
+    ],
+]
+
+/** A drawn codec in the place of a codec of one type: the draw knows no type of its own. */
+const as_ = (codec: AnyCodec): typeof string => codec as never
+
+const grow = (rng: Rng, depth: number): Entry => {
+    const at = <T>(xs: readonly T[]): T =>
+        xs[Math.floor(rng() * xs.length)] as T
+    if (depth === 0) return at(leaves)
+    const [n1, c1, ...w1] = grow(rng, depth - 1)
+    const [n2, c2, ...w2] = grow(rng, depth - 1)
+    const [a, b] = [w1[0], w2[0]]
+    const built: readonly Entry[] = [
+        [`array(${n1})`, array(as_(c1)), [a], []],
+        [`list(${n1},${n2})`, list(as_(c1), as_(c2)), [a, b]],
+        [
+            `list(${n1},spread(${n2}))`,
+            list(as_(c1), spread(as_(c2))),
+            [a, b, b],
+        ],
+        [
+            `list(${n1},spread(${n2}),${n1})`,
+            list(as_(c1), spread(as_(c2)), as_(c1)),
+            [a, b, a],
+        ],
+        [
+            `object(a:${n1},b:${n2})`,
+            object({ a: as_(c1), b: as_(c2) }),
+            { a, b },
+        ],
+        [`nullable(${n1})`, nullable(as_(c1)), ...w1, null],
+    ]
+    return at(built)
+}
+
+const kindsOf = (term: unknown, out = new Set<string>()): Set<string> => {
+    if (typeof term !== 'object' || term === null) return out
+    if ('kind' in term && typeof term.kind === 'string') out.add(term.kind)
+    for (const part of Object.values(term)) kindsOf(part, out)
+    return out
+}
+
+/** The kinds that the menu of the generator builds. A run that draws fewer tests nothing. */
+const menu = [
+    'string',
+    'number',
+    'boolean',
+    'binary',
+    'null',
+    'object',
+    'list',
+    'union',
+]
+
+const drawPool = (
+    seed: number,
+    draws: number,
+    depth: number,
+): readonly Entry[] => {
+    const rng = rngFrom(seed)
+    const grown = Array.from({ length: draws }, () => grow(rng, depth))
+    const kinds = new Set(grown.flatMap(([, c]) => [...kindsOf(termOf(c))]))
+    const missing = menu.filter((k) => !kinds.has(k))
+    if (missing.length > 0)
+        throw new CodecError(
+            `the drawn pool holds no codec of the kinds ${missing.join(', ')}, with seed ${seed}, so the run tests nothing`,
+        )
+    const byName = new Map<string, Entry>()
+    for (const e of [...seeds, ...grown])
+        if (!byName.has(e[0])) byName.set(e[0], e)
+    return [...byName.values()].map(
+        (e): Entry => [`drawn ${e[0]}`, e[1], ...e.slice(2)],
+    )
+}
+
+const pool: readonly Entry[] = [...constructed, ...drawPool(20261129, 60, 3)]
+
 describe('a codec of a constructor and the codec of its term agree', () => {
     it('each name of the pool is distinct, so no codec runs under the name of another', () => {
-        const names = constructed.map(([name]) => name)
+        const names = pool.map(([name]) => name)
         expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([])
         expect(constructed.filter(([n]) => withItem.includes(n))).toHaveLength(
             withItem.length,
         )
     })
 
-    for (const [name, codec] of constructed) {
+    for (const [name, codec] of pool) {
         it(`${name}: encode and decode agree on each drawn value`, () => {
             const rebuilt = codecOfTerm(
                 copyOf(termOf(codec)) as Term,
@@ -554,7 +671,7 @@ describe('the bytes of a codec of the pool are the bytes of the SDK', () => {
         ).toEqual([])
     })
 
-    for (const [name, codec, ...intended] of constructed) {
+    for (const [name, codec, ...intended] of pool) {
         const reason = beyondTheSdk.get(name)
         if (reason !== undefined) {
             it.skip(`${name}: skipped, ${reason}`, () => {})
@@ -580,4 +697,12 @@ describe('the bytes of a codec of the pool are the bytes of the SDK', () => {
             })
         })
     }
+})
+
+describe('a drawn pool that holds too few kinds is refused, and is no green run', () => {
+    it('a depth of zero draws leaves only, and the run is refused with its seed', () => {
+        expect(() => drawPool(7, 20, 0)).toThrow(
+            /holds no codec of the kinds .*, with seed 7, so the run tests nothing/,
+        )
+    })
 })
