@@ -1753,7 +1753,8 @@ const rowForm = (
     subject: Subject,
 ) => `Each distinct term is one \`def\`, and a caller's function of the term is a parameter of the \`def\`.
 A row applies the \`def\` to \`ρ n\` or \`π n\`, and each function of each ${unitOf[subject]} has an index of its own.
-A row is the name of its ${unitOf[subject]}, then the data. A list holds ${rowsPerList} rows, and the kernel decides
+A row is the name of its ${unitOf[subject]}, then the data. A row with the text of an earlier row of its form
+states no new proposition, so the file drops the row. A list holds ${rowsPerList} rows, and the kernel decides
 \`failing ok rows = []\` for the comparator \`ok\` of each list by \`kernel_rfl%\`. The last \`#eval\` prints
 \`failing ok rows\` of each list at one instance of the caller functions, so the file names each failing
 ${unitOf[subject]}, and prints nothing when each row passes.`
@@ -1786,7 +1787,15 @@ const rowLists = <F extends string>(
     readonly index: number
     readonly rows: readonly Row<F>[]
 }[] => {
-    const rows = file.rows(shapes)
+    // Two functions never share an index, so two rows of one form with one text hold no function and
+    // state one proposition. The kernel decides the proposition once, at the first row.
+    const seen = new Set<string>()
+    const rows = file.rows(shapes).filter((one) => {
+        const key = `${one.form} ${one.row}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+    })
     return (Object.keys(file.forms) as F[]).flatMap((form) =>
         listsOf(rows.filter((one) => one.form === form)).map((list, index) => ({
             form,
