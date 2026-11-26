@@ -61,6 +61,9 @@ const copyOf = (t: unknown, seen = new Map<object, unknown>()): unknown => {
     return out
 }
 
+/** A named codec of the pool. A list of entries holds each name, so a name that two entries share is visible. */
+type Entry = readonly [name: string, codec: AnyCodec]
+
 const A = object({ kind: string('A'), a: string })
 const B = object({ kind: string('B'), b: number })
 
@@ -74,76 +77,102 @@ const bytes = [Uint8Array.of(1), Uint8Array.of(2, 3)] as const
  * pair in the constructor, and the all-kinds route builds the same term through the general union.
  * The two statements of one meaning must agree on each value and on the text of each refusal.
  */
-const literals: Record<string, AnyCodec> = {
-    one: string('A'),
-    choice: string('A', 'B'),
-    flags: boolean(true, false),
-    oneBinary: binary(bytes[0]),
-    binaries: binary(...bytes),
-    oneNumber: dynamoNumber(numOne),
-    numbers: dynamoNumber(numOne, twoAndAHalf),
-    floats: number(1, 2),
-    decimals: decimal('1', '2.5'),
-    inObject: object({ kind: string('A', 'B'), n: number(1, 2) }),
-    inArray: array(string('A', 'B')),
-}
+const literals: readonly Entry[] = [
+    ['one', string('A')],
+    ['choice', string('A', 'B')],
+    ['flags', boolean(true, false)],
+    ['oneBinary', binary(bytes[0])],
+    ['binaries', binary(...bytes)],
+    ['oneNumber', dynamoNumber(numOne)],
+    ['numbers', dynamoNumber(numOne, twoAndAHalf)],
+    ['floats', number(1, 2)],
+    ['decimals', decimal('1', '2.5')],
+    ['inObject', object({ kind: string('A', 'B'), n: number(1, 2) })],
+    ['inArray', array(string('A', 'B'))],
+]
 
-const constructed: Record<string, AnyCodec> = {
+const constructed: readonly Entry[] = [
     ...literals,
-    string,
-    number,
-    decimal,
-    boolean,
-    binary,
-    literal: string('x', 'y'),
-    list: array(string),
-    strings: set(string),
-    tuple: list(string, number),
-    tail: list(string, spread(number), boolean),
-    middle: list(string, spread(number), boolean, binary),
-    listOfLiterals: list(string('A', 'B'), spread(string('C'))),
-    setOfLiterals: set(string('A', 'B')),
-    setOfBinary: set(binary),
-    ofObjects: array(A),
-    open: object({ a: string }, [string, optional(number)]),
-    marks: object({
-        a: undefinable(string),
-        b: optional(boolean),
-        c: fill(number, 1),
-    }),
-    deep: object({
-        inner: object({ list: array(string('A', 'B')), tags: set(string) }),
-    }),
-    ofTagged: array(discriminatedUnion('kind', [A, B])),
-    ofMulti: list(mdunion(['kind'], [A, B])),
-    setOfRefined: set(refine(string, (s): s is string => s.length > 1)),
-    numbers: set(number),
-    nested: array(array(number)),
-    object: object({ a: string, b: optional(number), c: fill(string, 'z') }),
-    nullable: nullable(string),
-    nullValue,
-    opaque,
-    lossy: opaque('lossy'),
-    refuse: opaque('refuse'),
-    refined: refine(string, (s): s is string => s.length > 1),
-    held: held(string, string, {
-        encode: (s: string) => s.toUpperCase(),
-        decode: (s: string) => s.toLowerCase(),
-    }),
-    legacy: legacy({
-        current: string,
-        older: { decode: (attribute: unknown) => String(attribute) },
-    }),
-    refinedObject: object({
-        name: refine(string, (s): s is string => s.length > 1),
-    }),
-    union: union([string, number]),
-    objects: union([A, B]),
-    tagged: discriminatedUnion('kind', [A, B]),
-}
+    ['string', string],
+    ['number', number],
+    ['decimal', decimal],
+    ['boolean', boolean],
+    ['binary', binary],
+    ['literal', string('x', 'y')],
+    ['list', array(string)],
+    ['strings', set(string)],
+    ['tuple', list(string, number)],
+    ['tail', list(string, spread(number), boolean)],
+    ['middle', list(string, spread(number), boolean, binary)],
+    ['listOfLiterals', list(string('A', 'B'), spread(string('C')))],
+    ['setOfLiterals', set(string('A', 'B'))],
+    ['setOfBinary', set(binary)],
+    ['ofObjects', array(A)],
+    ['open', object({ a: string }, [string, optional(number)])],
+    [
+        'marks',
+        object({
+            a: undefinable(string),
+            b: optional(boolean),
+            c: fill(number, 1),
+        }),
+    ],
+    [
+        'deep',
+        object({
+            inner: object({ list: array(string('A', 'B')), tags: set(string) }),
+        }),
+    ],
+    ['ofTagged', array(discriminatedUnion('kind', [A, B]))],
+    ['ofMulti', list(mdunion(['kind'], [A, B]))],
+    ['setOfRefined', set(refine(string, (s): s is string => s.length > 1))],
+    ['setOfNumbers', set(number)],
+    ['nested', array(array(number))],
+    [
+        'object',
+        object({ a: string, b: optional(number), c: fill(string, 'z') }),
+    ],
+    ['nullable', nullable(string)],
+    ['nullValue', nullValue],
+    ['opaque', opaque],
+    ['lossy', opaque('lossy')],
+    ['refuse', opaque('refuse')],
+    ['refined', refine(string, (s): s is string => s.length > 1)],
+    [
+        'held',
+        held(string, string, {
+            encode: (s: string) => s.toUpperCase(),
+            decode: (s: string) => s.toLowerCase(),
+        }),
+    ],
+    [
+        'legacy',
+        legacy({
+            current: string,
+            older: { decode: (attribute: unknown) => String(attribute) },
+        }),
+    ],
+    [
+        'refinedObject',
+        object({
+            name: refine(string, (s): s is string => s.length > 1),
+        }),
+    ],
+    ['union', union([string, number])],
+    ['objects', union([A, B])],
+    ['tagged', discriminatedUnion('kind', [A, B])],
+]
 
 describe('a codec of a constructor and the codec of its term agree', () => {
-    for (const [name, codec] of Object.entries(constructed)) {
+    it('each name of the pool is distinct, so no codec runs under the name of another', () => {
+        const names = constructed.map(([name]) => name)
+        expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([])
+        expect(constructed.filter(([n]) => withItem.includes(n))).toHaveLength(
+            withItem.length,
+        )
+    })
+
+    for (const [name, codec] of constructed) {
         it(`${name}: encode and decode agree on each drawn value`, () => {
             const rebuilt = codecOfTerm(
                 copyOf(termOf(codec)) as Term,
@@ -166,16 +195,18 @@ describe('a codec of a constructor and the codec of its term agree', () => {
         })
     }
 
-    for (const name of [
+    const withItem = [
         'object',
         'objects',
         'tagged',
         'inObject',
         'open',
         'marks',
-    ]) {
+    ]
+    for (const [name, codec] of constructed.filter(([n]) =>
+        withItem.includes(n),
+    )) {
         it(`${name}: the item reading agrees on each drawn value`, () => {
-            const codec = constructed[name] as AnyCodec
             const rebuilt = codecOfTerm(
                 copyOf(termOf(codec)) as Term,
             ) as AnyCodec
@@ -246,7 +277,7 @@ describe('a codec of a constructor and the codec of its term agree', () => {
     ]
     const text = (result: unknown): unknown =>
         result instanceof Error ? result.message : result
-    for (const [name, codec] of Object.entries(literals)) {
+    for (const [name, codec] of literals) {
         it(`${name}: each refusal reads the same on the two routes`, () => {
             const rebuilt = codecOfTerm(
                 copyOf(termOf(codec)) as Term,
