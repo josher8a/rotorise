@@ -8,8 +8,15 @@ import type {
     Free,
     FreeOf,
 } from './build'
-import { codecOfTerm } from './capabilities'
-import { termOf } from './denote'
+import { codecOfPair } from './capabilities'
+import {
+    heldPair,
+    judgedBy,
+    judgeWall,
+    legacyPair,
+    pairOfCodec,
+    termOf,
+} from './denote'
 import type { CycleEntryOf } from './pathModel'
 import type { Result } from './result'
 import { CodecError, failed, HeldSideRefusal } from './result'
@@ -214,8 +221,13 @@ export const held = <
         >
     > &
     Free<FreeOf<C> | FreeOf<O>> => {
-    return codecOfTerm<HeldOf<O>, AttributeOf<C>>(
-        heldTerm(termOf(inner as unknown as AnyCodec), outer, adapt),
+    const term = heldTerm(termOf(inner as unknown as AnyCodec), outer, adapt)
+    // the judgment and the pair come from the kind alone, so a bundle of `held` holds no switch
+    // over the other kinds
+    judgedBy(term, judgeWall(term))
+    return codecOfPair<HeldOf<O>, AttributeOf<C>>(
+        term,
+        heldPair(pairOfCodec(inner as unknown as AnyCodec), term),
     )
 }
 
@@ -432,9 +444,17 @@ export const legacy = <const C extends AnyCodec>(options: {
     readonly older: Reader<Decoded<C>>
 }): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> &
     TermMark<['legacy', TermOf<C>]> &
-    Free<FreeOf<C>> =>
-    codecOfTerm<Decoded<C>, AttributeOf<C> & AttributeValue>({
+    Free<FreeOf<C>> => legacyOf(options.current, options.older.decode)
+
+const legacyOf = <C extends AnyCodec>(
+    current: C,
+    older: Extract<Term, { kind: 'legacy' }>['r'],
+): AttributeCodec<Decoded<C>, AttributeOf<C> & AttributeValue> => {
+    const term: Extract<Term, { kind: 'legacy' }> = {
         kind: 'legacy',
-        inner: termOf(options.current),
-        r: options.older.decode,
-    })
+        inner: termOf(current),
+        r: older,
+    }
+    judgedBy(term, judgeWall(term))
+    return codecOfPair(term, legacyPair(pairOfCodec(current), older))
+}

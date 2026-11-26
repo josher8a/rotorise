@@ -14,11 +14,12 @@ import {
     asFloat,
     asJsNumber,
     codecOfGround,
+    codecOfPair,
     codecOfTerm,
     numericAdapter,
     storedOnly,
 } from './capabilities'
-import { groundOf, termOf } from './denote'
+import { groundOf, judgedBy, pairOfCodec, refinePair, termOf } from './denote'
 import type { IsUnion } from './derivedItem'
 import { CodecError } from './result'
 import type {
@@ -32,6 +33,7 @@ import type {
     NumText,
     NumTexts,
     Rng,
+    Term,
     TermMark,
     TermOf,
 } from './term'
@@ -396,7 +398,7 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     //
     // `set(amount)` decodes as `ReadonlySet<Price>` because the set is built from
     // `amount`, where the predicate that produces a `Price` already lives.
-    return codecOfTerm<Narrow, A>({
+    const term: Extract<Term, { kind: 'refine' }> = {
         kind: 'refine',
         inner: termOf(inner as unknown as AnyCodec),
         q: {
@@ -407,7 +409,14 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
                 | undefined,
             onThinSearch: options.onThinSearch,
         },
-    }) as unknown as AttributeCodec<Narrow, A>
+    }
+    // the judgment and the pair come from the kind alone, so a bundle of `refine` holds no switch
+    // over the other kinds
+    judgedBy(term, undefined)
+    return codecOfPair(
+        term,
+        refinePair(pairOfCodec(inner as unknown as AnyCodec), term.q),
+    ) as unknown as AttributeCodec<Narrow, A>
 }
 
 /**

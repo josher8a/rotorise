@@ -1676,15 +1676,10 @@ export const denote = (def: Term): Pair => {
             return objectPair(itemSem(def))
         /** The rule `(held)`. `Lawful.held1` is the lemma; the adapter is data the term carries. */
         case 'held':
-            return heldThrough(pairOf(def.inner), {
-                encode: def.f,
-                decode: def.g,
-            })
+            return heldPair(pairOf(def.inner), def)
         /** The rule `(refine)`. `Lawful.restrict` is the lemma; `q` is data the term carries. */
         case 'refine':
-            return restrict(pairOf(def.inner), holds(def.q), (value) =>
-                refusedBy(def.q, value),
-            )
+            return refinePair(pairOf(def.inner), def.q)
         /**
          * The rule `(legacy)`: the current reading, extended by an older one — the model's
          * `Codec.extendRead`. The model proves the core laws only (`LawfulCore.extendRead`): a
@@ -1701,38 +1696,8 @@ export const denote = (def: Term): Pair => {
          * the check the row decodes and the write-back refuses, which is **(C)** broken at the
          * migrated row and reported at the next write instead of at this read.
          */
-        case 'legacy': {
-            const current = pairOf(def.inner)
-            const older = def.r
-            return {
-                encode: current.encode,
-                decode: (attribute, enclosing) => {
-                    const read = current.decode(attribute, enclosing)
-                    if (!failed(read)) return read
-                    // the older reader is the caller's, so it may throw rather than return, and
-                    // the throw is a refusal of this read, as `held` reads a throw of the caller
-                    let older_: unknown
-                    try {
-                        older_ = older(attribute)
-                    } catch (thrown) {
-                        older_ = new CodecError(
-                            `the older reader threw: ${thrownReason(thrown)}`,
-                        )
-                    }
-                    if (!failed(older_)) {
-                        if (!writesAt(current, older_, enclosing)) {
-                            return new CodecError(
-                                `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
-                            )
-                        }
-                        return older_
-                    }
-                    return new CodecError(
-                        `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
-                    )
-                },
-            }
-        }
+        case 'legacy':
+            return legacyPair(pairOf(def.inner), def.r)
         /**
          * A `ref`: the pair of its target, read on use, because `ref` builds the pair before a
          * scope binds the name. The row recurses on the **value**, never on the term, which is
@@ -2006,6 +1971,75 @@ export const judgeUnion = (
     return undefined
 }
 
+/** The pair of a `held`: the pair of the inner term, through the adapter that the term carries. */
+export const heldPair = (
+    inner: Pair,
+    def: Extract<Term, { kind: 'held' }>,
+): Pair => heldThrough(inner, { encode: def.f, decode: def.g })
+
+/** The pair of a `refine`: the pair of the inner term, restricted to the values that `q` holds. */
+export const refinePair = (
+    inner: Pair,
+    q: Extract<Term, { kind: 'refine' }>['q'],
+): Pair => restrict(inner, holds(q), (value) => refusedBy(q, value))
+
+/**
+ * The pair of a `legacy`: the current reading, extended by an older one. The write side is the
+ * current one, and the older reader answers only where the current reading fails. The older
+ * reader is the caller's, so a throw of it is a refusal of the read.
+ */
+export const legacyPair = (
+    current: Pair,
+    older: Extract<Term, { kind: 'legacy' }>['r'],
+): Pair => {
+    return {
+        encode: current.encode,
+        decode: (attribute, enclosing) => {
+            const read = current.decode(attribute, enclosing)
+            if (!failed(read)) return read
+            // the older reader is the caller's, so it may throw rather than return, and
+            // the throw is a refusal of this read, as `held` reads a throw of the caller
+            let older_: unknown
+            try {
+                older_ = older(attribute)
+            } catch (thrown) {
+                older_ = new CodecError(
+                    `the older reader threw: ${thrownReason(thrown)}`,
+                )
+            }
+            if (!failed(older_)) {
+                if (!writesAt(current, older_, enclosing)) {
+                    return new CodecError(
+                        `an older encoding read this attribute as ${describeShape(older_)}, which the current encoding cannot write. A migration has to land on values that can be written back, or the row reads and then refuses on the way out`,
+                    )
+                }
+                return older_
+            }
+            return new CodecError(
+                `no encoding could read this attribute; tried the current one and one older: ${read} | ${older_}`,
+            )
+        },
+    }
+}
+
+/**
+ * **A wall reaches no cycle.** A wall is a `held` or a `legacy` with an older reader, and reads its
+ * argument through caller code at any depth. A wall that reads an entry on a cycle makes the flat
+ * system non-contractive. The rule passes a wall that reads a `ref` that no scope binds, and the
+ * scope judges the closed copy.
+ */
+export const judgeWall = (
+    t: Extract<Term, { kind: 'held' | 'legacy' }>,
+): CodecError | undefined => {
+    const args = t.kind === 'held' ? [t.inner, t.outer] : [t.inner]
+    const entry = unboundRefs(args).size > 0 ? undefined : cycleEntryOf(args)
+    return entry === undefined
+        ? undefined
+        : new CodecError(
+              `\`${t.kind === 'held' ? 'held' : 'legacy'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
+          )
+}
+
 /**
  * **The judgment of a container at its declaration**: the refusal of its own kind, then the guard
  * of the model. Each constructor passes the judge of its own kind, so a bundle of one container
@@ -2054,13 +2088,8 @@ const judge = (t: Term, declaring: boolean): CodecError | undefined => {
         // that the guard refuses keeps the refusal of the guard
         case 'held':
         case 'legacy': {
-            const args = t.kind === 'held' ? [t.inner, t.outer] : [t.inner]
-            const entry =
-                unboundRefs(args).size > 0 ? undefined : cycleEntryOf(args)
-            if (entry !== undefined)
-                return new CodecError(
-                    `\`${t.kind === 'held' ? 'held' : 'legacy'}\` reads '${entry}', an entry on a cycle. A wall reads its argument through caller code at any depth, so a wall that reads an entry on a cycle makes the flat system non-contractive, and the meaning of the codec needs a DAG of scopes with constants. Put the wall over a codec that reaches no cycle`,
-                )
+            const refusal = judgeWall(t)
+            if (refusal) return refusal
             break
         }
         // **Each two options of a union are compatible**, the model's obligation `TOp.obl` at

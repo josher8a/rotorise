@@ -19,7 +19,9 @@ import {
     decimal,
     discriminatedUnion,
     fill,
+    held,
     item,
+    legacy,
     list,
     mdunion,
     never,
@@ -117,6 +119,17 @@ const constructed: Record<string, AnyCodec> = {
     object: object({ a: string, b: optional(number), c: fill(string, 'z') }),
     nullable: nullable(string),
     refined: refine(string, (s): s is string => s.length > 1),
+    held: held(string, string, {
+        encode: (s: string) => s.toUpperCase(),
+        decode: (s: string) => s.toLowerCase(),
+    }),
+    legacy: legacy({
+        current: string,
+        older: { decode: (attribute: unknown) => String(attribute) },
+    }),
+    refinedObject: object({
+        name: refine(string, (s): s is string => s.length > 1),
+    }),
     union: union([string, number]),
     objects: union([A, B]),
     tagged: discriminatedUnion('kind', [A, B]),
