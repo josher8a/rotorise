@@ -1,14 +1,7 @@
 import type { ErrorMessage } from '../utils'
 import type { MissingCodec, RefineOptions } from './adapters'
 import { fillRefusal } from './adapters'
-import type {
-    Attribute,
-    AttributeValue,
-    BS,
-    DynamoNumber,
-    NS,
-    SS,
-} from './attribute'
+import type { Attribute, AttributeValue, DynamoNumber } from './attribute'
 import type {
     AnyCodec,
     AttributeCodec,
@@ -26,7 +19,6 @@ import {
 } from './capabilities'
 import { termOf } from './denote'
 import type { IsUnion } from './derivedItem'
-import type { SetCapable } from './products'
 import { CodecError } from './result'
 import type {
     BaseT,
@@ -118,8 +110,6 @@ export type SomeValue<
  * string              // any string
  * string('A')         // exactly 'A', and its type says so
  * string('A', 'B')    // one of two
- * string.set()        // SS
- * string.set('A', 'B')// SS whose members are checked
  * ```
  *
  * Callable *and* a codec, the same {@link opaque} trick and for the same reason: `string.encode`
@@ -135,14 +125,6 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
             ...allowed: L & SomeValue<'string', L>
         ): AttributeCodec<L[number], Attribute<'S'>> &
             TermMark<LitsT<'string', L>>
-        readonly set: {
-            (): AttributeCodec<ReadonlySet<string>, SS> &
-                TermMark<['set', BaseT<'string'>]>
-            <const L extends readonly string[]>(
-                ...allowed: L
-            ): AttributeCodec<ReadonlySet<L[number]>, SS> &
-                TermMark<['set', LitsT<'string', L>]>
-        }
     }
 
 /* ── the terms, denoted ───────────────────────────────────────────────────────────────── */
@@ -160,7 +142,6 @@ export const string: StringCodec = /* @__PURE__ */ codecOfTerm({
  * ```ts
  * dynamoNumber                       // an exact number
  * dynamoNumber(DynamoNumber.from('1.5'))   // …and a literal at it
- * dynamoNumber.set()                 // NS
  * ```
  *
  * **Three carriers write `N`, and the other two are adapters over this one.** They are no longer
@@ -185,14 +166,6 @@ export const dynamoNumber: AttributeCodec<DynamoNumber, Attribute<'N'>> &
             ...allowed: T & SomeValue<'dynamoNumber', T>
         ): AttributeCodec<T[number], Attribute<'N'>> &
             TermMark<LitsT<'number', NumTexts<T>>>
-        readonly set: {
-            (): AttributeCodec<ReadonlySet<DynamoNumber>, NS> &
-                TermMark<['set', BaseT<'number'>]>
-            <const T extends readonly DynamoNumber[]>(
-                ...allowed: T
-            ): AttributeCodec<ReadonlySet<T[number]>, NS> &
-                TermMark<['set', LitsT<'number', NumTexts<T>>]>
-        }
     } = /* @__PURE__ */ codecOfTerm({ kind: 'number' }) as never
 
 /**
@@ -244,23 +217,6 @@ export type DecimalCodec = AttributeCodec<string, Attribute<'N'>> &
             TermMark<
                 HeldT<LitsT<'number', L>, LitsT<'string', L>, 'decimalText'>
             >
-        readonly set: {
-            (): AttributeCodec<ReadonlySet<string>, NS> &
-                TermMark<['set', DecimalT]>
-            <const L extends readonly string[]>(
-                ...allowed: L
-            ): AttributeCodec<ReadonlySet<L[number]>, NS> &
-                TermMark<
-                    [
-                        'set',
-                        HeldT<
-                            LitsT<'number', L>,
-                            LitsT<'string', L>,
-                            'decimalText'
-                        >,
-                    ]
-                >
-        }
     }
 export const decimal: DecimalCodec = /* @__PURE__ */ numericAdapter<string>(
     { kind: 'number' },
@@ -275,8 +231,8 @@ export const decimal: DecimalCodec = /* @__PURE__ */ numericAdapter<string>(
  * Right for enums, counts and flags; wrong for money, which is {@link decimal}.
  *
  * **An adapter over {@link dynamoNumber}, not a base of its own**, and the conversion is where the
- * loss is: the float has already rounded before this codec sees it. `number.set()` and
- * `decimal.set()` are two carriers over one wire set: each is the set of its adapter.
+ * loss is: the float has already rounded before this codec sees it. `set(number)` and
+ * `set(decimal)` are two carriers over one wire set: each is the set of its adapter.
  */
 export type NumberCodec = AttributeCodec<number, Attribute<'N'>> &
     TermMark<FloatT<BaseT<'number'>>> & {
@@ -288,14 +244,6 @@ export type NumberCodec = AttributeCodec<number, Attribute<'N'>> &
             ...allowed: L & SomeValue<'number', L>
         ): AttributeCodec<L[number], Attribute<'N'>> &
             TermMark<FloatT<LitsT<'number', FloatTexts<L>>>>
-        readonly set: {
-            (): AttributeCodec<ReadonlySet<number>, NS> &
-                TermMark<['set', FloatT<BaseT<'number'>>]>
-            <const L extends readonly number[]>(
-                ...allowed: L
-            ): AttributeCodec<ReadonlySet<L[number]>, NS> &
-                TermMark<['set', FloatT<LitsT<'number', FloatTexts<L>>>]>
-        }
     }
 export const number: NumberCodec = /* @__PURE__ */ numericAdapter<number>(
     { kind: 'number' },
@@ -310,7 +258,7 @@ export const number: NumberCodec = /* @__PURE__ */ numericAdapter<number>(
  *
  * `boolean(true)` is a literal at `BOOL`, which nothing on the old surface could spell —
  * `literal(...)` took a string or a number and there was no third option. There is deliberately no
- * `boolean.set()`: DynamoDB has `SS`, `NS` and `BS`, and no set of booleans.
+ * `set(boolean)`: DynamoDB has `SS`, `NS` and `BS`, and no set of booleans.
  */
 export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
     TermMark<BaseT<'boolean'>> & {
@@ -369,14 +317,6 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
             ...allowed: L & SomeValue<'binary', L>
         ): AttributeCodec<Uint8Array, Attribute<'B'>> &
             TermMark<['union', LitT<'binary', string>[]]>
-        readonly set: {
-            (): AttributeCodec<ReadonlySet<Uint8Array>, BS> &
-                TermMark<['set', BaseT<'binary'>]>
-            (
-                ...allowed: readonly Uint8Array[]
-            ): AttributeCodec<ReadonlySet<Uint8Array>, BS> &
-                TermMark<['set', ['union', LitT<'binary', string>[]]]>
-        }
     }
 
 /** @see {@link BinaryCodec} */
@@ -411,14 +351,7 @@ export const binary: BinaryCodec = /* @__PURE__ */ codecOfTerm({
  * - **`encode` runs `is`.** The argument is a `Narrow` by its type, and a value that an `as` upstream
  *   forces past the type is refused with a `CodecError` of kind `refused`, and never written. This is
  *   `Codec.restrict` of the model, which restricts the graph in both directions.
- */
-export type Refined<
-    T,
-    A extends AttributeValue,
-    Tm = FreeTerm,
-> = AttributeCodec<T, A> & SetCapable<T, A, Tm>
-
-/**
+ *
  * A codec narrowed by a predicate. The term `['refine', Tm, () => Narrow]` keeps the term under
  * the predicate, so the members of a slice and the walk of `at` read a literal through a
  * refinement. It keeps the narrowed type too, so a path and a scope decode the brand that the
@@ -435,14 +368,12 @@ export function refine<
     inner: AttributeCodec<Wide, A> & TermMark<Tm> & Free<F>,
     is: (value: Wide) => value is Narrow,
     options?: RefineOptions<Narrow>,
-): Refined<Narrow, A, ['refine', Tm, () => Narrow]> &
-    TermMark<['refine', Tm, () => Narrow]> &
-    Free<F>
+): AttributeCodec<Narrow, A> & TermMark<['refine', Tm, () => Narrow]> & Free<F>
 export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     inner: AttributeCodec<Wide, A>,
     is: (value: Wide) => value is Narrow,
     options: RefineOptions<Narrow> = {},
-): Refined<Narrow, A, unknown> {
+): AttributeCodec<Narrow, A> {
     const what = options.describe ?? 'the expected form'
 
     /**
@@ -459,8 +390,7 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     // `member` reads through a refinement, which is what lets a set of a brand work; `constantOf`
     // does not, because the predicate may be exactly what rejects the constant.
     //
-    // `equip` carries `.set()` across the refinement, and it is the whole of why the brand
-    // survives: `amount.set()` decodes as `ReadonlySet<Price>` because the set is built from
+    // `set(amount)` decodes as `ReadonlySet<Price>` because the set is built from
     // `amount`, where the predicate that produces a `Price` already lives.
     return codecOfTerm<Narrow, A>({
         kind: 'refine',
@@ -473,7 +403,7 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
                 | undefined,
             onThinSearch: options.onThinSearch,
         },
-    }) as unknown as Refined<Narrow, A, unknown>
+    }) as unknown as AttributeCodec<Narrow, A>
 }
 
 /**

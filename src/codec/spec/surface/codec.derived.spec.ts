@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { memberOf } from '../../attribute'
-import { CodecError, nullable, number, refine, string } from '../../codec'
+import { CodecError, nullable, number, refine, set, string } from '../../codec'
 
 const isTag = (v: string): v is `t-${string}` => v.startsWith('t-')
 
@@ -44,8 +44,8 @@ describe('the member a codec writes', () => {
 
     /** What the set builder reads, and the reason a codec has to be able to say it at all. */
     it('is what lets a refined scalar still be a set element', () => {
-        expect(() => refine(string, isTag).set()).not.toThrow()
-        // @ts-expect-error `nullable` writes no single member, so the type declines the capability
-        expect(() => refine(nullable(string), isTag).set()).toThrow(CodecError)
+        expect(() => set(refine(string, isTag))).not.toThrow()
+        // @ts-expect-error `nullable` writes no single member, so the type declines the element
+        expect(() => set(refine(nullable(string), isTag))).toThrow(CodecError)
     })
 })

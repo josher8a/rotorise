@@ -107,7 +107,7 @@ export type WallOver<W extends string, C> = [CycleEntryOf<TermOf<C>>] extends [
  * @example
  * ```ts
  * // stored as SS, held as an array
- * const tags = held(string.set(), array(string), {
+ * const tags = held(set(string), array(string), {
  *     encode: (tags) => new Set(tags),
  *     decode: (tags) => [...tags],
  * })

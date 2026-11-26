@@ -554,7 +554,7 @@ export const readMember = (t: Term): AttributeName | undefined => {
 
 /**
  * **The member that a set element stores**, read at the node that each `ref` names. The type gates
- * `.set()` on the attribute of the element, and the attribute of a scope entry is the attribute of
+ * `set(...)` on the attribute of the element, and the attribute of a scope entry is the attribute of
  * the definition that the entry names, so the run time reads the same node. A stored set holds no
  * recursion, so a node that the read already passed answers nothing. At an entry of a cycle the
  * read gives the member where `printedMember` answers none. A set refuses both answers, because the
@@ -639,8 +639,8 @@ export const occV = (t: Term): readonly SetSlot[] => {
         // a set writes the wire family of each scalar slot its element writes. **An element slot
         // with no family answers every family, not none.** The model's caller carrier has no
         // set of booleans, so the model drops the slot exactly. The host caller carrier holds
-        // sets that the stored universe has no family for: `refine(held(string, boolean, …),
-        // isTrue).set()` admits a `Set<boolean>` and writes the set. The occupancy must
+        // sets that the stored universe has no family for: `set(refine(held(string, boolean, …),
+        // isTrue))` admits a `Set<boolean>` and writes the set. The occupancy must
         // over-approximate, so the occupancy keeps that slot. Two such sets then overlap, and
         // `union` refuses the pair at construction
         case 'set':

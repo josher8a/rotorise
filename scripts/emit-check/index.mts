@@ -24,6 +24,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     tableEntry,
@@ -123,7 +124,7 @@ export const Nick = nullable(string)
 export const Nothing = nullValue
 export const Age = number
 export const Lives = number(9)
-export const AgeSet = number.set()
+export const AgeSet = set(number)
 export const Owner = object({ name: string, tags: array(string) })
 export const Counts = object({ kind: string('DOG') }, [string, optional(string)])
 export const Any = opaque
@@ -134,7 +135,7 @@ export const Pinned = pin<{ name: string }>()(object({ name: string }))
 export const Pre = preconditions(at(item(Dog), ['name']))
 export const Next = ref('X')
 export const NamedAgain = refine(string, (s: string): s is string => s.length > 0)
-export const TagSet = string.set()
+export const TagSet = set(string)
 export const OnlyDog = extract(Pet, object({ kind: string('DOG'), name: string }))
 export const Weights = list(string, spread(number))
 export const Name = string

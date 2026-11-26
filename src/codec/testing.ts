@@ -288,7 +288,7 @@ const unwritable = (
  * `decode ∘ encode = id`, over generated entities.
  *
  * Generation is driven by the codec rather than the TypeScript type — see
- * {@link AttributeCodec.arbitrary} — so `decimal` yields normalised decimals and `string.set()`
+ * {@link AttributeCodec.arbitrary} — so `decimal` yields normalised decimals and `set(string)`
  * never yields the empty set. A structurally free arbitrary would produce values DynamoDB itself
  * rejects and blame the codec.
  *
@@ -1917,7 +1917,7 @@ export const checkEquivalent = <T>(
  *
  * @example
  * ```ts
- * checkIso(string.set(), {
+ * checkIso(set(string), {
  *     encode: (tags: readonly string[]) => new Set(tags),
  *     decode: (tags) => [...tags],
  * })

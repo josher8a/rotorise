@@ -19,6 +19,7 @@ import {
     item as itemOf,
     number,
     object,
+    set,
     string,
 } from '../../codec'
 import type { native } from '../../native'
@@ -42,7 +43,7 @@ const Pet = itemOf(
         TAG: string('PET'),
         id: string,
         price: decimal,
-        tags: string.set(),
+        tags: set(string),
     }),
 )
 
@@ -271,7 +272,7 @@ describe('the two implementations agree on the shape of a row', () => {
         id: string,
         price: decimal,
         qty: number,
-        tags: string.set(),
+        tags: set(string),
         fee: object({ price: decimal }),
         history: array(decimal),
     }
@@ -310,7 +311,7 @@ describe('the two implementations agree on the shape of a row', () => {
                      */
                     price: string
                     qty: string
-                    /** A native set, as a `Set` — which is what `.set()` reads too. */
+                    /** A native set, as a `Set` — which is what `set(...)` reads too. */
                     tags: Set<string>
                     /** Nested maps come back readonly, where the top level does not. */
                     fee: { readonly price: string }
@@ -378,7 +379,7 @@ describe('a codec against the SDK itself', () => {
             TAG: string('ROW'),
             id: string,
             note: string,
-            tags: string.set(),
+            tags: set(string),
         }),
     )
 

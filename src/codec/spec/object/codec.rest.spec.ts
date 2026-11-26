@@ -352,9 +352,7 @@ describe('the rest policy a definition records', () => {
      * two values, and the open one is enough to rebuild the codec a consumer must run. `codecOfTerm`
      * memoises on the frozen term, so rebuilding it runs what was declared.
      *
-     * The rebuilt codec is not `scalar` itself, and that is the design rather than a loss:
-     * `refine` returns `setCapable(codecOfTerm(...))`, so `.set` is a capability sitting *above*
-     * the term's codec. What the walk owes is the behaviour, which is what the second line asks.
+     * What the walk owes is the behaviour, which is what the second line asks.
      */
     it('records a rest codec as its term, not as a flag', () => {
         const def = object({ vendorId: string('ACME', 'GLOBEX') }, [

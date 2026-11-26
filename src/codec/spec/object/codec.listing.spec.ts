@@ -24,6 +24,7 @@ import {
     object,
     opaque,
     optional,
+    set,
     string,
 } from '../../codec'
 import {
@@ -177,7 +178,7 @@ const Listing = itemOf(
         allowsAgentPickup: boolean,
 
         // a native set, not a list — the choice no generic marshaller can infer
-        acceptedTenders: string.set(),
+        acceptedTenders: set(string),
         tenderDetailIds: array(string),
 
         breed: object({

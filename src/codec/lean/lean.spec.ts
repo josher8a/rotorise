@@ -57,6 +57,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     undefinable,
@@ -292,15 +293,15 @@ describe('terms', () => {
      * the set is the finite-powerset lift of its element.
      */
     it('emits a set as the set of its element term', () => {
-        expect(entriesOf(erase(string.set()))).toEqual([
+        expect(entriesOf(erase(set(string)))).toEqual([
             'Scoped.Term.set (1)',
             'Scoped.Term.string',
         ])
-        expect(entriesOf(erase(dynamoNumber.set()))).toEqual([
+        expect(entriesOf(erase(set(dynamoNumber)))).toEqual([
             'Scoped.Term.set (1)',
             'Scoped.Term.number',
         ])
-        expect(entriesOf(erase(binary.set()))).toEqual([
+        expect(entriesOf(erase(set(binary)))).toEqual([
             'Scoped.Term.set (1)',
             'Scoped.Term.binary',
         ])
@@ -312,16 +313,16 @@ describe('terms', () => {
      * name in the model, so its set is refused for the reason its scalar is.
      */
     it('emits the set of a named adapter, and refuses the set of an unnamed one', () => {
-        expect(entriesOf(erase(decimal.set()))).toEqual([
+        expect(entriesOf(erase(set(decimal)))).toEqual([
             'Scoped.Term.set (1)',
             '(Scoped.Term.held false (Scoped.Graph.Term.number) (Scoped.Graph.Term.string) (.decimalText, false) [])',
         ])
-        const why = refusal(() => leanClosedOf(erase(number.set()))).reason
+        const why = refusal(() => leanClosedOf(erase(set(number)))).reason
         expect(why).toContain('numeralOfStoredText')
     })
 
     /**
-     * A *restricted* element prints at the element. `string.set('a','b')` is the set of the union
+     * A *restricted* element prints at the element. `set(string('a','b'))` is the set of the union
      * of the two literals.
      *
      * **A closure element is still refused, and permanently.** The predicate is a caller's
@@ -329,7 +330,7 @@ describe('terms', () => {
      * any other. That refusal is not waiting on a pass.
      */
     it('prints a set of a literal element, and refuses one over a closure', () => {
-        expect(entriesOf(erase(string.set('a', 'b')))).toEqual([
+        expect(entriesOf(erase(set(string('a', 'b'))))).toEqual([
             'Scoped.Term.set (1)',
             'Scoped.Term.union [Scoped.Term.literal GroundKind.string "a", Scoped.Term.literal GroundKind.string "b"]',
         ])
@@ -338,7 +339,7 @@ describe('terms', () => {
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
-        expect(() => leanClosedOf(erase(positive.set()))).toThrow(
+        expect(() => leanClosedOf(erase(set(positive)))).toThrow(
             /not one this library ships/,
         )
     })
@@ -622,7 +623,7 @@ describe('what cannot be emitted', () => {
         expect(refusal(() => leanClosedOf(erase(notEmpty))).reason).toContain(
             'Value → Bool',
         )
-        const adapted = held(string.set(), array(string), {
+        const adapted = held(set(string), array(string), {
             encode: (value: readonly string[]) => new Set(value),
             decode: (holding: ReadonlySet<string>) => [...holding],
         })
@@ -1000,8 +1001,8 @@ const numberFlag = held(decimal, boolean, {
     decode: (text: string) => text === '1',
 })
 /** A set of a caller's adapter: the caller side of a set needs a refinement to have a set. */
-const textFlags = refine(textFlag, anyBoolean).set()
-const numberFlags = refine(numberFlag, anyBoolean).set()
+const textFlags = set(refine(textFlag, anyBoolean))
+const numberFlags = set(refine(numberFlag, anyBoolean))
 /** A caller's type guard over text, which the model names by no predicate. */
 const nonEmpty = (value: string): value is string => value.length > 0
 /** A caller's type guard that asks the shipped `isNumeral`, and is itself the caller's closure. */
@@ -1058,7 +1059,7 @@ export const sampleVectors: readonly Vector[] = [
     },
     {
         name: 'set_of_string',
-        codec: erase(string.set()),
+        codec: erase(set(string)),
         value: new Set(['b', 'a']),
     },
     /**
@@ -1067,14 +1068,14 @@ export const sampleVectors: readonly Vector[] = [
      */
     {
         name: 'set_of_literal',
-        codec: erase(string.set('a', 'b')),
+        codec: erase(set(string('a', 'b'))),
         value: new Set(['b', 'a']),
     },
-    // **at the native, not at `decimal`.** `decimal.set()` is an adapter over this one, and the
+    // **at the native, not at `decimal`.** `set(decimal)` is an adapter over this one, and the
     // model has no name for a set-level pair yet, so the vector states the base the model has
     {
         name: 'set_of_number',
-        codec: erase(dynamoNumber.set()),
+        codec: erase(set(dynamoNumber)),
         value: new Set([
             orThrow(DynamoNumber.from('1.5')),
             orThrow(DynamoNumber.from('2')),
@@ -1160,15 +1161,15 @@ export const sampleVectors: readonly Vector[] = [
      */
     {
         name: 'open_of_restricted_set',
-        codec: erase(object([string, optional(string.set('a', 'b'))])),
+        codec: erase(object([string, optional(set(string('a', 'b')))])),
         value: { a: new Set(['a']) },
     },
     {
         name: 'object_restricted_rest',
         codec: erase(
-            object({ a: string.set('b', 'c') }, [
+            object({ a: set(string('b', 'c')) }, [
                 string,
-                optional(string.set('b', 'c')),
+                optional(set(string('b', 'c'))),
             ]),
         ),
         value: { a: new Set(['b']), z: new Set(['c']) },
@@ -1621,12 +1622,12 @@ const separationPairs = (): readonly Separation[] => {
         {
             name: 'text_flags__vs__decimal_set',
             left: textFlags,
-            right: decimal.set(),
+            right: set(decimal),
         },
         {
             name: 'text_flags__vs__string_set',
             left: textFlags,
-            right: string.set(),
+            right: set(string),
         },
     )
     // a library adapter below a binder, beside three partners
@@ -1848,7 +1849,7 @@ const readVerdicts = (): readonly ReadVerdict[] => {
 const resolutionUnions = (): readonly (readonly [string, AnyCodec])[] => [
     ['u_string_boolean', erase(union([string, boolean]))],
     ['u_string_null', erase(union([string, nullValue]))],
-    ['u_setstring_setnumber', erase(union([string.set(), dynamoNumber.set()]))],
+    ['u_setstring_setnumber', erase(union([set(string), set(dynamoNumber)]))],
     [
         'u_objects_by_name',
         erase(union([object({ a: string }), object({ b: boolean })])),

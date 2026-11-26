@@ -348,7 +348,7 @@ the values as a tuple and states no distinctness. Measured 2026-11-13 with `tsc 
 `d1` is a `DynamoNumber`:
 
     string('dog', 'dog')   number(1, 1)   decimal('1', '1')   boolean(true, true)
-    binary(a, a)   dynamoNumber(d1, d1)   and `.set` of each that has one
+    binary(a, a)   dynamoNumber(d1, d1)   and `set` of each that has one
       type checker: builds
       runtime:      throws, a literal's alternatives are distinct, and `string()` names the same
                     value at positions 0 and 1
@@ -369,7 +369,7 @@ have one type for every value, so the type cannot tell a repeat from two values.
 
 **Pin.** `src/codec/spec/literal/codec.literalbase.spec.ts` pins the throw for `string` and
 `binary`, and the positions for `string`. The same file pins the former that the message names.
-`src/codec/spec/literal/codec.setbase.spec.ts` pins the throw of `.set` at each base. No test pins
+`src/codec/spec/literal/codec.setbase.spec.ts` pins the throw of `set` at each base. No test pins
 the mark of a repeat or the type that reads the constant.
 
 ---

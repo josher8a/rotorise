@@ -21,6 +21,7 @@ import {
     object,
     opaque,
     refine,
+    set,
     string,
     union,
 } from '../../codec'
@@ -123,7 +124,7 @@ describe('a stored set refuses two members that read to one value', () => {
      */
     it('refuses two numerals that read to one float, and names the two positions', () => {
         const read = refusal(() =>
-            number.set().decode({ NS: ['0.1', '0.10000000000000001'] }),
+            set(number).decode({ NS: ['0.1', '0.10000000000000001'] }),
         )
         expect(read.message).toMatch(
             /members 0 and 1 of this NS read to one value/,
@@ -131,7 +132,7 @@ describe('a stored set refuses two members that read to one value', () => {
     })
 
     it('reads two numerals that read to two values', () => {
-        const read = number.set().decode({ NS: ['0.1', '0.2'] })
+        const read = set(number).decode({ NS: ['0.1', '0.2'] })
         expect(read).toEqual(new Set([0.1, 0.2]))
     })
 })

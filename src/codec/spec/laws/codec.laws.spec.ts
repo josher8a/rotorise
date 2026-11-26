@@ -35,6 +35,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     union,
@@ -97,7 +98,7 @@ describe('held', () => {
     it('leaves what is stored alone, which is the whole of what it claims', () => {
         expect(
             memberWritten(
-                held(string.set(), array(string), {
+                held(set(string), array(string), {
                     encode: (tags: readonly string[]) => new Set(tags),
                     decode: (tags) => [...tags],
                 }) as AnyCodec,
@@ -117,7 +118,7 @@ describe('held', () => {
 
     it('is an isomorphism where it says it is', () => {
         checkIso(
-            string.set(),
+            set(string),
             {
                 encode: (tags: readonly string[]) => new Set(tags),
                 decode: (tags: ReadonlySet<string>) => [...tags],
@@ -512,7 +513,7 @@ describe('optional', () => {
         )
         expect(
             memberWritten(
-                optional(string.set()).codec as AnyCodec,
+                optional(set(string)).codec as AnyCodec,
                 new Set(['a']),
             ),
         ).toBe('SS')
@@ -651,13 +652,13 @@ describe('what the wrappers preserve', () => {
     )
 
     it('and a set keeps the member its element decides', () => {
-        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+        expect(memberWritten(set(string) as AnyCodec, new Set(['a']))).toBe(
             'SS',
         )
-        expect(memberWritten(number.set() as AnyCodec, new Set([1]))).toBe('NS')
+        expect(memberWritten(set(number) as AnyCodec, new Set([1]))).toBe('NS')
         expect(
             memberWritten(
-                binary.set() as AnyCodec,
+                set(binary) as AnyCodec,
                 new Set([new Uint8Array([1])]),
             ),
         ).toBe('BS')
@@ -750,7 +751,7 @@ describe('the laws that do NOT hold', () => {
             (value): value is string | number => value !== null,
         )
         // @ts-expect-error a union writes no single member, so the type declines the capability
-        expect(() => either.set()).toThrow(CodecError)
+        expect(() => set(either)).toThrow(CodecError)
     })
 
     /**
@@ -765,7 +766,7 @@ describe('the laws that do NOT hold', () => {
      * attribute, while these two sets share no value at all.
      */
     it('a union of sets resolves, because its elements check', () => {
-        const either = union([string.set(), number.set()])
+        const either = union([set(string), set(number)])
         expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
             SS: ['a'],
         })
@@ -778,10 +779,10 @@ describe('the laws that do NOT hold', () => {
         )
 
         // the stored side always knew which, and that has not changed
-        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+        expect(memberWritten(set(string) as AnyCodec, new Set(['a']))).toBe(
             'SS',
         )
-        expect(memberWritten(number.set() as AnyCodec, new Set([1]))).toBe('NS')
+        expect(memberWritten(set(number) as AnyCodec, new Set([1]))).toBe('NS')
         expect(either.unsafeDecode({ SS: ['a'] })).toEqual(new Set(['a']))
         expect(either.unsafeDecode({ NS: ['1'] })).toEqual(new Set([1]))
 
@@ -826,7 +827,7 @@ describe('the laws that do NOT hold', () => {
 
     /** A set is not a list held as an array, however similar the two look. */
     it('a set is not an array', () => {
-        expect(memberWritten(string.set() as AnyCodec, new Set(['a']))).toBe(
+        expect(memberWritten(set(string) as AnyCodec, new Set(['a']))).toBe(
             'SS',
         )
         expect(memberWritten(array(string) as AnyCodec, ['a'])).toBe('L')
@@ -850,7 +851,7 @@ describe('(C): what a codec reads, it can write', () => {
             id: string,
             price: decimal,
             count: number,
-            tags: string.set(),
+            tags: set(string),
             steps: array(string),
             note: optional(string),
             nick: fill(string, 'anon'),
@@ -961,7 +962,7 @@ describe('(C): what a codec reads, it can write', () => {
      * the point with.
      */
     it('is stable where the stored form is not recovered exactly', () => {
-        const Stored = item(object({ tags: string.set() }))
+        const Stored = item(object({ tags: set(string) }))
         const stored = { tags: { SS: ['c', 'a', 'b'] } }
 
         checkStable(Stored, [stored])
@@ -1149,16 +1150,16 @@ describe('`accepts` answers the rows that the model states', () => {
         expect(failed(array(string).encode([5] as never))).toBe(true)
         expect(accepts(array(string), 'abc')).toBe(false)
         expect(failed(array(string).encode('abc' as never))).toBe(true)
-        expect(accepts(string.set(), 'abc')).toBe(false)
-        expect(failed(string.set().encode('abc' as never))).toBe(true)
+        expect(accepts(set(string), 'abc')).toBe(false)
+        expect(failed(set(string).encode('abc' as never))).toBe(true)
 
         // an empty array is admitted and an empty set is not, and both are right: `L` has an empty
         // inhabitant and DynamoDB's sets do not
         expect(accepts(array(string), [])).toBe(true)
-        expect(accepts(string.set(), new Set())).toBe(false)
+        expect(accepts(set(string), new Set())).toBe(false)
 
         // `held` is asked about the value it holds, and its adapter throws on one it does not own
-        const asSet = held(string.set(), array(string), {
+        const asSet = held(set(string), array(string), {
             encode: (tags: readonly string[]) => new Set(tags),
             decode: (tags: ReadonlySet<string>) => [...tags],
         })

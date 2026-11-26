@@ -495,17 +495,17 @@ const printerOf = (
                 return literalText([t]) ?? refuse(at, 'a literal')
             case 'set': {
                 const e = t.elem
-                if (e.kind === 'string') return 'string.set()'
-                if (e.kind === 'number') return 'dynamoNumber.set()'
-                if (e.kind === 'binary') return 'binary.set()'
+                if (e.kind === 'string') return 'set(string)'
+                if (e.kind === 'number') return 'set(dynamoNumber)'
+                if (e.kind === 'binary') return 'set(binary)'
                 if (
                     e.kind === 'held' &&
                     e.via === 'decimalText' &&
                     e.inner.kind === 'number'
                 )
-                    return 'decimal.set()'
+                    return 'set(decimal)'
                 const call = literalCall(optionsOf(e))
-                if (call?.base === 'string') return `string.set(${call.args})`
+                if (call?.base === 'string') return `set(string(${call.args}))`
                 return refuse(at, `a set of ${e.kind}`)
             }
             case 'list': {
@@ -1445,7 +1445,7 @@ const library = '../../src/codec'
 
 const codecsHeader = [
     `import type { AttributeCodec, Decoded } from '${library}/codec'`,
-    `import { array, binary, boolean, decimal, discriminatedUnion, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { array, binary, boolean, decimal, discriminatedUnion, fill, held, item, legacy, list, mdunion, never, nullValue, number, object, opaque, optional, ref, refine, scope, set, spread, string, undefinable, union } from '${library}/codec'`,
     `import { dynamoNumber } from '${library}/prisms'`,
     `import { DynamoNumber, isNumeral, isStoredNumeral } from '${library}/attribute'`,
     `import { native } from '${library}/native'`,
@@ -1455,7 +1455,7 @@ const codecsHeader = [
 
 const checksHeader = [
     `import type { Decoded } from '${library}/codec'`,
-    `import { array, at, binary, boolean, decimal, exclude, extract, fill, legacy, list, meet, narrow, number, object, opaque, optional, spread, string, undefinable, union } from '${library}/codec'`,
+    `import { array, at, binary, boolean, decimal, exclude, extract, fill, legacy, list, meet, narrow, number, object, opaque, optional, set, spread, string, undefinable, union } from '${library}/codec'`,
     `import { dynamoNumber } from '${library}/prisms'`,
     `import { DynamoNumber, type AttributeValue } from '${library}/attribute'`,
     `import { native } from '${library}/native'`,

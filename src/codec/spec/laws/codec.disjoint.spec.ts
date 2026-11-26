@@ -24,6 +24,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     string,
     undefinable,
     union,
@@ -60,13 +61,13 @@ describe('two primitives are disjoint where they share no value', () => {
 describe('two sets are disjoint where their elements are, because a stored set is not empty', () => {
     it('keeps two literal sets with no shared member apart', () => {
         expect(
-            apart(termOf(string.set('a', 'b')), termOf(string.set('c'))),
+            apart(termOf(set(string('a', 'b'))), termOf(set(string('c')))),
         ).toBe(true)
     })
 
     it('keeps two literal sets with a shared member together', () => {
         expect(
-            apart(termOf(string.set('a', 'b')), termOf(string.set('b', 'c'))),
+            apart(termOf(set(string('a', 'b'))), termOf(set(string('b', 'c')))),
         ).toBe(false)
     })
 })
@@ -81,7 +82,7 @@ describe('an adapter is disjoint from the bottom alone, and the views read it', 
             [string, decimal],
             [string('1'), decimal],
             [string, decimal('1')],
-            [string.set(), decimal.set()],
+            [set(string), set(decimal)],
         ] as const) {
             expect(apart(termOf(x), termOf(y))).toBe(false)
             expect(viewsDisjoint(termOf(x), termOf(y))).toBe(false)
@@ -96,7 +97,7 @@ describe('an adapter is disjoint from the bottom alone, and the views read it', 
     it('refuses the number family beside the decimal family, because both read N', () => {
         for (const [x, y] of [
             [number, decimal],
-            [number.set(), decimal.set()],
+            [set(number), set(decimal)],
         ] as const) {
             expect(viewsDisjoint(termOf(x), termOf(y))).toBe(false)
             expect(viewsDisjoint(termOf(y), termOf(x))).toBe(false)
@@ -230,7 +231,7 @@ describe('two objects are disjoint where one name holds two fields apart', () =>
     it('reads an open block at every name the other body declares', () => {
         const open = termOf(object({ a: string }, [string, optional(string)]))
         const map = termOf(object([string, optional(string)]))
-        const sets = termOf(object([string, optional(string.set('a', 'b'))]))
+        const sets = termOf(object([string, optional(set(string('a', 'b')))]))
         expect(apart(open, map)).toBe(false)
         expect(apart(open, sets)).toBe(true)
     })

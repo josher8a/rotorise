@@ -3,7 +3,7 @@
  *
  * Two words this library keeps apart. An attribute is **stored** as `S`, `N`, `SS`; it is **held**,
  * in code, as a `string`, a `Date`, an array. `held` changes only the second, which makes it the
- * answer to "my values arrive as an array and `.set()` wants a `Set`" — nothing about the table has
+ * answer to "my values arrive as an array and `set(...)` wants a `Set`" — nothing about the table has
  * to change for that, so nothing about what is written does either.
  */
 import { describe, expect, it } from 'vitest'
@@ -27,6 +27,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     union,
@@ -61,7 +62,7 @@ const anything = <T>(): StandardSchemaV1<T> => ({
  * The case that prompted it: values arrive as an array, the table holds a set. The held side
  * states a non-empty array, because the store has no empty set.
  */
-const tags = held(string.set(), list(string, spread(string)), {
+const tags = held(set(string), list(string, spread(string)), {
     encode: (tags: readonly [string, ...string[]]) => new Set(tags),
     decode: (tags) => {
         const [first, ...rest] = tags
@@ -327,7 +328,7 @@ describe('composing with the rest', () => {
      * that the adapter writes `[]` where `array(number)` writes it.
      */
     it('refuses a list of another element beside a held side that admits the empty list', () => {
-        const loose = held(string.set(), array(string), {
+        const loose = held(set(string), array(string), {
             encode: (tags: readonly string[]) => new Set(tags),
             decode: (tags) => [...tags],
         })

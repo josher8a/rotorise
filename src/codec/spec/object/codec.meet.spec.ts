@@ -29,6 +29,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     termOf,
@@ -816,7 +817,7 @@ describe('a meet of lawful factors is lawful', () => {
             item(
                 meet(
                     object({ tag: string('a', 'b'), n: number }),
-                    object({ tags: string.set(), steps: array(decimal) }),
+                    object({ tags: set(string), steps: array(decimal) }),
                 ),
             ),
         ],
@@ -896,7 +897,7 @@ describe('the composition reads each factor open', () => {
      */
     it('closes the meet of two recursive factors with a ref to the meet', () => {
         const { self: left } = scope({
-            self: union([string.set(), object({ m: optional(ref('self')) })]),
+            self: union([set(string), object({ m: optional(ref('self')) })]),
         })
         const { self: right } = scope({
             self: union([
@@ -994,13 +995,13 @@ describe('the type of a meet reads the values that the run time keeps', () => {
         }>()
         expect(fixed.def).toEqual(object({ a: list(string('q'), boolean) }).def)
         const sets = meet(
-            object({ a: string.set() }),
-            object({ a: string.set() }),
+            object({ a: set(string) }),
+            object({ a: set(string) }),
         )
         expectTypeOf<Decoded<typeof sets>>().toEqualTypeOf<{
             readonly a: ReadonlySet<string>
         }>()
-        expect(sets.def).toEqual(object({ a: string.set() }).def)
+        expect(sets.def).toEqual(object({ a: set(string) }).def)
     })
 
     /** Two bases of different members hold no common value, so the type is `never` as the term is. */

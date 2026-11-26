@@ -18,14 +18,14 @@ import type {
     WritesPin,
     WritesVariantsPin,
 } from './build'
-import { codecOfTerm, setOf, slotsOf } from './capabilities'
+import { codecOfTerm, slotsOf } from './capabilities'
 import type { ItemTerm } from './denote'
 import { byTagSem, guard, itemSem, judged, membersOf, termOf } from './denote'
 import type { AnyObjectCodec, ItemOf, KnownKeys, SpecsOf } from './derivedItem'
 import { keySets } from './derivedItem'
 import type { DecodeTerm, ScopeWallCycle } from './pathModel'
 import { checkFill } from './prisms'
-import type { ArrayOver, ListCodec, SetCapable, SpreadOver } from './products'
+import type { ArrayOver, ListCodec, SpreadOver } from './products'
 import type { Result } from './result'
 import { andThen, CodecError, failed, orThrow, setOwn } from './result'
 import { pathReads } from './scopePath'
@@ -258,9 +258,8 @@ export type OptionInScope<O, Defs> = O extends ObjectCodec<
  * An object keeps its item, and a union keeps its item and its slices, each typed from the term.
  * Each option of a union is the definition that the option names, so a slice reads a `ref` option
  * as the definition. Each slot of an object, and of an option that is an object, reads a bare `ref`
- * as the entry that the `ref` names ({@link ClosedRef}). Any other entry keeps the `.set()` of an
- * element that writes `S`, `N` or `B`, and a dissection keeps its options in declared order, each
- * the definition that the option names.
+ * as the entry that the `ref` names ({@link ClosedRef}). A dissection keeps its options in declared
+ * order, each the definition that the option names.
  */
 export type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
     infer Spec extends Record<string, ObjectSlot>,
@@ -282,7 +281,6 @@ export type EntryOf<C, Tm, Defs> = C extends ObjectCodec<
         >
       : AttributeCodec<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue> &
             TermMark<Tm> &
-            SetCapable<DecodeTerm<Tm>, AttributeOf<C> & AttributeValue, Tm> &
             (C extends OptionsMark<infer Os extends readonly unknown[]>
                 ? OptionsMark<{
                       [I in keyof Os]: OptionInScope<DefOf<Defs, Os[I]>, Defs>
@@ -388,31 +386,18 @@ export function scope(defs: Readonly<Record<string, AnyCodec>>): unknown {
     }
     // **An entry is the codec of its closed term.** An entry that reaches no free name is the
     // codec that the caller declared. An object entry reads its spec and its open block from the
-    // term. An entry carries the `.set()` of the node that its chain of `ref`s names, as its type
-    // does. A `ref` and a literal carry no `.set()` of their own, so such an entry builds the set
-    // of itself, and the judgment of the set refuses an element that writes no `S`, `N` or `B`. An
-    // object and a union write `M` or no single member, so their entries carry no `.set()`
+    // term.
     return Object.fromEntries(
         Object.entries(defs).map(([name, def]) => {
             const t = record[name]
-            if (t === undefined || t === terms[name])
-                return [name, entryOf(def, t?.kind)]
+            if (t === undefined || t === terms[name]) return [name, def]
             const codec: AnyCodec = codecOfTerm(t)
-            if (t.kind !== 'object') return [name, entryOf(codec, t.kind)]
+            if (t.kind !== 'object') return [name, codec]
             const { spec, rest } = objectItem(t)
             return [name, { ...codec, spec, rest }]
         }),
     )
 }
-
-/** The entry of a scope over its codec: a codec with no `.set()` builds the set of itself. */
-export const entryOf = (
-    codec: AnyCodec,
-    kind: Term['kind'] | undefined,
-): object =>
-    'set' in codec || kind === 'object' || kind === 'union'
-        ? codec
-        : { ...codec, set: setOf(() => codec) }
 
 /**
  * **The marker of a whole-item reading.** Each reading that {@link item} returns carries the

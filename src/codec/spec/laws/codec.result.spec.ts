@@ -10,7 +10,7 @@
  * has: nothing to unwrap, nothing allocated, and `instanceof Error` tells the two apart.
  */
 import { describe, expect, it } from 'vitest'
-import { tableEntry } from '../../../Rotorise'
+import { set, tableEntry } from '../../../Rotorise'
 
 import {
     array,
@@ -189,7 +189,7 @@ describe('the safe pair never throws, whatever is thrown at it', () => {
         ['opaque encode', () => opaque.encode(1n)],
         ['opaque refuse decode', () => opaque('refuse').decode({ N: '1' })],
         ['opaque nested', () => opaque.encode({ a: [{ b: 1n }] })],
-        ['set', () => string.set().encode(new Set())],
+        ['set', () => set(string).encode(new Set())],
         ['array', () => array(string).decode({ L: [{ N: '1' }] })],
         ['tuple', () => list(string).decode({ L: [] })],
         [

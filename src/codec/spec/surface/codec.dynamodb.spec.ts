@@ -38,6 +38,7 @@ import {
     object,
     opaque,
     optional,
+    set,
     string,
 } from '../../codec'
 import {
@@ -152,7 +153,7 @@ const Row = item(
         amount: decimal,
         count: number,
         kind: string('A', 'B'),
-        tags: string.set(),
+        tags: set(string),
         steps: array(string),
         blob: binary,
         // `unknown` includes `undefined`, so the spec requires the optional form.

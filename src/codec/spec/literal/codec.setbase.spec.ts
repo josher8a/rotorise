@@ -1,26 +1,18 @@
 /**
- * A set is a capability of the base its members sit at, and of everything that reduces to one.
+ * A set is the set of a codec that writes `S`, `N` or `B`, and of everything that reduces to one.
  *
- * `string.set()`, `number.set()`, `decimal.set()` and `binary.set()` are the four sets DynamoDB
- * has, spelled where the base is. `boolean` has no `.set`, because there is no `BOOLS`.
+ * `set(string)`, `set(number)`, `set(decimal)` and `set(binary)` are the four sets DynamoDB
+ * has, spelled where the base is. `boolean` has no set, because there is no `BOOLS`.
  *
- * **Both numeric forms are first-class.** `number.set()` is what a caller who means their
- * platform's numbers means; `decimal.set()` is the host-independent one. They write the same member,
+ * **Both numeric forms are first-class.** `set(number)` is what a caller who means their
+ * platform's numbers means; `set(decimal)` is the host-independent one. They write the same member,
  * `NS`, and hold different things: each is the set of its own adapter, and the adapter is what
  * tells them apart. Neither is a legacy encoding path.
  *
- * ── the free `set(...)` is gone, and the branding objection was answered rather than overruled ──
- *
- * This file used to argue that `set(...)` had to stay, because `.set(...)` takes **values** and a
- * list of values cannot brand anything: `set(amount)` with `amount = refine(decimal, isAmount)`
- * decodes to `ReadonlySet<Price>` and no arrangement of `decimal.set(...)` reaches `Price`.
- *
- * The premise was right and the conclusion was wrong. The brand rides on `amount`, so the
- * capability belongs on `amount` — `amount.set()`, which is `ReadonlySet<Price>` for exactly the
- * reason the old argument gave. {@link SetCapable} is the type and the element check of `.set()` is
- * the runtime one; a set of a refinement is the set of that refinement, with the predicate at the
- * element. So the general form did not need to be free-standing, and the free
- * `set(...)` is no longer exported: `.set()` is the whole surface, and the builder is internal.
+ * **The brand rides on the element.** `set(amount)` with `amount = refine(decimal, isAmount)`
+ * decodes to `ReadonlySet<Price>`: a set of a refinement is the set of that refinement, with the
+ * predicate at the element. {@link SetElement} is the type and the element check of `set` is the
+ * runtime one.
  */
 import { describe, expect, it } from 'vitest'
 import type { BS, NS, SS } from '../../attribute'
@@ -37,6 +29,7 @@ import {
     number,
     object,
     refine,
+    set,
     string,
     union,
 } from '../../codec'
@@ -78,20 +71,20 @@ describe('a set at each base', () => {
      * side effect of comparing closures.
      */
     it('records the element term itself as the set element', () => {
-        expect(string.set().def).toEqual({
+        expect(set(string).def).toEqual({
             kind: 'set',
             elem: { kind: 'string' },
         })
-        expect((string.set().def as { elem: unknown }).elem).toBe(string.def)
-        expect(binary.set().def).toEqual({
+        expect((set(string).def as { elem: unknown }).elem).toBe(string.def)
+        expect(set(binary).def).toEqual({
             kind: 'set',
             elem: { kind: 'binary' },
         })
         // `number` and `decimal` are adapters over the one numeric base, so each set holds the
         // adapter as its element and the conversion rides there
         for (const [one, element] of [
-            [number.set(), number],
-            [decimal.set(), decimal],
+            [set(number), number],
+            [set(decimal), decimal],
         ] as const) {
             expect(one.def.kind).toBe('set')
             expect((one.def as { elem: unknown }).elem).toBe(element.def)
@@ -99,15 +92,15 @@ describe('a set at each base', () => {
     })
 
     it('encodes and decodes at the type the base holds', () => {
-        const text: SS = string.set().unsafeEncode(new Set(['b', 'a']))
+        const text: SS = set(string).unsafeEncode(new Set(['b', 'a']))
         expect(text).toEqual({ SS: ['a', 'b'] })
-        const digits: NS = number.set().unsafeEncode(new Set([2, 1]))
+        const digits: NS = set(number).unsafeEncode(new Set([2, 1]))
         expect(digits).toEqual({ NS: ['1', '2'] })
-        const exact: NS = decimal.set().unsafeEncode(new Set(['1', '2.5']))
+        const exact: NS = set(decimal).unsafeEncode(new Set(['1', '2.5']))
         expect(exact).toEqual({ NS: ['1', '2.5'] })
-        const bytes: BS = binary
-            .set()
-            .unsafeEncode(new Set([Uint8Array.from([1])]))
+        const bytes: BS = set(binary).unsafeEncode(
+            new Set([Uint8Array.from([1])]),
+        )
         expect(Object.keys(bytes)).toEqual(['BS'])
     })
 
@@ -117,20 +110,21 @@ describe('a set at each base', () => {
      */
     it('distinguishes the two numeric sets, which the member cannot', () => {
         const wide = '123456789012345678901234567890'
-        expect([...decimal.set().unsafeDecode({ NS: [wide] })]).toEqual([wide])
-        // the same attribute through the host, which is what `number.set()` is for and is lossy
-        expect([...number.set().unsafeDecode({ NS: ['1'] })]).toEqual([1])
+        expect([...set(decimal).unsafeDecode({ NS: [wide] })]).toEqual([wide])
+        // the same attribute through the host, which is what `set(number)` is for and is lossy
+        expect([...set(number).unsafeDecode({ NS: ['1'] })]).toEqual([1])
     })
 
-    /** There is no `BOOLS`, so the capability is absent rather than throwing. */
-    it('gives no set to the one base that has none', () => {
-        expect('set' in boolean).toBe(false)
+    /** There is no `BOOLS`, so the type declines the element and the run time refuses it. */
+    it('refuses the one base that has no set', () => {
+        // @ts-expect-error `boolean` writes `BOOL`, and a stored set holds `S`, `N` or `B`
+        expect(() => set(boolean)).toThrow(CodecError)
     })
 })
 
 describe('a set of a literal, spelled at the base', () => {
     it('checks each member against the values the base was given', () => {
-        const tags = string.set('a', 'b', 'c')
+        const tags = set(string('a', 'b', 'c'))
         expect(tags.unsafeEncode(new Set(['c', 'a']))).toEqual({
             SS: ['a', 'c'],
         })
@@ -138,7 +132,7 @@ describe('a set of a literal, spelled at the base', () => {
     })
 
     it('reaches the numeric set the old surface could not narrow losslessly', () => {
-        const codes = decimal.set('1', '2', '10')
+        const codes = set(decimal('1', '2', '10'))
         const value = new Set(['10', '2'] as const)
         expect(codes.unsafeEncode(value)).toEqual({ NS: ['10', '2'] })
         expect(codes.unsafeDecode(codes.unsafeEncode(value))).toEqual(value)
@@ -149,8 +143,8 @@ describe('a set of a literal, spelled at the base', () => {
         checkRoundTrip(
             item(
                 object({
-                    tags: string.set('a', 'b'),
-                    codes: number.set(1, 2, 10),
+                    tags: set(string('a', 'b')),
+                    codes: set(number(1, 2, 10)),
                 }),
             ),
             { count: 100, seed: 20260901 },
@@ -161,32 +155,32 @@ describe('a set of a literal, spelled at the base', () => {
 /**
  * **A set of a literal names each value once, at each base.** A call of several values is a union
  * of one-value literals, and a repeated value makes a union of two options that admits one value
- * and decides no constant. `string('dog', 'dog')` refuses, so `string.set('dog', 'dog')` refuses for
+ * and decides no constant. `string('dog', 'dog')` refuses, so `set(string('dog', 'dog'))` refuses for
  * the same reason, and so does the set at every other base.
  */
 describe('a set of a literal refuses a repeated value, at each base', () => {
     const repeated = /a literal's alternatives are distinct/
     const one = orThrow(DynamoNumber.from('1'))
     it('refuses the repeat at string', () => {
-        expect(() => string.set('dog', 'dog')).toThrow(repeated)
+        expect(() => set(string('dog', 'dog'))).toThrow(repeated)
     })
     it('refuses the repeat at number', () => {
-        expect(() => number.set(1, 1)).toThrow(repeated)
+        expect(() => set(number(1, 1))).toThrow(repeated)
     })
     it('refuses the repeat at decimal', () => {
-        expect(() => decimal.set('1', '1')).toThrow(repeated)
+        expect(() => set(decimal('1', '1'))).toThrow(repeated)
     })
     it('refuses the repeat at binary, comparing the bytes', () => {
         expect(() =>
-            binary.set(new Uint8Array([1]), new Uint8Array([1])),
+            set(binary(new Uint8Array([1]), new Uint8Array([1]))),
         ).toThrow(repeated)
     })
     it('refuses the repeat at dynamoNumber', () => {
-        expect(() => dynamoNumber.set(one, one)).toThrow(repeated)
+        expect(() => set(dynamoNumber(one, one))).toThrow(repeated)
     })
 
     it('builds the set of two distinct values, as the literal builds them', () => {
-        const kinds = string.set('dog', 'cat')
+        const kinds = set(string('dog', 'cat'))
         expect(failed(kinds.decode({ SS: ['cat'] }))).toBe(false)
         expect(failed(kinds.decode({ SS: ['dog', 'cat'] }))).toBe(false)
         expect(failed(kinds.decode({ SS: ['cow'] }))).toBe(true)
@@ -201,13 +195,13 @@ describe('a set of a literal refuses a repeated value, at each base', () => {
  * set-level refinement of `ReadonlySet<string>` gives back `ReadonlySet<string>`, and the brand is
  * gone. So the only spelling that preserves it is the one whose element is a *codec*.
  *
- * `amount.set()` is that spelling. What would have lost the brand is a surface where the only set
- * of a decimal was `decimal.set(...values)`: not a compile error, but a quietly wider type —
+ * `set(amount)` is that spelling. What would have lost the brand is a surface where the only set
+ * of a decimal was `set(decimal(...values))`: not a compile error, but a quietly wider type —
  * `Price` becoming `string`, and every place downstream that required a checked amount accepting an
  * unchecked one. Propagating the capability is what avoids that without a free function.
  */
 describe('branding survives, and it survives through the capability', () => {
-    const Pet = item(object({ id: string, amounts: amount.set() }))
+    const Pet = item(object({ id: string, amounts: set(amount) }))
 
     it('decodes back as the brand, not as plain strings', () => {
         const back = Pet.unsafeDecode({
@@ -230,19 +224,19 @@ describe('branding survives, and it survives through the capability', () => {
      * codecs; they are not interchangeable, and the difference is invisible at runtime — which is
      * why it is worth a test rather than a comment.
      */
-    it('is exactly what `decimal.set()` does not give', () => {
-        const plain: ReadonlySet<string> = decimal
-            .set()
-            .unsafeDecode({ NS: ['1'] })
+    it('is exactly what `set(decimal)` does not give', () => {
+        const plain: ReadonlySet<string> = set(decimal).unsafeDecode({
+            NS: ['1'],
+        })
         expect([...plain]).toEqual(['1'])
-        // @ts-expect-error `decimal.set()` holds strings; the brand is not recoverable from values
+        // @ts-expect-error `set(decimal)` holds strings; the brand is not recoverable from values
         const _widened: ReadonlySet<Price> = plain
     })
 
     /**
      * The capability propagates through any number of refinements and through a literal, because
-     * each rides at the element. So a set whose members are checked twice, by the literal and by the predicate, is one `.set()`
-     * call, where before it needed the free builder and a codec argument.
+     * each rides at the element. So a set whose members are checked twice, by the literal and by the predicate, is one `set(...)`
+     * call.
      */
     it('propagates through a refinement of a literal', () => {
         const first = refine(
@@ -250,7 +244,7 @@ describe('branding survives, and it survives through the capability', () => {
             (value): value is 'a' => value === 'a',
             { describe: 'the a tag' },
         )
-        const tags = first.set()
+        const tags = set(first)
         expect(tags.unsafeEncode(new Set(['a']))).toEqual({ SS: ['a'] })
         // refused by the predicate, which the literal alone would have allowed
         expect(tags.decode({ SS: ['b'] })).toBeInstanceOf(CodecError)
@@ -272,7 +266,7 @@ describe('branding survives, and it survives through the capability', () => {
             (value): value is 'a' => value === 'a',
             { describe: 'the a tag' },
         )
-        const tags = first.set()
+        const tags = set(first)
         expect(tags.encode(new Set(['a'] as const))).toEqual({ SS: ['a'] })
         // in the literal, refused by the predicate
         expect(tags.encode(new Set(['b'] as never))).toBeInstanceOf(CodecError)
@@ -300,7 +294,7 @@ describe('what a set cannot be built from', () => {
             (value): value is string | number => value !== null,
         )
         // @ts-expect-error a union writes no single member, so the type declines it too
-        expect(() => either.set()).toThrow(CodecError)
+        expect(() => set(either)).toThrow(CodecError)
     })
 
     /**
@@ -309,11 +303,11 @@ describe('what a set cannot be built from', () => {
      * per member of an attribute storing no such thing.
      *
      * Mapping the conversion over the wire set is what fixes that, and it is the set-level
-     * spelling the refusal said did not exist. It is needed either way now, because `decimal.set()`
+     * spelling the refusal said did not exist. It is needed either way now, because `set(decimal)`
      * is a set of an adapter.
      *
      * `legacy` is still refused and is still one the type cannot catch: it writes `S`, so
-     * `SetCapable`'s gate — which sees the attribute and never the base — hands it a `.set()`.
+     * the gate of `set` — which sees the attribute and never the base — accepts it.
      * Closing that in the type needs a codec type generic in its definition, measured at 481 of
      * 968 signatures and rejected, so the runtime refusal stays for it.
      */
@@ -323,10 +317,10 @@ describe('what a set cannot be built from', () => {
             decode: (stored: string) => stored.split(','),
         })
         const adapted = refine(asArray, isTexts)
-        expect(
-            adapted.set().unsafeEncode(new Set([['a', 'b'], ['c']])),
-        ).toEqual({ SS: ['a,b', 'c'] })
-        expect([...adapted.set().unsafeDecode({ SS: ['a,b', 'c'] })]).toEqual([
+        expect(set(adapted).unsafeEncode(new Set([['a', 'b'], ['c']]))).toEqual(
+            { SS: ['a,b', 'c'] },
+        )
+        expect([...set(adapted).unsafeDecode({ SS: ['a,b', 'c'] })]).toEqual([
             ['a', 'b'],
             ['c'],
         ])
@@ -349,7 +343,7 @@ describe('what a set cannot be built from', () => {
                 value.length >= 3 && value === value.toUpperCase(),
             { describe: 'long and upper case' },
         )
-        const words = refine(union([short, shouting]), isText).set()
+        const words = set(refine(union([short, shouting]), isText))
         const value = new Set(['ab', 'XYZ'])
         expect(words.unsafeEncode(value)).toEqual({ SS: ['XYZ', 'ab'] })
         expect(words.unsafeDecode(words.unsafeEncode(value))).toEqual(value)
@@ -358,6 +352,6 @@ describe('what a set cannot be built from', () => {
     it('refuses a read widening, because no law covers the set of an element that is not lawful', () => {
         const widened = legacy({ current: string, older: decimal })
         // @ts-expect-error the term reaches a `legacy`, so the type gives no `set`, as construction refuses
-        expect(() => refine(widened, isText).set()).toThrow(CodecError)
+        expect(() => set(refine(widened, isText))).toThrow(CodecError)
     })
 })

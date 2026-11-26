@@ -18,6 +18,7 @@ import {
     narrow,
     number,
     object,
+    set,
     string,
     union,
     valueKinds,
@@ -145,8 +146,8 @@ describe('a numeric tag', () => {
  * member, and the element now has one either way.
  */
 describe('a set of a literal', () => {
-    const tags = string.set('a', 'b', 'c')
-    const codes = number.set(1, 2, 3, 4)
+    const tags = set(string('a', 'b', 'c'))
+    const codes = set(number(1, 2, 3, 4))
 
     it('writes SS for text and NS for digits', () => {
         const asSS: SS = tags.unsafeEncode(new Set(['c', 'a']))
@@ -183,7 +184,7 @@ describe('a set of a literal', () => {
      * holds anyway. This is the case that would break if a set were an array.
      */
     it('round-trips digits that do not sort numerically', () => {
-        const codec = number.set(1, 2, 10)
+        const codec = set(number(1, 2, 10))
         const value = new Set([10, 2] as const)
         expect(codec.unsafeEncode(value)).toEqual({ NS: ['10', '2'] })
         expect(codec.unsafeDecode(codec.unsafeEncode(value))).toEqual(value)
@@ -201,14 +202,14 @@ describe('a set of a literal', () => {
      *
      * Both options are given a `Set`, so the kind cannot choose between them — but a literal element
      * *refuses* a value that is not its own, so the resolver can. This was the contrast:
-     * `union(string.set(), number.set())` was refused because "those elements check nothing".
+     * `union(set(string), set(number))` was refused because "those elements check nothing".
      *
      * They check now, so the contrast is gone and the plain pair resolves too. What is left worth
-     * pinning here is that a **literal** element narrows further than its base — `string.set('a','b')`
-     * refuses `'c'`, which `string.set()` admits — so the two are still not the same codec.
+     * pinning here is that a **literal** element narrows further than its base — `set(string('a','b'))`
+     * refuses `'c'`, which `set(string)` admits — so the two are still not the same codec.
      */
     it('and a union of two literal sets resolves, narrowing further than its base', () => {
-        const either = union([string.set('a', 'b'), number.set(1, 2)])
+        const either = union([set(string('a', 'b')), set(number(1, 2))])
         expect(either.unsafeEncode(new Set<'a' | 'b'>(['a']))).toEqual({
             SS: ['a'],
         })
@@ -223,7 +224,7 @@ describe('a set of a literal', () => {
         )
 
         // and the plain pair, which this test used to contrast against, is allowed now
-        expect(() => union([string.set(), number.set()])).not.toThrow()
+        expect(() => union([set(string), set(number)])).not.toThrow()
     })
 })
 

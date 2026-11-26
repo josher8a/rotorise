@@ -1332,10 +1332,11 @@ binds the name later, so the run time alone refuses a list position that the sco
 that holds no value. Agreement reads the meaning of two options, so the run time alone refuses a
 pair of options.
 
-**An entry carries the capabilities of the node that its references name.** An entry whose node
-writes `S`, `N` or `B` offers `.set()`, in the type and at run time. A reference and a literal carry
-no `.set()` of their own, so the scope gives such an entry the set of itself. An entry that names a
-dissection keeps the options of the dissection in declared order, so a meet distributes over them.
+**An entry carries the capabilities of the node that its references name.** `set` takes an entry
+whose node writes `S`, `N` or `B`, direct or through a reference, in the type and at run time, as it
+takes the node. `set` refuses any other entry with the text of the judgment of a set. An entry that
+names a dissection keeps the options of the dissection in declared order, so a meet distributes over
+them.
 
 **A host obligation that no host code reads is found by whatever has to serialise the host's own
 definition, or it is not found.** A term the host builds must determine the codec the host runs.

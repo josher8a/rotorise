@@ -31,6 +31,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     exclude as typedExclude,
@@ -817,7 +818,7 @@ describe("an accepted union's options never write one value, or read one attribu
         ['number', number],
         ['number(1)', number(1)],
         ['flip', flip],
-        ['decimal.set()', decimal.set()],
+        ['set(decimal)', set(decimal)],
         ['array(string)', array(string)],
         ['legacy', migrated],
         // a closure, and a list of adapters beside it that its inner term meets at the bottom
@@ -902,7 +903,7 @@ describe("an accepted union's options never write one value, or read one attribu
     })
 
     it('writes a set of decimals only from a Set', () => {
-        const numerals = decimal.set() as unknown as Pair
+        const numerals = set(decimal) as unknown as Pair
         expect(failed(numerals.encode('1'))).toBe(true)
         expect(failed(numerals.encode(['1']))).toBe(true)
         expect(numerals.encode(new Set(['1']))).toEqual({ NS: ['1'] })

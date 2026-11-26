@@ -1401,7 +1401,7 @@ export const denote = (def: Term): Pair => {
          * the pair's two halves disagreeing about what it holds — **(C)** failing.
          *
          * `value.size` is `undefined` on anything that is not a `Set`, so `=== 0` was false for a
-         * string and `[...value]` then spread it into its characters: `string.set()` wrote
+         * string and `[...value]` then spread it into its characters: `set(string)` wrote
          * `{ SS: ['a','b','c'] }` for `'abc'`. The `set` row asks `instanceof Set` first.
          */
         case 'set': {
@@ -2391,7 +2391,7 @@ const numberPolicy = (numbers: OpaqueNumbers) => {
                 [...members].some((x) => x instanceof DynamoNumber)
                     ? unrecoverable(
                           'a stored set of numbers',
-                          "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `number.set()` or `decimal.set()`.",
+                          "`NS` has no counterpart this codec can write — a set of numbers is refused on the way in, because nothing without a schema says which of its members a JS number holds faithfully. Reading it would mean re-encoding it as `SS` and changing the attribute's stored type. Declare the attribute with `set(number)` or `set(decimal)`.",
                       )
                     : members,
         )

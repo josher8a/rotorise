@@ -27,6 +27,7 @@ import {
     opaque,
     optional,
     refine,
+    set,
     string,
     union,
 } from '../../codec'
@@ -45,7 +46,7 @@ const codecs: readonly (readonly [string, AnyCodec])[] = [
     ['null', nullValue],
     ['binary', binary],
     ['opaque', opaque],
-    ['set', string.set()],
+    ['set', set(string)],
     ['array', array(string)],
     ['list', list(string, number)],
     ['open object', object([string, optional(decimal)])],

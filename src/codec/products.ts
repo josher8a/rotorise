@@ -20,7 +20,6 @@ import type {
     ElementMark,
     ElementsMark,
     elementsMarker,
-    FreeTerm,
     spreadMarker,
     TermMark,
     TermOf,
@@ -357,42 +356,70 @@ export type SpreadOver<C extends AnyCodec> = SpreadCodec<
     ElementMark<C>
 
 /**
- * `.set()`, where the codec it sits on can be a set's element.
+ * Nothing, or why a codec is no element of a set.
  *
- * The capability {@link set} decides at runtime, stated at the type. Each codec type carries its
+ * The refusal that {@link set} decides at run time, stated at the type. Each codec type carries its
  * term `Tm`, so the gate reads two facts. The attribute is `S`, `N` or `B`, the three that a stored
  * set is built from. The term reaches no `legacy`, because a read widening has no set in the model
  * ({@link WidensRead}). A `ref` in the term names an entry that the type cannot read, and the
  * refusal in {@link set} decides there.
  *
  * **One member at a time, and each test non-distributive.** Two shorter spellings were tried and
- * both admit `refine(union([string, number]), p).set()`, which is a set of an element writing two
+ * both admit `set(refine(union([string, number]), p))`, which is a set of an element writing two
  * members and cannot exist:
  *
  * - `[A] extends [Attribute<'S'> | Attribute<'N'> | Attribute<'B'>]` — a union of admissible
  *   attributes is assignable to a union of them, so it passes.
- * - the same without the tuples, distributing — each arm passes on its own, and the result is
- *   `{ set: () => SS } | { set: () => NS }`, a union whose members all have a `set`, so calling it
- *   is allowed.
+ * - the same without the tuples, distributing — each arm passes on its own, so the union passes.
  *
  * Asking each member separately, with `[A] extends [...]` so the question is about `A` whole, is
  * what refuses the union: it is not `Attribute<'S'>`, not `Attribute<'N'>` and not
  * `Attribute<'B'>`, so it falls through.
  *
- * `Record<never, never>` rather than `{}` in the last branch: an intersection with it is the codec
- * unchanged, and `{}` means "anything but null", which would make the intersection accept a `.set`
- * this type is declining to give.
+ * **The refusal sits in the constraint of `C`, and not in an intersection with the parameter.** A
+ * parameter `C & SetElement<C>` makes the inference drop the alias of the codec that the caller
+ * passed, so the declaration of a consumer names `ErrorMessage` and `FloatText`, which no entry
+ * publishes. A constraint keeps `C` as the codec that was passed, and the refusal still lands on
+ * the argument.
  */
-export type SetCapable<T, A extends AttributeValue, Tm = FreeTerm> = [
-    SetAttribute<A>,
-] extends [never]
-    ? Record<never, never>
-    : WidensRead<Tm> extends true
-      ? Record<never, never>
-      : {
-            readonly set: () => AttributeCodec<
-                ReadonlySet<T>,
-                SetAttribute<A>
-            > &
-                TermMark<['set', Tm]>
-        }
+export type SetElement<C> = [SetAttribute<AttributeOf<C>>] extends [never]
+    ? ErrorMessage<'[set] the element writes no `S`, `N` or `B`, and a stored set holds only those. Use `array(...)` for the list `L`'>
+    : WidensRead<TermOf<C>> extends true
+      ? ErrorMessage<'[set] the element widens a read, and a `legacy` term has no set'>
+      : unknown
+
+/**
+ * The set of an element that writes `S`, `N` or `B`, as `SS`, `NS` or `BS`.
+ *
+ * **Order is not preserved.** DynamoDB returns a set in an order that the service chooses, so both
+ * directions sort. `decode ∘ encode = id` holds only for canonical values; for the rest the law is
+ * {@link checkStable}. If order carries meaning, use {@link array}. **Empty is not representable**:
+ * `encode` throws where the service refuses.
+ *
+ * The set is the finite-powerset lift of the term of the element, so a restriction, a literal and
+ * an adapter each ride at the element, and `set(price)` decodes back as prices. The member of the
+ * element decides the wire set. A repeated value refuses at the literal, as at `string('dog', 'dog')`.
+ *
+ * @example
+ * ```ts
+ * set(string)               // SS
+ * set(string('A', 'B'))     // SS whose members are checked
+ * set(dynamoNumber)         // NS
+ * set(refine(decimal, isAmount))  // NS, decoded as `ReadonlySet<Amount>`
+ * ```
+ */
+export const set = <const C extends AnyCodec & SetElement<C>>(
+    element: C,
+): SetOver<C> =>
+    codecOfTerm<ReadonlySet<Decoded<C>>, SetAttribute<AttributeOf<C>>>({
+        kind: 'set',
+        elem: termOf(element as unknown as AnyCodec),
+    })
+
+/** The codec that {@link set} returns, and the one that a scope rebuilds below a `ref`. */
+export type SetOver<C extends AnyCodec> = AttributeCodec<
+    ReadonlySet<Decoded<C>>,
+    SetAttribute<AttributeOf<C>>
+> &
+    TermMark<['set', TermOf<C>]> &
+    Free<FreeOf<C>>

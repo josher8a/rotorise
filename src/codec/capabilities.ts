@@ -2,13 +2,11 @@
  * The codec of a term, with the capabilities that the term decides.
  *
  * `codecOfTerm` and `equip` are one recursion. `equip` reads the codec of each slot of an object
- * term, and the set builder builds a term and asks `codecOfTerm` for the codec. So the memo, the
- * capabilities and the builders that they call live in one module, and a module above this one
- * builds a codec at load with no order to keep.
+ * term. So the memo, the capabilities and the builders that they call live in one module, and a
+ * module above this one builds a codec at load with no order to keep.
  *
- * **The capabilities are the literal call, `.set()`, `.spec` and `.rest`.** Each is a function of
- * the term. A codec that a slice or a meet builds from a term is therefore the codec that the
- * caller wrote.
+ * **The capabilities are the literal call, `.spec` and `.rest`.** Each is a function of the term.
+ * A codec that a slice or a meet builds from a term is therefore the codec that the caller wrote.
  */
 import type { Attribute, AttributeValue } from './attribute'
 import { DynamoNumber, isStoredNumeral } from './attribute'
@@ -94,40 +92,6 @@ export const slotsOf = (body: Body) => ({
 })
 
 /**
- * **The `.set()` of a codec**: the set of the codec that carries it, or, where the codec has a
- * literal call, the set of the literal at the alternatives that the call names. One function for
- * each codec that has a `.set()`: the bases, the two numeric adapters, a refinement and an entry of
- * a scope. A repeated value refuses here as it refuses at `string('dog', 'dog')`.
- *
- * The thunk reads the codec that carries the `.set()`, and not the one that was handed in:
- * `.set()` records its element in `def`, so two copies of one codec would give two definitions
- * that differ by a property nobody can see.
- *
- * **This is the one set builder, and it is internal.** Every set in the surface comes through
- * here: `string.set()` and the other bases, and everything that reduces to a base through
- * {@link equip}, such as `amount.set()` where `amount = refine(decimal, isAmount)`. The capability
- * propagates, so a free-standing form said nothing that `.set()` cannot say. The set is the
- * finite-powerset lift of the term of the element, so a restriction, a literal and an adapter each
- * ride at the element, and `price.set()` decodes back as prices. The member of the element, `SS`,
- * `NS` or `BS`, decides the wire set.
- *
- * **Order is not preserved.** DynamoDB returns a set in an order that the service chooses, so both
- * directions sort. `decode ∘ encode = id` holds only for canonical values; for the rest the law is
- * {@link checkStable}. If order carries meaning, use `array(...)`. **Empty is not representable**: `encode` throws where the service
- * refuses.
- */
-export const setOf =
-    (carrier: () => AnyCodec, literal?: (...allowed: never[]) => AnyCodec) =>
-    (...allowed: readonly unknown[]) =>
-        codecOfTerm({
-            kind: 'set',
-            elem: (allowed.length > 0 && literal !== undefined
-                ? literal(...(allowed as never[]))
-                : carrier()
-            ).def,
-        })
-
-/**
  * The alternatives of a literal call, checked: non-empty and pairwise distinct.
  *
  * **A literal of the model holds one value**, `Term.literal k v`. A call of several values is a
@@ -175,8 +139,6 @@ export const literalCapability =
  *
  * - The literal call: the four bases at the term of the base (`string('A')`), the two numeric
  *   adapters at the term of the adapter (`decimal('1.5')`, `number(5)`).
- * - `.set()`: the bases that have a set (`boolean` has none), the two numeric adapters, and a
- *   refinement of any term. `set` refuses an element that names no member of `S`, `N` or `B`.
  * - `.spec` and `.rest`: the slots of an object term.
  *
  * The constants are the codecs that this gives for their own term, so a codec that a slice or a meet
@@ -200,19 +162,8 @@ export const equip = (codec: AnyCodec, term: Term): unknown => {
             },
         )
     }
-    if (term.kind === 'refine') {
-        const capable: AnyCodec = {
-            ...codec,
-            set: setOf(() => capable),
-        } as AnyCodec
-        return capable
-    }
     const call = literalCallOf(term)
-    if (call === undefined) return codec
-    const carrier = Object.assign(call, codec) as unknown as AnyCodec
-    return term.kind === 'boolean'
-        ? carrier
-        : Object.assign(carrier, { set: setOf(() => carrier, call) })
+    return call === undefined ? codec : Object.assign(call, codec)
 }
 
 /**

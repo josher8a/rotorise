@@ -73,7 +73,6 @@ PathOf
 PathTerminal
 Precondition
 Reader
-Refined
 Refinement
 Result
 Rng
@@ -83,8 +82,8 @@ SS
 ScopeTerms
 Segment
 SetBase
-SetCapable
 SetOf
+SetOver
 SetSlot
 Shape
 SortCondition
@@ -139,6 +138,7 @@ preconditions
 ref
 refine
 scope
+set
 spread
 string
 tableEntry

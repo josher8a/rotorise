@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
-import { type AnyCodec, decimal, number, opaque } from '../../codec'
+import { type AnyCodec, decimal, number, opaque, set } from '../../codec'
 import { native } from '../../native'
 import { dynamoNumber } from '../../prisms'
 import { failed } from '../../result'
@@ -55,8 +55,8 @@ describe('a numeric read refuses a numeral that the store would not return, so e
     })
 
     const sets: readonly (readonly [string, AnyCodec])[] = [
-        ['number.set()', number.set()],
-        ['decimal.set()', decimal.set()],
+        ['set(number)', set(number)],
+        ['set(decimal)', set(decimal)],
         ['opaque', opaque],
         ['native', native as AnyCodec],
     ]

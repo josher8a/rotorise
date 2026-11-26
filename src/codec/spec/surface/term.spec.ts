@@ -16,6 +16,7 @@ import {
     object,
     opaque,
     refine,
+    set,
     string,
     termOf,
     union,
@@ -255,7 +256,7 @@ describe('the tag a variant answers to', () => {
     })
 })
 
-describe('the term `.set()` writes', () => {
+describe('the term `set(...)` writes', () => {
     /**
      * The rule `(set)` is the finite-powerset lift of an element term, so a restriction rides at the
      * element: the set of `refine(decimal, q)` holds that refinement as its element, and the
@@ -267,7 +268,7 @@ describe('the term `.set()` writes', () => {
             (value: string): value is string => !value.startsWith('-'),
             { describe: 'non-negative' },
         )
-        const term = erase(positive.set()).def
+        const term = erase(set(positive)).def
         expect(term).toEqual({ kind: 'set', elem: positive.def })
         // the element writes `N`, so the set writes `NS`
         expect(member(term)).toBe('NS')
@@ -278,7 +279,7 @@ describe('the term `.set()` writes', () => {
      * is what makes the disjointness test able to read them.
      */
     it('a set over a literal carries the alternatives, so the declaration can read them', () => {
-        const term = erase(string.set('a', 'b')).def
+        const term = erase(set(string('a', 'b'))).def
         expect(term).toEqual({
             kind: 'set',
             elem: {
@@ -293,7 +294,7 @@ describe('the term `.set()` writes', () => {
     })
 
     it('a set over a bare base holds the base as its element', () => {
-        expect(erase(string.set()).def).toEqual({
+        expect(erase(set(string)).def).toEqual({
             kind: 'set',
             elem: { kind: 'string' },
         })

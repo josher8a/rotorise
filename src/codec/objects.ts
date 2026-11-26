@@ -130,8 +130,8 @@ export const optional = <const C extends AnyCodec>(
  * {@link optional}.
  *
  * ```ts
- * object({ tags: undefinable(string.set()) })   // { tags: ReadonlySet<string> | undefined }
- * object({ tags: optional(string.set()) })      // { tags?: ReadonlySet<string> }
+ * object({ tags: undefinable(set(string)) })   // { tags: ReadonlySet<string> | undefined }
+ * object({ tags: optional(set(string)) })      // { tags?: ReadonlySet<string> }
  * ```
  *
  * **It stores nothing, and never `NULL`** — {@link nullable} is the codec for a value that *is*
@@ -176,7 +176,7 @@ export const undefinable = <const C extends AnyCodec>(
  *     SK: string,
  *     ownerId: string,
  *     price: decimal,               // money, never a float
- *     tags: string.set(),           // SS, not L
+ *     tags: set(string),           // SS, not L
  *     adopted: boolean,
  *     soldAt: optional(string),
  * })

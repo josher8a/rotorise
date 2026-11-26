@@ -51,7 +51,6 @@ export type {
     EveryButNumberT,
     FloatT,
     NumberCodec,
-    Refined,
     SetBase,
     StringCodec,
 } from './prisms'
@@ -71,11 +70,11 @@ export type {
     ListCodec,
     ListOf,
     ListWrites,
-    SetCapable,
+    SetOver,
     SpreadCodec,
     SpreadOnce,
 } from './products'
-export { array, list, spread } from './products'
+export { array, list, set, spread } from './products'
 // the failure algebra lives in `./result`, and is re-exported because it is part of the surface a
 // caller works in: a `Result` is what every direction returns
 export {

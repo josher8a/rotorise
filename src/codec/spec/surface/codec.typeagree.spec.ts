@@ -25,6 +25,7 @@ import {
     number,
     object,
     refine,
+    set,
     string,
     termOf,
     union,
@@ -92,7 +93,7 @@ describe('a set of a refinement is refused at the type where the term reaches a 
         })
         const isText = (value: string): value is string => value.length > 0
         // @ts-expect-error a read widening has no set in the model
-        expect(() => refine(widened, isText).set()).toThrow(CodecError)
+        expect(() => set(refine(widened, isText))).toThrow(CodecError)
     })
 })
 

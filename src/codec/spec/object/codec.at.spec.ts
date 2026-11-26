@@ -34,6 +34,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     union,
@@ -418,7 +419,7 @@ describe('the attribute that the codec at a path writes', () => {
         object({
             name: string,
             count: number,
-            tags: string.set(),
+            tags: set(string),
             notes: array(string),
             address: object({ city: string }),
             either: union([string, number]),

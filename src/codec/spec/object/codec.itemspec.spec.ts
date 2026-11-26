@@ -10,7 +10,6 @@ describe('the spec of an item codec', () => {
         const pet = object({ name: string })
         const spec = item(pet).spec
         expect(spec.name).toBe(string)
-        expect(spec.name.set).toBeTypeOf('function')
         expect(spec.name('REX').def).toEqual(string('REX').def)
     })
 

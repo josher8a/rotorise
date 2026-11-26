@@ -23,6 +23,7 @@ import {
     number,
     object,
     opaque,
+    set,
     string,
 } from '../../codec'
 import { checkDecodesAreWritable } from '../../testing'
@@ -43,7 +44,7 @@ describe('decode returns a value or a CodecError for every mutated row', () => {
             object({ tags: array(string) }),
         ),
         'an untyped list entry': item(object({ anything: opaque })),
-        'a set of numbers': item(object({ amounts: number.set() })),
+        'a set of numbers': item(object({ amounts: set(number) })),
         'a row that is no map': item(object({ name: string, age: number })),
         'a conversion of a held that throws at decode': item(
             object({
@@ -103,7 +104,7 @@ describe('a decode that throws another error is reported, with the mutation that
 })
 
 describe('a read keeps the shape of the row, in the members, the sizes and the names', () => {
-    const Amounts = item(object({ amounts: number.set() }))
+    const Amounts = item(object({ amounts: set(number) }))
 
     it('holds for a set of numbers, whose read refuses two numerals that read to one value', () => {
         expect(() =>

@@ -8,7 +8,7 @@
  *
  * Held as a `Set`, which is what it is. An array was the earlier reading and it cost the distinction
  * that matters most here: a set and a list are given the same array, so nothing about a value said
- * which was meant — `union([string.set(), array(string)])` could not be resolved, and the marshaller
+ * which was meant — `union([set(string), array(string)])` could not be resolved, and the marshaller
  * this library mirrors reads `SS` back as a `Set` besides.
  */
 import { describe, expect, it } from 'vitest'
@@ -24,6 +24,7 @@ import {
     object,
     orThrow,
     refine,
+    set,
     string,
 } from '../../codec'
 import { dynamoNumber } from '../../prisms'
@@ -37,8 +38,7 @@ const isAmount = (v: string): v is Price =>
 /**
  * Two predicates that decide nothing, used only to reach `set`'s refusals.
  *
- * The set builder is no longer part of the public surface — `.set()` is — so the only way to hand
- * it an element it must refuse is across a refinement, which is where `.set()` propagates to.
+ * A refinement keeps the term of its inner codec, so `set` reads the same element across it.
  * These are honest about being trivial: what is under test is the refusal, not the predicate.
  */
 const isText = (value: unknown): value is string => typeof value === 'string'
@@ -53,28 +53,27 @@ const amount = refine(decimal, isAmount, {
 
 describe('the member follows from the element', () => {
     it('writes SS for strings', () => {
-        expect(string.set().unsafeEncode(new Set(['b', 'a']))).toEqual({
+        expect(set(string).unsafeEncode(new Set(['b', 'a']))).toEqual({
             SS: ['a', 'b'],
         })
     })
 
     it('writes NS for numbers', () => {
-        expect(number.set().unsafeEncode(new Set([2, 1]))).toEqual({
+        expect(set(number).unsafeEncode(new Set([2, 1]))).toEqual({
             NS: ['1', '2'],
         })
     })
 
     it('writes BS for binary', () => {
-        const encoded = binary
-            .set()
-            .unsafeEncode(new Set([Uint8Array.from([1])]))
+        const encoded = set(binary).unsafeEncode(
+            new Set([Uint8Array.from([1])]),
+        )
         expect(Object.keys(encoded)).toEqual(['BS'])
     })
 
     /**
-     * The refusals are reached through `refine`, because that is the only way left to hand the set
-     * builder an element: `.set()` propagates across a refinement, and the *type* gate there is the
-     * attribute — `S`, `N` or `B` — which is as far as a codec's type can see. So each of these
+     * The refusals are reached through `refine`: the *type* gate of `set` is the attribute —
+     * `S`, `N` or `B` — which is as far as a codec's type can see. So each of these
      * pins both halves at once: `@ts-expect-error` says the type declined, and the `toThrow` says
      * the runtime did too.
      */
@@ -82,15 +81,15 @@ describe('the member follows from the element', () => {
         // `nullable` writes its inner member or NULL, so it cannot be a set's element
         const maybe = refine(nullable(string), isText)
         // @ts-expect-error `nullable` writes no single member
-        expect(() => maybe.set()).toThrow(CodecError)
+        expect(() => set(maybe)).toThrow(CodecError)
         // @ts-expect-error and the runtime says why
-        expect(() => maybe.set()).toThrow(CodecError)
+        expect(() => set(maybe)).toThrow(CodecError)
     })
 
     it('refuses an element that is not a scalar at all', () => {
         const list = refine(array(string), isTexts)
         // @ts-expect-error an `L` is not one of the three members a set is built from
-        expect(() => list.set()).toThrow(CodecError)
+        expect(() => set(list)).toThrow(CodecError)
     })
 })
 
@@ -98,7 +97,7 @@ describe('a set of a branded element', () => {
     const Pet = item(
         object({
             id: string,
-            amounts: amount.set(),
+            amounts: set(amount),
         }),
     )
 
@@ -134,8 +133,8 @@ describe('a set of a branded element', () => {
 
 describe('what a set cannot hold', () => {
     it('refuses to write an empty one', () => {
-        expect(() => string.set().unsafeEncode(new Set())).toThrow(CodecError)
-        expect(() => number.set().unsafeEncode(new Set())).toThrow(CodecError)
+        expect(() => set(string).unsafeEncode(new Set())).toThrow(CodecError)
+        expect(() => set(number).unsafeEncode(new Set())).toThrow(CodecError)
     })
 
     /**
@@ -145,21 +144,21 @@ describe('what a set cannot hold', () => {
      * own `encode` refuses, so an item could be read and not written back.
      */
     it('refuses to read an empty one, which its own encode would refuse', () => {
-        expect(() => string.set().unsafeDecode({ SS: [] })).toThrow(CodecError)
-        expect(() => number.set().unsafeDecode({ NS: [] })).toThrow(CodecError)
+        expect(() => set(string).unsafeDecode({ SS: [] })).toThrow(CodecError)
+        expect(() => set(number).unsafeDecode({ NS: [] })).toThrow(CodecError)
     })
 
     it('reads back a set, whatever order it arrives in', () => {
-        expect(string.set().unsafeDecode({ SS: ['b', 'a'] })).toEqual(
+        expect(set(string).unsafeDecode({ SS: ['b', 'a'] })).toEqual(
             new Set(['a', 'b']),
         )
-        expect(string.set().unsafeDecode({ SS: ['a', 'b'] })).toEqual(
+        expect(set(string).unsafeDecode({ SS: ['a', 'b'] })).toEqual(
             new Set(['a', 'b']),
         )
     })
 
     it('writes sorted, so what is stored does not depend on insertion order', () => {
-        expect(string.set().unsafeEncode(new Set(['b', 'a']))).toEqual({
+        expect(set(string).unsafeEncode(new Set(['b', 'a']))).toEqual({
             SS: ['a', 'b'],
         })
     })
@@ -170,21 +169,19 @@ describe('what a set cannot hold', () => {
      * merge would decode to a smaller set than the one written, so the codec refuses the set.
      */
     it('refuses a set whose members write one stored member, because DynamoDB refuses a repeat', () => {
-        const bytes = binary
-            .set()
-            .encode(new Set([Uint8Array.of(1), Uint8Array.of(1)]))
+        const bytes = set(binary).encode(
+            new Set([Uint8Array.of(1), Uint8Array.of(1)]),
+        )
         expect(bytes).toBeInstanceOf(CodecError)
         expect((bytes as CodecError).reason).toBe(
             'two members of this set write one B, and DynamoDB refuses a BS that repeats a member',
         )
-        const numbers = dynamoNumber
-            .set()
-            .encode(
-                new Set([
-                    orThrow(DynamoNumber.from('1')),
-                    orThrow(DynamoNumber.from('1.0')),
-                ]),
-            )
+        const numbers = set(dynamoNumber).encode(
+            new Set([
+                orThrow(DynamoNumber.from('1')),
+                orThrow(DynamoNumber.from('1.0')),
+            ]),
+        )
         expect(numbers).toBeInstanceOf(CodecError)
         expect((numbers as CodecError).reason).toMatch(
             /refuses a NS that repeats a member/,
@@ -192,14 +189,14 @@ describe('what a set cannot hold', () => {
     })
 
     it('reads no stored set that repeats a member, because DynamoDB writes none', () => {
-        const strings = string.set().decode({ SS: ['dog', 'dog'] })
+        const strings = set(string).decode({ SS: ['dog', 'dog'] })
         expect(strings).toBeInstanceOf(CodecError)
         expect((strings as CodecError).reason).toMatch(
             /^DynamoDB holds no SS that repeats a member/,
         )
-        const bytes = binary
-            .set()
-            .decode({ BS: [Uint8Array.of(1), Uint8Array.of(1)] })
+        const bytes = set(binary).decode({
+            BS: [Uint8Array.of(1), Uint8Array.of(1)],
+        })
         expect(bytes).toBeInstanceOf(CodecError)
         expect((bytes as CodecError).reason).toMatch(
             /^DynamoDB holds no BS that repeats a member/,

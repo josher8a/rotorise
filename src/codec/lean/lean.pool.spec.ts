@@ -50,6 +50,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     spread,
     string,
     undefinable,
@@ -172,11 +173,11 @@ const leaves: readonly (readonly [string, () => AnyCodec])[] = [
     ['undeclared', () => erase(undeclared)],
 ]
 const setable: readonly (readonly [string, () => AnyCodec])[] = [
-    ['string.set', () => erase(string.set())],
-    ['lit_s.set', () => erase(string.set('a', 'b'))],
-    ['dynamoNumber.set', () => erase(dynamoNumber.set())],
-    ['decimal.set', () => erase(decimal.set())],
-    ['binary.set', () => erase(binary.set())],
+    ['string.set', () => erase(set(string))],
+    ['lit_s.set', () => erase(set(string('a', 'b')))],
+    ['dynamoNumber.set', () => erase(set(dynamoNumber))],
+    ['decimal.set', () => erase(set(decimal))],
+    ['binary.set', () => erase(set(binary))],
 ]
 /** A `ref` that no scope binds: a free variable, and each codec that reads it an open fragment. */
 const undeclared = ref('undeclared')

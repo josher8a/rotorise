@@ -16,6 +16,7 @@ import {
     number,
     object,
     opaque,
+    set,
     string,
 } from '../../codec'
 import { native } from '../../native'
@@ -32,7 +33,7 @@ const wrong: readonly (readonly [string, AttributeValue, AnyCodec])[] = [
     ['NULL', { NULL: false } as never, nullValue],
     ['L', { L: 'abc' } as never, array(string)],
     ['M', { M: ['a'] } as never, object({ petName: string })],
-    ['SS', { SS: 'ab' } as never, string.set()],
+    ['SS', { SS: 'ab' } as never, set(string)],
 ]
 
 describe('a read refuses a payload of the wrong type, for every member', () => {

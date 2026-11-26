@@ -7,7 +7,7 @@
  * `expectTypeOf` is the failure of a type that differs.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { tableEntry } from '../../../Rotorise'
+import { set, tableEntry } from '../../../Rotorise'
 import type { Decoded } from '../../codec'
 import {
     array,
@@ -57,12 +57,12 @@ const born = () =>
     })
 
 describe('a read widening has no set, in the type of a scope entry as in the run time', () => {
-    it('refuses `.set()` of an entry over a `legacy`', () => {
+    it('refuses `set` of an entry over a `legacy`', () => {
         const { Rate } = scope({
             Rate: legacy({ current: decimal, older: string }),
         })
         // @ts-expect-error a `legacy` widens a read, and a set has no such law in the model
-        expect(() => Rate.set()).toThrow(CodecError)
+        expect(() => set(Rate)).toThrow(CodecError)
     })
 })
 

@@ -3,7 +3,7 @@
  *
  * A codec that a slice, a meet or a scope builds is built from a term, and a caller writes the
  * same term with a constructor. The two must give one codec: the literal call of a base, the
- * `.set()` of a base and of a refinement, and the `.spec` of an object each come from the term,
+ * `set(...)` of a base and of a refinement, and the `.spec` of an object each come from the term,
  * so a slot of a built object holds the codec that the caller wrote.
  */
 import { describe, expect, it } from 'vitest'
@@ -11,6 +11,7 @@ import type { AnyCodec } from '../../codec'
 import {
     binary,
     boolean,
+    CodecError,
     codecOfTerm,
     decimal,
     extract,
@@ -20,6 +21,7 @@ import {
     object,
     opaque,
     refine,
+    set,
     string,
     union,
 } from '../../codec'
@@ -73,14 +75,14 @@ describe('a term that is equal to the term of a base denotes a codec with the ca
 
     it('takes the set of the base and the set of a literal at the base, and boolean has none', () => {
         const text = denoted({ kind: 'string' })
-        expect(sameTerm(text.set().def, string.set().def)).toBe(true)
+        expect(sameTerm(set(text).def, set(string).def)).toBe(true)
         expect(
             sameTerm(
-                text.set('REX' as never, 'FLUFFY' as never).def,
-                string.set('REX', 'FLUFFY').def,
+                set(text('REX' as never, 'FLUFFY' as never)).def,
+                set(string('REX', 'FLUFFY')).def,
             ),
         ).toBe(true)
-        expect('set' in denoted({ kind: 'boolean' })).toBe(false)
+        expect(() => set(denoted({ kind: 'boolean' }))).toThrow(CodecError)
     })
 
     it('takes the set of a refinement over any term', () => {
@@ -90,7 +92,7 @@ describe('a term that is equal to the term of a base denotes a codec with the ca
         )
         const built = denoted({ ...named.def })
         expect(built).not.toBe(named)
-        expect(sameTerm(built.set().def, named.set().def)).toBe(true)
+        expect(sameTerm(set(built).def, set(named).def)).toBe(true)
     })
 })
 
@@ -98,13 +100,12 @@ describe('the slots of an object that a term denotes are the codecs that the cal
     it('holds the constant at a member that the term names as a base', () => {
         const pet = denoted({ ...object({ name: string }).def })
         expect(pet.spec.name).toBe(string)
-        expect(pet.spec.name?.set).toBeTypeOf('function')
     })
 
     it('holds that codec in the spec of a meet', () => {
         const both = meet(object({ name: string }), object({ chip: string }))
         expect(both.spec.name).toBe(string)
-        expect(item(both).spec.chip.set).toBeTypeOf('function')
+        expect(item(both).spec.chip('A').def).toEqual(string('A').def)
     })
 
     it('holds that codec in the spec of each option of the item of a union', () => {

@@ -9,7 +9,7 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { AttributeValue } from '../../attribute'
-import type { AnyCodec, Decoded } from '../../codec'
+import type { AnyCodec, Decoded, SetOver } from '../../codec'
 import {
     array,
     binary,
@@ -28,6 +28,7 @@ import {
     opaque,
     optional,
     refine,
+    set,
     spread,
     string,
     termOf,
@@ -711,11 +712,11 @@ describe('fits is the order of the meet, at the top and at a set', () => {
     })
 
     it('extracts a set by a set pattern whose element holds the element of the set', () => {
-        const mixed = union([binary.set(), string])
-        const kept = extract(mixed, binary.set())
-        const rest = exclude(mixed, binary.set())
+        const mixed = union([set(binary), string])
+        const kept = extract(mixed, set(binary))
+        const rest = exclude(mixed, set(binary))
         expectTypeOf<Decoded<typeof kept>>().toEqualTypeOf<
-            Decoded<ReturnType<typeof binary.set>>
+            Decoded<SetOver<typeof binary>>
         >()
         expectTypeOf<Decoded<typeof rest>>().toEqualTypeOf<string>()
         expect(optionsOf(kept).map((one) => one.kind)).toEqual(['set'])

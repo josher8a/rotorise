@@ -288,7 +288,7 @@ export namespace opaque {
                             // has no write path here, so reading one would re-encode as `SS` and
                             // change the attribute's stored type — (MP), which `μ = ⊤` leaves as
                             // the only law watching
-                            ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `number.set()` or `decimal.set()`'>
+                            ErrorMessage<'[opaque] a stored set of numbers has no counterpart this codec can write, so reading it would re-encode as `SS`. Declare the attribute with `set(number)` or `set(decimal)`'>
                       : A extends BS
                         ? Set<Uint8Array>
                         : A extends L<infer Element>

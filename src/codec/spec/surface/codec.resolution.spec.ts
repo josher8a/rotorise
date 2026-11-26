@@ -28,6 +28,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     string,
     union,
 } from '../../codec'
@@ -155,18 +156,15 @@ describe('an entry key and a variant read the node that a ref names', () => {
 })
 
 describe('a set element and a slice read the node that a ref names', () => {
-    /** The type offers `.set()` on the attribute that the entry names, so the run time builds it. */
+    /** The type accepts `set` over the attribute that the entry names, so the run time builds it. */
     it('stores a set of a refined element that a ref names', () => {
-        const Tags = refine(
-            StringAt,
-            (v: string): v is string => v !== '',
-        ).set()
+        const Tags = set(refine(StringAt, (v: string): v is string => v !== ''))
         expect(Tags.encode(new Set(['x']))).toEqual({ SS: ['x'] })
     })
 
     it('slices a union whose option is a ref, in the type and at run time', () => {
         const h = object({
-            a: union([string.set('a', 'b'), nullValue]),
+            a: union([set(string('a', 'b')), nullValue]),
             b: decimal('1', '2.5'),
         })
         const { U } = scope({
@@ -479,27 +477,29 @@ describe('a chain of names holds no value when its last entry holds none, at any
 describe('an entry carries the capabilities of the node that its ref chain names', () => {
     it('offers the set of an entry whose node writes S, N or B, direct and through a ref', () => {
         const { S, A, L } = scope({ S: string, A: ref('S'), L: string('a') })
-        expect(S.set().encode(new Set(['x']))).toEqual({ SS: ['x'] })
-        expect(A.set().encode(new Set(['x']))).toEqual({ SS: ['x'] })
-        expect(L.set().encode(new Set(['a'] as const))).toEqual({ SS: ['a'] })
+        expect(set(S).encode(new Set(['x']))).toEqual({ SS: ['x'] })
+        expect(set(A).encode(new Set(['x']))).toEqual({ SS: ['x'] })
+        expect(set(L).encode(new Set(['a'] as const))).toEqual({ SS: ['a'] })
     })
 
-    it('offers no set where the node writes another member', () => {
+    it('refuses a set where the node writes another member', () => {
         const { O, B } = scope({
             O: object({ a: string }),
             B: ref('T'),
             T: boolean,
         })
         // @ts-expect-error an object writes M
-        expect(() => O.set()).toThrow(TypeError)
+        expect(() => set(O)).toThrow(
+            "a set holds strings, numbers or binary, and this element writes 'M'",
+        )
         // @ts-expect-error a boolean writes BOOL, and DynamoDB has no set of it
-        expect(() => B.set()).toThrow(/a set holds strings, numbers or binary/)
+        expect(() => set(B)).toThrow(/a set holds strings, numbers or binary/)
     })
 
     it('refuses the set of a node that writes BOOL with the text of the judge, which owns the rule of a set element', () => {
         const { B } = scope({ B: ref('T'), T: boolean })
         // @ts-expect-error a boolean writes BOOL, and DynamoDB has no set of it
-        const run = () => B.set()
+        const run = () => set(B)
         expect(run).toThrow(CodecError)
         expect(run).toThrow(
             "a set holds strings, numbers or binary, and this element writes 'BOOL'",

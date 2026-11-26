@@ -15,7 +15,7 @@
  * somebody changes an attribute.
  */
 import { describe, expect, it } from 'vitest'
-import { tableEntry } from '../../../Rotorise'
+import { set, tableEntry } from '../../../Rotorise'
 import type {
     AttributeMap,
     B,
@@ -82,7 +82,7 @@ const spec = {
     weight: number,
     adopted: boolean,
     photo: binary,
-    tags: string.set(),
+    tags: set(string),
     breed: object({ species: string, coat: optional(string) }),
     visits: array(object({ at: string })),
     note: optional(string),

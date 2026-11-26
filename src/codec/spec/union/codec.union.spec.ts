@@ -25,6 +25,7 @@ import {
     ref,
     refine,
     scope,
+    set,
     string,
     union,
 } from '../../codec'
@@ -297,9 +298,9 @@ describe('the declaration guard, where a term is what the guard reads', () => {
      */
     it('declares a union of two literal sets whose alphabets do not meet', () => {
         expect(() =>
-            union([string.set('a', 'b'), string.set('c')]),
+            union([set(string('a', 'b')), set(string('c'))]),
         ).not.toThrow()
-        const either = union([string.set('a', 'b'), string.set('c')])
+        const either = union([set(string('a', 'b')), set(string('c'))])
         expect(either.unsafeEncode(new Set(['a']) as never)).toEqual({
             SS: ['a'],
         })
@@ -321,8 +322,8 @@ describe('the declaration guard, where a term is what the guard reads', () => {
             encode: (b) => DynamoNumber.from(b ? '1' : '0'),
             decode: (n) => String(n) === '1',
         })
-        const x = refine(asText, isTrue).set()
-        const y = refine(asNumber, isTrue).set()
+        const x = set(refine(asText, isTrue))
+        const y = set(refine(asNumber, isTrue))
         const one = new Set<true>([true])
         expect(x.unsafeEncode(one)).toEqual({ SS: ['y'] })
         expect(y.unsafeEncode(one)).toEqual({ NS: ['1'] })
@@ -336,12 +337,12 @@ describe('the declaration guard, where a term is what the guard reads', () => {
             encode: (b) => (b ? 'y' : 'n'),
             decode: (s) => s === 'y',
         })
-        const flags = union([refine(asText, isTrue).set(), string])
+        const flags = union([set(refine(asText, isTrue)), string])
         expect(flags.unsafeEncode(new Set<true>([true]))).toEqual({ SS: ['y'] })
     })
 
     it('declares two sets and two lists whose element families do not meet', () => {
-        expect(() => union([string.set(), dynamoNumber.set()])).not.toThrow()
+        expect(() => union([set(string), set(dynamoNumber)])).not.toThrow()
         expect(() => union([array(string), array(dynamoNumber)])).not.toThrow()
     })
 
@@ -430,7 +431,7 @@ describe('the declaration guard, where a term is what the guard reads', () => {
             expect(either.unsafeEncode('B')).toEqual({ S: 'B' })
             expect(either.unsafeDecode({ S: 'A' })).toBe('A')
         }
-        const sets = union([string.set(), string.set('a', 'b')])
+        const sets = union([set(string), set(string('a', 'b'))])
         expect(sets.unsafeEncode(new Set(['a', 'z']) as never)).toEqual({
             SS: ['a', 'z'],
         })

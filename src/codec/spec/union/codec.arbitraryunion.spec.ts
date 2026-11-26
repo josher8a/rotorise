@@ -26,6 +26,7 @@ import {
     number,
     object,
     optional,
+    set,
     string,
     union,
 } from '../../codec'
@@ -160,7 +161,7 @@ describe('what the value cannot tell apart', () => {
      * as a `Set` they are disjoint in both directions: `Set<string>` against `readonly string[]` at
      * the declaration, and `SS` against `L` in the table.
      */
-    const Tags = union([string.set(), array(string)])
+    const Tags = union([set(string), array(string)])
 
     it('writes SS for a set and L for a list', () => {
         expect(Tags.unsafeEncode(new Set(['b', 'a']))).toEqual({
