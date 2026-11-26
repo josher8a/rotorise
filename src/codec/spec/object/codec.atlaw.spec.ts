@@ -19,7 +19,7 @@ import {
     preconditions,
     string,
 } from '../../codec'
-import { parsePath } from '../../scopePath'
+import { parsePath } from '../../documentPath'
 
 const Leg = object({ id: string, deliveredAt: optional(string) })
 const Adoption = item(

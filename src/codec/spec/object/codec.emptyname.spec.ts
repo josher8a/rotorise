@@ -17,9 +17,9 @@ import {
     optional,
     string,
 } from '../../codec'
+import { parsePath } from '../../documentPath'
 import { native } from '../../native'
 import { failed } from '../../result'
-import { parsePath } from '../../scopePath'
 
 const Vaccines = item(object({ petId: string }, [string, optional(string)]))
 const Litter = item(object({ petId: string, litter: array(string) }))
