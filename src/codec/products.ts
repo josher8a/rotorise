@@ -78,7 +78,7 @@ export const array = <const C extends AnyCodec>(element: C): ArrayOver<C> => {
     const def: ListTerm = {
         kind: 'list',
         pre: [],
-        spread: termOf(element as unknown as AnyCodec),
+        spread: termOf(element),
         suf: [],
     }
     // the judgment and the pair come from the kind alone, so a bundle of `array` holds no switch
@@ -163,7 +163,7 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
     // across this repo, measured
     ...elements: Cs & SpreadOnce<Cs> & NoNeverSlot<Cs>
 ): ListCodec<Cs> => {
-    const all = elements as readonly unknown[]
+    const all = elements
 
     /**
      * `SpreadOnce` refuses a second spread in the *type*, and a cast defeats the type.
@@ -191,8 +191,6 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
         suf: suf.map(termOf),
     }
     judgedBy(def, judgeList(def))
-    // as with `map`, the cast keeps the shape each position writes, which
-    // `Attribute<'L'>` would flatten to "some list"
     return codecOfPair(
         def,
         listPair(
@@ -200,7 +198,7 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
             marked && pairOfCodec(marked.spread),
             suf.map(pairOfCodec),
         ),
-    ) as unknown as ListCodec<Cs>
+    )
 }
 
 /** The codec that {@link list} returns, and the one that a slice at a position rebuilds. */
@@ -338,7 +336,7 @@ export type SpreadOnce<Cs extends readonly unknown[]> = Split<Cs> extends {
  * ```
  */
 export const spread = <const C extends AnyCodec>(element: C): SpreadOver<C> =>
-    ({ spread: element as unknown as AnyCodec }) as unknown as SpreadCodec<
+    ({ spread: element as unknown as AnyCodec }) as SpreadCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
     >
@@ -438,7 +436,7 @@ export const set = <const C extends AnyCodec & SetElement<C>>(
 ): SetOver<C> => {
     const def: Extract<Term, { kind: 'set' }> = {
         kind: 'set',
-        elem: termOf(element as unknown as AnyCodec),
+        elem: termOf(element),
     }
     judgedBy(def, judgeSet(def))
     return codecOfPair<ReadonlySet<Decoded<C>>, SetAttribute<AttributeOf<C>>>(

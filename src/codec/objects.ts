@@ -129,7 +129,7 @@ export const optional = <const C extends AnyCodec>(
     return {
         codec: inner,
         def: { mark: 'optional', t: termOf(inner) },
-    } as unknown as OptionalCodec<Decoded<C>, AttributeOf<C>, C>
+    } as OptionalCodec<Decoded<C>, AttributeOf<C>, C>
 }
 
 /**
@@ -159,7 +159,7 @@ export const undefinable = <const C extends AnyCodec>(
     ({
         codec: inner,
         def: { mark: 'undefinable', t: termOf(inner) },
-    }) as unknown as UndefinableCodec<Decoded<C>, AttributeOf<C>, C>
+    }) as UndefinableCodec<Decoded<C>, AttributeOf<C>, C>
 
 /**
  * The codec that a slot holds. A marked slot is `{ codec, def }` at run time, and its type names
@@ -217,7 +217,7 @@ export const objectFromMap = <
     // the pair of each child codec, by the term of the child: the body is composed from these, and
     // reads no term
     const pairs = new Map<Term, Pair>()
-    const declaredSpec = spec as unknown as Record<string, ObjectSlot>
+    const declaredSpec = spec
     for (const name in declaredSpec) {
         if (isEmptyName(name)) {
             throw new CodecError(
@@ -364,7 +364,7 @@ export function object(
         !isEntry && first !== undefined
             ? (first as Record<string, ObjectSlot>)
             : {}
-    const entries = (isEntry ? [first, ...tail] : tail) as AnyObjectEntry[]
+    const entries = isEntry ? [first, ...tail] : tail
     const fields: Record<string, ObjectSlot> = { ...spec }
     let rest: AnyCodec | undefined
     for (const [key, slot] of entries) {
@@ -389,10 +389,7 @@ export function object(
             setOwn(fields, name, slot)
         }
     }
-    return objectFromMap(fields, rest) as ObjectCodec<
-        Record<string, ObjectSlot>,
-        AnyCodec | undefined
-    >
+    return objectFromMap(fields, rest)
 }
 
 /** The options a factor offers, at the type level: a union's, or the factor itself. */

@@ -1903,8 +1903,7 @@ const componentOf = (component: unknown): Component | undefined => {
             : { at: component }
     const { at } = record
     if (typeof at === 'string') return record as Component
-    if (typeof at === 'number')
-        return { ...record, at: String(at) } as Component
+    if (typeof at === 'number') return { ...record, at: String(at) }
     return undefined
 }
 
@@ -2132,7 +2131,7 @@ const expandCases = (spec: unknown): unknown => {
         throw new RotoriseError(`Match on ${name}: cases is no list of cases`)
     }
     const arms = new Map<string, unknown>()
-    for (const entry of spec.cases as unknown[]) {
+    for (const entry of spec.cases) {
         const [literals, arm] = Array.isArray(entry) ? entry : []
         if (!Array.isArray(literals) || literals.length === 0) {
             throw new RotoriseError(
@@ -2255,11 +2254,7 @@ const key =
             if (case_ === undefined) {
                 return keyRefusal(`Key ${key.toString()} not found in schema`)
             }
-            const arm = select(
-                case_,
-                attributes as Record<string, unknown>,
-                reading,
-            )
+            const arm = select(case_, attributes, reading)
             if (arm.kind === 'missing') {
                 // an error names the discriminator and holds no value
                 return keyRefusal(
@@ -2272,18 +2267,13 @@ const key =
             if (arm.kind === 'null') return undefined
             if (arm.kind === 'attr') {
                 const value = reading(attributes, arm.name)
-                if (value === null) return undefined as never
+                if (value === null) return undefined
                 // a key of one attribute holds the stored payload of an attribute under the adapter
                 // of a caller, as the row holds it
                 const stored =
                     text === undefined || value === undefined
                         ? value
-                        : text(
-                              arm.name,
-                              value,
-                              attributes as Record<string, unknown>,
-                              true,
-                          )
+                        : text(arm.name, value, attributes, true)
                 if (failed(stored)) return stored
                 const empty = nonEmpty(
                     stored,
@@ -2325,11 +2315,7 @@ const key =
                 return undefined
             }
 
-            const printedParts = parts(
-                structure,
-                attributes as Record<string, unknown>,
-                reading,
-            )
+            const printedParts = parts(structure, attributes, reading)
             for (const [at, part] of printedParts.entries()) {
                 if (part === undefined) {
                     if (config?.allowPartial) {
@@ -2360,14 +2346,10 @@ const key =
                 }
                 const stored =
                     shape !== undefined
-                        ? (shape(value as never) as joinable)
+                        ? shape(value as never)
                         : text === undefined
                           ? value
-                          : text(
-                                path,
-                                value,
-                                attributes as Record<string, unknown>,
-                            )
+                          : text(path, value, attributes)
                 if (failed(stored)) return stored
                 const refusedValue = push(path, stored as joinable)
                 if (refusedValue !== undefined) return refusedValue
@@ -2433,7 +2415,7 @@ const key =
                 'the print of the components is empty, so the key is empty. Give a component a value, or leave the key out.',
             )
             if (empty !== undefined) return empty
-            return built as never
+            return built
         }
     }
 
@@ -3871,7 +3853,7 @@ const notAKey = (name: string): CodecError =>
 
 /** The term of a slot: a codec, or a field that marks a codec. */
 const termOfSlot = (slot: ObjectSlot): Term => {
-    const def = (slot as { readonly def: Term | Field }).def
+    const def = slot.def
     return 'mark' in def ? def.t : def
 }
 
@@ -3955,7 +3937,7 @@ type ItemCodecRuntime = ItemCodec<
  */
 const isItemCodec = (value: unknown): value is ItemCodecRuntime =>
     callable<ItemCodecRuntime>(value, ['unsafeEncodePartial']) &&
-    'rest' in (value as object)
+    'rest' in value
 
 /** Anything that reads and writes an attribute — the shape a spec is *not*. */
 const isCodecLike = (value: unknown): value is AnyCodec =>
@@ -4007,7 +3989,7 @@ const isTagged = (value: unknown): value is TaggedRuntime =>
         'encodePartial',
         'variantOf',
         'variants',
-    ]) && typeof (value as TaggedRuntime).discriminator === 'string'
+    ]) && typeof value.discriminator === 'string'
 
 /**
  * Whether two values are one constant, for a change that writes a decided attribute and for the
@@ -4538,7 +4520,7 @@ export const tableEntry =
             indexes?: Readonly<Record<string, KeyRoles>>
         }
 
-        const sep = separator ?? ('#' as Separator)
+        const sep = separator ?? '#'
         if (sep === '' || typeof sep !== 'string') {
             throw new RotoriseError('Separator must not be an empty string')
         }
@@ -4589,11 +4571,7 @@ export const tableEntry =
             sep,
             (path, value, given, alone) =>
                 storedText(path, value, given, alone),
-        ) as (
-            name: never,
-            attributes: never,
-            config?: never,
-        ) => Result<string | undefined>
+        )
 
         /** The builder of an update: it reads the given item by the written name first, as `given` of the model does. */
         const buildGiven = key()(
@@ -4602,11 +4580,7 @@ export const tableEntry =
             (path, value, given, alone) =>
                 storedText(path, value, given, alone),
             (segments) => givenFrom(readerOf(segments)),
-        ) as (
-            name: never,
-            attributes: never,
-            config?: never,
-        ) => Result<string | undefined>
+        )
 
         /**
          * A built codec carries its own options; a spec takes the defaults.
@@ -4847,10 +4821,7 @@ export const tableEntry =
             const refused = (error: CodecError) => pathRefusal(path, error)
             let found: AnyCodec
             try {
-                found = pathReadsOf(attributes).at(
-                    attributes as never,
-                    path as never,
-                ) as never
+                found = pathReadsOf(attributes).at(attributes as never, path)
             } catch (error) {
                 if (!(error instanceof CodecError)) throw error
                 return refused(error)
@@ -4901,9 +4872,7 @@ export const tableEntry =
             const declared = slotsAt(field)
             if (declared.length > 0) return declared
             // the erased item codec types its rest as `undefined`, and the run time holds a codec there
-            const rest = (
-                attributes as unknown as { readonly rest?: ObjectSlot }
-            ).rest
+            const rest = attributes.rest
             return rest === undefined ? [] : [rest]
         }
 
@@ -5050,9 +5019,7 @@ export const tableEntry =
             const found = new Map<AttributeName, string>()
             const arm = (value: unknown): void => {
                 if (isMatch(value)) {
-                    for (const next of Object.values(
-                        (value.spec ?? {}) as Record<string, unknown>,
-                    ))
+                    for (const next of Object.values(value.spec ?? {}))
                         arm(next)
                 } else if (Array.isArray(value)) {
                     found.set('S', 'a list of components')
@@ -5527,8 +5494,7 @@ export const tableEntry =
             )
             // a refusal of a key keeps its own kind and text, so the codec checks the item last
             if (failed(entry) || attributes === undefined) return entry
-            // the erased codec takes `never`, and the codec checks the item itself
-            const written = attributes.encode(item as never)
+            const written = attributes.encode(item)
             return written instanceof CodecError ? written : entry
         }
 
@@ -5638,50 +5604,47 @@ export const tableEntry =
         }
 
         const definition = {
-            keyUpdates: updateKeys as never,
-            unsafeKeyUpdates: ((changed: Record<string, unknown>) =>
-                orThrow(updateKeys(changed))) as never,
-            keys: keysOf as never,
-            unsafeKeys: ((
+            keyUpdates: updateKeys,
+            unsafeKeyUpdates: (changed: Record<string, unknown>) =>
+                orThrow(updateKeys(changed)),
+            keys: keysOf,
+            unsafeKeys: (
                 first: readonly string[] | Record<string, unknown>,
                 second?: Record<string, unknown>,
-            ) => orThrow(keysOf(first, second))) as never,
-            keyCondition: keyConditionOf as never,
-            unsafeKeyCondition: ((
+            ) => orThrow(keysOf(first, second)),
+            keyCondition: keyConditionOf,
+            unsafeKeyCondition: (
                 first: string | Record<string, unknown>,
                 second?: Record<string, unknown>,
-            ) => orThrow(keyConditionOf(first, second))) as never,
-            toEntry: buildEntry as never,
-            unsafeToEntry: ((item: Record<string, unknown>) =>
-                orThrow(buildEntry(item))) as never,
-            fromEntry: dropKeys as never,
-            key: keyValue as never,
-            unsafeKey: ((
+            ) => orThrow(keyConditionOf(first, second)),
+            toEntry: buildEntry,
+            unsafeToEntry: (item: Record<string, unknown>) =>
+                orThrow(buildEntry(item)),
+            fromEntry: dropKeys,
+            key: keyValue,
+            unsafeKey: (
                 name: string,
                 attributes: Record<string, unknown>,
                 config?: object,
-            ) => orThrow(keyValue(name, attributes, config))) as never,
-            infer: chainableNoOpProxy as never,
-            path: () => pathBuilder() as never,
+            ) => orThrow(keyValue(name, attributes, config)),
+            infer: chainableNoOpProxy,
+            path: () => pathBuilder(),
         }
 
         if (attributes === undefined) return definition as never
 
         const toItem = (item: Record<string, unknown>): Result<AttributeMap> =>
-            andThen(
-                attributes.encode(item as never),
-                (written: AttributeMap) => {
-                    const held = holdsKeyName(written, 'the write of the codec')
-                    return held !== undefined
-                        ? new CodecError(held)
-                        : andThen(
-                              keyPart(item, (name, value) =>
-                                  carried(name, item, value, written),
-                              ),
-                              (part) => joinRow(written, part),
-                          )
-                },
-            )
+            andThen(attributes.encode(item), (written: AttributeMap) => {
+                const held = holdsKeyName(written, 'the write of the codec')
+                return held !== undefined
+                    ? new CodecError(held)
+                    : andThen(
+                          keyPart(item, (name, value) =>
+                              carried(name, item, value, written),
+                          ),
+                          (part) => joinRow(written, part),
+                      )
+            })
         /**
          * The keys are removed before decoding, not merely left undeclared.
          *
@@ -5692,11 +5655,11 @@ export const tableEntry =
          * closed entry and for an open one.
          */
         const fromItem = (item: AttributeMap) =>
-            attributes.decode(dropKeys(item)) as Result<unknown>
+            attributes.decode(dropKeys(item))
 
         return {
             ...definition,
-            codec: attributes as never,
+            codec: attributes,
             toItem,
             fromItem,
             unsafeToItem: (item: Record<string, unknown>) =>

@@ -80,7 +80,7 @@ export const asRecord = (
     value: unknown,
 ): Record<string, unknown> | undefined => {
     if (typeof value !== 'object' || value === null) return undefined
-    const proto = Object.getPrototypeOf(value) as object | null
+    const proto = Object.getPrototypeOf(value)
     return proto === Object.prototype || proto === null
         ? (value as Record<string, unknown>)
         : undefined
@@ -228,7 +228,7 @@ export const expect = <K extends AttributeName>(
     attribute: AttributeValue,
 ): Result<AttributeCarriesOf<K>> => {
     if (asRecord(attribute) === undefined) return notAnAttribute(attribute)
-    const carried = (attribute as Record<string, unknown>)[name]
+    const carried = attribute[name]
     if (carried === undefined) {
         return new CodecError(
             `expected attribute member '${name}', found '${memberOf(attribute) ?? 'none'}'`,

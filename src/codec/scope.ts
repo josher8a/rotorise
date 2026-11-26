@@ -575,14 +575,12 @@ export const objectItem = (itemDef: ItemTerm): ObjectItem => {
         encodePartial: (patch) =>
             openRefusal(itemDef) ??
             itemRefusal(patch) ??
-            (body.encode(patch as Record<string, unknown>, 0, true) as never),
+            (body.encode(patch, 0, true) as never),
 
         decode: (item) =>
             openRefusal(itemDef) ??
             itemRefusal(item) ??
-            (body.decode(
-                item as Readonly<Record<string, AttributeValue>>,
-            ) as never),
+            body.decode(item as Readonly<Record<string, AttributeValue>>),
 
         unsafeEncode: (item) => orThrow(self.encode(item)),
         unsafeDecode: (item) => orThrow(self.decode(item)),
@@ -656,7 +654,7 @@ export const dissectionOf = (
             return names &&
                 (scope === 'member' ||
                     Object.keys(patch).every((name) => names.has(name)))
-                ? variant.encodePartial(patch as never)
+                ? variant.encodePartial(patch)
                 : undefined
         }
         const members = membersOf(
@@ -676,10 +674,7 @@ export const dissectionOf = (
                         callerMembers.set(item, names.add(name))
                     }
                 }
-                return [
-                    node.body,
-                    item as unknown as ItemCodec<T, unknown>,
-                ] as const
+                return [node.body, item as ItemCodec<T, unknown>] as const
             }),
             callerMembers.size > 0 ? written : undefined,
         )
@@ -688,14 +683,7 @@ export const dissectionOf = (
             ks,
             members,
             callerMembers.size > 0 ? written : undefined,
-        ) as unknown as {
-            pick: (
-                assignment: Readonly<Record<string, string>>,
-            ) => Result<ItemCodec<T, unknown>>
-            tagOf: (
-                item: Partial<T>,
-            ) => Result<Readonly<Record<string, string>>>
-        }
+        )
         return { members, pick, tagOf }
     }
     let indexed: ReturnType<typeof index> | undefined
@@ -712,7 +700,7 @@ export const dissectionOf = (
     // head of a list. Where it has several there is no such name, and the codec carries `keys`
     // instead — so the field is absent rather than holding one of several
     const [only, ...rest] = ks
-    const oneKey = rest.length === 0 ? (only as string) : undefined
+    const oneKey = rest.length === 0 ? only : undefined
 
     // a term that reads a name that no scope binds refuses each use
     const self = {
@@ -721,20 +709,20 @@ export const dissectionOf = (
             openRefusal(unionDef) ??
             itemRefusal(item) ??
             andThen(andThen(tagOf(item), pick), (variant) =>
-                variant.encode(item as never),
+                variant.encode(item),
             ),
         encodePartial: (patch: Partial<T>) =>
             openRefusal(unionDef) ??
             itemRefusal(patch) ??
             andThen(andThen(tagOf(patch), pick), (variant) =>
-                variant.encodePartial(patch as never),
+                variant.encodePartial(patch),
             ),
         decode: (item: StoredItem) =>
             openRefusal(unionDef) ??
             itemRefusal(item) ??
-            (andThen(andThen(readTags(item, ks), pick), (variant) =>
+            andThen(andThen(readTags(item, ks), pick), (variant) =>
                 variant.decode(item),
-            ) as Result<T>),
+            ),
         // the variant that the tags of an item select, read as `encode` reads them. The key layer
         // reads each variant through this one reader, so a tag under an adapter of a caller selects
         // the variant by the stored literal

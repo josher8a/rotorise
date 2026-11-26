@@ -118,7 +118,7 @@ export const nullable = <
 ): AttributeCodec<T | null, A | Attribute<'NULL'>> &
     TermMark<['union', [Tm, BaseT<'null'>]]> &
     Free<F> => {
-    const t = termOf(inner as unknown as AnyCodec)
+    const t = termOf(inner)
     const owns = ownsNullOf(t)
     // **An unbound `ref` leaves the answer open**: the codec is the union with `NULL`, an open
     // fragment, and the scope that binds the names checks the union on its closed copy. A `ref`
@@ -468,7 +468,7 @@ export const dissect = <T extends Record<string, unknown>>(
     // **Each option names an object node, read through its `ref`s.** An option that names a `ref`
     // that no scope binds is read by the scope, where the index reads the node of the closed copy
     for (const option of options) {
-        if (!indexable(option as unknown as AnyCodec)) {
+        if (!indexable(option as AnyCodec)) {
             throw new CodecError(
                 'every option must be an object codec, and one of them is not',
             )
@@ -483,9 +483,7 @@ export const dissect = <T extends Record<string, unknown>>(
      * is a lookup this builder keeps for `encodePartial` and the item path — a host
      * index, carried by no term.
      */
-    const memberTerms = options.map((option) =>
-        termOf(option as unknown as AnyCodec),
-    )
+    const memberTerms = options.map((option) => termOf(option as AnyCodec))
     const unionDef = { kind: 'union', options: memberTerms, keys: ks } as const
     // **A tag that a member reads through an unbound `ref` is indexed by the scope**, on the closed
     // copy, because the index reads the literal of each tag through the `ref`
@@ -522,10 +520,7 @@ export const optionOf = (
     return asObject
         ? {
               ...base,
-              item: asObject as unknown as ItemCodec<
-                  Record<string, unknown>,
-                  unknown
-              >,
+              item: asObject as ItemCodec<Record<string, unknown>, unknown>,
           }
         : base
 }
@@ -861,10 +856,7 @@ export const discriminatedUnion = <
     // one cast, at the one place where a runtime table meets a type computed from the specs: the
     // builder is written once over `readonly string[]`, and {@link Dissection} is what that builder
     // produces read at the arity the caller wrote
-    dissect(
-        typeof key === 'string' ? [key] : key,
-        options as readonly AnyObjectCodec[],
-    ) as never
+    dissect(typeof key === 'string' ? [key] : key, options) as never
 
 /**
  * A union told apart by what each option holds, with no tag to switch on — `zod`'s `union`.
@@ -891,10 +883,7 @@ export const discriminatedUnion = <
 export const union = <const Options extends readonly AnyCodec[]>(
     options: Options,
 ): UnionCodec<DerivedUnion<Options>, Options> => {
-    return joined(options) as unknown as UnionCodec<
-        DerivedUnion<Options>,
-        Options
-    >
+    return joined(options) as UnionCodec<DerivedUnion<Options>, Options>
 }
 
 /**
@@ -964,7 +953,7 @@ export const unionOf = (
         if (hit?.item) {
             const direct = (
                 hit.item as ItemCodec<Record<string, unknown>, unknown>
-            ).decode(item) as Result<T>
+            ).decode(item)
             if (!failed(direct)) return direct
         }
         return only(
@@ -973,14 +962,14 @@ export const unionOf = (
             (option) =>
                 (
                     option.item as ItemCodec<Record<string, unknown>, unknown>
-                ).decode(item) as Result<T>,
+                ).decode(item),
         )
     }
 
     const writeItem = (item: T): Result<AttributeMap> => {
         const open = openRefusal(declared)
         if (open) return open
-        const names = namesOf(item as Record<string, unknown>)
+        const names = namesOf(item)
         const { onlyAdmitting, naming } = resolution()
         return onlyAdmitting(
             () => true,
@@ -989,7 +978,7 @@ export const unionOf = (
             (option) =>
                 (
                     option.item as ItemCodec<Record<string, unknown>, unknown>
-                ).encode(item as Record<string, unknown>),
+                ).encode(item),
         )
     }
 

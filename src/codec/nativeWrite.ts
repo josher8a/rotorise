@@ -35,10 +35,7 @@ const BINARY = new Set([
 ])
 
 const isBinaryValue = (value: unknown): boolean =>
-    BINARY.has(
-        (value as { constructor?: { name?: string } })?.constructor
-            ?.name as string,
-    )
+    BINARY.has(value?.constructor?.name as string)
 
 /**
  * The refusal of a number outside the safe range, or `undefined`. `shown` is the number as the SDK
@@ -164,8 +161,7 @@ const setMember = (
     write: (value: number | bigint, ranged?: boolean) => Result<DynamoNumber>,
     options: native.Options,
 ): Result<unknown> => {
-    const named = (member as { constructor?: { name?: string } })?.constructor
-        ?.name
+    const named = member?.constructor?.name
     const primitive =
         named === 'Number' || named === 'String'
             ? (member as number | string).valueOf()
@@ -252,8 +248,7 @@ export const toCanonical = (
         )
     }
 
-    const named = (value as { constructor?: { name?: string } })?.constructor
-        ?.name
+    const named = value?.constructor?.name
     if (named === 'Set') {
         const members = options.removeUndefinedValues
             ? [...(value as ReadonlySet<unknown>)].filter(
@@ -295,9 +290,7 @@ export const toCanonical = (
     // the SDK tests `!data.constructor`, so a value whose constructor is a string or a nameless class
     // is no map unless `convertClassInstanceToMap` is set
     const isPlain =
-        named === 'Object' ||
-        (!(value as { constructor?: unknown }).constructor &&
-            typeof value === 'object')
+        named === 'Object' || (!value.constructor && typeof value === 'object')
     if (isPlain) {
         if (tooDeeplyNested(enclosing)) return value
         // `for…in`, as the SDK does: enumerable *and* inherited, which is what makes
@@ -318,7 +311,7 @@ export const toCanonical = (
     }
     // a boxed primitive is its primitive, by `constructor.name`, as the SDK reads it
     if (typeof value === 'boolean' || named === 'Boolean') {
-        return (value as boolean | boolean).valueOf()
+        return value.valueOf()
     }
     if (typeof value === 'number' || typeof value === 'bigint') {
         return write(value)

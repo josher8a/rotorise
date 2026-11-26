@@ -18,7 +18,6 @@ import { setOwn } from './result'
 import type {
     Body,
     Field,
-    LiteralValue,
     NameForm,
     ObjectTermOf,
     Order,
@@ -852,9 +851,7 @@ export const joinParts = (t: Term): Term[] => {
                 Object.entries(t.body.fields).map(([name, field]) => {
                     const { absent, present } = presenceParts(field)
                     return [
-                        ...(absent === undefined
-                            ? []
-                            : [[name, absent] as [string, Field]]),
+                        ...(absent === undefined ? [] : [[name, absent]]),
                         ...joinParts(present.t).map((part): [string, Field] => [
                             name,
                             { ...present, t: part },
@@ -918,10 +915,8 @@ export const fitsNode = (
                 { required: true, ...mine },
                 { required: true, ...pinned },
             ) &&
-            (mine.alts.ls as readonly LiteralValue[]).every((one) =>
-                (pinned.alts.ls as readonly LiteralValue[]).some((tag) =>
-                    sameLiteral(one, tag),
-                ),
+            mine.alts.ls.every((one) =>
+                pinned.alts.ls.some((tag) => sameLiteral(one, tag)),
             )
         )
     }

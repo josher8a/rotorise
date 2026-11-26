@@ -725,7 +725,7 @@ const valuesOf = (
             values.push({ keeps: false, text })
             continue
         }
-        const back = run.decode(stored as never)
+        const back = run.decode(stored)
         if (!failed(back) && isDeepStrictEqual(back, value))
             values.push({ keeps: true, text })
     }
@@ -825,9 +825,8 @@ type Pattern = {
     readonly codec: AnyCodec
 }
 
-// one cast each, where a constructor takes a tuple of literals and the root gives a list at run time
-const stringOf = string as unknown as (...values: readonly string[]) => AnyCodec
-const booleanOf = boolean as unknown as (value: boolean) => AnyCodec
+const stringOf = string
+const booleanOf = boolean
 
 /**
  * **The patterns that the options of a root suggest.** Each literal that an option holds at a name
@@ -1320,10 +1319,7 @@ const foreignRoot = (
     return { root, declarations: p.declarations, checks: b }
 }
 
-// one cast, where the run time takes erased factors and `meet` takes the tuple that it validates
-const meetOfCodecs = meet as unknown as (
-    ...factors: readonly AnyCodec[]
-) => AnyCodec
+const meetOfCodecs = meet
 
 /** The run-time meet, or nothing where the run time refuses the factors. */
 const met = (pair: MeetPair): AnyCodec | undefined => {

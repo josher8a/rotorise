@@ -606,16 +606,12 @@ const SHAPES: readonly {
         // the form that DynamoDB normalises away, so a decode that returns it is a read that cannot be written back
         what: 'a denormalised N',
         to: (v) =>
-            memberOf(v) === 'N'
-                ? { value: { N: `${v.N as string}0` } }
-                : undefined,
+            memberOf(v) === 'N' ? { value: { N: `${v.N}0` } } : undefined,
     },
     {
         what: 'an N with a leading zero',
         to: (v) =>
-            memberOf(v) === 'N'
-                ? { value: { N: `0${v.N as string}` } }
-                : undefined,
+            memberOf(v) === 'N' ? { value: { N: `0${v.N}` } } : undefined,
     },
     {
         what: 'an N past the magnitude DynamoDB stores',
@@ -636,8 +632,7 @@ const SHAPES: readonly {
     },
     {
         what: 'a string where a number was stored',
-        to: (v) =>
-            memberOf(v) === 'N' ? { value: { S: v.N as string } } : undefined,
+        to: (v) => (memberOf(v) === 'N' ? { value: { S: v.N } } : undefined),
     },
     {
         // two numerals that read to one value are two members that a set holds as one
@@ -1124,9 +1119,7 @@ const shrinkUnknown = (value: unknown): readonly unknown[] => {
         // never to empty: DynamoDB refuses an empty set, so it is not a smaller counterexample
         return [
             null,
-            ...shrinkSequence([...value], undefined, 1).map(
-                (x) => new Set(x as unknown[]),
-            ),
+            ...shrinkSequence([...value], undefined, 1).map((x) => new Set(x)),
         ]
     }
     if (typeof value === 'object') {
@@ -1462,10 +1455,7 @@ const someSet = (
     const byStored = new Map<string, unknown>()
     for (let i = 0; i < count; i++) {
         const value = one()
-        const written = element.unsafeEncode(value as never) as Record<
-            string,
-            unknown
-        >
+        const written = element.unsafeEncode(value as never)
         byStored.set(String(member ? written[member] : written), value)
     }
     return new Set([...byStored.keys()].sort().map((key) => byStored.get(key)))
@@ -1535,7 +1525,7 @@ export const shrinkOf = (
                 [...(value as ReadonlySet<unknown>)],
                 shrinkAt(codecOfTerm(def.elem)),
                 1,
-            ).map((shrunk) => new Set(shrunk as readonly unknown[]))
+            ).map((shrunk) => new Set(shrunk))
         case 'list':
             // with no declared position the length is free, so the sequence shrinks
             if (def.pre.length === 0 && def.suf.length === 0 && def.spread)
@@ -1858,7 +1848,7 @@ export const checkEquivalent = <T>(
 ): void => {
     const { count, seed, equals, discard, next } = resolved<T>(options)
     for (let i = 0; i < count; i++) {
-        const { value, throughRead } = next(a as unknown as AnyCodec)
+        const { value, throughRead } = next(a)
 
         const written = a.encode(value)
         const alsoWritten = b.encode(value)

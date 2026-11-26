@@ -1025,7 +1025,7 @@ export function at(
     // keeps its location. The read casts, because no type names the slot
     const prior = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
     // the walk reads the item codec as one codec among those it carries, which it is at run time
-    const root = prior?.root ?? (codec as unknown as AnyCodec)
+    const root = prior?.root ?? (codec as AnyCodec)
     const segments = typeof path === 'string' ? parsePath(path) : path
     // the tuple form carries each name as it is, so the string form's rule is read here too
     const empty = segments.findIndex(
@@ -1057,7 +1057,7 @@ export function narrow(
 ): unknown {
     // read through a cast, for the reason at {@link at}: a spread copy must keep its location
     const prior = (located as { readonly [locatedSlot]?: Located })[locatedSlot]
-    const root = prior?.root ?? (located as unknown as AnyCodec)
+    const root = prior?.root ?? (located as AnyCodec)
     return locate(root, [...(prior?.steps ?? []), clauseOf(pattern)], prior)
 }
 
@@ -1218,7 +1218,7 @@ export const locate = (
         // and the codec of the kept options refuses a value of a dropped option. The root of an item
         // is an item reading, which the kept options read as a row
         if (segments.length === 0) {
-            const [only, ...others] = frontier as [AnyCodec, ...AnyCodec[]]
+            const [only, ...others] = frontier
             if (frontier.length === 1 && only === root) return root
             // more than one option means that the root is a union, and a union carries the constructor
             const build = unionBuilderOf(root)
@@ -1226,10 +1226,10 @@ export const locate = (
                 throw new CodecError(
                     'broken invariant: a root with more than one option is a union, and each codec of a union carries the constructor of a union. A codec of a union that no constructor of union and no route of a bare term built has no slot',
                 )
-            const kept = others.length === 0 ? only : build?.(frontier as never)
+            const kept = others.length === 0 ? only : build?.(frontier)
             // the walk carries each codec as an `AnyCodec`, and the codec of the kept options is
             // one, which it is at run time as the root is
-            return (whole ? item(kept as never) : kept) as unknown as AnyCodec
+            return (whole ? item(kept as never) : kept) as AnyCodec
         }
         const [first, ...ambiguous] = frontier as [AnyCodec, ...AnyCodec[]]
         // the item root is no level, and each segment past the first crosses one L or M. Any

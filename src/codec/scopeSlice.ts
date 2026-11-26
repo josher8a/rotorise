@@ -1190,7 +1190,7 @@ export const sliceSpec = (
         for (const summand of summands) {
             const one = objectNamed(summand) as ObjectItem
             const here: Piece = {
-                spec: one.spec as Record<string, ObjectSlot>,
+                spec: one.spec,
                 rest: one.rest,
             }
             original.push(here)
@@ -1323,16 +1323,11 @@ export const sliceSpec = (
             if (same && presence === undefined) continue
             changed = true
             if (presence !== undefined && (same || list.length === 0)) {
-                const held = same ? presence.inner : (never as AnyCodec)
+                const held = same ? presence.inner : never
                 setOwn(
                     spec,
                     name,
-                    (list === entry.keep
-                        ? held
-                        : underMark(
-                              presence.mark,
-                              held,
-                          )) as unknown as ObjectSlot,
+                    list === entry.keep ? held : underMark(presence.mark, held),
                 )
                 continue
             }
@@ -1341,23 +1336,17 @@ export const sliceSpec = (
                     `'${name}' holds an object with an open key entry, and a pattern splits declared names only`,
                 )
             }
-            const codecs = list.map(
-                (one) =>
-                    objectFromMap(one.spec, undefined) as unknown as AnyCodec,
-            )
+            const codecs = list.map((one) => objectFromMap(one.spec, undefined))
             const codec = (
-                codecs.length === 1 ? codecs[0] : union(codecs as never)
+                codecs.length === 1 ? codecs[0] : union(codecs)
             ) as AnyCodec
             if (entry.at === undefined) {
                 setOwn(
                     spec,
                     name,
-                    (presence === undefined || list === entry.keep
+                    presence === undefined || list === entry.keep
                         ? codec
-                        : underMark(
-                              presence.mark,
-                              codec,
-                          )) as unknown as ObjectSlot,
+                        : underMark(presence.mark, codec),
                 )
                 continue
             }
@@ -1366,9 +1355,7 @@ export const sliceSpec = (
             positions.set(name, at)
         }
         for (const [name, at] of positions) {
-            const declared = resolvedTerm(
-                termOf(piece.spec[name] as unknown as AnyCodec),
-            )
+            const declared = resolvedTerm(termOf(piece.spec[name] as AnyCodec))
             if (declared?.kind !== 'list') {
                 throw new Error(
                     `'${name}' was split by position and holds no list`,
@@ -1381,7 +1368,7 @@ export const sliceSpec = (
                     kind: 'list',
                     pre: declared.pre.map((one, i) => at.get(i) ?? one),
                     suf: [],
-                }) as unknown as ObjectSlot,
+                }),
             )
         }
         return changed ? { spec, rest: piece.rest } : piece
@@ -1425,7 +1412,7 @@ export const picked = <O>(
     if (why) throw new CodecError(why)
     const wanted = opened(written)
     return options.flatMap((option) => {
-        const term = termOf(option as unknown as AnyCodec)
+        const term = termOf(option as AnyCodec)
         // an option that fits whole has parts that all fit, so it stays whole and no part remains
         if (below(term, wanted, 'value')) return keep ? [option] : []
         const item = objectNamed(term)
@@ -1434,7 +1421,7 @@ export const picked = <O>(
         if (!item || node?.kind !== 'object') return keep ? [] : [option]
         const sliced = coverOf(
             {
-                spec: item.spec as Record<string, ObjectSlot>,
+                spec: item.spec,
                 rest: item.rest,
             },
             node,
@@ -1453,7 +1440,7 @@ export const picked = <O>(
                     'a member has an open key entry, and a pattern splits declared names only',
                 )
             }
-            return objectFromMap(one.spec, undefined) as unknown as O
+            return objectFromMap(one.spec, undefined) as O
         })
     })
 }
@@ -1472,7 +1459,7 @@ export const slicedUnion = (
     keep: boolean,
 ): unknown => {
     const kept = picked(options, pattern, keep, true)
-    return kept.length === 0 ? never : union(kept as never)
+    return kept.length === 0 ? never : union(kept)
 }
 
 /**

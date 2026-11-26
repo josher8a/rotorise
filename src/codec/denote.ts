@@ -17,7 +17,7 @@
  * key stable rather than probable.
  */
 
-import type { AttributeMap, AttributeName, AttributeValue } from './attribute'
+import type { AttributeName, AttributeValue } from './attribute'
 import {
     carrying,
     DynamoNumber,
@@ -390,7 +390,7 @@ export const groundCodec = (
 ): Pair => ({
     encode: (value) =>
         shapeOf(value) === shape
-            ? carrying(member, value as never)
+            ? carrying(member, value)
             : new CodecError(
                   `${describeShape(value)} is not ${noun}, and \`${shape}\` writes ${writes} — a codec's input is typed, so this is a value that reached \`encode\` past its type`,
               ),
@@ -569,10 +569,7 @@ export const bodySem = (
                         `'${name}' is not an attribute this codec declares; the schema and the data have drifted apart`,
                     )
                 }
-                const read = restPair.decode(
-                    item[name] as AttributeValue,
-                    enclosing,
-                )
+                const read = restPair.decode(item[name], enclosing)
                 if (failed(read)) return read.under(name)
                 setOwn(out, name, read)
             }
@@ -781,7 +778,7 @@ const storedKeyAt = (
 ): string | undefined => {
     let at: AttributeValue | undefined = attribute
     for (const name of path) {
-        at = (at as { readonly M?: AttributeMap }).M?.[name]
+        at = at.M?.[name]
         if (at === undefined) return undefined
     }
     // a payload of another type reads no key, and the attempt that follows refuses the attribute
@@ -961,14 +958,11 @@ export const altSem = (
     const read = (attribute: AttributeValue, enclosing: number): Result<T> => {
         const hit = named(attribute)
         if (hit !== undefined) {
-            const direct = hit.pair.decode(attribute, enclosing) as Result<T>
+            const direct = hit.pair.decode(attribute, enclosing)
             if (!failed(direct)) return direct
         }
         const member = memberOf(attribute)
-        const carriedMap =
-            member === 'M'
-                ? (attribute as { readonly M: AttributeMap }).M
-                : undefined
+        const carriedMap = member === 'M' ? attribute.M : undefined
         const names = carriedMap ? namesOf(carriedMap) : undefined
         return only(
             (option) =>
@@ -976,7 +970,7 @@ export const altSem = (
                 member === undefined ||
                 option.member === member,
             naming('this attribute', names),
-            (option) => option.pair.decode(attribute, enclosing) as Result<T>,
+            (option) => option.pair.decode(attribute, enclosing),
         )
     }
     const write = (
@@ -989,11 +983,11 @@ export const altSem = (
             naming('this value', held ? namesOf(held) : undefined),
             value,
             (option) => option.pair.encode(value as never, enclosing),
-        ) as Result<AttributeValue>
+        )
     }
 
     return {
-        pair: { encode: write as Pair['encode'], decode: read },
+        pair: { encode: write, decode: read },
         only,
         onlyAdmitting,
         naming,
@@ -1033,7 +1027,7 @@ export const byTagSem = <V>(
         // Where every key matches some member and no member carries them all, the combination is
         // what failed, and that is what the message says
         for (const name of ks) {
-            const carried = members.map(([one]) => one[name] as string)
+            const carried = members.map(([one]) => one[name])
             if (!carried.includes(assignment[name] as string)) {
                 const expected = [...new Set(carried)]
                     .map((tag) => `'${tag}'`)
@@ -1385,10 +1379,10 @@ export const literalPair = (def: Literal): Pair => {
      * and `===` says is not.
      */
     const member = (value: unknown): LiteralValue | undefined =>
-        allowed.find((one) => sameLiteral(one, value as LiteralValue))
+        allowed.find((one) => sameLiteral(one, value))
     const refuse = (value: unknown) =>
         new CodecError(
-            `${namedLiteral(value as LiteralValue)} is not one of ${allowed
+            `${namedLiteral(value)} is not one of ${allowed
                 .map(namedLiteral)
                 .join(', ')}`,
         )
@@ -1421,7 +1415,7 @@ export const literalsPair = (
     const values = options.map((one) => one.v)
     const ground = groundOf(base)
     const member = (value: unknown): LiteralValue | undefined =>
-        values.find((one) => sameLiteral(one, value as LiteralValue))
+        values.find((one) => sameLiteral(one, value))
     const listed = values
         .map((one) => `${literalForm(base, undefined)}(${namedLiteral(one)})`)
         .join(' | ')
@@ -1437,10 +1431,7 @@ export const literalsPair = (
         },
         decode: (attribute, enclosing) => {
             const carried = memberOf(attribute)
-            const map =
-                carried === 'M'
-                    ? (attribute as { readonly M: AttributeMap }).M
-                    : undefined
+            const map = carried === 'M' ? attribute.M : undefined
             const refused = () =>
                 unmatchedAmong(
                     naming('this attribute', map ? namesOf(map) : undefined),
@@ -1535,10 +1526,7 @@ export const setPair = (
     const carried = (value: unknown): Result<string | Uint8Array> =>
         andThen(
             inner.encode(value as never),
-            (written) =>
-                (written as Record<string, unknown>)[member] as
-                    | string
-                    | Uint8Array,
+            (written) => written[member] as string | Uint8Array,
         )
     return {
         encode: (value: unknown) =>
@@ -1563,7 +1551,7 @@ export const setPair = (
                         return setFaultError(setMember, fault)
                     }
                     return every(members, (raw) =>
-                        inner.decode(carrying(member, raw as never)),
+                        inner.decode(carrying(member, raw)),
                     )
                 }),
                 (read) => {
@@ -1793,7 +1781,7 @@ export const denote = (def: Term): Pair => {
  * a `mark`. The types refuse each of these calls, so the caller is one that arrived past a cast.
  */
 export const defOf = (declared: ObjectSlot): Term | Field => {
-    const def = (declared as { readonly def?: unknown } | null | undefined)?.def
+    const def = declared?.def
     if (
         typeof def !== 'object' ||
         def === null ||
@@ -2788,7 +2776,7 @@ export const readsBack = (
     attribute: AttributeValue,
 ): boolean => {
     try {
-        return !failed(codec.decode(attribute as never))
+        return !failed(codec.decode(attribute))
     } catch {
         return false
     }

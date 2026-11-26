@@ -221,13 +221,13 @@ export const held = <
         >
     > &
     Free<FreeOf<C> | FreeOf<O>> => {
-    const term = heldTerm(termOf(inner as unknown as AnyCodec), outer, adapt)
+    const term = heldTerm(termOf(inner), outer, adapt)
     // the judgment and the pair come from the kind alone, so a bundle of `held` holds no switch
     // over the other kinds
     judgedBy(term, judgeWall(term))
     return codecOfPair<HeldOf<O>, AttributeOf<C>>(
         term,
-        heldPair(pairOfCodec(inner as unknown as AnyCodec), term),
+        heldPair(pairOfCodec(inner), term),
     )
 }
 

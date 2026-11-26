@@ -40,7 +40,6 @@ import type {
     LitT,
     NumText,
     NumTexts,
-    Rng,
     Term,
     TermMark,
     TermOf,
@@ -144,7 +143,7 @@ export type StringCodec = AttributeCodec<string, Attribute<'S'>> &
 export const string: StringCodec = /* @__PURE__ */ codecOfGround(
     { kind: 'string' },
     /* @__PURE__ */ groundOf('string'),
-) as unknown as StringCodec
+) as StringCodec
 
 /**
  * **`N` itself, and the one native numeric term.** DynamoDB's own number, held as
@@ -291,7 +290,7 @@ export type BooleanCodec = AttributeCodec<boolean, Attribute<'BOOL'>> &
 export const boolean: BooleanCodec = /* @__PURE__ */ codecOfGround(
     { kind: 'boolean' },
     /* @__PURE__ */ groundOf('boolean'),
-) as unknown as BooleanCodec
+) as BooleanCodec
 
 /**
  * The `NULL` point: the one value `null`, stored as `⟨NULL, ∗⟩`.
@@ -315,7 +314,7 @@ export const nullValue: AttributeCodec<null, Attribute<'NULL'>> &
     TermMark<BaseT<'null'>> = /* @__PURE__ */ codecOfPair(
     { kind: 'null' },
     nullPair,
-) as never
+)
 
 /**
  * Binary, as `B`.
@@ -341,7 +340,7 @@ export type BinaryCodec = AttributeCodec<Uint8Array, Attribute<'B'>> &
 export const binary: BinaryCodec = /* @__PURE__ */ codecOfGround(
     { kind: 'binary' },
     /* @__PURE__ */ groundOf('binary'),
-) as unknown as BinaryCodec
+) as BinaryCodec
 
 // ── narrowing ───────────────────────────────────────────────────────
 
@@ -413,23 +412,18 @@ export function refine<Wide, Narrow extends Wide, A extends AttributeValue>(
     // `amount`, where the predicate that produces a `Price` already lives.
     const term: Extract<Term, { kind: 'refine' }> = {
         kind: 'refine',
-        inner: termOf(inner as unknown as AnyCodec),
+        inner: termOf(inner),
         q: {
-            is: is as (value: never) => boolean,
+            is: is,
             what,
-            arbitrary: options.arbitrary as
-                | ((rng: Rng, size: number) => unknown)
-                | undefined,
+            arbitrary: options.arbitrary,
             onThinSearch: options.onThinSearch,
         },
     }
     // the judgment and the pair come from the kind alone, so a bundle of `refine` holds no switch
     // over the other kinds
     judgedBy(term, undefined)
-    return codecOfPair(
-        term,
-        refinePair(pairOfCodec(inner as unknown as AnyCodec), term.q),
-    ) as unknown as AttributeCodec<Narrow, A>
+    return codecOfPair(term, refinePair(pairOfCodec(inner), term.q))
 }
 
 /**
@@ -469,12 +463,12 @@ export const fill = <const C extends AnyCodec>(
     // value the item cannot be written back as — (C) broken at the read, with the refusal arriving
     // on the next write instead of at the declaration that caused it. Decidable from the
     // declaration alone, which is why the fill value is a value and not a thunk
-    const filledCodec = inner as unknown as AnyCodec
+    const filledCodec = inner
     // **A fill value that the codec writes through an unbound `ref` is checked by the scope**, on the
     // closed copy, because the write reads through the ref
     if (unboundRefs([termOf(filledCodec)]).size === 0)
         checkFill(filledCodec, value)
-    const attribute = inner as unknown as AttributeCodec<Decoded<C>>
+    const attribute = inner
     return {
         codec: attribute,
         def: { mark: 'fill', t: termOf(inner), v: value },

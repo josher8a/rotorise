@@ -203,9 +203,7 @@ export const codecOfPair = <T, A extends AttributeValue>(
         pair,
         0,
     )
-    const made = (
-        call === undefined ? bare : Object.assign(call, bare)
-    ) as AttributeCodec<never, AttributeValue>
+    const made = call === undefined ? bare : Object.assign(call, bare)
     codecs.set(def, made)
     return made as unknown as AttributeCodec<T, A>
 }
@@ -214,12 +212,7 @@ export const codecOfPair = <T, A extends AttributeValue>(
 export const codecOfGround = <T, A extends AttributeValue>(
     def: Term & { readonly kind: 'string' | 'boolean' | 'binary' },
     pair: Pair,
-): AttributeCodec<T, A> =>
-    codecOfPair(
-        def,
-        pair,
-        literalCapability(def.kind) as (...allowed: never[]) => AnyCodec,
-    )
+): AttributeCodec<T, A> => codecOfPair(def, pair, literalCapability(def.kind))
 
 /**
  * The literal call that a term has, or nothing. Each call is a function of its own: the carrier
@@ -233,19 +226,15 @@ export const literalCallOf = (
         case 'string':
         case 'boolean':
         case 'binary':
-            return literalCapability(term.kind) as (
-                ...allowed: never[]
-            ) => AnyCodec
+            return literalCapability(term.kind)
         case 'number':
-            return literalCapability('number', 'dynamoNumber') as (
-                ...allowed: never[]
-            ) => AnyCodec
+            return literalCapability('number', 'dynamoNumber')
         case 'held':
             if (term.inner.kind !== 'number') return undefined
             if (term.via === 'decimalText' && term.outer.kind === 'string')
-                return (...allowed) => decimalCall(...(allowed as string[]))
+                return (...allowed) => decimalCall(...allowed)
             return term.via === 'float'
-                ? (...allowed) => numberCall(...(allowed as number[]))
+                ? (...allowed) => numberCall(...allowed)
                 : undefined
         default:
             return undefined
@@ -273,8 +262,8 @@ export const numericAdapter = <T>(
         kind: 'held',
         inner: termOf(inner),
         outer,
-        f: into as (value: never) => unknown,
-        g: outOf as (held: never) => unknown,
+        f: into,
+        g: outOf,
         ...(via ? { via } : {}),
     }
     // the judgment and the pair come from the kind alone, so a bundle of a numeric adapter holds
@@ -310,7 +299,7 @@ export const storedOnly = (value: string): Result<DynamoNumber> =>
 export const decimalCall = (...allowed: readonly string[]) => {
     const stored = allowed.map((one) => orThrow(storedOnly(one)))
     return numericAdapter<string>(
-        literalCapability('number', 'decimal')(...stored) as AnyCodec,
+        literalCapability('number', 'decimal')(...stored),
         // the held side is the texts the adapter hands the caller, so the view is exact
         literalTermOf(
             'string',
@@ -388,9 +377,7 @@ export const asJsNumber = (held: DynamoNumber): Result<number> => {
 /** The literal call of {@link number}: each alternative is refused at the caller's level first. */
 export const numberCall = (...allowed: readonly number[]) =>
     numericAdapter<number>(
-        literalCapability('number')(
-            ...numericAlternatives(allowed),
-        ) as AnyCodec,
+        literalCapability('number')(...numericAlternatives(allowed)),
         { kind: 'number' },
         asFloat,
         asJsNumber,

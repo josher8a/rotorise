@@ -63,13 +63,7 @@ import {
 import { codecOfTerm } from './capabilities'
 import type { ClausePattern } from './clause'
 import { clauseOf } from './clause'
-import type {
-    AnyCodec,
-    LiteralValue,
-    ObjectSlot,
-    Precondition,
-    Refinement,
-} from './codec'
+import type { AnyCodec, ObjectSlot, Precondition, Refinement } from './codec'
 import {
     at,
     exclude,
@@ -266,21 +260,19 @@ export const leanValueOf = (value: unknown, at = 'value'): string => {
         const first = members[0]
         if (typeof first === 'string') {
             return `Value.strSet (${leanNonEmptySet(
-                members.map((m) => leanString(m as string)),
+                members.map((m) => leanString(m)),
                 at,
             )})`
         }
         if (first instanceof Uint8Array) {
             return `Value.binSet (${leanNonEmptySet(
-                members.map((m) => leanBytes(m as Uint8Array)),
+                members.map((m) => leanBytes(m)),
                 at,
             )})`
         }
         if (first instanceof DynamoNumber) {
             return `Value.numSet (${leanNonEmptySet(
-                members.map(
-                    (m) => `(${leanNumeral((m as DynamoNumber).toString())})`,
-                ),
+                members.map((m) => `(${leanNumeral(m.toString())})`),
                 at,
             )})`
         }
@@ -1394,7 +1386,7 @@ export const separationForm = ({
     )
     let declared: AnyCodec | undefined
     try {
-        declared = union([left, right] as never)
+        declared = union([left, right])
     } catch {
         declared = undefined
     }
@@ -2260,7 +2252,7 @@ export const legacyReadOf = (
     const log = new Map<unknown, [AttributeValue, unknown][]>()
     let read: unknown
     try {
-        read = codecOfTerm(recording(def, log)).decode(attribute as never)
+        read = codecOfTerm(recording(def, log)).decode(attribute)
     } catch (thrown) {
         read = new CodecError(String(thrown))
     }
@@ -2366,9 +2358,7 @@ const leanClause = (entries: readonly ClauseEntry[], at: string): string =>
         entries.map(([name, word, alts]) => [
             leanString(name),
             `((${word}, ⟨.${alts.base}, ${leanNonEmptySet(
-                (alts.ls as readonly LiteralValue[]).map((one) =>
-                    leanAlternative(alts.base, one),
-                ),
+                alts.ls.map((one) => leanAlternative(alts.base, one)),
                 at,
             )}⟩) : Pin)`,
         ]),
@@ -2616,7 +2606,7 @@ export const hostAt = (codec: AnyCodec, steps: readonly PathStep[]): HostAt => {
         if (!(error instanceof CodecError)) throw error
         return { kind: error.kind === 'vacant' ? 'vacant' : 'refused' }
     }
-    if (reachable(item.def as Term).has(reached.def as Term))
+    if (reachable(item.def).has(reached.def))
         return {
             kind: 'resolved',
             codec: reached,
@@ -2893,7 +2883,7 @@ export const leanPath = (
         readers: new Map(),
     }
     const item = wrapperOf(codec)
-    const def = item.def as Term
+    const def = item.def
     // a closed codec prints one time per theorem, as a `let` that the rows name, unless the file holds it as a `def`
     const closedLets = new Map<string, string>()
     const mentionsBound = (printed: string): boolean =>
@@ -2934,7 +2924,7 @@ export const leanPath = (
         frameText: (w: GraphWalked) => string,
     ): string => {
         if (decided.kind !== 'resolved') return `.${decided.kind}`
-        const node = underRefs(decided.codec.def as Term)
+        const node = underRefs(decided.codec.def)
         const walked = frontier() ?? []
         // a frame holds the resolved node where it prints as the node prints
         const same = (t: Term): boolean => {
@@ -2988,7 +2978,7 @@ export const leanPath = (
         }
         const clause = (steps[k] as Exclude<PathStep, string | number>).narrow
         const rest = steps.slice(k + 1) as readonly (string | number)[]
-        const options = underRefs(before.codec.def as Term)
+        const options = underRefs(before.codec.def)
         if (options?.kind !== 'union')
             return refuse(
                 at,
@@ -3235,7 +3225,7 @@ export const readVerdictOf = (
             "a caller's predicate below the top: the emitter computes the value that the predicate reads at the top only",
         )
     }
-    const read: unknown = codecOfTerm(inner.term).decode(attribute as never)
+    const read: unknown = codecOfTerm(inner.term).decode(attribute)
     if (failed(read)) return { decodes, term, quantified: true }
     return {
         decodes,
@@ -3275,7 +3265,7 @@ export const readVerdictOf = (
  */
 export const leanReadVector = ({ name, codec, value }: Vector): string => {
     const attribute = codec.unsafeEncode(value as never)
-    const out = codec.decode(attribute as never)
+    const out = codec.decode(attribute)
     if (failed(out)) {
         return refuse(
             name,
@@ -3305,7 +3295,7 @@ export const readVectorIsUnstatable = (
 ): 'no round trip' | undefined => {
     try {
         const attribute = one.codec.unsafeEncode(one.value as never)
-        const out = one.codec.decode(attribute as never)
+        const out = one.codec.decode(attribute)
         return failed(out) ? 'no round trip' : undefined
     } catch {
         return 'no round trip'
@@ -3394,9 +3384,7 @@ const writeOf = (
     | { readonly wrote: false; readonly written?: undefined } => {
     try {
         const out = u.encode(value as never)
-        return failed(out)
-            ? { wrote: false }
-            : { wrote: true, written: out as AttributeValue }
+        return failed(out) ? { wrote: false } : { wrote: true, written: out }
     } catch {
         return { wrote: false }
     }
@@ -3831,7 +3819,7 @@ export const resolutionRows = (
             }),
             ...reads.map((one) =>
                 read(one.name, one.union, one.attribute, () =>
-                    one.union.decode(one.attribute as never),
+                    one.union.decode(one.attribute),
                 ),
             ),
             ...items.map((one) =>
