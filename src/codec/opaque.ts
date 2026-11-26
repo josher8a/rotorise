@@ -16,20 +16,29 @@ import type {
 import type { AttributeCodec } from './build'
 import { codecOfTerm } from './capabilities'
 import type { OpaqueNumbers } from './denote'
-import { opaqueTerms } from './denote'
+import {
+    canonicalOpaqueTerm,
+    lossyOpaqueTerm,
+    refuseOpaqueTerm,
+} from './denote'
 import type { EveryButNumberT } from './prisms'
 import type { HeldT, TermMark } from './term'
 
 // ── the escape hatch ────────────────────────────────────────────────
 
-export const canonicalOpaque = codecOfTerm<unknown, AttributeValue>(
-    opaqueTerms.canonical,
-)
+export const canonicalOpaque = /* @__PURE__ */ codecOfTerm<
+    unknown,
+    AttributeValue
+>(canonicalOpaqueTerm)
 export const opaquePolicies: {
     readonly [Of in opaque.Numbers]: AttributeCodec<unknown>
 } = {
-    lossy: codecOfTerm<unknown, AttributeValue>(opaqueTerms.lossy),
-    refuse: codecOfTerm<unknown, AttributeValue>(opaqueTerms.refuse),
+    lossy: /* @__PURE__ */ codecOfTerm<unknown, AttributeValue>(
+        lossyOpaqueTerm,
+    ),
+    refuse: /* @__PURE__ */ codecOfTerm<unknown, AttributeValue>(
+        refuseOpaqueTerm,
+    ),
 }
 
 export function opaqueOf(): AttributeCodec<unknown> & TermMark<['opaq']>
@@ -69,7 +78,7 @@ export function opaqueOf(numbers?: opaque.Numbers): AttributeCodec<unknown> {
  */
 export const opaque: AttributeCodec<unknown> &
     TermMark<['opaq']> &
-    typeof opaqueOf = Object.assign(opaqueOf, canonicalOpaque)
+    typeof opaqueOf = /* @__PURE__ */ Object.assign(opaqueOf, canonicalOpaque)
 
 /**
  * The shapes, named as the runtime names them.

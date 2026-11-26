@@ -2441,14 +2441,17 @@ const policyTerm = (numbers: OpaqueNumbers): Term => {
  *
  * One object per term, so the codec cache and the identity of `def` hold across calls.
  */
+export const canonicalOpaqueTerm: Term = canonicalOpaque
+export const lossyOpaqueTerm: Term = /* @__PURE__ */ policyTerm('lossy')
+export const refuseOpaqueTerm: Term = /* @__PURE__ */ policyTerm('refuse')
 export const opaqueTerms: {
     readonly canonical: Term
     readonly lossy: Term
     readonly refuse: Term
 } = {
-    canonical: canonicalOpaque,
-    lossy: policyTerm('lossy'),
-    refuse: policyTerm('refuse'),
+    canonical: canonicalOpaqueTerm,
+    lossy: lossyOpaqueTerm,
+    refuse: refuseOpaqueTerm,
 }
 
 /**
