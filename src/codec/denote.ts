@@ -86,6 +86,7 @@ import {
     faultOfSet,
     namedLiteral,
     namesOf,
+    notAnAttribute,
     own,
     rendered,
     sameLiteral,
@@ -413,7 +414,9 @@ export const carriedCodec = <Payload, Written, Read>(
     },
     decode: (attribute, enclosing) =>
         andThen(expect(member, attribute), (carried) =>
-            outOf(carried as Read, enclosing + 1),
+            enclosing >= MAX_DOCUMENT_NESTING
+                ? storedTooDeep(enclosing)
+                : outOf(carried as Read, enclosing + 1),
         ),
 })
 
@@ -1609,7 +1612,8 @@ export const denote = (def: Term): Pair => {
             return {
                 encode: (value: unknown, enclosing) =>
                     encodeUnknown(value, enclosing),
-                decode: (attribute) => decodeUnknown(attribute),
+                decode: (attribute, enclosing) =>
+                    decodeUnknown(attribute, enclosing),
             }
         /**
          * The rule `(literal)`, and it is **not** a sixth ground term: `literalCodec k x` is
@@ -1930,6 +1934,12 @@ const pairOf = (def: Term): Pair => {
     return made
 }
 
+/** The refusal of a container read at the bound: the read side of {@link tooDeeplyNested}, because the decode returns a value that the encode writes back. */
+const storedTooDeep = (enclosing: number): CodecError =>
+    new CodecError(
+        `nesting reaches ${enclosing + 1} levels of list and map, and DynamoDB stores at most ${MAX_DOCUMENT_NESTING} — the store cannot hold this attribute, so the value read would not write back`,
+    )
+
 /**
  * Nothing, or the refusal of an attribute that nests past what DynamoDB stores.
  *
@@ -1943,22 +1953,14 @@ export const storedTooDeeply = (
     enclosing: number,
 ): CodecError | undefined => {
     // a list member or a map member that is no attribute reads no container, and no codec reads it
-    if (asRecord(attribute) === undefined) {
-        return new CodecError(
-            `a stored member is ${describeShape(attribute)}, and an attribute is a plain object with one member`,
-        )
-    }
+    if (asRecord(attribute) === undefined) return notAnAttribute(attribute)
     // a payload of another type is the refusal of `expect`, so this walk reads the two containers only
     const list = Array.isArray(attribute.L) ? attribute.L : undefined
     const map = asRecord(attribute.M) as
         | Readonly<Record<string, AttributeValue | undefined>>
         | undefined
     if (list === undefined && map === undefined) return undefined
-    if (enclosing >= MAX_DOCUMENT_NESTING) {
-        return new CodecError(
-            `nesting reaches ${enclosing + 1} levels of list and map, and DynamoDB stores at most ${MAX_DOCUMENT_NESTING} — the store cannot hold this attribute, so the value read would not write back`,
-        )
-    }
+    if (enclosing >= MAX_DOCUMENT_NESTING) return storedTooDeep(enclosing)
     if (list !== undefined) {
         for (const [index, one] of list.entries()) {
             const deep = storedTooDeeply(one, enclosing + 1)
@@ -2002,9 +2004,7 @@ export const codecAtLevel = <T, A extends AttributeValue>(
     } = {
         encode: (value) => openRefusal(def) ?? pair.encode(value, enclosing),
         decode: (attribute) =>
-            openRefusal(def) ??
-            storedTooDeeply(attribute, enclosing) ??
-            pair.decode(attribute, enclosing),
+            openRefusal(def) ?? pair.decode(attribute, enclosing),
     }
     return codec<T, A>({
         def,
@@ -2200,8 +2200,12 @@ const setFaultError = (family: SetFamily, fault: SetFault): CodecError =>
  */
 export const decodeWith = (
     read: (digits: string) => Result<unknown>,
-): ((attribute: AttributeValue) => Result<unknown>) => {
-    const walk = (attribute: AttributeValue): Result<unknown> => {
+): ((attribute: AttributeValue, enclosing?: number) => Result<unknown>) => {
+    const walk = (
+        attribute: AttributeValue,
+        enclosing: number,
+    ): Result<unknown> => {
+        if (asRecord(attribute) === undefined) return notAnAttribute(attribute)
         const member = memberOf(attribute)
         switch (member) {
             case 'NULL':
@@ -2229,17 +2233,23 @@ export const decodeWith = (
                 })
             case 'L':
                 return andThen(expect(member, attribute), (carried) =>
-                    every(carried, walk),
+                    enclosing >= MAX_DOCUMENT_NESTING
+                        ? storedTooDeep(enclosing)
+                        : every(carried, (one) => walk(one, enclosing + 1)),
                 )
             case 'M':
                 return andThen(expect(member, attribute), (carried) =>
-                    everyEntry(carried, walk),
+                    enclosing >= MAX_DOCUMENT_NESTING
+                        ? storedTooDeep(enclosing)
+                        : everyEntry(carried, (one) =>
+                              walk(one, enclosing + 1),
+                          ),
                 )
             default:
                 return new CodecError('an AttributeValue carrying no member')
         }
     }
-    return walk
+    return (attribute, enclosing = 0) => walk(attribute, enclosing)
 }
 
 /**

@@ -67,6 +67,16 @@ describe('a value that is no attribute is refused, where it sits in a list or a 
         refusal(() => opaque.decode({ L: [undefined] } as never))
     })
 
+    it('refuses a null list member of an untyped read, and names the position', () => {
+        const read = refusal(() => opaque.decode({ L: [null] } as never))
+        expect(read.message).toMatch(/at \[0\]: a stored member is null/)
+    })
+
+    it('refuses a null map member of an untyped read, and names the name', () => {
+        const read = refusal(() => opaque.decode({ M: { a: null } } as never))
+        expect(read.message).toMatch(/at a: a stored member is null/)
+    })
+
     it('refuses a null map member, and names the name', () => {
         const read = refusal(() =>
             item(object({ a: string })).decode({ a: null } as never),

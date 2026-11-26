@@ -933,6 +933,9 @@ export const unionOf = (
         if (open) return open
         const refused = itemRefusal(item)
         if (refused) return refused
+        // before the dispatch, because a union reports "no option admits this item" for the refusal
+        // of each option, and a member that is no attribute or nests too deep is a fact about the
+        // item and not about one option
         const deep = membersTooDeeply(item, 0)
         if (deep) return deep
         const names = namesOf(item)

@@ -20,15 +20,7 @@ import type {
 } from './build'
 import { codecOfTerm, setOf, slotsOf } from './capabilities'
 import type { ItemTerm } from './denote'
-import {
-    byTagSem,
-    guard,
-    itemSem,
-    judged,
-    membersOf,
-    membersTooDeeply,
-    termOf,
-} from './denote'
+import { byTagSem, guard, itemSem, judged, membersOf, termOf } from './denote'
 import type { AnyObjectCodec, ItemOf, KnownKeys, SpecsOf } from './derivedItem'
 import { keySets } from './derivedItem'
 import type { DecodeTerm, ScopeWallCycle } from './pathModel'
@@ -606,7 +598,6 @@ export const objectItem = (itemDef: ItemTerm): ObjectItem => {
         decode: (item) =>
             openRefusal(itemDef) ??
             itemRefusal(item) ??
-            membersTooDeeply(item, 0) ??
             (body.decode(
                 item as Readonly<Record<string, AttributeValue>>,
             ) as never),

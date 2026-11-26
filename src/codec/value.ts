@@ -212,6 +212,12 @@ const payloadOf: {
     BS: { holds: Array.isArray, noun: 'an array' },
 }
 
+/** The refusal of a stored member that is no attribute. A decode reads no member before it passes this. */
+export const notAnAttribute = (member: unknown): CodecError =>
+    new CodecError(
+        `a stored member is ${describeShape(member)}, and an attribute is a plain object with one member`,
+    )
+
 /**
  * The payload of the member `name` of an attribute. The attribute comes from outside the program,
  * so the read refuses an attribute that lacks the member and an attribute whose payload is no
@@ -221,6 +227,7 @@ export const expect = <K extends AttributeName>(
     name: K,
     attribute: AttributeValue,
 ): Result<AttributeCarriesOf<K>> => {
+    if (asRecord(attribute) === undefined) return notAnAttribute(attribute)
     const carried = (attribute as Record<string, unknown>)[name]
     if (carried === undefined) {
         return new CodecError(
