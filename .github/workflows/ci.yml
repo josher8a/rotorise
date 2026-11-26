@@ -81,11 +81,13 @@ jobs:
       - run: formal/scripts/gate.sh --full
       - name: leanchecker
         working-directory: formal
+        # A job checks one module and reads no other job, so the jobs run in parallel, one for each
+        # core of the runner. xargs runs every job, and fails the step when one job fails.
+        # `lake env` runs one time around xargs: parallel `lake env` processes failed with
+        # "bad file descriptor" while they read the build of mathlib.
         run: |
-          for f in $(find Calculus -name '*.lean' | sort); do
-            m="${f%.lean}"
-            lake env leanchecker "${m//\//.}"
-          done
+          find Calculus -name '*.lean' | sort | sed 's/\.lean$//; s#/#.#g' |
+            lake env xargs -P 4 -I{} sh -c 'leanchecker {} || { echo "leanchecker failed: {}"; exit 1; }'
 
   publish:
     needs: [check, test, build, gate]
