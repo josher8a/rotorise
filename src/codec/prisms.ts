@@ -472,11 +472,7 @@ export const fill = <const C extends AnyCodec>(
     return {
         codec: attribute,
         def: { mark: 'fill', t: termOf(inner), v: value },
-    } as unknown as MissingCodec<
-        Decoded<C>,
-        AttributeOf<C> & AttributeValue,
-        C
-    > &
+    } as MissingCodec<Decoded<C>, AttributeOf<C> & AttributeValue, C> &
         TermMark<['fill', TermOf<C>]> &
         Free<FreeOf<C>>
 }

@@ -472,7 +472,7 @@ const shapeOfAttribute = (value: AttributeValue | undefined): unknown => {
     if (value === undefined) return 'absent'
     const m = memberOf(value)
     if (m === 'SS' || m === 'NS' || m === 'BS') {
-        return [m, (value[m] as readonly unknown[]).length]
+        return [m, (value[m] ?? []).length]
     }
     if (m === 'L') return ['L', (value.L ?? []).length]
     if (m === 'M') return ['M', Object.keys(value.M ?? {}).sort()]

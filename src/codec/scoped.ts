@@ -698,7 +698,10 @@ const listRows = (
     suf: readonly At[],
 ): boolean =>
     alignedRows(fpre, fsp, fsuf, pre, sp, suf).every(([fs, us]) =>
-        fs.some((f, at) => at < us.length && f(us[at] as At)),
+        fs.some((f, at) => {
+            const u = us[at]
+            return u !== undefined && f(u)
+        }),
     )
 
 /**

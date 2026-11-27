@@ -53,13 +53,7 @@
  * does not state. A `DynamoNumber` is a numeral, and it emits as `Value.num`.
  */
 import type { AttributeValue, StoredItem } from './attribute'
-import {
-    carrying,
-    DynamoNumber,
-    isNumeral,
-    isStoredNumeral,
-    memberOf,
-} from './attribute'
+import { carrying, DynamoNumber, isNumeral, isStoredNumeral } from './attribute'
 import { codecOfTerm } from './capabilities'
 import type { ClausePattern } from './clause'
 import { clauseOf } from './clause'
@@ -377,52 +371,38 @@ export const leanAttrOf = (
     attribute: AttributeValue,
     at = 'attribute',
 ): string => {
-    const member = memberOf(attribute)
-    // `memberOf` chooses the member at run time, and a type cannot narrow an attribute by it, so each read below casts
-    switch (member) {
-        case 'S':
-            return `Attr.s ${leanString(attribute.S as string)}`
-        case 'N':
-            return `Attr.n (${leanNumeral(attribute.N as string)})`
-        case 'B':
-            return `Attr.b ${leanBytes(attribute.B as Uint8Array)}`
-        case 'BOOL':
+    // each case tests the member that it reads, and the test narrows the attribute to that member
+    switch (true) {
+        case attribute.S !== undefined:
+            return `Attr.s ${leanString(attribute.S)}`
+        case attribute.N !== undefined:
+            return `Attr.n (${leanNumeral(attribute.N)})`
+        case attribute.B !== undefined:
+            return `Attr.b ${leanBytes(attribute.B)}`
+        case attribute.BOOL !== undefined:
             return `Attr.bool ${attribute.BOOL}`
-        case 'NULL':
+        case attribute.NULL !== undefined:
             return 'Attr.null'
-        case 'SS':
-            return `Attr.ss (${leanNonEmptySet(
-                (attribute.SS as readonly string[]).map(leanString),
-                at,
-            )})`
-        case 'NS':
+        case attribute.SS !== undefined:
+            return `Attr.ss (${leanNonEmptySet(attribute.SS.map(leanString), at)})`
+        case attribute.NS !== undefined:
             return `Attr.ns (${leanNonEmptySet(
-                (attribute.NS as readonly string[]).map(
-                    (n) => `(${leanNumeral(n)})`,
-                ),
+                attribute.NS.map((n) => `(${leanNumeral(n)})`),
                 at,
             )})`
-        case 'BS':
-            return `Attr.bs (${leanNonEmptySet(
-                (attribute.BS as readonly Uint8Array[]).map(leanBytes),
-                at,
-            )})`
-        case 'L':
-            return `Attr.l [${(attribute.L as readonly AttributeValue[])
-                .map((element, index) => leanAttrOf(element, `${at}[${index}]`))
-                .join(', ')}]`
-        case 'M': {
-            const map = attribute.M as Record<string, AttributeValue>
-            const names = Object.keys(map)
-            return `Attr.m ${leanFinset(names)} (${leanKeyFunction(
-                names.map(
-                    (name) =>
+        case attribute.BS !== undefined:
+            return `Attr.bs (${leanNonEmptySet(attribute.BS.map(leanBytes), at)})`
+        case attribute.L !== undefined:
+            return `Attr.l [${attribute.L.map((element, index) =>
+                leanAttrOf(element, `${at}[${index}]`),
+            ).join(', ')}]`
+        case attribute.M !== undefined: {
+            return `Attr.m ${leanFinset(Object.keys(attribute.M))} (${leanKeyFunction(
+                Object.entries(attribute.M).map(
+                    ([name, one]) =>
                         [
                             leanString(name),
-                            leanAttrOf(
-                                map[name] as AttributeValue,
-                                `${at}.${name}`,
-                            ),
+                            leanAttrOf(one, `${at}.${name}`),
                         ] as const,
                 ),
             )})`
@@ -3469,26 +3449,11 @@ const asRecordish = (value: unknown): Record<string, unknown> | undefined =>
  * reason to risk one when the number is right here.
  */
 const fuelFor = (attribute: AttributeValue): number => {
-    const member = memberOf(attribute)
-    if (member === 'L') {
-        return (
-            1 +
-            Math.max(
-                0,
-                ...(attribute.L as readonly AttributeValue[]).map(fuelFor),
-            )
-        )
+    if (attribute.L !== undefined) {
+        return 1 + Math.max(0, ...attribute.L.map(fuelFor))
     }
-    if (member === 'M') {
-        return (
-            1 +
-            Math.max(
-                0,
-                ...Object.values(
-                    attribute.M as Record<string, AttributeValue>,
-                ).map(fuelFor),
-            )
-        )
+    if (attribute.M !== undefined) {
+        return 1 + Math.max(0, ...Object.values(attribute.M).map(fuelFor))
     }
     return 1
 }

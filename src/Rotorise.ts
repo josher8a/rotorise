@@ -5318,7 +5318,7 @@ export const tableEntry =
                         `'${key.name}' cannot be rebuilt from this change: ${error.message}`,
                         error.kind,
                     )
-                const built = buildGiven(key.name as never, given as never)
+                const built = buildGiven(key.name, given)
                 if (failed(built)) return stepRefusal(built)
                 if (built === undefined) {
                     remove.push(key.name)
@@ -5348,7 +5348,7 @@ export const tableEntry =
             name: string,
             attributes: Record<string, unknown>,
         ): Result<Carrying<KeyMember>> => {
-            const built = buildKey(name as never, attributes as never)
+            const built = buildKey(name, attributes)
             if (failed(built)) return built
             if (built === undefined) {
                 return keyRefusal(
@@ -5397,21 +5397,19 @@ export const tableEntry =
                 const [first] = arm.kind === 'leaf' ? arm.components : []
                 if (first === undefined) return undefined
                 if (componentOf(first)?.tag === false) return undefined
-                const closed = buildKey(
-                    name as never,
-                    attributes as never,
-                    { allowPartial: true, enforceBoundary: true } as never,
-                )
+                const closed = buildKey(name, attributes, {
+                    allowPartial: true,
+                    enforceBoundary: true,
+                })
                 if (failed(closed)) return closed
                 return closed === undefined
                     ? undefined
                     : { name, beginsWith: carrying('S', String(closed)) }
             }
-            const built = buildKey(
-                name as never,
-                attributes as never,
-                { allowPartial: true, enforceBoundary: true } as never,
-            )
+            const built = buildKey(name, attributes, {
+                allowPartial: true,
+                enforceBoundary: true,
+            })
             if (failed(built)) return built
             if (built === undefined) {
                 return keyRefusal(
@@ -5444,7 +5442,7 @@ export const tableEntry =
         ): Result<Record<string, V>> => {
             const entries: (readonly [string, V])[] = []
             for (const name of keyNames) {
-                const value = buildKey(name as never, item as never)
+                const value = buildKey(name, item)
                 if (failed(value)) return value
                 if (value === undefined) continue
                 const carriedValue = carry(name, value)
@@ -5610,7 +5608,7 @@ export const tableEntry =
                     `Key ${name}: depth is a non-negative integer`,
                 )
             }
-            return buildKey(name as never, attributes as never, config as never)
+            return buildKey(name, attributes, config)
         }
 
         const definition = {

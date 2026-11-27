@@ -336,7 +336,7 @@ export type SpreadOnce<Cs extends readonly unknown[]> = Split<Cs> extends {
  * ```
  */
 export const spread = <const C extends AnyCodec>(element: C): SpreadOver<C> =>
-    ({ spread: element as unknown as AnyCodec }) as SpreadCodec<
+    ({ spread: element as AnyCodec }) as SpreadCodec<
         Decoded<C>,
         AttributeOf<C> & AttributeValue
     >

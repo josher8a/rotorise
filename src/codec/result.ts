@@ -210,13 +210,15 @@ export const every = <A, B>(
     step: (item: A, index: number) => Result<B>,
 ): Result<B[]> => {
     const out: B[] = []
-    for (let index = 0; index < items.length; index++) {
-        const next = step(items[index] as A, index)
+    let index = 0
+    for (const item of items) {
+        const next = step(item, index)
         // the failure is labelled where it is already known to be one. A `within(segment, value)`
         // helper reads well and asks `failed` twice per value — once inside itself and once here —
         // which is twice per element of every list in every item
         if (failed(next)) return next.under(index)
         out.push(next)
+        index++
     }
     return out
 }

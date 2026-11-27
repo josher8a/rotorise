@@ -752,7 +752,8 @@ const literalIndex = (all: readonly Option[]): LiteralIndex | undefined => {
         for (const ids of subsets(size, 0)) {
             const table = new Map<string, Option>()
             let distinct = true
-            for (let at = 0; distinct && at < all.length; at++) {
+            for (const [at, option] of all.entries()) {
+                if (!distinct) break
                 let tuples: string[][] = [[]]
                 for (const id of ids) {
                     const pinned = per[at]?.get(id)?.ls ?? []
@@ -762,7 +763,7 @@ const literalIndex = (all: readonly Option[]): LiteralIndex | undefined => {
                 for (const tuple of distinct ? tuples : []) {
                     const key = JSON.stringify(tuple)
                     if (table.has(key)) distinct = false
-                    table.set(key, all[at] as Option)
+                    table.set(key, option)
                 }
             }
             if (distinct) {
@@ -1033,7 +1034,7 @@ export const byTagSem = <V>(
         // what failed, and that is what the message says
         for (const name of ks) {
             const carried = members.map(([one]) => one[name])
-            if (!carried.includes(assignment[name] as string)) {
+            if (!carried.includes(assignment[name])) {
                 const expected = [...new Set(carried)]
                     .map((tag) => `'${tag}'`)
                     .join(', ')
