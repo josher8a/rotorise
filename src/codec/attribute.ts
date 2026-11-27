@@ -125,14 +125,38 @@ export type Carrying<K extends AttributeName> = K extends unknown
     ? Attribute<K>
     : never
 
-/** The member a value is carrying, or `undefined` if it carries none. */
+/**
+ * The names of the ten members, in one list. The parameter type refuses a list that omits a name of
+ * {@link AttributeName}, so a member that DynamoDB adds is a type error here.
+ */
+const completeNames = <const T extends readonly AttributeName[]>(
+    names: T &
+        ([Exclude<AttributeName, T[number]>] extends [never] ? unknown : never),
+): T => names
+
+const memberNames = completeNames([
+    'S',
+    'N',
+    'B',
+    'SS',
+    'NS',
+    'BS',
+    'M',
+    'L',
+    'BOOL',
+    'NULL',
+])
+
+/**
+ * The member a value is carrying, or `undefined` if it carries none.
+ *
+ * The loop runs over the names of the members, so a key that no member names decides nothing, and the
+ * answer does not depend on the key order of the attribute. A union decodes before any parse of the
+ * attribute, so the value can be `null`, and the read `?.` answers `undefined` for it.
+ */
 export const memberOf = (value: AttributeValue): AttributeName | undefined => {
-    // `for..in` rather than `Object.keys`: an attribute is read on every decode of every nesting
-    // point, and the key array is allocated only to be walked once and dropped
-    for (const name in value) {
-        // the key of a `for...in` is a `string` (TS7053 without the cast). A key that no member names returns here as well.
-        if (value[name as AttributeName] !== undefined)
-            return name as AttributeName
+    for (const name of memberNames) {
+        if (value?.[name] !== undefined) return name
     }
     return undefined
 }
