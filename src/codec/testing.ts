@@ -404,7 +404,7 @@ export const checkDecodesAreWritable = <T>(
                     'the codec',
                     value,
                     seed,
-                    (error as Error).message,
+                    messageOf(error),
                     `, case ${i}`,
                 )
             }
@@ -440,7 +440,7 @@ export const checkDecodesAreWritable = <T>(
                         `  seed     = ${seed}, case ${i}\n` +
                         `  item     = ${JSON.stringify(item)}\n` +
                         `  decoded  = ${JSON.stringify(read)}\n` +
-                        `  encoding it again said: ${(error as Error).message}`,
+                        `  encoding it again said: ${messageOf(error)}`,
                 )
             }
             const changed = shapeChange(
@@ -1817,6 +1817,26 @@ const where = (difference: Difference): string =>
 // ── laws between codecs ─────────────────────────────────────────────
 
 /** Rendered for a message. `Set`s and typed arrays do not survive `JSON.stringify` on their own. */
+/**
+ * The text of a thrown value: an `Error` gives its message, and any other value gives its own text.
+ * This is the one place that prints a value that a caller threw. The printer `show` throws on a
+ * cyclic object and on a `BigInt`, and `String` throws on an object with no prototype. A throw of
+ * the printer would replace the failure that the check reports, so each throw falls to the next
+ * printer, and the last printer never throws.
+ */
+const messageOf = (thrown: unknown): string => {
+    if (thrown instanceof Error) return thrown.message
+    try {
+        return show(thrown)
+    } catch {
+        try {
+            return String(thrown)
+        } catch {
+            return Object.prototype.toString.call(thrown)
+        }
+    }
+}
+
 const show = (value: unknown): string =>
     value instanceof Set
         ? `Set(${JSON.stringify([...value])})`

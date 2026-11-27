@@ -1811,7 +1811,10 @@ const pathSegments = (path: string): string[] => {
 }
 
 /** How a key name reads a value at a carrier: an item reads one way, and the given item of an update reads another. */
-type KeyNameReader = (attributes: object, path: string) => unknown
+type KeyNameReader = (
+    attributes: Readonly<Record<string, unknown>>,
+    path: string,
+) => unknown
 
 /**
  * The value of a key name at an item. An item is a document. A name that holds no `.` is an
@@ -1868,7 +1871,7 @@ const givenFrom =
     (read: KeyNameReader): KeyNameReader =>
     (attributes, path) =>
         Object.hasOwn(attributes, path)
-            ? (attributes as Record<string, unknown>)[path]
+            ? attributes[path]
             : read(attributes, path)
 
 /**
