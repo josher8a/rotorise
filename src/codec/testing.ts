@@ -1054,6 +1054,10 @@ const shrinkThrough = (
     shrink: (inner: unknown) => readonly unknown[],
 ): readonly unknown[] => (failed(mapped) ? [] : shrink(mapped))
 
+/** The refusal of a term with no inhabitant: `never`, and a union of no option. */
+const noValueToGenerate =
+    '`never` admits no value, so there is nothing to generate'
+
 // the index exists where `values` holds a member (TS2322). An empty list returns `undefined`, so the caller owns the length.
 const pickFrom = <T>(rng: Rng, values: readonly T[]): T =>
     values[Math.floor(rng() * values.length)] as T
@@ -1393,17 +1397,10 @@ const draw = (
             // an option that holds no value has nothing to draw, as a field of the object row; a
             // union of no inhabited option draws through its options, and the `never` row refuses
             const inhabited = def.options.filter((one) => !holdsNoValue(one))
-            return draw(
-                codecOfTerm(
-                    pickFrom(
-                        rng,
-                        inhabited.length > 0 ? inhabited : def.options,
-                    ),
-                ),
-                rng,
-                size,
-                drew,
-            )
+            const pool = inhabited.length > 0 ? inhabited : def.options
+            // a union of no option admits no value, as `never` does, and `pickFrom` reads a list with a member
+            if (pool.length === 0) throw new CodecError(noValueToGenerate)
+            return draw(codecOfTerm(pickFrom(rng, pool)), rng, size, drew)
         }
         case 'refine': {
             const q = def.q
@@ -1438,9 +1435,7 @@ const draw = (
         // and not a value: the switch's return type admits `undefined`, and falling through would
         // hand `undefined` to a round trip as though it were a value of this codec
         case 'never':
-            throw new CodecError(
-                '`never` admits no value, so there is nothing to generate',
-            )
+            throw new CodecError(noValueToGenerate)
         // a kind left out would draw `undefined`, as the comment above says. This arm is the build
         // error for it
         default:
