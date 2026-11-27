@@ -2285,6 +2285,9 @@ const key =
                     `the attribute '${arm.name}' is empty, so the key is empty. Give '${arm.name}' a value, or leave it out.`,
                 )
                 if (empty !== undefined) return empty
+                // a typed entry refuses a key attribute that is stored as none of S, N and B, at `tableEntry`
+                // (TS2322), so `stored` is text, a number or bytes. The checker does not carry that refusal here.
+                // `unsafeKey` with a value of another type returns the value unchanged
                 return stored as never
             }
 
