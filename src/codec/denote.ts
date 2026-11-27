@@ -2912,8 +2912,8 @@ export const describeOf = (def: Term): string => {
     if (def.kind !== 'object') return namedKind(def)
     // an open block holds every undeclared name, and `...` names it
     return `{ ${[
-        ...Object.keys(def.body.fields).map((name) =>
-            alwaysWritten(def.body.fields[name] as Field) ? name : `${name}?`,
+        ...Object.entries(def.body.fields).map(([name, field]) =>
+            alwaysWritten(field) ? name : `${name}?`,
         ),
         ...(def.body.rest === undefined ? [] : ['...']),
     ].join(', ')} }`

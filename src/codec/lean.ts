@@ -156,6 +156,7 @@ const refuse = (at: string, reason: string): never => {
 const leanString = (value: string): string => {
     let out = '"'
     for (const ch of value) {
+        // a character of a string iteration is never empty, so the code point exists
         const code = ch.codePointAt(0) as number
         out +=
             ch === '"'
@@ -208,10 +209,10 @@ const leanNonEmptySet = (elements: readonly string[], at: string): string => {
 const leanKeyFunction = (
     entries: readonly (readonly [string, string])[],
 ): string => {
-    if (entries.length === 0) {
+    const last = entries.at(-1)
+    if (last === undefined) {
         return 'fun k => absurd k.2 (Finset.notMem_empty k.1)'
     }
-    const last = entries[entries.length - 1] as readonly [string, string]
     const tests = entries
         .slice(0, -1)
         .map(([name, body]) => `if k.1 = ${name} then ${body} else `)
@@ -377,6 +378,7 @@ export const leanAttrOf = (
     at = 'attribute',
 ): string => {
     const member = memberOf(attribute)
+    // `memberOf` chooses the member at run time, and a type cannot narrow an attribute by it, so each read below casts
     switch (member) {
         case 'S':
             return `Attr.s ${leanString(attribute.S as string)}`
@@ -2651,9 +2653,12 @@ const leanCond = (p: Precondition): string => {
     const path = `[${p.segments.map(leanSeg).join(', ')}]`
     if ('exists' in p) return `⟨${path}, .exists⟩`
     if ('type' in p) return `⟨${path}, .type .${p.type}⟩`
-    const [first, ...rest] = p.in.map(leanStoredLiteral)
-    const [base, x] = first as readonly [string, string]
-    return `⟨${path}, .in GroundKind.${base} ${x} [${rest.map(([, y]) => y).join(', ')}]⟩`
+    const [first, ...rest] = p.in
+    const [base, x] = leanStoredLiteral(first)
+    return `⟨${path}, .in GroundKind.${base} ${x} [${rest
+        .map(leanStoredLiteral)
+        .map(([, y]) => y)
+        .join(', ')}]⟩`
 }
 
 /**

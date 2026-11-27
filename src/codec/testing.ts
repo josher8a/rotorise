@@ -1039,8 +1039,8 @@ const shrinkSequence = <T>(
         }
     }
     if (element) {
-        for (let i = 0; i < value.length; i++) {
-            for (const smaller of element(value[i] as T)) {
+        for (const [i, held] of value.entries()) {
+            for (const smaller of element(held)) {
                 out.push([...value.slice(0, i), smaller, ...value.slice(i + 1)])
             }
         }

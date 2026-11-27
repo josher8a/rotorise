@@ -130,7 +130,7 @@ const buildFlat = (root: Term, other: Term = root): FlatResult => {
         const target = targetOf(t)
         if (target !== undefined) keep(target)
     }
-    for (let j = 0; j < bodies.length; j++) visit(bodies[j] as Term)
+    for (const one of bodies) visit(one)
     return {
         kind: 'flat',
         bodies,
@@ -210,6 +210,7 @@ const sideOfFlat = (flat: FlatScope, mode: Mode): Side => {
         cycles: flat.cycles,
         index: flat.index,
         root: flat.root,
+        // `satisfies` leaves the property a `string` in an unannotated literal, so the cast keeps the union
         mode: 'raw' as Mode,
         adapts: [],
         stable: true,
