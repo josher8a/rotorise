@@ -210,8 +210,7 @@ const sideOfFlat = (flat: FlatScope, mode: Mode): Side => {
         cycles: flat.cycles,
         index: flat.index,
         root: flat.root,
-        // `satisfies` leaves the property a `string` in an unannotated literal, so the cast keeps the union
-        mode: 'raw' as Mode,
+        mode: 'raw' as const satisfies Mode,
         adapts: [],
         stable: true,
     }
