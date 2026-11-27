@@ -21,6 +21,7 @@ import {
     CodecError,
     decimal,
     discriminatedUnion,
+    encodeAny,
     fill,
     held,
     item,
@@ -379,6 +380,78 @@ describe('a codec of a constructor and the codec of its term agree', () => {
             expect(drawn).toBeGreaterThan(0)
         })
     }
+
+    /**
+     * The values that no codec of the pool wrote: the intended values of each other codec, and the
+     * inputs that a type does not name. An erased codec is called with any of them, so the codec
+     * must check the value that the codec encodes.
+     */
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    const foreign: readonly unknown[] = [
+        ...pool.flatMap(([, , ...intended]) => intended),
+        undefined,
+        null,
+        Symbol('foreign'),
+        () => 'foreign',
+        cyclic,
+        Number.NaN,
+        Number.POSITIVE_INFINITY,
+        -0,
+        0n,
+    ]
+
+    it('encode of a foreign value returns a value or a CodecError and never throws', () => {
+        const thrown: string[] = []
+        let written = 0
+        let refused = 0
+        for (const [name, codec] of pool)
+            for (const value of foreign)
+                try {
+                    if (encodeAny(codec, value) instanceof CodecError) refused++
+                    else written++
+                } catch (error) {
+                    thrown.push(
+                        `${name} on ${typeof value}: ${error instanceof Error ? error.message : String(error)}`,
+                    )
+                }
+        expect(thrown).toEqual([])
+        // a run that only writes, or only refuses, tests nothing about the check of the codec
+        expect(written).toBeGreaterThan(0)
+        expect(refused).toBeGreaterThan(0)
+    })
+
+    it('encode throws only what an accessor of the value throws, so no codec throws of its own', () => {
+        const accessor = new Error('the accessor of the value')
+        const trap = new Proxy(
+            {},
+            {
+                get: () => {
+                    throw accessor
+                },
+            },
+        )
+        const hostile = [
+            {
+                get a(): never {
+                    throw accessor
+                },
+                get kind(): never {
+                    throw accessor
+                },
+            },
+            trap,
+        ]
+        const foreignThrows: unknown[] = []
+        for (const [, codec] of pool)
+            for (const value of hostile)
+                try {
+                    encodeAny(codec, value)
+                } catch (error) {
+                    if (error !== accessor) foreignThrows.push(error)
+                }
+        expect(foreignThrows).toEqual([])
+    })
 
     const withItem = [
         'object',

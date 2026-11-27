@@ -23,6 +23,7 @@ export type {
     SetOf,
     Writes,
 } from './build'
+export { encodeAny } from './build'
 /**
  * The values that read a term. `capabilities.ts` declares `codecOfTerm`, and `denote.ts` declares
  * `termOf` and `valueKinds`.

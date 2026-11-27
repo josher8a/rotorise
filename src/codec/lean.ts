@@ -66,6 +66,7 @@ import { clauseOf } from './clause'
 import type { AnyCodec, ObjectSlot, Precondition, Refinement } from './codec'
 import {
     at,
+    encodeAny,
     exclude,
     extract,
     item as itemOf,
@@ -77,7 +78,7 @@ import {
     union,
 } from './codec'
 import { accepts, assignmentOf, readsBack } from './denote'
-import { CodecError, failed, type Result } from './result'
+import { CodecError, failed, orThrow, type Result } from './result'
 import {
     agrees,
     agreesApart,
@@ -1218,7 +1219,7 @@ export const leanVector = (
     protocol: Protocol = 'check',
 ): string => {
     const meaning = leanMeaningOf(codec, name)
-    const attribute = codec.unsafeEncode(value as never)
+    const attribute = orThrow(encodeAny(codec, value))
     const head = [`/-- \`${name}\` -/`, `theorem ${leanIdent(name)} :`]
     const guard = recursive(codec)
         ? `\n\n${leanGuard({ name: `${name}__guarded`, codec, guarded: true })}`
@@ -3264,7 +3265,7 @@ export const readVerdictOf = (
  * fails where the reason is.
  */
 export const leanReadVector = ({ name, codec, value }: Vector): string => {
-    const attribute = codec.unsafeEncode(value as never)
+    const attribute = orThrow(encodeAny(codec, value))
     const out = codec.decode(attribute)
     if (failed(out)) {
         return refuse(
@@ -3294,7 +3295,7 @@ export const readVectorIsUnstatable = (
     one: Vector,
 ): 'no round trip' | undefined => {
     try {
-        const attribute = one.codec.unsafeEncode(one.value as never)
+        const attribute = orThrow(encodeAny(one.codec, one.value))
         const out = one.codec.decode(attribute)
         return failed(out) ? 'no round trip' : undefined
     } catch {
@@ -3383,7 +3384,7 @@ const writeOf = (
     | { readonly wrote: true; readonly written: AttributeValue }
     | { readonly wrote: false; readonly written?: undefined } => {
     try {
-        const out = u.encode(value as never)
+        const out = encodeAny(u, value)
         return failed(out) ? { wrote: false } : { wrote: true, written: out }
     } catch {
         return { wrote: false }
@@ -3711,7 +3712,7 @@ export const vectorRows = (
     },
     rows: (shapes) => [
         ...admissions.flatMap(({ name, codec, value }) => {
-            const attribute = codec.unsafeEncode(value as never)
+            const attribute = orThrow(encodeAny(codec, value))
             const t = shapes.closed(leanClosedOf(codec, name), 'closed')
             const row = {
                 name: leanIdent(name),

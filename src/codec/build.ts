@@ -104,6 +104,21 @@ export type AttributeCodec<
 export type AnyCodec = CodecShape<never, unknown, AttributeValue>
 
 /**
+ * Writes any value with an erased codec.
+ *
+ * `encode` of {@link AnyCodec} takes `never`, because a parameter is contravariant and `never` is the
+ * one parameter that every codec fits. A codec does not trust the parameter. The codec checks the
+ * kind of a value before the codec reads the value, and answers a {@link CodecError} for a value that
+ * the codec does not write. So the cast states a check that the codec makes, and a caller states it
+ * here one time. A throw comes only from an accessor of the value that the codec reads, never from
+ * the codec. `codec.routes.spec.ts` pins the claim over the drawn pool.
+ */
+export const encodeAny = (
+    codec: Pick<AnyCodec, 'encode'>,
+    value: unknown,
+): Result<AttributeValue> => codec.encode(value as never)
+
+/**
  * Anything an object member can be declared as: a codec, or a field that marks one.
  *
  * `optional` and `fill` state that the attribute at a *name* may be absent, and the name belongs

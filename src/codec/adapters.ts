@@ -8,6 +8,7 @@ import type {
     Free,
     FreeOf,
 } from './build'
+import { encodeAny } from './build'
 import { codecOfPair } from './capabilities'
 import {
     heldPair,
@@ -80,7 +81,7 @@ export const fillRefusal = (
     value: unknown,
 ): CodecError | undefined => {
     try {
-        const written = filledCodec.encode(value as never)
+        const written = encodeAny(filledCodec, value)
         return failed(written) ? written : undefined
     } catch (thrown) {
         // a value outside the codec's type, which the codec reached past that type: as `accepts` reads it
@@ -315,7 +316,7 @@ export const heldSide = (
             admit: (value, at) => {
                 let written: unknown
                 try {
-                    written = outer.encode(value as never)
+                    written = encodeAny(outer, value)
                 } catch (thrown) {
                     written = new CodecError(thrownReason(thrown))
                 }

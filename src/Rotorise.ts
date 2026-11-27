@@ -25,6 +25,7 @@ import type {
 import {
     andThen,
     CodecError,
+    encodeAny,
     failed,
     orThrow,
     pathBuilder,
@@ -3968,6 +3969,7 @@ type TaggedRuntime = TaggedCodec<
  * library carry them, and a codec that a caller builds by hand may not.
  */
 const carriedReads = (codec: object): PathReads | undefined =>
+    // a slot is a symbol that no published type declares, and the codec layer writes it
     (codec as { readonly [readSlot]?: PathReads })[readSlot]
 
 /** The readers of a path of a codec that the entry accepted. The entry refuses a codec with none at construction. */
@@ -4832,7 +4834,7 @@ export const tableEntry =
             // refusals on use
             const address =
                 termOfSlot(found).kind === 'never'
-                    ? found.encode(undefined as never)
+                    ? encodeAny(found, undefined)
                     : undefined
             if (address instanceof CodecError && address.kind === 'refused')
                 return refused(address)
@@ -5235,8 +5237,7 @@ export const tableEntry =
                 // a removal is no value for the codec to encode, as the model states it: `changed: name → none`
                 if (given === undefined) continue
                 const refusals = reached.frontier.map((codec) =>
-                    // the erased codec of a frontier takes `never`, and the codec checks the value itself
-                    codec.encode(given as never),
+                    encodeAny(codec, given),
                 )
                 const [first] = refusals
                 if (

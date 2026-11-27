@@ -56,7 +56,14 @@ import type {
     Rng,
     Segment,
 } from './codec'
-import { at, CodecError, codecOfTerm, failed, orThrow } from './codec'
+import {
+    at,
+    CodecError,
+    codecOfTerm,
+    encodeAny,
+    failed,
+    orThrow,
+} from './codec'
 import { accepts, holds, termOf } from './denote'
 import { asPath, Disagreement, setOwn } from './result'
 import type { Term } from './term'
@@ -844,7 +851,7 @@ export const checkEncodePaths = <T, Spec>(
 
             // the names are the names that the value carries, so the path is no tuple of the spec
             const named: readonly Segment[] = [name]
-            const viaField = at(subject, named).unsafeEncode(one as never)
+            const viaField = orThrow(encodeAny(at(subject, named), one))
             if (!equals(viaField, attribute)) {
                 fail(
                     `at(item, ['${name}']).unsafeEncode differs from unsafeEncode`,
@@ -1455,7 +1462,7 @@ const someSet = (
     const byStored = new Map<string, unknown>()
     for (let i = 0; i < count; i++) {
         const value = one()
-        const written = element.unsafeEncode(value as never)
+        const written = orThrow(encodeAny(element, value))
         byStored.set(String(member ? written[member] : written), value)
     }
     return new Set([...byStored.keys()].sort().map((key) => byStored.get(key)))

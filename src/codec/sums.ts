@@ -350,6 +350,7 @@ export function item<C extends Itemable<unknown>>(
 ): ReadingOf<C>
 export function item(codec: object): unknown {
     const term = termOf(codec as AnyCodec)
+    // a slot is a symbol that no published type declares, and `carryingReading` writes it
     const carried = (codec as { readonly [readingSlot]?: () => Reading })[
         readingSlot
     ]

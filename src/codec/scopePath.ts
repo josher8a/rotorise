@@ -1023,7 +1023,7 @@ export function at(
     // `p ++ q` from the root of `c`: the segments join, and the preconditions conjoin
     // the slot is a symbol property and not a registry entry, so a spread copy of a located codec
     // keeps its location. The read casts, because no type names the slot
-    const prior = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
+    const prior = locatedOf(codec)
     // the walk reads the item codec as one codec among those it carries, which it is at run time
     const root = prior?.root ?? (codec as AnyCodec)
     const segments = typeof path === 'string' ? parsePath(path) : path
@@ -1056,7 +1056,7 @@ export function narrow(
     pattern: ClausePattern,
 ): unknown {
     // read through a cast, for the reason at {@link at}: a spread copy must keep its location
-    const prior = (located as { readonly [locatedSlot]?: Located })[locatedSlot]
+    const prior = locatedOf(located)
     const root = prior?.root ?? (located as AnyCodec)
     return locate(root, [...(prior?.steps ?? []), clauseOf(pattern)], prior)
 }
@@ -1248,6 +1248,14 @@ export const locate = (
     const made: Located = { root, steps, reached }
     return { ...here, [locatedSlot]: made }
 }
+
+/**
+ * The location that a codec carries in {@link locatedSlot}, or `undefined`. The one reader of the
+ * slot. A slot is a symbol that no published type declares, and {@link locate} writes it.
+ */
+const locatedOf = (carrier: object): Located | undefined =>
+    (carrier as { readonly [locatedSlot]?: Located })[locatedSlot]
+
 export type Located = {
     readonly root: AnyCodec
     readonly steps: readonly Step[]
@@ -1280,7 +1288,7 @@ export function path(codec: {
     readonly def: Term
 }): string | readonly Segment[] {
     // read through a cast, for the reason at {@link at}: a spread copy must keep its location
-    const located = (codec as { readonly [locatedSlot]?: Located })[locatedSlot]
+    const located = locatedOf(codec)
     if (located === undefined) return ''
     // only an item writes the top-level attributes of a row, so only a path from an item is a
     // document path; any other root gives its segments, which no expression takes for a path
@@ -1301,10 +1309,7 @@ export const preconditions = (located: {
     readonly def: Term
 }): Result<readonly Precondition[]> =>
     // read through a cast, for the reason at {@link at}: a spread copy must keep its location
-    preconditionsOf(
-        (located as { readonly [locatedSlot]?: Located })[locatedSlot]?.steps ??
-            [],
-    )
+    preconditionsOf(locatedOf(located)?.steps ?? [])
 
 /**
  * The readers that an item codec and a tagged codec carry in {@link readSlot}. A table entry reads

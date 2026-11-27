@@ -28,7 +28,7 @@ import {
     tooDeeplyNested,
 } from './attribute'
 import type { AnyCodec, AttributeCodec, Codec, ObjectSlot } from './build'
-import { codec } from './build'
+import { codec, encodeAny } from './build'
 import type { Result } from './result'
 import {
     andThen,
@@ -340,6 +340,13 @@ export type Pair = {
     ) => Result<unknown>
 }
 
+/** Writes any value with an erased pair, on the reason of {@link encodeAny}: the pair checks the value. */
+const writeAny = (
+    pair: Pair,
+    value: unknown,
+    enclosing: number,
+): Result<AttributeValue> => pair.encode(value as never, enclosing)
+
 /**
  * One option of a union, reduced to what matching it actually asks.
  *
@@ -492,7 +499,7 @@ export const bodySem = (
                         `'${name}' is required and was not given`,
                     )
                 }
-                const written = attribute.encode(value as never, enclosing)
+                const written = writeAny(attribute, value, enclosing)
                 if (failed(written)) return written.under(name)
                 setOwn(out, name, written)
             }
@@ -513,7 +520,7 @@ export const bodySem = (
                         `an open key has no character in its name: ${emptyNameReason}`,
                     ).under(name)
                 }
-                const written = restPair.encode(value as never, enclosing)
+                const written = writeAny(restPair, value, enclosing)
                 if (failed(written)) return written.under(name)
                 setOwn(out, name, written)
             }
@@ -612,9 +619,7 @@ export const heldThrough = (
     const outOf = guarded(adapt.decode, 'reading')
     return {
         encode: (value, enclosing) =>
-            andThen(into(value), (held) =>
-                inner.encode(held as never, enclosing),
-            ),
+            andThen(into(value), (held) => writeAny(inner, held, enclosing)),
         decode: (attribute, enclosing) => {
             // `failed` rather than `andThen`, because a {@link Pair}'s read answers `unknown` and
             // `Result<unknown>` *is* `unknown` — the failure channel is not visible in that type,
@@ -982,7 +987,7 @@ export const altSem = (
             forValue(shapeOf(value)),
             naming('this value', held ? namesOf(held) : undefined),
             value,
-            (option) => option.pair.encode(value as never, enclosing),
+            (option) => writeAny(option.pair, value, enclosing),
         )
     }
 
@@ -1391,7 +1396,7 @@ export const literalPair = (def: Literal): Pair => {
         encode: (value: unknown, enclosing) =>
             member(value) === undefined
                 ? refuse(value)
-                : base.encode(value as never, enclosing),
+                : writeAny(base, value, enclosing),
         decode: (attribute, enclosing) =>
             andThen(base.decode(attribute, enclosing), (read) => {
                 const found = member(read)
@@ -1422,7 +1427,7 @@ export const literalsPair = (
     return {
         encode: (value: unknown, enclosing) => {
             if (member(value) !== undefined)
-                return ground.encode(value as never, enclosing)
+                return writeAny(ground, value, enclosing)
             const held = asRecord(value)
             return unmatchedAmong(
                 naming('this value', held ? namesOf(held) : undefined),
@@ -1525,7 +1530,7 @@ export const setPair = (
     const setMember = setMembers[one]
     const carried = (value: unknown): Result<string | Uint8Array> =>
         andThen(
-            inner.encode(value as never),
+            encodeAny(inner, value),
             (written) => written[member] as string | Uint8Array,
         )
     return {
@@ -2147,6 +2152,7 @@ const pairs = new WeakMap<Term, Pair>()
  * container cannot take its pair, so the read refuses.
  */
 export const pairOfCodec = (codec: AnyCodec): Pair => {
+    // a slot is a symbol that no published type declares, and `codecWithPair` writes it
     const carried = (codec as { readonly [pairSlot]?: Pair })[pairSlot]
     if (carried === undefined) {
         throw new CodecError(
@@ -2749,7 +2755,7 @@ export const valueKinds = (t: Term): readonly Shape[] => {
  */
 export const accepts = (codec: AnyCodec, value: unknown): boolean => {
     try {
-        return !failed(codec.encode(value as never))
+        return !failed(encodeAny(codec, value))
     } catch {
         // **The catch is what makes this equal to the reader it replaces**, and it was found by
         // running the law's own table: `admits` classified the value's shape *before* dispatching,
@@ -2764,7 +2770,7 @@ export const accepts = (codec: AnyCodec, value: unknown): boolean => {
 /** Whether a pair writes a value at a level, with a throw read as a refusal, as {@link accepts} reads it. */
 const writesAt = (pair: Pair, value: unknown, enclosing: number): boolean => {
     try {
-        return !failed(pair.encode(value as never, enclosing))
+        return !failed(writeAny(pair, value, enclosing))
     } catch {
         return false
     }

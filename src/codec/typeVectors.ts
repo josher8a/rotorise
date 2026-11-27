@@ -56,7 +56,15 @@ import { isDeepStrictEqual } from 'node:util'
 import { DynamoNumber, isNumeral, isStoredNumeral, memberOf } from './attribute'
 import { codecOfTerm } from './capabilities'
 import type { AnyCodec } from './codec'
-import { boolean, legacy, meet, object, string, union } from './codec'
+import {
+    boolean,
+    encodeAny,
+    legacy,
+    meet,
+    object,
+    string,
+    union,
+} from './codec'
 import type { PathStep, PathVectors, Slice } from './lean'
 import { hostAt, LeanUnemittable, leanClosedOf, reachable } from './lean'
 import { CodecError, failed } from './result'
@@ -720,7 +728,7 @@ const valuesOf = (
 ): readonly { readonly keeps: boolean; readonly text: string }[] => {
     const values: { readonly keeps: boolean; readonly text: string }[] = []
     for (const { value, text } of drawn(option, root)) {
-        const stored = run.encode(value as never)
+        const stored = encodeAny(run, value)
         if (failed(stored)) {
             values.push({ keeps: false, text })
             continue
@@ -1121,7 +1129,7 @@ const foreignAt = (codec: AnyCodec): number | string | undefined => {
         throw error
     }
     const foreign = typeof drawn === 'number' ? '1' : 1
-    return failed(codec.encode(foreign as never)) ? foreign : undefined
+    return failed(encodeAny(codec, foreign)) ? foreign : undefined
 }
 
 /**
@@ -1296,7 +1304,7 @@ const foreignRoot = (
     p: ReturnType<typeof printerOf>,
     root: string,
 ): Root => {
-    if (!failed(foreign.codec.encode(foreign.sample as never)))
+    if (!failed(encodeAny(foreign.codec, foreign.sample)))
         refuse(root, 'a foreign sample that the codec writes')
     p.constant('c', 'foreign', foreign.codec.def)
     const sample = valueText(foreign.sample, `${root} foreign`)
@@ -1342,8 +1350,7 @@ const meetSamples = (result: AnyCodec, at: string): readonly string[] => {
         try {
             const value = arbitraryOf(result, rngFrom(seed), 3)
             // a value that the run-time codec itself cannot write is no sample of the result
-            if (!failed(result.encode(value as never)))
-                out.add(valueText(value, at))
+            if (!failed(encodeAny(result, value))) out.add(valueText(value, at))
         } catch (error) {
             if (
                 !(
@@ -1426,7 +1433,7 @@ const writtenKeys = (codec: AnyCodec): readonly string[] => {
                 throw error
             continue
         }
-        const written = codec.encode(value as never)
+        const written = encodeAny(codec, value)
         if (failed(written)) continue
         const key = memberOf(written)
         if (key !== undefined) keys.add(key)
