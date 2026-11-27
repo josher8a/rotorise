@@ -5500,15 +5500,21 @@ export const tableEntry =
 
         /**
          * The keys of the names, as the AttributeMap of a request. A name that the schema does not
-         * declare, and the form with no names where the entry has no `key` option, are refused by the
-         * type, so they are a broken call and throw. Every other refusal is a value.
+         * declare, the form with no names where the entry has no `key` option, and the form with names
+         * and no item, are refused by the type, so they are a broken call and throw. Every other
+         * refusal is a value.
          */
         const keysOf = (
             first: readonly string[] | Record<string, unknown>,
             second?: Record<string, unknown>,
         ): Result<AttributeMap> => {
+            const noItem = (): never => {
+                throw new RotoriseError(
+                    'the call names keys and gives no item, so each component of a key has no attributes to be read from. The second argument is the item',
+                )
+            }
             const [names, given] = Array.isArray(first)
-                ? [first, second as Record<string, unknown>]
+                ? [first, second ?? noItem()]
                 : [tableKeyNames, first as Record<string, unknown>]
             if (!Array.isArray(first) && names.length === 0) {
                 throw new RotoriseError(
