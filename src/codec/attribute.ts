@@ -91,7 +91,7 @@ export const carrying = <K extends AttributeName>(
     // that the engine cannot give one shape, and `carrying` runs for each attribute that is written.
     // The type refuses another name, so the last arm is a broken invariant of the caller
     // each cast below ties the literal to the member that the arm names, which a generic `K` cannot state: a table of
-    // makers typed by the mapped type deletes the casts and makes `encode` 18% slower in the p232 bench
+    // makers typed by the mapped type deletes the casts and makes `encode` about 15% slower in the p232 bench
     switch (name) {
         case 'S':
             return { S: value } as Carrying<K>
@@ -130,6 +130,7 @@ export const memberOf = (value: AttributeValue): AttributeName | undefined => {
     // `for..in` rather than `Object.keys`: an attribute is read on every decode of every nesting
     // point, and the key array is allocated only to be walked once and dropped
     for (const name in value) {
+        // the key of a `for...in` is a `string` (TS7053 without the cast). A key that no member names returns here as well.
         if (value[name as AttributeName] !== undefined)
             return name as AttributeName
     }

@@ -873,6 +873,7 @@ export const altSem = (
     ): Result<A> => {
         const candidates = all.filter(survives)
         if (candidates.length === 0) return unmatched(named)
+        // the length test makes index 0 exist. The checker adds `undefined` to an index read (TS2345).
         if (candidates.length === 1) return through(candidates[0] as Option)
         for (const option of candidates) {
             const attempt = through(option)
@@ -1479,6 +1480,7 @@ export const listPair = (
      * value is. The prefix and the suffix cannot overlap here, because `aligned` has
      * already turned down every length below `declared`.
      */
+    // each read follows the length test that bounds the index. The checker adds `undefined` to an index read (TS2322).
     const at = (index: number, length: number): Pair =>
         index < pre.length
             ? (pre[index] as Pair)
@@ -2153,7 +2155,8 @@ const pairs = new WeakMap<Term, Pair>()
  * container cannot take its pair, so the read refuses.
  */
 export const pairOfCodec = (codec: AnyCodec): Pair => {
-    // a slot is a symbol that no published type declares, and `codecWithPair` writes it
+    // a slot is a symbol that no published type declares, and `codecWithPair` writes it. A declaration on
+    // `AnyCodec` needs `Pair` from this layer, which `layer_order.py` counts, and the published declarations change
     const carried = (codec as { readonly [pairSlot]?: Pair })[pairSlot]
     if (carried === undefined) {
         throw new CodecError(

@@ -47,6 +47,8 @@ export const codecOfTerm = <T, A extends AttributeValue>(
     def: Term,
 ): AttributeCodec<T, A> => {
     const built = codecs.get(def)
+    // the cache holds each codec at `<never, AttributeValue>`. `T` and `A` belong to the caller, and no argument fixes them.
+    // A single cast fails with TS2352, so the cast goes through `unknown`.
     if (built) return built as unknown as AttributeCodec<T, A>
     judged(def)
     const made = equip(
@@ -196,6 +198,8 @@ export const codecOfPair = <T, A extends AttributeValue>(
     call?: (...allowed: never[]) => AnyCodec,
 ): AttributeCodec<T, A> => {
     const built = codecs.get(def)
+    // the cache holds each codec at `<never, AttributeValue>`. `T` and `A` belong to the caller, and no argument fixes them.
+    // A single cast fails with TS2352, so the cast goes through `unknown`.
     if (built) return built as unknown as AttributeCodec<T, A>
     seedPair(def, pair)
     const bare = codecWithPair<never, AttributeValue>(

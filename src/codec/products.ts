@@ -180,6 +180,8 @@ export const list = <const Cs extends readonly (AnyCodec | AnySpread)[]>(
     }
 
     const at = all.findIndex(isSpread)
+    // `at` is the index that `isSpread` found, and `findIndex` carries no guard (TS2339). The check above
+    // refuses a second spread, so the two slices below hold no spread (TS2345).
     const marked = at === -1 ? undefined : (all[at] as AnySpread)
 
     const pre = (at === -1 ? all : all.slice(0, at)) as readonly AnyCodec[]

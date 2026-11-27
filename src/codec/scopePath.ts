@@ -1184,6 +1184,7 @@ export const reachAt = (
  * the slot is the type of `union`, and a codec of another kind has no slot.
  */
 const unionBuilderOf = (codec: object): typeof union | undefined =>
+    // a slot is a symbol that no published type declares, and `carryingReading` writes it
     (codec as { readonly [unionSlot]?: typeof union })[unionSlot]
 
 /** The codec at the steps of a path from a root, with its place. */

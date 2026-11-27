@@ -224,6 +224,8 @@ export const objectFromMap = <
                 `the object declares the field '${name}', which has no character in its name: ${emptyNameReason}`,
             )
         }
+        // the name comes from the `for...in` of `declaredSpec`, so the read exists (TS2345 without the cast).
+        // A slot that is no codec reaches the constructor, which refuses it with a CodecError.
         const slot = declaredSpec[name] as ObjectSlot
         const field = fieldOf(slot)
         setOwn(fields, name, field)

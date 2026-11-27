@@ -1467,7 +1467,9 @@ export const slicedUnion = (
  *
  * The result is `unknown`: only {@link extract} and {@link exclude} know the codec type that a
  * call gives. Each of the two casts the result once, to the `Slice` of the call. A dissection keeps
- * every key in its slice, because each member still writes its tag.
+ * every key in its slice, because each member still writes its tag. A typed helper over this function
+ * fails with TS2375: it reads the arguments as `C & Closed` and `P & ValidatePattern<P>`, and returns the
+ * `Slice` of those two, which is not the `Slice` of the call.
  */
 export const sliced = (
     codec: AnyCodec,

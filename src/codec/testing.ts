@@ -1054,6 +1054,7 @@ const shrinkThrough = (
     shrink: (inner: unknown) => readonly unknown[],
 ): readonly unknown[] => (failed(mapped) ? [] : shrink(mapped))
 
+// the index exists where `values` holds a member (TS2322). An empty list returns `undefined`, so the caller owns the length.
 const pickFrom = <T>(rng: Rng, values: readonly T[]): T =>
     values[Math.floor(rng() * values.length)] as T
 

@@ -2962,6 +2962,8 @@ export const leanPath = (
                 'no union stands before the clause: a row narrows the options of one union',
             )
         }
+        // `clauses` lists the steps that carry a clause, and `k` is the only one. So `steps[k]` carries a clause
+        // and `rest` carries none. The checker relates the index to neither (TS2532, TS2345).
         const clause = (steps[k] as Exclude<PathStep, string | number>).narrow
         const rest = steps.slice(k + 1) as readonly (string | number)[]
         const options = underRefs(before.codec.def)

@@ -269,6 +269,8 @@ export const everyEntry = <A, B>(
 ): Result<Record<string, B>> => {
     const out: Record<string, B> = {}
     for (const key in held) {
+        // the key comes from the `for...in` of `held`, so the read exists.
+        // The checker adds `undefined` to an index read (TS2345).
         const next = step(held[key] as A, key)
         if (failed(next)) return next.under(key)
         setOwn(out, key, next)
